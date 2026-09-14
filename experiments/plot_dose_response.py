@@ -55,6 +55,14 @@ def plot_primary(data):
         ax.errorbar(x, rates, yerr=[los, his], marker="o", markersize=6, capsize=4,
                     color=color, label=label, linewidth=2)
 
+    # Recursive's 5 dose-axis points are the SAME underlying measurement,
+    # not 5 independent ones -- greedy search converges to the same
+    # near-global optimum regardless of beam width on this DGP (~99.7%+ of
+    # draws), so sr_sel and M_b coincide across variants. Said once, in the
+    # figure, rather than left implicit in equal-looking error bars.
+    ax.text(0.98, 0.80, "recursive's 5 points share one\nunderlying measurement (n=150) --\nsee text, not 5 independent draws",
+            transform=ax.transAxes, fontsize=7, color=ORANGE, ha="right", va="top", style="italic")
+
     ax.axhline(0.05, linestyle="--", color=GRAY, linewidth=1.5, zorder=0)
     ax.text(20, 0.037, "nominal α=0.05", color=GRAY, fontsize=9, ha="right", va="top")
 
@@ -83,41 +91,62 @@ def plot_primary(data):
     print("Saved figures/e5_dose_response_primary.png")
 
 
-def plot_divergence(data):
+def plot_diagnostics(data, entropy_data):
+    """Two panels side by side: Jaccard divergence rate and normalized beam
+    entropy, both against naive type-I rate. Shown together deliberately --
+    entropy was predicted to track type-I more tightly (a magnitude measure
+    vs. divergence's rate that saturates near 1.0), but measured on this
+    7-point sample it does NOT clearly outperform divergence (Pearson
+    r=0.861 vs 0.901; Spearman 0.935 vs 0.972). Reported as found, not
+    spun -- both are decent directional diagnostics, neither is a clean
+    linear predictor of exact inflation magnitude."""
+    from math import comb, log
+    from matplotlib.lines import Line2D
+
     p_naive, divergence = data["p_naive"], data["divergence"]
+    norm_entropy = entropy_data["norm_entropy"]
     dose_names = {n for n, _ in DOSE_ORDER}
 
-    # Several points cluster tightly (adaptive, neighbor_adaptive land at
-    # nearly identical coordinates) -- stack their labels vertically with
-    # explicit offsets instead of letting them collide.
-    label_offsets = {
-        "adaptive (dose max, k=1)": (8, -14),
-        "depth_adaptive": (8, 6),
-        "neighbor_adaptive": (8, -28),
-        "beam2": (8, -4),
-        "beam4": (8, 6),
+    label_offsets_div = {
+        "adaptive (dose max, k=1)": (8, -14), "depth_adaptive": (8, 6),
+        "neighbor_adaptive": (8, -28), "beam2": (8, -4), "beam4": (8, 6),
+    }
+    label_offsets_ent = {
+        "adaptive (dose max, k=1)": (8, -4), "depth_adaptive": (8, 8),
+        "neighbor_adaptive": (8, -18), "beam2": (-10, 10), "beam4": (8, -14),
+        "beam16": (8, 8),
     }
 
-    fig, ax = plt.subplots(figsize=(6.5, 5.5))
-    for name in p_naive:
-        rate, lo, hi = type1_rate(p_naive[name], alpha=0.05)
-        div = divergence[name].mean()
-        color = BLUE if name in dose_names else ORANGE
-        ax.errorbar([div], [rate], yerr=[[rate - lo], [hi - rate]], marker="o",
-                    markersize=8, capsize=4, color=color)
-        label = name.split(" ")[0]
-        dx, dy = label_offsets.get(name, (8, 6))
-        ax.annotate(label, (div, rate), fontsize=8, xytext=(dx, dy), textcoords="offset points")
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
 
-    ax.axhline(0.05, linestyle="--", color=GRAY, linewidth=1.5, zorder=0)
-    ax.set_xlabel("divergence rate (mean Jaccard distance, real vs. bootstrap-replicate round-1 beam)")
-    ax.set_ylabel("naive bootstrap type-I rate at α=0.05")
-    ax.set_title("Type-I inflation tracks candidate-set instability directly")
-    from matplotlib.lines import Line2D
-    ax.legend(handles=[
+    for ax, series, offsets, xlabel, title in [
+        (axes[0], divergence, label_offsets_div,
+         "divergence rate\n(mean Jaccard distance, real vs. replicate round-1 beam)",
+         "Divergence rate (a rate, saturates near 1.0)"),
+        (axes[1], norm_entropy, label_offsets_ent,
+         "normalized beam entropy\n(H / log C(K, beam width))",
+         "Normalized entropy (a magnitude -- predicted\nto track more tightly; measured: it doesn't)"),
+    ]:
+        for name in p_naive:
+            rate, lo, hi = type1_rate(p_naive[name], alpha=0.05)
+            x_val = series[name].mean() if hasattr(series[name], "mean") else series[name]
+            color = BLUE if name in dose_names else ORANGE
+            ax.errorbar([x_val], [rate], yerr=[[rate - lo], [hi - rate]], marker="o",
+                        markersize=8, capsize=4, color=color)
+            label = name.split(" ")[0]
+            dx, dy = offsets.get(name, (8, 6))
+            ax.annotate(label, (x_val, rate), fontsize=7.5, xytext=(dx, dy), textcoords="offset points")
+        ax.axhline(0.05, linestyle="--", color=GRAY, linewidth=1.5, zorder=0)
+        ax.set_xlabel(xlabel, fontsize=9)
+        ax.set_ylabel("naive bootstrap type-I rate at α=0.05")
+        ax.set_title(title, fontsize=10)
+
+    axes[0].legend(handles=[
         Line2D([0], [0], marker="o", color=BLUE, label="dose axis (beam width)", linestyle=""),
         Line2D([0], [0], marker="o", color=ORANGE, label="structural axis (depth/neighbor)", linestyle=""),
     ], loc="upper left", frameon=False, fontsize=8)
+
+    fig.suptitle("Neither diagnostic is a clean linear predictor of inflation magnitude", fontsize=11)
     fig.tight_layout()
     fig.savefig("figures/e5_divergence_diagnostic.png", dpi=150)
     print("Saved figures/e5_divergence_diagnostic.png")
@@ -125,5 +154,7 @@ def plot_divergence(data):
 
 if __name__ == "__main__":
     data = load()
+    with open("figures/e5_entropy_data.pkl", "rb") as f:
+        entropy_data = pickle.load(f)
     plot_primary(data)
-    plot_divergence(data)
+    plot_diagnostics(data, entropy_data)

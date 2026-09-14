@@ -142,18 +142,49 @@ every candidate) and Adaptive (`k=1`, argmax only):
 Strictly monotone as `k` shrinks — no falsifier triggered (not flat, not
 non-monotone, and BeamAdaptive(2) already excludes nominal 5% two steps
 before the original Adaptive, so the effect isn't narrow to one searcher).
-Recursive stays flat at nominal across every point on both axes.
 NeighborAdaptive lands exactly on Adaptive's rate despite anchoring round 2
 on feature correlation rather than Sharpe-argmax: it's data-dependence per
-se that breaks the naive bootstrap, not that specific rule. Caught and
-fixed a real bug along the way — `deflate()`'s default `sr_sel` isn't
+se that breaks the naive bootstrap, not that specific rule.
+
+**Recursive's five identical readings got checked, not narrated past.**
+Five-way exact agreement (0.060 everywhere) is the signature of a bug, so
+it was checked directly rather than reported as "flat across five
+independent points": `beam_width` mechanically restricts candidates
+correctly (instrumented directly — 94 evaluations for beam=2, matching
+`K+2(K-1)+2(K-2)` exactly, not the full lattice's ~1140), but greedy search
+converges to the *same* near-global optimum regardless of beam width on
+this DGP (1/300 mismatches on fresh draws, 0/300 on bootstrap replicates),
+so `sr_sel` and `M_b` genuinely coincide across the five `max_features=3`
+variants. Not a bug — but it means recursive's reading here is one
+measurement (n=150, Wilson CI 0.032–0.110, **consistent with** nominal —
+not "equal to" it, not five confirmations), not undermining recursive's
+separately-validated n=500 result on Adaptive, but thinner evidence on its
+own than it first looked. Full trace in `SCOPE.md` §5.
+
+**Diagnostic refinement: entropy vs. divergence, compared honestly.**
+Normalized `beam_entropy` (Shannon entropy of the round-1 beam distribution
+across replicates, ÷ `log(C(K, beam width))`) was predicted to track type-I
+more tightly than the Jaccard divergence rate, being a magnitude rather
+than a saturating rate. Measured: it doesn't (Pearson r = 0.861 vs
+divergence's 0.901; Spearman 0.935 vs 0.972) — both are strong, directional,
+and imperfect in different places. `SCOPE.md` §5 has the full comparison,
+including why BeamAdaptive(16) and BeamAdaptive(4) tie almost exactly in
+entropy (`C(20,16)=C(20,4)`, a parameter-choice artifact, not a diagnostic
+failure).
+
+Also caught a real bug along the way — `deflate()`'s default `sr_sel` isn't
 always a searcher's own submitted value, ~1.7% of the time in this DGP —
 detailed in `SCOPE.md` §5 along with why it didn't change any conclusion
 already reported here.
 
-**Experiments 2-4 from the build spec** (predictive power under the
-alternative, scaling with trial budget, correlation sensitivity) — not yet
-run; blocked behind resolving the adaptive-search boundary above first.
+**Next: the build spec's Experiment 2** (predictive power under the
+alternative — naive Sharpe vs. closed-form DSR vs. bootstrap deflation as
+predictors of out-of-sample Sharpe under `s=3`) has not been started.
+Everything above is null-calibration (`s=0`) work: it shows the estimator
+doesn't cry wolf, not that it has power to detect real decay. That's next.
+
+**Experiments 3-4 from the build spec** (scaling with trial budget,
+correlation sensitivity) — not yet run.
 
 ## Repository layout
 

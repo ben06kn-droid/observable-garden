@@ -3,7 +3,7 @@ import pytest
 
 from environments.dgp import DGPConfig, generate
 from environments.sandbox import Sandbox
-from estimator.divergence import divergence_rate
+from estimator.divergence import divergence_rate, beam_entropy
 from searchers.dose_response import BeamAdaptive, DepthAdaptive, NeighborAdaptive
 from searchers.diagnostic import LatticeAdaptive
 from searchers.scripted import Adaptive
@@ -68,6 +68,15 @@ def test_divergence_rate_bounds(searcher_factory, expect_zero):
         assert rate == 0.0
     else:
         assert rate > 0.0
+
+
+def test_beam_entropy_zero_for_oblivious_menu_positive_otherwise():
+    sandbox, config = make_sandbox(K=10, seed=9)
+    base_columns = sandbox.base_feature_columns()
+    h_lattice = beam_entropy(base_columns, LatticeAdaptive(seed=9), B=200, seed=1)
+    h_adaptive = beam_entropy(base_columns, Adaptive(max_features=3, seed=9), B=200, seed=1)
+    assert h_lattice == 0.0
+    assert h_adaptive > 0.0
 
 
 def test_round1_beam_sizes():

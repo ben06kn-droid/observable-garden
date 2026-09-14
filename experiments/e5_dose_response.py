@@ -95,7 +95,7 @@ def run(n_draws=300, M=60, T=600, T_oos=300, K=25, B=1500, seed0=10_000, verbose
             sr_sel = searcher.replay(base_columns_ref, annualization=ann)
             p_naive[name].append(deflate(R, sr_sel=sr_sel, B=B, annualization=ann, seed=seed0 + i).p_value)
 
-            M_b, mean_div = recursive_bootstrap_and_divergence(
+            M_b, mean_div, _entropy = recursive_bootstrap_and_divergence(
                 base_columns_ref, searcher, B=B, annualization=ann, seed=seed0 + i,
             )
             p_recursive[name].append(float((1 + np.sum(M_b >= sr_sel)) / (B + 1)))

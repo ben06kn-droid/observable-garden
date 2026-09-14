@@ -241,11 +241,67 @@ gets a validation spot-check as described below).
 0.060 → 0.067 → 0.093 → 0.107 → 0.127 as `k` shrinks from 20 to 1 — every
 step in the predicted direction, landing almost exactly on the qualitative
 labels predicted in advance (none / slight / moderate / substantial / max).
-Recursive sits flat at 0.060 — indistinguishable from nominal — across
-every single point on both axes; the naive-vs-recursive gap is what
-widens, not recursive's own behavior. The effect is not narrow to one
-searcher: BeamAdaptive(2)'s CI already excludes nominal 5% entirely, two
-steps before reaching the original Adaptive.
+The effect is not narrow to one searcher: BeamAdaptive(2)'s CI already
+excludes nominal 5% entirely, two steps before reaching the original
+Adaptive.
+
+**Recursive's five points are one measurement, not five — checked
+directly, not assumed, because five-way exact agreement earned exactly
+that suspicion.** Recursive reads 0.060 at every single dose-axis point.
+Before reporting that as "flat at nominal across five independent checks,"
+the two innocent explanations and the bad one all got checked:
+
+- *Is `beam_width` actually reaching the recursive path?* Instrumented
+  `BeamAdaptive(2)._search` directly on one resampled replicate: 94
+  candidate evaluations (exactly `K + 2(K-1) + 2(K-2)` for beam=2, not the
+  full lattice's ~1140), round-1 beam size exactly 2. Mechanically correct.
+- *Do the p-values actually differ, with rejection counts only coincidentally
+  matching?* No — loaded the raw arrays and checked directly: recursive's
+  p-value array is **elementwise identical** across LatticeAdaptive,
+  BeamAdaptive(16/4/2), Adaptive, and NeighborAdaptive (DepthAdaptive
+  differs, correlation 1.000, because its extra round changes the
+  achievable support size). Traced to the source: `M_b` itself is
+  identical to floating-point precision across all four searchers on
+  every one of 300 tested bootstrap replicates (max abs diff = 0.0).
+- *Why, mechanically, if beam_width is respected?* Greedy forward selection
+  (any beam width 1–K, or NeighborAdaptive's correlation-based rule)
+  finds the TRUE global optimum over subsets of size ≤3 on this DGP with
+  very high probability — measured at 1/300 mismatches (0.3%) on fresh iid
+  draws and 0/300 on bootstrap replicates of one draw (both well below the
+  ~1.7% rate §3's earlier, noisier 60-draw check suggested). Since `sr_sel`
+  and each replicate's `M_b` value both reduce to "the achievable global
+  optimum," and that quantity doesn't depend on which greedy rule computes
+  it, all five max_features=3 variants' recursive p-values coincide by
+  construction on this DGP.
+
+So: not a bug, but the five-point reading genuinely is n=150, once — not
+n=750. Reported properly: type-I = 0.060, 95% Wilson CI (0.032, 0.110),
+**consistent with nominal** (the interval contains 0.05 comfortably), not
+"equal to" it and not five independent confirmations of it. This does not
+undermine recursive's validity — that rests on the separately-run,
+properly-powered n=500 check on Adaptive alone (§3, KS D=0.041, type-I
+0.034, CI 0.021–0.054) and on the oblivious-menu argument that makes
+LatticeAdaptive/Greedy/GridSearch provably correct regardless of sample
+size (§1). It does mean the dose-response sweep's OWN evidence for
+recursive's correctness is thinner than it first looked, and the honest
+sample size for recursive here is n=150, once.
+
+**A related, smaller check on that same n=150, B=300 baseline reading.**
+Both naive and recursive read 0.060 for LatticeAdaptive — expected (§1: an
+oblivious menu makes them mathematically identical) — but 0.060 sits about
+one Wilson-CI standard error above nominal 0.05. Pushed to B=10,000 on a
+reduced n=60 to check whether this moves toward 0.05, as finite-B p-value
+discreteness or slight nullification leakage would predict
+(`experiments/e5c_baseline_diagnostic.py`): type-I = **0.083** (95% CI
+0.036–0.181), KS stat 0.056 (KS p = 0.987, comfortably uniform). The point
+estimate moved further from 0.05, not toward it — but the CI at n=60 is
+wide enough to contain both 0.05 and the original 0.060 comfortably, so
+this is not evidence of a real drift either direction. Net: no evidence of
+a systematic B-driven bias (the KS test stays excellent at B=10,000), and
+the 0.06-vs-0.05 gap at n=150 is most parsimoniously ordinary sampling
+noise rather than a real, fixable leak — stated as inconclusive-but-
+reassuring rather than resolved, since resolving it properly would need a
+substantially larger n than this diagnostic used.
 
 **Structural axis confirms it's data-dependence, not the specific rule.**
 DepthAdaptive (0.133) runs slightly hotter than Adaptive (0.127) — selection
@@ -257,18 +313,38 @@ selection rule produces the same inflation, because it has the same
 *amount* of realized-data-dependence. That's the direct answer to "is it
 Sharpe-argmax specifically, or any data-dependent rule" — it's the latter.
 
-**The divergence-rate diagnostic tracks the trend, with a caveat stated
-rather than smoothed over.** `estimator/divergence.py` measures, for each
-variant, what fraction of the real transcript's round-1 beam a bootstrap
-replicate's own beam fails to reproduce (mean Jaccard distance). It rises
-0.000 → 0.331 → 0.876 → 0.932 → 0.950 in exact lockstep with the type-I
-ordering in the low-to-mid range — a real quantitative echo of the
-mechanism, not just a qualitative one. But it *saturates* near 1.0 for
-BeamAdaptive(2) through NeighborAdaptive while naive's type-I rate keeps
-climbing a further ~2 points across those same variants: divergence rate is
-a strong leading indicator and a legible number a practitioner could
-compute on their own search, but it is not a tight linear predictor of
-exact inflation magnitude once a search is already almost fully data-driven.
+**Two diagnostics, compared honestly — the predicted winner didn't win.**
+`estimator/divergence.py`'s Jaccard divergence rate (what fraction of the
+real transcript's round-1 beam a bootstrap replicate's own beam fails to
+reproduce) is a *rate*, bounded at 1, and it saturates: 0.000 → 0.331 →
+0.876 → 0.932 → 0.950 across the dose axis, compressing BeamAdaptive(2)
+through NeighborAdaptive into a narrow band while their type-I rates keep
+separating by a further ~4 points. The predicted fix was a *magnitude*:
+`beam_entropy`, the Shannon entropy of the round-1 beam's distribution
+across replicates, normalized by `log(C(K, beam_width))` since raw entropy
+isn't comparable across beam widths with differently-sized outcome spaces
+(unnormalized, larger beams score higher for no reason but having more
+possible subsets to land on — confirmed by computing it both ways before
+settling on the normalized version).
+
+Measured against naive's type-I rate across all 7 variants: divergence
+Pearson r = 0.901 (Spearman 0.972); normalized entropy Pearson r = 0.861
+(Spearman 0.935). **Entropy does not track type-I more tightly than
+divergence on this sample — contrary to the prediction, stated before
+computing either correlation.** Both are strong, both directionally
+correct, neither is decisively better; entropy has its own saturation
+problem in a different place (BeamAdaptive(16) and BeamAdaptive(4) score
+0.6669 and 0.6668 — visually identical — while their type-I rates differ
+by 2.6 points). Worth being precise about why: `C(20,16) = C(20,4)`
+exactly (binomial symmetry), so those two variants' outcome spaces are the
+same size by construction of choosing `beam=16` with `K=20` — an artifact
+of this experiment's parameter choice, not a general property of the
+entropy diagnostic. A different `K` (or a beam width not symmetric to
+another tested one) would not reproduce this specific tie, but the
+broader point stands: neither diagnostic is a clean linear predictor of
+exact inflation magnitude, and reporting the one that happened to score
+higher without checking the other would have been the wrong way to settle
+that (figure: `figures/e5_divergence_diagnostic.png`, both panels).
 
 **A bug found and fixed during this work, worth stating precisely.** An
 earlier draft of §4's LatticeAdaptive comparison relied on `deflate()`'s
@@ -285,6 +361,14 @@ experiment from this section onward passes `sr_sel` explicitly rather than
 relying on the default, and the over-claiming test that asserted "always
 equal" was replaced with one that measures the actual rate
 (`tests/test_lattice_greedy_optimality.py`).
+
+**Next.** The build spec's Experiment 2 (predictive power under the
+alternative — comparing naive Sharpe, closed-form DSR, and bootstrap
+deflation as predictors of out-of-sample Sharpe under `s=3`, the genuine-
+signal configuration) has not been started. Everything above is null-
+calibration work (`s=0`); it establishes that the estimator doesn't cry
+wolf, not that it has power to detect real decay when there's something to
+detect. That's the natural next block of work.
 
 ## 6. This is a known phenomenon, not a novel one
 
