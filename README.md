@@ -102,15 +102,39 @@ path entirely. Spec §4.1 calls this the pass/fail gate for the whole project
 matters most, so Days 10+ are on hold pending a decision on how to handle
 sequentially-adaptive search (see conversation / open question below).
 
-**Open question, not yet resolved:** whether to (a) scope the estimator's
-validated claim to non-adaptive search (any N, any correlation) and report
-Adaptive's failure as a genuine, documented boundary — which is itself
-evidence for the paper's own next question, whether adaptive-data-analysis
-machinery (Thresholdout-style query budgets) is needed once search gets
-sequential; or (b) build a recursive/sequential bootstrap that re-runs the
-selection *rule* on resampled underlying data each replicate, not just the
-final flat return matrix — a materially bigger change to the estimator's
-design than spec §1.3 describes.
+**Resolved (for now): scope the claim, ground the failure in theory.** Full
+writeup in `SCOPE.md`. Short version:
+
+- The bootstrap's actual sufficient condition isn't independence (what the
+  spec's own framing says) — it's that the candidate *menu* be
+  **data-oblivious** (fixed given the search's configuration, independent of
+  realized outcomes). That's strictly weaker than independence and it's
+  exactly what Honest/Greedy/GridSearch have, however large or correlated
+  their menus get — which is why all three are calibrated.
+- Adaptive's menu isn't oblivious: round 2's candidates are built on top of
+  whichever feature *actually* won round 1 on this realized data. Because
+  `Specification` is linear (a pair's return stream is exactly
+  `single(a)+single(b)`, confirmed to float precision), this is directly
+  checkable: an "oracle" bootstrap that re-derives each round's winner from
+  every replicate's *own* resampled data — instead of freezing it at the
+  observed winner, which is what the naive bootstrap does — raises
+  `mean_null_max` (0.061→0.070 on a single draw) and restores calibration
+  (KS p: 0.001→0.558 over 80 null draws). That's a controlled confirmation
+  of the mechanism, not just a plausible story.
+- This is a known phenomenon (Leeb & Pötscher 2005 on the impossibility of
+  naive post-selection bootstraps; Efron 2014's prescription to re-run
+  selection inside the bootstrap, which is exactly what the oracle bootstrap
+  above does; the selective-inference program of Berk et al. 2013 and Lee et
+  al. 2016), not a novel one — `SCOPE.md` §3 has the precise citations.
+- **Validated claim going forward:** the estimator is correctly calibrated
+  for any data-oblivious search — any trial count, any correlation,
+  duplicates included — which covers Honest/Greedy/GridSearch-shaped agent
+  behavior (menu fixed up front, best result reported). Sequential search
+  (Adaptive, and a real agent's tool-calling loop) is a documented open
+  boundary, not silently swept in.
+
+Days 10-13 (experiments 2-4, decay/scaling/correlation curves) proceed on
+Honest, Greedy, and GridSearch, within this scoped claim.
 
 ## Setup
 
