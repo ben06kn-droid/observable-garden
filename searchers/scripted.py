@@ -212,3 +212,11 @@ class Adaptive(Searcher):
 
         _, best_sharpe = _greedy_forward_selection(K, self.max_features, singles_score, support_score)
         return best_sharpe
+
+    def round1_beam(self, base_columns: np.ndarray, annualization: float = 1.0) -> frozenset[int]:
+        """The dose-response family's uniform diagnostic hook (searchers/
+        dose_response.py, estimator/divergence.py): the set of features
+        that survive round 0 to seed later-round candidate generation.
+        For beam_width=1 (Adaptive), that's just the single best feature."""
+        sr = sharpe(base_columns, axis=0, annualization=annualization)
+        return frozenset({int(np.argmax(sr))})

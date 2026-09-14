@@ -166,15 +166,32 @@ small residual deviation for LatticeAdaptive (p=0.034) that a larger
 `n_draws` would be needed to characterize — reported rather than rounded
 away, per the type of honesty this document is trying to model.
 
-One check this result leans on, verified rather than assumed
-(`tests/test_lattice_greedy_optimality.py`): LatticeAdaptive's greedy
-selection examines only `K + (K-1) + (K-2)` of the full lattice's `2^K`-ish
-combos, yet its submitted value exactly equals the true full-lattice maximum
-on every one of 30 draws checked across two different configurations. So the
-comparison above is a clean one-variable-changed experiment — same
-selection rule, same optimal outcome as taking the full max, only the menu's
-obliviousness differs — not confounded by greedy selection landing somewhere
-suboptimal for one searcher and not the other.
+One check this result leans on — and an earlier version of this document
+got it wrong, worth stating plainly rather than quietly fixing. The first
+30-draw check found LatticeAdaptive's greedy selection (which examines only
+`K + (K-1) + (K-2)` of the full lattice's combos, restricted to the same
+round-by-round path structure as Adaptive) landing exactly on the true
+full-lattice maximum every time, and this document originally claimed that
+as a general property. It isn't one: greedy forward selection is a
+heuristic with no optimality guarantee, and a direct counterexample turned
+up during the dose-response follow-up work (`K=20, M=50, T=500, seed=70022`)
+— greedy's pick scored 1.9956 while an unselected triple already sitting in
+the same transcript scored 2.0148. Measured properly
+(`tests/test_lattice_greedy_optimality.py`) over 60 further draws: this
+happens about 1.7% of the time, with small gaps (~0.01–0.02 Sharpe) when it
+does.
+
+This mattered beyond one test's wording: `deflate()`'s default `sr_sel`
+(max over the whole transcript) silently relies on exactly this "always
+equal" assumption, and the original table above was computed that way. The
+comparison was rerun with `sr_sel` passed explicitly as each searcher's own
+submitted value (`experiments/e2_lattice_control.py`, now fixed) — the
+numbers came back **identical** to four decimal places. At a ~1.7% mismatch
+rate with sub-0.02 gaps, not enough draws are affected to move the aggregate
+KS statistic or type-I rate at n=200. The original conclusion holds; the bug
+was real and worth fixing on principle (a rarer or larger-gap version of it
+elsewhere could easily have mattered), but it did not happen to distort this
+particular result.
 
 If LatticeAdaptive is far closer to calibrated than Adaptive on the
 statistic that actually matters, adaptive candidate generation is the

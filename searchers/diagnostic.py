@@ -80,3 +80,8 @@ class LatticeAdaptive(Searcher):
         }
         _, best_sharpe = self._select(K, sharpe_of)
         return best_sharpe
+
+    def round1_beam(self, base_columns: np.ndarray, annualization: float = 1.0) -> frozenset[int]:
+        """Dose 0: the full menu, always. Divergence rate is 0 by
+        construction -- nothing about the menu depends on realized data."""
+        return frozenset(range(base_columns.shape[1]))
