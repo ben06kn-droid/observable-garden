@@ -109,6 +109,20 @@ class Sandbox:
             raise TypeError("submit() requires a Distribution over out-of-sample Sharpe")
         self._submission = (spec, predicted_oos_sharpe)
 
+    # -- problem-setup metadata (dimensions only, not a leak) ----------------
+
+    @property
+    def num_features(self) -> int:
+        return self._data.x_in.shape[2]
+
+    @property
+    def num_periods(self) -> int:
+        return self._data.x_in.shape[0]
+
+    @property
+    def num_assets(self) -> int:
+        return self._data.x_in.shape[1]
+
     # -- harness-only, not part of the searcher-visible contract -------------
 
     @property
