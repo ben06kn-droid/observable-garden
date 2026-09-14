@@ -199,7 +199,94 @@ dominant driver of the naive bootstrap's failure — not adaptive selection.
 That's the one-sentence version of everything above, demonstrated rather
 than argued from the mechanism alone.
 
-## 5. This is a known phenomenon, not a novel one
+## 5. A monotone dose-response, not a one-searcher artifact
+
+Everything above establishes the mechanism on two points (Adaptive,
+LatticeAdaptive). The natural objection: maybe it's specific to one
+searcher's quirks, not a general property of adaptive candidate generation.
+`experiments/e5_dose_response.py` tests this directly with a scalar dose —
+beam width `k` (`searchers/dose_response.py`'s `BeamAdaptive`), which
+interpolates continuously between the two existing endpoints: `k=K` keeps
+every candidate at every round (≈ LatticeAdaptive), `k=1` is exactly
+Adaptive. Plus two structural variants holding `k=1` fixed: `DepthAdaptive`
+(one more round) and `NeighborAdaptive` (round 2 anchors on the feature most
+correlated with round 1's winner, not the winner itself — same *amount* of
+data-dependence, a different rule generating it).
+
+Prediction, stated before running: naive's type-I rate decreases
+monotonically in `k`. Falsifiers, stated before running: flat in `k` means
+the mechanism story is wrong; non-monotone means something's confounded
+with beam width; only the original Adaptive breaking means the result is
+narrow. Paired seeds throughout (every variant sees the identical null draw
+at each index), n=150, `K=20, M=50, T=500, B=300` — scoped down from the
+originally requested n=500/B=2000 for tractability (procedure-level's
+B-full-re-runs cost makes the full spec's 5 variants × 500 draws × 2000
+replicates × 3 methods a many-hour job; naive and recursive, where the
+dose-response signal actually lives, get the full sweep, procedure-level
+gets a validation spot-check as described below).
+
+| variant | dose (mean divergence) | naive type-I (95% CI) | recursive type-I (95% CI) |
+|---|---|---|---|
+| LatticeAdaptive | 0.000 | 0.060 (0.032–0.110) | 0.060 (0.032–0.110) |
+| BeamAdaptive(16) | 0.331 | 0.067 (0.037–0.118) | 0.060 (0.032–0.110) |
+| BeamAdaptive(4) | 0.876 | 0.093 (0.056–0.151) | 0.060 (0.032–0.110) |
+| BeamAdaptive(2) | 0.932 | 0.107 (0.067–0.166) | 0.060 (0.032–0.110) |
+| Adaptive (k=1) | 0.950 | 0.127 (0.083–0.189) | 0.060 (0.032–0.110) |
+| DepthAdaptive | 0.950 | 0.133 (0.088–0.197) | 0.060 (0.032–0.110) |
+| NeighborAdaptive | 0.950 | 0.127 (0.083–0.189) | 0.060 (0.032–0.110) |
+
+(figures: `figures/e5_dose_response_primary.png`, `figures/e5_divergence_diagnostic.png`)
+
+**Strictly monotone, no falsifier triggered.** Naive's type-I rate climbs
+0.060 → 0.067 → 0.093 → 0.107 → 0.127 as `k` shrinks from 20 to 1 — every
+step in the predicted direction, landing almost exactly on the qualitative
+labels predicted in advance (none / slight / moderate / substantial / max).
+Recursive sits flat at 0.060 — indistinguishable from nominal — across
+every single point on both axes; the naive-vs-recursive gap is what
+widens, not recursive's own behavior. The effect is not narrow to one
+searcher: BeamAdaptive(2)'s CI already excludes nominal 5% entirely, two
+steps before reaching the original Adaptive.
+
+**Structural axis confirms it's data-dependence, not the specific rule.**
+DepthAdaptive (0.133) runs slightly hotter than Adaptive (0.127) — selection
+compounding over an extra round, in the predicted direction, though the
+CIs overlap too much to call this decisive on its own. NeighborAdaptive
+(0.127) lands exactly on Adaptive's rate despite anchoring round 2 on
+feature *correlation* rather than Sharpe-argmax: a completely different
+selection rule produces the same inflation, because it has the same
+*amount* of realized-data-dependence. That's the direct answer to "is it
+Sharpe-argmax specifically, or any data-dependent rule" — it's the latter.
+
+**The divergence-rate diagnostic tracks the trend, with a caveat stated
+rather than smoothed over.** `estimator/divergence.py` measures, for each
+variant, what fraction of the real transcript's round-1 beam a bootstrap
+replicate's own beam fails to reproduce (mean Jaccard distance). It rises
+0.000 → 0.331 → 0.876 → 0.932 → 0.950 in exact lockstep with the type-I
+ordering in the low-to-mid range — a real quantitative echo of the
+mechanism, not just a qualitative one. But it *saturates* near 1.0 for
+BeamAdaptive(2) through NeighborAdaptive while naive's type-I rate keeps
+climbing a further ~2 points across those same variants: divergence rate is
+a strong leading indicator and a legible number a practitioner could
+compute on their own search, but it is not a tight linear predictor of
+exact inflation magnitude once a search is already almost fully data-driven.
+
+**A bug found and fixed during this work, worth stating precisely.** An
+earlier draft of §4's LatticeAdaptive comparison relied on `deflate()`'s
+default `sr_sel` (max over the whole transcript), based on a claim —
+verified on only 30 draws — that this always equals a searcher's own
+greedy submission. It doesn't, in general: a direct counterexample turned
+up while building this section (`K=20, M=50, T=500, seed=70022`), where an
+unselected triple sitting in LatticeAdaptive's own transcript scored 2.0148
+against the greedy pick's 1.9956. Measured properly, this happens on
+~1.7% of draws with small (~0.01–0.02) gaps. §4's original numbers were
+rerun with `sr_sel` passed explicitly and came back identical to four
+decimal places — the conclusion wasn't distorted here — but every
+experiment from this section onward passes `sr_sel` explicitly rather than
+relying on the default, and the over-claiming test that asserted "always
+equal" was replaced with one that measures the actual rate
+(`tests/test_lattice_greedy_optimality.py`).
+
+## 6. This is a known phenomenon, not a novel one
 
 - **Leeb & Pötscher (2005)**, *Model Selection and Inference: Facts and
   Fiction*, Econometric Theory — proves the sampling distribution of a
@@ -222,7 +309,7 @@ than argued from the mechanism alone.
   Confidence Intervals for Selected Parameters* — the same principle inside
   the multiple-comparisons framing this project otherwise sits in.
 
-## 6. What's validated, what's fixed, and what's still open
+## 7. What's validated, what's fixed, and what's still open
 
 **Validated at n=200, properly powered, matched seeds:** the naive bootstrap
 is correctly calibrated for any search whose candidate menu is data-oblivious

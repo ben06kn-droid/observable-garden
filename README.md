@@ -122,6 +122,36 @@ Naive fails almost 3x its nominal rate; recursive is indistinguishable from
 correctly calibrated. The fix holds at proper statistical power, not just
 at the n=200 boundary case that motivated running this.
 
+**A monotone dose-response, not a one-searcher artifact**
+(`experiments/e5_dose_response.py`, n=150, `K=20, M=50, T=500, B=300` —
+scoped down from n=500/B=2000 for tractability; see `SCOPE.md` §5). Beam
+width `k` interpolates continuously between LatticeAdaptive (`k=K`, keeps
+every candidate) and Adaptive (`k=1`, argmax only):
+
+| variant | dose (mean divergence) | naive type-I (95% CI) | recursive type-I (95% CI) |
+|---|---|---|---|
+| LatticeAdaptive | 0.000 | 0.060 (0.032–0.110) | 0.060 (0.032–0.110) |
+| BeamAdaptive(16) | 0.331 | 0.067 (0.037–0.118) | 0.060 (0.032–0.110) |
+| BeamAdaptive(4) | 0.876 | 0.093 (0.056–0.151) | 0.060 (0.032–0.110) |
+| BeamAdaptive(2) | 0.932 | 0.107 (0.067–0.166) | 0.060 (0.032–0.110) |
+| Adaptive (k=1) | 0.950 | 0.127 (0.083–0.189) | 0.060 (0.032–0.110) |
+| DepthAdaptive (one more round) | 0.950 | 0.133 (0.088–0.197) | 0.060 (0.032–0.110) |
+| NeighborAdaptive (different rule) | 0.950 | 0.127 (0.083–0.189) | 0.060 (0.032–0.110) |
+
+(figures: `figures/e5_dose_response_primary.png`, `figures/e5_divergence_diagnostic.png`)
+
+Strictly monotone as `k` shrinks — no falsifier triggered (not flat, not
+non-monotone, and BeamAdaptive(2) already excludes nominal 5% two steps
+before the original Adaptive, so the effect isn't narrow to one searcher).
+Recursive stays flat at nominal across every point on both axes.
+NeighborAdaptive lands exactly on Adaptive's rate despite anchoring round 2
+on feature correlation rather than Sharpe-argmax: it's data-dependence per
+se that breaks the naive bootstrap, not that specific rule. Caught and
+fixed a real bug along the way — `deflate()`'s default `sr_sel` isn't
+always a searcher's own submitted value, ~1.7% of the time in this DGP —
+detailed in `SCOPE.md` §5 along with why it didn't change any conclusion
+already reported here.
+
 **Experiments 2-4 from the build spec** (predictive power under the
 alternative, scaling with trial budget, correlation sensitivity) — not yet
 run; blocked behind resolving the adaptive-search boundary above first.
