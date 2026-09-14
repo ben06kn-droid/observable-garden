@@ -1,8 +1,7 @@
 # observable-garden
 
 **An estimator for how much of a reported backtest is search rather than
-signal — with the one input every version of this problem has had to guess
-replaced by a number read off the transcript.**
+signal.**
 
 The deflated Sharpe ratio of Bailey & López de Prado subtracts an expected
 null maximum from a reported result, but that subtraction needs the number
