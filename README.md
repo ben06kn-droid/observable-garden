@@ -109,8 +109,18 @@ actual search on nullified raw data (no linearity dependency) — mean
 difference in `mean_null_max` = +0.019 (SD 0.043), sign flipping roughly
 evenly across draws. No detectable systematic bias.
 
-**Definitive Adaptive check at n=500** (`experiments/e4_adaptive_n500.py`):
-*in progress.*
+**Definitive Adaptive check at n=500** (`experiments/e4_adaptive_n500.py`,
+`K=25, M=60, T=600, B=1500`) — properly powered enough that neither result
+is close to its critical value:
+
+| estimator | KS stat | KS p | type-I rate at α=0.05 (95% CI) |
+|---|---|---|---|
+| naive | 0.164 (critical: 0.061) | 0.0000 | 0.136 (0.109–0.169) — decisively excludes nominal 5% |
+| recursive | 0.041 (critical: 0.061) | 0.363 | 0.034 (0.021–0.054) — consistent with nominal 5% |
+
+Naive fails almost 3x its nominal rate; recursive is indistinguishable from
+correctly calibrated. The fix holds at proper statistical power, not just
+at the n=200 boundary case that motivated running this.
 
 **Experiments 2-4 from the build spec** (predictive power under the
 alternative, scaling with trial budget, correlation sensitivity) — not yet

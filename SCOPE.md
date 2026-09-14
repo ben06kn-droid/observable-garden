@@ -88,6 +88,20 @@ On the same matched 200 draws: recursive-bootstrap KS statistic for Adaptive
 = **0.0876** (KS p = 0.088), *below* the n=200 critical value of 0.096 —
 passes, where naive's 0.2052 fails by a factor of two.
 
+That n=200 result is close enough to its critical value (0.088 vs. 0.096)
+that it's worth not resting on. At n=500 (`experiments/e4_adaptive_n500.py`,
+properly powered — neither result lands anywhere near its critical value of
+0.061):
+
+| estimator | KS stat | type-I rate at α=0.05 (95% CI) |
+|---|---|---|
+| naive | 0.164 | 0.136 (0.109–0.169) — decisively excludes nominal 5% |
+| recursive | 0.041 | 0.034 (0.021–0.054) — consistent with nominal 5% |
+
+Naive fails at nearly 3x its nominal rate; recursive is not distinguishable
+from correctly calibrated. The fix holds with room to spare, not only at a
+boundary case.
+
 **But look at how `replay` gets round 2's candidate for a counterfactual
 winner it never evaluated.** Say round 1's real winner was feature 7, but
 this replicate's *own* resampled data favors feature 3. `replay` needs
