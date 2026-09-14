@@ -1,13 +1,23 @@
-# Scope of the validated claim, and why Adaptive fails
+# Scope of the validated claim, and the boundary of "it's all in the transcript"
 
-Experiment 1 (spec §4.1) is designed as a pass/fail gate: under a pure null,
-every searcher's p-value should be Uniform(0,1). Honest, Greedy, and
-GridSearch pass. Adaptive — the searcher spec §3.1 calls "the one that
-matters most" because it reproduces a real agent's sequential structure —
-does not (README, "Days 7-9"). This document states precisely what is and
-isn't proven by the searchers that pass, and gives a mechanistic,
-literature-grounded account of why Adaptive fails, verified directly against
-this codebase rather than asserted by analogy.
+The proposal's central claim is that an agent's search is auditable *because
+it's logged*: "every backtest, every dropped feature, every parameter sweep
+sits in the transcript... its trial count and correlation structure can be
+read off." Experiment 1 (spec §4.1) tests this as a pass/fail gate: under a
+pure null, every searcher's p-value should be Uniform(0,1), regardless of
+how hard or how sequentially it searched.
+
+That claim survives for search whose candidate menu is fixed in advance and
+fails for search that decides what to try next based on what it's already
+seen — and the reason it fails is sharper than "the naive bootstrap has a
+bug." **A logged transcript licenses a valid correction only when the
+candidate set is fixed. When the search generates candidates conditional on
+its own earlier results, the transcript is not enough — you additionally
+need either an algebraic property of the specification class strong enough
+to reconstruct untried candidates, or a re-executable environment.**
+Observability of what was tried is necessary but not sufficient; this
+document works out exactly where the line is, with a fix on one side of it
+and an open problem on the other.
 
 ## 1. The actual sufficient condition, stated precisely
 
@@ -37,10 +47,11 @@ point of resampling rows jointly. **Non-obliviousness is.**
 This is why Honest (`N=1`), Greedy (`N=K`, fixed given `K`), and GridSearch
 (`N` up to thousands, heavily correlated overlapping subsets, but *which*
 subsets appear is fixed given `K`/`subset_sizes` and a seed uncorrelated with
-any realized Sharpe) are all calibrated — KS p = 0.167, 0.992, 0.966 over 100
-null draws — despite spanning three orders of magnitude in `N` and a wide
-range of trial correlation. Independence was never the load-bearing
-assumption; obliviousness of the menu is, and it's strictly weaker.
+any realized Sharpe) are all calibrated on a properly powered check (n=200
+null draws, matched seeds): KS p = 0.777, 0.118, 0.174 respectively —
+despite spanning three orders of magnitude in `N` and a wide range of trial
+correlation. Independence was never the load-bearing assumption; obliviousness
+of the menu is, and it's strictly weaker.
 
 ## 2. Why Adaptive violates it, and the exact mechanism
 
@@ -49,114 +60,177 @@ Adaptive's round-`(r+1)` menu is `{support_r(ω) ∪ {j} : j ∈ remaining}`, wh
 manifestly not oblivious: which candidates even get tried in round 2 is a
 discontinuous function of the very null noise under test.
 
-**The specific mechanism, not just an appeal to the general principle.**
-`Specification` is linear, and every specification in a draw shares the same
-noise realization, so a pair's return series is *exactly*
-`single(a) + single(b)`, elementwise — confirmed to floating-point precision
-(`max abs diff = 2.2e-16`) — and demeaning distributes over the sum, so this
-survives null-imposition too. That makes the failure mode exact and
-checkable: `estimator/bootstrap.py`'s `null_max_bootstrap`, as specified,
-resamples the *observed* transcript's fixed weight vectors. In every
-replicate, round 2's candidates stay "feature `W_orig` + feature `j`" for
-the *specific* `W_orig` that won round 1 on the real, unresampled data. But
-on fresh null data — a real second run, or a faithful bootstrap replicate of
-one — a *different* feature would generically win round 1. Freezing the
-anchor denies every replicate's round 2 the thing the real search actually
-had: the freedom to build on top of whichever feature *that draw's own
-noise* favored. The naive bootstrap explores a strictly narrower space than
-the procedure it's supposed to be nulling, so it **underestimates** the true
-null max — which biases p-values downward (anti-conservative), exactly the
-observed direction (excess mass of `p<0.05`: e.g. 0.163–0.175 across two
-independent 80-draw checks against a nominal 0.05).
+On the same 200 null draws used above: naive-bootstrap KS statistic for
+Adaptive = **0.2052** (KS p ≈ 0.0000) against a critical value at n=200 of
+≈0.096 — over double the threshold, not a marginal miss.
 
-**Direct empirical confirmation** (`experiments/verify_selective_inference_theory.py`).
-Because of the additive-linearity property above, the fix is directly
-testable: build an "oracle" bootstrap that re-derives each round's winner
-from every replicate's *own* resampled singles — reconstructing any
-hypothetical pair by summing the appropriate bootstrapped single columns,
-without touching raw asset-level data — instead of reusing the observed
-`W_orig`.
+**The specific mechanism.** `Specification` is linear, and every
+specification in a draw shares the same noise realization, so a pair's
+return series is *exactly* `single(a) + single(b)`, elementwise — confirmed
+to floating-point precision (`max abs diff = 2.2e-16`) — and demeaning
+distributes over the sum, so this survives null-imposition too. The naive
+bootstrap (`estimator/bootstrap.py`) resamples the *observed* transcript's
+fixed weight vectors: in every replicate, round 2's candidates stay "feature
+`W_orig` + feature `j`" for the *specific* `W_orig` that won round 1 on the
+real, unresampled data. On fresh null data, a *different* feature would
+generically win round 1. Freezing the anchor denies every replicate's round 2
+the thing the real search actually had — the freedom to build on top of
+whichever feature *that draw's own noise* favored — so the naive bootstrap
+explores a strictly narrower space than the procedure it's nulling, which
+under-estimates the true null max and biases p-values downward.
 
-- Single draw: `mean_null_max` = 0.0609 (naive) vs **0.0695 (oracle)** — larger,
-  exactly as the mechanism predicts.
-- Calibration, 80 pure-null draws, `K=30`: naive KS p = **0.0010** (fails);
-  oracle KS p = **0.5575** (passes); `frac(p<0.05)` drops from 0.163 to 0.075,
-  near the nominal 0.05.
+## 3. The fix, and its real dependency (found before it became a problem)
 
-Re-deriving the selection inside the bootstrap, instead of freezing it at its
-observed value, is sufficient to restore calibration. This isn't circumstantial
-correlational evidence for the mechanism — it's a controlled intervention on
-the specific quantity (which round's winner is held fixed vs re-derived) that
-the mechanism says is the cause, with the predicted effect on both magnitude
-and direction.
+`estimator/recursive_bootstrap.py` re-derives each round's selection inside
+every replicate instead of freezing it, via a `replay(base_columns)` method
+every searcher implements (the `Replayable` protocol, `searchers/base.py`).
+On the same matched 200 draws: recursive-bootstrap KS statistic for Adaptive
+= **0.0876** (KS p = 0.088), *below* the n=200 critical value of 0.096 —
+passes, where naive's 0.2052 fails by a factor of two.
 
-## 3. This is a known phenomenon, not a novel one
+**But look at how `replay` gets round 2's candidate for a counterfactual
+winner it never evaluated.** Say round 1's real winner was feature 7, but
+this replicate's *own* resampled data favors feature 3. `replay` needs
+`single(3) + single(j)` for various `j` — a pair the real search never ran,
+for a winner the real search never had. It gets this by *summing* the
+already-logged `single(3)` and `single(j)` columns. That sum is only equal
+to what `evaluate()` would have returned because `Specification` is linear.
+**This means the transcript alone is not what makes the fix work — the
+transcript plus an algebraic property of the specification class is what
+makes it work.** A specification with a threshold, a lookback window, or any
+interaction term would break the reconstruction, and nothing in the logged
+transcript would let you recover what `(3, j)` scores. This is a genuine
+weakening of "it's all in the transcript," not a footnote, and it's the
+reason SCOPE.md exists as a separate document rather than a clean two-line
+result: the boundary is not "adaptive search is unfixable," it's "adaptive
+search needs *more than the log* unless the specification class cooperates."
+
+**Validating the fix against something that doesn't need that dependency.**
+`estimator/procedure_level_bootstrap.py` is the version with no
+reconstruction requirement: it circularly shifts `r_in` in time relative to
+`x_in` (destroying the feature-return relationship while preserving each
+series' own autocorrelation and cross-feature correlation exactly — a
+standard surrogate-data technique) and literally *re-executes* the
+searcher's `run()` against each nullified draw, B times. Correct for any
+searcher by construction, linearity or not, because it bootstraps the
+procedure rather than reconstructing its output.
+
+Compared against the cheap recursive bootstrap on 20 independent draws
+(`experiments/e3_procedure_level_validation.py`, `K=20, M=60, T=600, B∈{300,500}`):
+mean(`mean_null_max_recursive - mean_null_max_procedure`) = **+0.019**
+(SD 0.043), with the sign flipping roughly evenly across draws — consistent
+with pure Monte Carlo noise, not a systematic bias. The reconstruction is
+sound where it's available; it just isn't available in general.
+
+## 4. Isolating the exact cause: adaptive selection vs. adaptive candidate generation
+
+Everything above argues, from the mechanism, that it's specifically the
+*menu* being data-dependent — not how a searcher picks among an oblivious
+menu — that breaks the naive bootstrap. `searchers/diagnostic.py`'s
+`LatticeAdaptive` tests this as a one-variable-changed experiment: it
+evaluates the *full* fixed lattice (every subset up to `max_features`)
+unconditionally every run — an oblivious menu, identical in shape to
+GridSearch's uncapped transcript — then *selects* the submitted spec with
+the exact same sequential greedy rule as Adaptive. Selection is just as
+sequentially data-dependent as Adaptive's; only candidate generation is not.
+
+Naive-bootstrap null calibration, Adaptive vs. LatticeAdaptive, same 200
+null draws (`K=20, M=60, T=600, B=1500`):
+
+| searcher | KS stat | KS p | type-I rate at α=0.05 (95% Wilson CI) |
+|---|---|---|---|
+| Adaptive | 0.2106 | 0.0000 | 0.120 (0.082–0.172) |
+| LatticeAdaptive | 0.0999 | 0.0344 | 0.065 (0.038–0.108) |
+
+Adaptive's type-I-rate CI excludes the nominal 5% entirely (0.082–0.172).
+LatticeAdaptive's *includes* it (0.038–0.108) — on the operationally
+relevant statistic (how often this would actually fool someone using
+α=0.05), LatticeAdaptive is not distinguishable from correctly calibrated,
+while Adaptive clearly is broken. The KS test, which is sensitive to the
+whole distribution's shape rather than just the α=0.05 tail, still flags a
+small residual deviation for LatticeAdaptive (p=0.034) that a larger
+`n_draws` would be needed to characterize — reported rather than rounded
+away, per the type of honesty this document is trying to model.
+
+One check this result leans on, verified rather than assumed
+(`tests/test_lattice_greedy_optimality.py`): LatticeAdaptive's greedy
+selection examines only `K + (K-1) + (K-2)` of the full lattice's `2^K`-ish
+combos, yet its submitted value exactly equals the true full-lattice maximum
+on every one of 30 draws checked across two different configurations. So the
+comparison above is a clean one-variable-changed experiment — same
+selection rule, same optimal outcome as taking the full max, only the menu's
+obliviousness differs — not confounded by greedy selection landing somewhere
+suboptimal for one searcher and not the other.
+
+If LatticeAdaptive is far closer to calibrated than Adaptive on the
+statistic that actually matters, adaptive candidate generation is the
+dominant driver of the naive bootstrap's failure — not adaptive selection.
+That's the one-sentence version of everything above, demonstrated rather
+than argued from the mechanism alone.
+
+## 5. This is a known phenomenon, not a novel one
 
 - **Leeb & Pötscher (2005)**, *Model Selection and Inference: Facts and
   Fiction*, Econometric Theory — proves the sampling distribution of a
   post-model-selection estimator cannot in general be consistently estimated
   by any procedure that treats the selected model as fixed, because the map
-  from data to "which model was selected" is discontinuous in the data. This
-  is the formal version of what §2 shows constructively for this case.
+  from data to "which model was selected" is discontinuous in the data.
 - **Efron (2014)**, *Estimation and Accuracy after Model Selection*, JASA —
   the prescription: the bootstrap must re-run the *selection step* inside
   every replicate, not just resample data underlying an already-fixed
-  selected model. That is exactly what the oracle bootstrap does, and exactly
-  why it works.
+  selected model. `recursive_bootstrap.py` does this via reconstruction;
+  `procedure_level_bootstrap.py` does it literally, with no dependency.
 - **Berk, Brown, Buja, Zhang & Zhao (2013)**, *Valid Post-Selection
   Inference* (PoSI), and **Lee, Sun, Sun & Taylor (2016)**, *Exact
-  Post-Selection Inference, with Application to the Lasso* — the selective-
-  inference program: conditioning on a data-dependent selection event
-  changes the correct reference null distribution, and substituting the
-  marginal/unconditional null is systematically anti-conservative.
+  Post-Selection Inference, with Application to the Lasso* — the
+  selective-inference program: conditioning on a data-dependent selection
+  event changes the correct reference null distribution, and substituting
+  the marginal/unconditional null is systematically anti-conservative. This
+  is the analytic alternative to re-simulation (§6, route 2).
 - **Benjamini & Yekutieli (2005)**, *False Discovery Rate–Adjusted Multiple
   Confidence Intervals for Selected Parameters* — the same principle inside
   the multiple-comparisons framing this project otherwise sits in.
 
-## 4. What is and isn't validated
+## 6. What's validated, what's fixed, and what's still open
 
-**Validated, cleanly, by experiment 1:** the bootstrap null-maximum estimator
+**Validated at n=200, properly powered, matched seeds:** the naive bootstrap
 is correctly calibrated for any search whose candidate menu is data-oblivious
-— fixed given the search's own configuration, independent of realized
-outcomes — for any trial count from 1 to several thousand and any degree of
-correlation among candidates, including exact duplicates (§6 test 4) and
-heavily overlapping subsets (GridSearch). This is a strictly more general
-claim than "works when trials are independent," which is what the spec's own
-framing under-sells, and it is the operative case for Greedy- or
-GridSearch-shaped agent behavior: an agent that decides its *menu* up front
-(even a huge, correlated one) and then reports the best result is correctly
-handled.
+— any trial count from 1 to several thousand, any correlation among
+candidates including exact duplicates — covering Honest/Greedy/GridSearch-
+shaped agent behavior: an agent that decides its *menu* up front, even a
+huge and correlated one, and reports the best result.
 
-**Not currently validated:** search where later trials are chosen
-conditional on earlier trials' *realized outcomes* within the same run —
-Adaptive, and by extension the sequential tool-calling loop of a real LLM
-agent (spec §3.3), where each `evaluate()` call is informed by the results of
-previous ones. This is precisely the structure spec §3.1 identifies as load-
-bearing for the eventual agent experiments, not a corner case being set aside.
+**Fixed, with a known dependency:** sequential search where later trials are
+chosen conditional on earlier realized outcomes (Adaptive) is calibrated
+under the recursive bootstrap *provided* the specification class is
+algebraically rich enough to reconstruct untried candidates from already-
+logged ones (linearity, here). Validated independently against a
+reconstruction-free gold standard (§3). This is not guaranteed for a general
+searcher, and is not guaranteed at all for an LLM agent.
 
-This isn't a reason to abandon the approach — it's the exact boundary the
-project's own Hypothesis section anticipates probing ("whether adaptive data
-analysis repairs it... whether a Thresholdout-style query budget restores
-calibration"). §2's oracle-bootstrap result is a first positive existence
-proof that a bootstrap-based fix is possible for sequential search using only
-the transcript already being logged — no raw asset-level data, no change to
-what gets recorded — provided the round's continuation can be reconstructed
-from earlier columns.
+**Still open, stated rather than hidden:** the procedure-level bootstrap is
+the fully general fix, but it requires re-running the search B times. A
+scripted searcher's `run()` is cheap and deterministic, so this costs
+B× the compute. An LLM agent is neither: re-running it B times means B×
+the token cost, and the agent isn't deterministic, so "re-running the same
+procedure" doesn't even mean the same thing it means for code. Three
+candidate routes past this, none yet tried:
 
-## 5. What's still open
+1. **A surrogate searcher** fitted to the agent's own selection behavior —
+   approximate the agent's decision policy with something cheap and
+   deterministic enough to re-run B times, trading exactness for
+   tractability.
+2. **Conditional selective inference** (Lee, Sun, Sun & Taylor 2016-style) —
+   an analytic correction conditioning on the realized selection event
+   directly, rather than re-simulating it at all.
+3. **Plain sample splitting** — reserve part of the in-sample data purely
+   for the agent's exploration and a separate slice purely for evaluating
+   whatever it finally selects, sidestepping the multiple-testing correction
+   entirely at the cost of using less data for search and less for
+   evaluation.
 
-The oracle bootstrap solves a narrow case: additive, linear specifications
-where round `r+1`'s candidates are exact sums of already-logged round-0
-columns, so any hypothetical continuation is reconstructable without
-re-running the sandbox. A real agent's search need not have this property —
-a later specification is not guaranteed to be a fixed linear function of
-earlier evaluated ones. Generalizing the fix means either:
-
-(a) a general recursive bootstrap that re-executes the searcher's *decision
-rule* on resampled underlying (asset-level) data each replicate — well-
-defined for a scripted searcher (the rule is known code), structurally
-harder to define for an LLM agent (the "rule" is the model's own weights and
-context); or
-(b) an explicit selective-inference correction (Lee et al. 2016-style)
-tailored to the specific sequential structure, conditioning on the realized
-selection event rather than re-simulating it.
+Which of these actually works against a real agent is a genuinely open
+question. Finding the exact boundary of the transcript-only claim — and
+having three concrete routes past it, rather than one clean result that
+would have quietly assumed obliviousness — is the more interesting thing to
+have going into Phase 2.

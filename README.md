@@ -17,124 +17,127 @@ ten. No independence assumption, no invented trial count.
 
 It's validated first against a synthetic data-generating process with a
 computable oracle, where "how much did the search cost you" has a right
-answer to check against, before any claim is made about real backtests.
+answer to check against, before any claim is made about real backtests. The
+long-run aim (`estimator_build_spec.md`, `The Observable Garden.pdf`) is an
+instrumented sandbox an agent searches against, where the estimator scores
+the agent's stated confidence against what its own transcript implies it
+should have expected — testing whether agents discount for the search
+they've just run, or are simply deaf to their own trial count.
 
-Full design in `estimator_build_spec.md`; motivating essay in
-`The Observable Garden.pdf`. This README tracks build status and will lead
-with results once there are any.
+## How it works
 
-## Status
+1. A search evaluates candidate specifications one at a time against a
+   sandbox (`environments/sandbox.py`). Every evaluation is logged with its
+   full in-sample return stream, whether or not the search goes on to use it.
+2. The searcher submits one specification plus a predictive distribution
+   over its own out-of-sample Sharpe.
+3. The estimator (`estimator/bootstrap.py`) demeans every logged column
+   (imposing the null that nothing in the transcript carries real edge),
+   then repeatedly draws one stationary-bootstrap time index and applies it
+   to *all* logged columns at once — preserving their observed correlation
+   structure exactly — and tracks the resampled maximum. That empirical
+   distribution gives a deflated Sharpe and a p-value: how surprising is the
+   reported result, given a search that looked exactly like this one?
+4. `environments/dgp.py` provides the synthetic world this is validated
+   against: a panel with a known signal set and a closed-form oracle Sharpe,
+   so "how much did the search cost" has a computable right answer.
 
-**Days 1-3 (done):** synthetic DGP with a computable oracle, and the sandbox
-contract that scripted searchers and an eventual LLM agent will both run
-against.
+## Validated scope
 
-- `environments/dgp.py` — panel DGP (`M` assets x `T` periods x `K` features,
-  `s` of them carrying signal), an equicorrelation `Sigma_x`, and a closed-form
-  oracle Sharpe derived from the true linear strategy. Verified against a
-  chunked Monte Carlo simulation (`tests/test_oracle.py`) across correlation
-  and noise-scale sweeps, including fat-tailed noise.
-- `environments/sandbox.py` — `get_data` / `evaluate` / `submit` contract.
-  Every `evaluate()` call logs its full return stream regardless of use; OOS
-  data is reachable only through a harness-only grading method a searcher
-  never calls.
+Full argument and citations in `SCOPE.md`. The short version: the bootstrap
+is exactly valid whenever the search's *candidate menu* is **data-oblivious**
+— fixed given the search's own configuration, independent of realized
+outcomes — for *any* trial count and *any* correlation structure among
+candidates, including exact duplicates. That's a strictly weaker condition
+than the "independent trials" framing usually attached to this kind of
+method, and it's what makes a huge, heavily-correlated grid search just as
+tractable as one honest pre-registered backtest.
 
-**Days 4-6 (done):** bootstrap estimator and closed-form DSR baseline.
+It breaks for search where later trials are chosen conditional on earlier
+trials' *realized* outcomes within the same run — the structure of a real
+agent's tool-calling loop — and the reason is sharper than "the naive
+bootstrap has a bug": **a logged transcript licenses a valid correction only
+when the candidate set is fixed. When the search generates candidates
+conditional on its own earlier results, the transcript alone is not enough.**
+A **recursive bootstrap** (`estimator/recursive_bootstrap.py`) that
+re-derives each round's selection inside every replicate fixes this, but it
+depends on the specification class being algebraically rich enough to
+reconstruct candidates that were never actually evaluated (linearity, here)
+— which is a real, load-bearing dependency, not a detail, and is checked
+explicitly against a reconstruction-free gold standard
+(`estimator/procedure_level_bootstrap.py`). Full argument, including the
+experiment that isolates *why* it fails — adaptive candidate generation, not
+adaptive selection — is in `SCOPE.md` §§2–4.
 
-- `estimator/bootstrap.py` — stationary bootstrap (Politis-Romano) with joint
-  row resampling across all trial columns simultaneously, block length chosen
-  per-column via Politis-White (`arch.bootstrap.optimal_block_length`, median
-  across columns). `null_max_bootstrap` / `deflate`.
-- `estimator/deflated_sharpe.py` — closed-form DSR (Bailey & Lopez de Prado),
-  with both raw and eigenvalue-based effective trial count, kept only as the
-  baseline the bootstrap is measured against.
-- Tests 2-5 (spec §6) passing: independent-trial agreement with the closed
-  form, ~zero deflation at N=1, block length correctly under-deflates
-  autocorrelated data at L=1. Test 4 (duplicate invariance) is the one
-  the spec calls "the thesis in eight lines of code": duplicating every trial
-  column leaves the bootstrap's mean null-max unchanged while the naive
-  closed form moves up meaningfully — verified for both iid and
-  factor-correlated base trials.
-- Known limitation to revisit if it bites: at large N (tens of thousands of
-  trials, e.g. a full GridSearch sweep) the bootstrap's B=10,000 default gets
-  slow (~1.7s at N=50, ~85s extrapolated at N=2000). Not optimized yet since
-  Days 7-9 hasn't produced a real large-N transcript to profile against.
+## Results
 
-**Days 7-9 (blocked — the gate caught something real):** the four scripted
-searchers are built and tested (`searchers/scripted.py`, `tests/
-test_searchers.py`), and experiment 1 (`experiments/e1_null_calibration.py`)
-ran: 100 pure-null (`s=0`) draws, every searcher, KS test against U(0,1).
+*Updated as experiments run. See `figures/` for plots and `SCOPE.md` for the
+theory behind anything non-obvious below. Type-I rate = fraction of null
+draws with p < 0.05 (should be ≈0.05); reported with a 95% Wilson CI
+alongside the KS statistic, since a bare KS p-value near its critical value
+doesn't settle the question either way.*
 
-| searcher   | KS statistic | KS p-value | verdict |
+**Null calibration, properly powered (n=200 matched null draws, `K=25,
+M=60, T=600, B=1500`, `experiments/e1_null_calibration.py` /
+`e1_recursive_calibration.py`):**
+
+| searcher | naive bootstrap | recursive bootstrap |
+|---|---|---|
+| Honest     | KS p = 0.777 — pass | KS p = 0.777 — pass |
+| Greedy     | KS p = 0.118 — pass | KS p = 0.118 — pass (identical to naive, as it must be — same math) |
+| GridSearch | KS p = 0.174 — pass | KS p = 0.144 — pass |
+| Adaptive   | **KS D = 0.205, p ≈ 0.0000 — fail, over 2x the critical value** | KS D = 0.088, p = 0.088 — pass, just under the n=200 critical value (0.096) |
+
+**Isolating the cause** — Adaptive vs. `LatticeAdaptive` (same greedy
+selection rule, but evaluates the full fixed lattice unconditionally instead
+of building it round-by-round; `experiments/e2_lattice_control.py`, n=200,
+`K=20, M=60, T=600, B=1500`):
+
+| searcher | KS stat | KS p | type-I rate at α=0.05 (95% CI) |
 |---|---|---|---|
-| Honest     | 0.110 | 0.167 | pass |
-| Greedy     | 0.042 | 0.992 | pass |
-| GridSearch | 0.048 | 0.966 | pass |
-| Adaptive   | 0.173 | **0.004** | **fail** |
+| Adaptive | 0.211 | 0.0000 | 0.120 (0.082–0.172) — excludes nominal 5% |
+| LatticeAdaptive | 0.100 | 0.034 | 0.065 (0.038–0.108) — includes nominal 5% |
 
-(figure: `figures/e1_null_calibration.png`)
+Adaptive candidate *generation* — not adaptive *selection* — is what breaks
+the naive bootstrap: on the operationally relevant statistic (type-I rate),
+LatticeAdaptive isn't distinguishable from correctly calibrated; Adaptive is.
 
-Adaptive — the searcher the spec calls "the one that matters most" because
-it reproduces a real agent's sequential structure — is *not* calibrated.
-GridSearch has far more trials and equally correlated ones, and passes; so
-it isn't N and it isn't correlation.
+**Validating the fix against a dependency-free gold standard**
+(`experiments/e3_procedure_level_validation.py`, 20 draws): the cheap
+recursive bootstrap vs. a procedure-level bootstrap that re-executes the
+actual search on nullified raw data (no linearity dependency) — mean
+difference in `mean_null_max` = +0.019 (SD 0.043), sign flipping roughly
+evenly across draws. No detectable systematic bias.
 
-`experiments/diagnose_adaptive_calibration.py` isolates why: `PseudoAdaptive`
-runs the identical round structure and trial count as `Adaptive`, but
-round-2+ candidates always extend a *fixed* anchor feature instead of
-whichever feature round 0's data happened to pick as best. Same N, same
-correlated/overlapping subsets, same number of rounds — the only thing
-removed is choosing later trials conditional on an earlier trial's outcome.
-At matched scale (`K=30`, 80 draws): Adaptive KS p=0.020 (fails), PseudoAdaptive
-KS p=0.539 (passes).
+**Definitive Adaptive check at n=500** (`experiments/e4_adaptive_n500.py`):
+*in progress.*
 
-So the failure isn't the trial count and isn't the correlation structure —
-both of those are exactly what the bootstrap is built to handle, and it
-handles them correctly (that's what Greedy and GridSearch show). It's that
-the bootstrap resamples the *observed* transcript's columns holding the
-column *set* fixed, while Adaptive's later-round column set is itself a
-function of the realized null noise: which pairs even get tried in round 2
-depends on which single won round 1, on this specific draw. A resample that
-reuses the same fixed weight vectors doesn't reproduce the counterfactual
-where a different round-1 winner would have sent round 2 down a different
-path entirely. Spec §4.1 calls this the pass/fail gate for the whole project
-— it is failing for exactly the searcher the spec flags as the one that
-matters most, so Days 10+ are on hold pending a decision on how to handle
-sequentially-adaptive search (see conversation / open question below).
+**Experiments 2-4 from the build spec** (predictive power under the
+alternative, scaling with trial budget, correlation sensitivity) — not yet
+run; blocked behind resolving the adaptive-search boundary above first.
 
-**Resolved (for now): scope the claim, ground the failure in theory.** Full
-writeup in `SCOPE.md`. Short version:
+## Repository layout
 
-- The bootstrap's actual sufficient condition isn't independence (what the
-  spec's own framing says) — it's that the candidate *menu* be
-  **data-oblivious** (fixed given the search's configuration, independent of
-  realized outcomes). That's strictly weaker than independence and it's
-  exactly what Honest/Greedy/GridSearch have, however large or correlated
-  their menus get — which is why all three are calibrated.
-- Adaptive's menu isn't oblivious: round 2's candidates are built on top of
-  whichever feature *actually* won round 1 on this realized data. Because
-  `Specification` is linear (a pair's return stream is exactly
-  `single(a)+single(b)`, confirmed to float precision), this is directly
-  checkable: an "oracle" bootstrap that re-derives each round's winner from
-  every replicate's *own* resampled data — instead of freezing it at the
-  observed winner, which is what the naive bootstrap does — raises
-  `mean_null_max` (0.061→0.070 on a single draw) and restores calibration
-  (KS p: 0.001→0.558 over 80 null draws). That's a controlled confirmation
-  of the mechanism, not just a plausible story.
-- This is a known phenomenon (Leeb & Pötscher 2005 on the impossibility of
-  naive post-selection bootstraps; Efron 2014's prescription to re-run
-  selection inside the bootstrap, which is exactly what the oracle bootstrap
-  above does; the selective-inference program of Berk et al. 2013 and Lee et
-  al. 2016), not a novel one — `SCOPE.md` §3 has the precise citations.
-- **Validated claim going forward:** the estimator is correctly calibrated
-  for any data-oblivious search — any trial count, any correlation,
-  duplicates included — which covers Honest/Greedy/GridSearch-shaped agent
-  behavior (menu fixed up front, best result reported). Sequential search
-  (Adaptive, and a real agent's tool-calling loop) is a documented open
-  boundary, not silently swept in.
-
-Days 10-13 (experiments 2-4, decay/scaling/correlation curves) proceed on
-Honest, Greedy, and GridSearch, within this scoped claim.
+```
+environments/   the DGP (computable oracle) and the Sandbox contract
+searchers/      scripted.py: Honest, Greedy, GridSearch, Adaptive -- each
+                implements run() (against a Sandbox) and replay() (pure-
+                array, for the recursive bootstrap). diagnostic.py:
+                LatticeAdaptive, the selection-vs-generation control.
+estimator/      bootstrap.py (naive), recursive_bootstrap.py (re-derives
+                selection per replicate via replay()), procedure_level_
+                bootstrap.py (dependency-free gold standard: re-executes
+                run() on nullified data), deflated_sharpe.py (closed-form
+                baseline), metrics.py (type-I rate + Wilson CI, KS critical
+                value)
+experiments/    e1 (null calibration, both estimators), e2 (lattice
+                control), e3 (procedure-level validation), e4 (n=500
+                Adaptive), plus the diagnostic scripts behind SCOPE.md
+tests/          correctness tests -- duplicate-invariance
+                (estimator/bootstrap.py), run()/replay() agreement, the
+                lattice greedy-optimality property e2 leans on
+figures/        plots referenced above
+```
 
 ## Setup
 

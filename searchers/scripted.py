@@ -8,6 +8,13 @@ Every searcher submits a naive, undiscounted predictive distribution
 to discount for their own search. That's the point: calibration is scored
 against the estimator's transcript-implied deflation, not against anything
 the scripted searcher itself believes.
+
+Every searcher also implements `replay` (searchers/base.py's `Replayable`
+protocol): the SAME decision rule as `run`, re-expressed as pure array
+operations on a set of (possibly resampled) base feature columns instead of
+sandbox.evaluate() calls. `run` and `replay` share one core routine per
+searcher so the two can't drift out of sync -- `replay` is what makes
+estimator/recursive_bootstrap.py possible.
 """
 from __future__ import annotations
 
@@ -16,6 +23,7 @@ import itertools
 import numpy as np
 
 from environments.sandbox import Sandbox, Specification, Distribution, EvalResult
+from estimator.bootstrap import sharpe
 from searchers.base import Searcher
 
 
@@ -23,6 +31,41 @@ def _one_hot_sum(K: int, indices) -> np.ndarray:
     w = np.zeros(K)
     w[list(indices)] = 1.0
     return w
+
+
+def _column_sharpe(column: np.ndarray, annualization: float = 1.0) -> float:
+    return float(sharpe(column[:, None], axis=0, annualization=annualization)[0])
+
+
+def _greedy_forward_selection(K: int, max_features: int, singles_score, support_score):
+    """Shared core of Adaptive's run() and replay(): evaluate all K singles,
+    keep the best, then repeatedly try extending the current best support by
+    one more feature, keeping the extension only if it improves.
+
+    singles_score(k) -> float; support_score(support: list[int]) -> float.
+    Returns (final_support, final_score)."""
+    best_k, best_score = None, -np.inf
+    for k in range(K):
+        score = singles_score(k)
+        if score > best_score:
+            best_k, best_score = k, score
+
+    support = [best_k]
+    remaining = set(range(K)) - {best_k}
+
+    for _ in range(max_features - 1):
+        round_best_j, round_best_score = None, -np.inf
+        for j in remaining:
+            score = support_score(support + [j])
+            if score > round_best_score:
+                round_best_j, round_best_score = j, score
+        if round_best_j is None or round_best_score <= best_score:
+            break
+        support.append(round_best_j)
+        remaining.discard(round_best_j)
+        best_score = round_best_score
+
+    return support, best_score
 
 
 class Honest(Searcher):
@@ -39,6 +82,9 @@ class Honest(Searcher):
         result = sandbox.evaluate(spec)
         sandbox.submit(spec, Distribution.degenerate(result.sharpe))
 
+    def replay(self, base_columns: np.ndarray, annualization: float = 1.0) -> float:
+        return _column_sharpe(base_columns[:, self.feature_index], annualization)
+
 
 class Greedy(Searcher):
     """Evaluates all K single-feature strategies, takes the best. Minimal
@@ -54,6 +100,9 @@ class Greedy(Searcher):
             if best is None or result.sharpe > best[1].sharpe:
                 best = (spec, result)
         sandbox.submit(best[0], Distribution.degenerate(best[1].sharpe))
+
+    def replay(self, base_columns: np.ndarray, annualization: float = 1.0) -> float:
+        return float(sharpe(base_columns, axis=0, annualization=annualization).max())
 
 
 class GridSearch(Searcher):
@@ -78,8 +127,14 @@ class GridSearch(Searcher):
         self.subset_sizes = subset_sizes
         self.max_trials = max_trials
 
-    def run(self, sandbox: Sandbox) -> None:
-        K = sandbox.num_features
+    def _combos(self, K: int) -> list[tuple[int, ...]]:
+        # A function of K/subset_sizes/seed only -- never of realized returns
+        # -- so it is exactly reproducible inside replay() without having
+        # observed the original run's transcript. Cached: replay() calls this
+        # once per bootstrap replicate, and it's identical every time.
+        cached = getattr(self, "_combos_cache", None)
+        if cached is not None and cached[0] == K:
+            return cached[1]
         combos = list(itertools.chain.from_iterable(
             itertools.combinations(range(K), size) for size in self.subset_sizes
         ))
@@ -87,14 +142,37 @@ class GridSearch(Searcher):
             rng = np.random.default_rng(self.seed)
             keep = rng.choice(len(combos), size=self.max_trials, replace=False)
             combos = [combos[i] for i in keep]
+        self._combos_cache = (K, combos)
+        return combos
 
+    def _membership_matrix(self, K: int) -> np.ndarray:
+        # (K, n_combos) 0/1 matrix so replay() can score every combo in one
+        # matmul + vectorized Sharpe instead of a per-combo Python loop --
+        # replay() runs once per bootstrap replicate, so this matters.
+        cached = getattr(self, "_membership_cache", None)
+        if cached is not None and cached[0] == K:
+            return cached[1]
+        combos = self._combos(K)
+        M = np.zeros((K, len(combos)))
+        for c, combo in enumerate(combos):
+            M[list(combo), c] = 1.0
+        self._membership_cache = (K, M)
+        return M
+
+    def run(self, sandbox: Sandbox) -> None:
+        K = sandbox.num_features
         best: tuple[Specification, EvalResult] | None = None
-        for combo in combos:
+        for combo in self._combos(K):
             spec = Specification(weights=_one_hot_sum(K, combo), name=f"grid_{combo}")
             result = sandbox.evaluate(spec)
             if best is None or result.sharpe > best[1].sharpe:
                 best = (spec, result)
         sandbox.submit(best[0], Distribution.degenerate(best[1].sharpe))
+
+    def replay(self, base_columns: np.ndarray, annualization: float = 1.0) -> float:
+        K = base_columns.shape[1]
+        candidates = base_columns @ self._membership_matrix(K)   # (T, n_combos)
+        return float(sharpe(candidates, axis=0, annualization=annualization).max())
 
 
 class Adaptive(Searcher):
@@ -112,31 +190,25 @@ class Adaptive(Searcher):
 
     def run(self, sandbox: Sandbox) -> None:
         K = sandbox.num_features
-        remaining = set(range(K))
 
-        best_singles: tuple[int, EvalResult] | None = None
-        for k in range(K):
-            result = sandbox.evaluate(Specification(weights=_one_hot_sum(K, [k]), name=f"adaptive_f{k}"))
-            if best_singles is None or result.sharpe > best_singles[1].sharpe:
-                best_singles = (k, result)
+        def singles_score(k):
+            return sandbox.evaluate(Specification(weights=_one_hot_sum(K, [k]), name=f"adaptive_f{k}")).sharpe
 
-        support = [best_singles[0]]
-        best_sharpe = best_singles[1].sharpe
-        best_spec = Specification(weights=_one_hot_sum(K, support), name=f"adaptive_{support}")
-        remaining.discard(support[0])
+        def support_score(support):
+            return sandbox.evaluate(Specification(weights=_one_hot_sum(K, support), name=f"adaptive_{support}")).sharpe
 
-        for _ in range(self.max_features - 1):
-            round_best: tuple[int, EvalResult] | None = None
-            for k in remaining:
-                trial_support = support + [k]
-                result = sandbox.evaluate(Specification(weights=_one_hot_sum(K, trial_support), name=f"adaptive_{trial_support}"))
-                if round_best is None or result.sharpe > round_best[1].sharpe:
-                    round_best = (k, result)
-            if round_best is None or round_best[1].sharpe <= best_sharpe:
-                break
-            support.append(round_best[0])
-            remaining.discard(round_best[0])
-            best_sharpe = round_best[1].sharpe
-            best_spec = Specification(weights=_one_hot_sum(K, support), name=f"adaptive_{support}")
+        support, best_sharpe = _greedy_forward_selection(K, self.max_features, singles_score, support_score)
+        spec = Specification(weights=_one_hot_sum(K, support), name=f"adaptive_{support}")
+        sandbox.submit(spec, Distribution.degenerate(best_sharpe))
 
-        sandbox.submit(best_spec, Distribution.degenerate(best_sharpe))
+    def replay(self, base_columns: np.ndarray, annualization: float = 1.0) -> float:
+        K = base_columns.shape[1]
+
+        def singles_score(k):
+            return _column_sharpe(base_columns[:, k], annualization)
+
+        def support_score(support):
+            return _column_sharpe(base_columns[:, support].sum(axis=1), annualization)
+
+        _, best_sharpe = _greedy_forward_selection(K, self.max_features, singles_score, support_score)
+        return best_sharpe

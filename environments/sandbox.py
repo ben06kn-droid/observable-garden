@@ -149,3 +149,14 @@ class Sandbox:
         if std == 0:
             return 0.0
         return float(R.mean() / std * np.sqrt(self.periods_per_year))
+
+    def base_feature_columns(self) -> np.ndarray:
+        """Harness-only: the K single-feature in-sample return columns
+        (T, K), computed directly rather than via evaluate() (so calling this
+        adds nothing to the transcript). Not a leak — every entry is already
+        reconstructable by a searcher from get_data() alone. Exists for the
+        recursive bootstrap (estimator/recursive_bootstrap.py), which needs
+        these building blocks regardless of which specifications a given
+        searcher happened to log, so that a searcher's `replay` can be
+        re-derived under resampled null data without re-invoking the sandbox."""
+        return (self._data.x_in * self._data.r_in[:, :, None]).mean(axis=1)
