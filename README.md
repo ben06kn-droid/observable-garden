@@ -3,6 +3,32 @@
 **An estimator for how much of a reported backtest is search rather than
 signal, and a gate that turns it into a verdict.**
 
+## The headline result
+
+A search that builds on its own best result breaks the standard correction,
+and it breaks worse the wider the data. Below: a search picks its best
+feature, then pairs it with each of the others and keeps the best pair, on
+data with no signal at all. A correct test at the 5% level should report a
+find 5% of the time.
+
+| candidate features | 10 | 20 | 40 | 80 |
+|---|---|---|---|---|
+| Reality Check on the search's log | 10.0% | 14.2% | 22.4% | **36.2%** |
+| this project's correction | 4.4% | 5.0% | 4.8% | 5.2% |
+
+With 80 uncorrelated features, **more than a third of searches over pure
+noise clear a nominal 5% bar**. Correlation between features damps this:
+at correlation 0.3 the naive rate runs 7.0% to 14.0% over the same range,
+against 4.0% to 5.0% corrected. Every point is n=500 paired draws,
+pre-registered, and matches a Gaussian-limit prediction fixed before the run
+(SCOPE.md §19).
+
+The correction is a recursive bootstrap, which re-derives what the search
+would have chosen on each resampled dataset instead of freezing the choices
+it made on the real data, or the Reality Check run over a whole class of
+specifications declared before the search. Both stay at nominal across the
+range.
+
 ## Quickstart
 
 ```
@@ -97,6 +123,15 @@ algebraically — checked against a reconstruction-free gold standard.
 
 ## Results
 
+- **Wider searches make the naive correction worse** — the headline result
+  above. For a search that builds on its own best feature, naive type-I rose
+  from 10% to 36% as the candidate features grew from 10 to 80 with
+  uncorrelated features, and from 7% to 14% at correlation 0.3, matching a
+  Gaussian-limit prediction fixed in advance. The recursive and full-class
+  corrections stayed at 4–5% throughout. The mechanism is the search's value
+  tracking the top two features, whose lead over an ordinary feature grows
+  with the count, while the naive null keeps re-testing the one feature that
+  won on the real data (SCOPE.md §19, THEORY.md P4).
 - **Null calibration**: Honest/Greedy/GridSearch pass under the naive
   bootstrap; **Adaptive fails** because its candidate menu depends on
   outcomes: naive type-I 13.6% against nominal 5% (n=500), where a
@@ -113,12 +148,6 @@ algebraically — checked against a reconstruction-free gold standard.
   best results. Rules that anchor on a random or uncorrelated feature stay
   at or near nominal, and inflation rises with how strongly the anchor
   tracks performance (SCOPE.md §14–18).
-- **Wider searches make the naive correction worse.** For a search that
-  builds on its own best feature, naive type-I rose from 10% to 36% as the
-  candidate features grew from 10 to 80 with uncorrelated features, and
-  from 7% to 14% at correlation 0.3, matching a Gaussian-limit prediction
-  fixed in advance. The recursive and full-class corrections stayed at 4–5%
-  throughout (SCOPE.md §19).
 - **Predictive power** (`s=3`, real signal): only **bootstrap deflation is
   unbiased** for average decay; closed-form DSR-L with the raw trial count
   is conservative, less so as correlation rises; DSR-L with a
