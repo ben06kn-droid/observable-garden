@@ -211,7 +211,10 @@ every candidate at every round (≈ LatticeAdaptive), `k=1` is exactly
 Adaptive. Plus two structural variants holding `k=1` fixed: `DepthAdaptive`
 (one more round) and `NeighborAdaptive` (round 2 anchors on the feature most
 correlated with round 1's winner, not the winner itself — same *amount* of
-data-dependence, a different rule generating it).
+data-dependence, a different rule generating it). **Correction (§14):** a bug
+made NeighborAdaptive anchor on the round-1 winner itself, so throughout this
+section it was Adaptive under another name. Its row and every conclusion drawn
+from it below are void; §14 reruns the comparison with the bug fixed.
 
 Prediction, stated before running: naive's type-I rate decreases
 monotonically in `k`. Falsifiers, stated before running: flat in `k` means
@@ -233,7 +236,7 @@ gets a validation spot-check as described below).
 | BeamAdaptive(2) | 0.932 | 0.107 (0.067–0.166) | 0.060 (0.032–0.110) |
 | Adaptive (k=1) | 0.950 | 0.127 (0.083–0.189) | 0.060 (0.032–0.110) |
 | DepthAdaptive | 0.950 | 0.133 (0.088–0.197) | 0.060 (0.032–0.110) |
-| NeighborAdaptive | 0.950 | 0.127 (0.083–0.189) | 0.060 (0.032–0.110) |
+| NeighborAdaptive (bug: was Adaptive, see §14) | 0.950 | 0.127 (0.083–0.189) | 0.060 (0.032–0.110) |
 
 (figures: `figures/e5_dose_response_primary.png`, `figures/e5_divergence_diagnostic.png`)
 
@@ -258,13 +261,15 @@ the two innocent explanations and the bad one all got checked:
 - *Do the p-values actually differ, with rejection counts only coincidentally
   matching?* No — loaded the raw arrays and checked directly: recursive's
   p-value array is **elementwise identical** across LatticeAdaptive,
-  BeamAdaptive(16/4/2), Adaptive, and NeighborAdaptive (DepthAdaptive
+  BeamAdaptive(16/4/2), Adaptive, and NeighborAdaptive (the last trivially:
+  the anchor bug made it Adaptive, §14) (DepthAdaptive
   differs, correlation 1.000, because its extra round changes the
   achievable support size). Traced to the source: `M_b` itself is
   identical to floating-point precision across all four searchers on
   every one of 300 tested bootstrap replicates (max abs diff = 0.0).
 - *Why, mechanically, if beam_width is respected?* Greedy forward selection
-  (any beam width 1–K, or NeighborAdaptive's correlation-based rule)
+  (any beam width 1–K; NeighborAdaptive's correlation rule was never actually
+  exercised, §14)
   finds the TRUE global optimum over subsets of size ≤3 on this DGP with
   very high probability — measured at 1/300 mismatches (0.3%) on fresh iid
   draws and 0/300 on bootstrap replicates of one draw (both well below the
@@ -303,22 +308,26 @@ noise rather than a real, fixable leak — stated as inconclusive-but-
 reassuring rather than resolved, since resolving it properly would need a
 substantially larger n than this diagnostic used.
 
-**Structural axis confirms it's data-dependence, not the specific rule.**
-DepthAdaptive (0.133) runs slightly hotter than Adaptive (0.127) — selection
-compounding over an extra round, in the predicted direction, though the
-CIs overlap too much to call this decisive on its own. NeighborAdaptive
-(0.127) lands exactly on Adaptive's rate despite anchoring round 2 on
-feature *correlation* rather than Sharpe-argmax: a completely different
-selection rule produces the same inflation, because it has the same
-*amount* of realized-data-dependence. That's the direct answer to "is it
-Sharpe-argmax specifically, or any data-dependent rule" — it's the latter.
+**Structural axis, corrected.** DepthAdaptive (0.133) runs slightly hotter
+than Adaptive (0.127) — selection compounding over an extra round, in the
+predicted direction, though the CIs overlap too much to call this decisive on
+its own. The original version of this paragraph concluded that
+NeighborAdaptive, anchoring round 2 on feature correlation rather than
+Sharpe-argmax, "lands exactly on Adaptive's rate" because any data-dependent
+rule with the same amount of data-dependence inflates equally. That was a
+bug, not a finding: `_anchor` set the winner's correlation to −inf before
+taking absolute values, so |−inf| won, the anchor was always the winner, and
+NeighborAdaptive was Adaptive. Identical rates were identity, not evidence.
+Rerun with the bug fixed and three more anchor rules (§14), the conclusion
+reverses: the rule matters, and only the anchor built on the selection
+statistic's own winner inflated the naive bootstrap.
 
 **Two diagnostics, compared honestly — the predicted winner didn't win.**
 `estimator/divergence.py`'s Jaccard divergence rate (what fraction of the
 real transcript's round-1 beam a bootstrap replicate's own beam fails to
 reproduce) is a *rate*, bounded at 1, and it saturates: 0.000 → 0.331 →
 0.876 → 0.932 → 0.950 across the dose axis, compressing BeamAdaptive(2)
-through NeighborAdaptive into a narrow band while their type-I rates keep
+through NeighborAdaptive (whose figures are Adaptive's; §14) into a narrow band while their type-I rates keep
 separating by a further ~4 points. The predicted fix was a *magnitude*:
 `beam_entropy`, the Shannon entropy of the round-1 beam's distribution
 across replicates, normalized by `log(C(K, beam_width))` since raw entropy
@@ -1026,3 +1035,53 @@ at 7–11% single-strategy power. Which side a real search is on depends on
 where the edge sits in its menu, which the transcript does not reveal, so
 the gate prints the single-strategy figure and states no direction.
 INADMISSIBLE does not need the bound: it only ever replaces FAIL.
+
+## 14. Which anchor rule distorts the naive bootstrap: coupling to the selection statistic
+
+**Adaptivity alone does not distort the naive bootstrap. Only the menu built
+around the selection statistic's own winner did.** Four searchers differing
+only in round 2's anchor rule, with max_features=2 so the anchor is the only
+data-dependent step in the menu: n=500 paired null draws, K=20, M=50, T=500,
+ρ=0.3 (equicorrelated features), B=1500. Pre-registered and committed before
+running (`experiments/e15_anchor_coupling.py`), after fixing the bug that had
+made §5's NeighborAdaptive identical to Adaptive.
+
+| anchor rule | coupling to the selection statistic | naive type-I (95% CI) | naive KS p | recursive type-I (95% CI) | recursive KS p |
+|---|---|---|---|---|---|
+| winner (round-1 Sharpe argmax) | maximal | **0.082** (0.061–0.109) | 0.0015 | 0.046 (0.031–0.068) | 0.358 |
+| neighbor (most correlated with the winner) | intended weaker | 0.036 (0.023–0.056) | 0.321 | 0.038 (0.024–0.059) | 0.441 |
+| random (searcher's own seed; oblivious control) | none | 0.040 (0.026–0.061) | 0.683 | 0.040 (0.026–0.061) | 0.608 |
+| worst (round-1 loser) | opposite | 0.032 (0.020–0.051) | 0.116 | 0.038 (0.024–0.059) | 0.420 |
+
+Exact McNemar tests on the paired naive rejections, winner against each rule:
+23–0 against neighbor (p = 2.4×10⁻⁷), 21–0 against random (p = 9.5×10⁻⁷), and
+25–0 against worst (p = 6.0×10⁻⁸). Every discordant draw is one the winner rule
+rejected and the other did not. On recursive p-values no rule differs from
+winner (p = 0.45–0.66).
+
+**Against the pre-registered predictions.** Held: random's CI contains 5%, so
+the control is intact; worst is at or below 5%; recursive is near 5% for all
+four. Failed: the strict order winner > neighbor > random, since neighbor
+(0.036) came out below random (0.040). Neighbor is decisively distinguishable
+from winner, so §5's "the rule doesn't matter" is refuted, not rescued.
+
+**Why neighbor did not land in between (measured afterwards; exploratory).**
+With equicorrelated features, every feature is equally correlated with the
+winner in expectation, and the "most correlated neighbor" is picked by
+sampling noise. Over 200 of e15's seeds, the anchor's rank among the 20
+single-feature Sharpes averaged **11.0 for neighbor and 10.7 for random**
+(uncoupled: 10.5), against 1 for winner and 20 for worst. Its correlation with
+the winner averaged 0.36 against random's 0.30, which is just the maximum of 19
+noisy correlations spread 0.23–0.36. In this design the fixed neighbor rule
+carried essentially no coupling, so the graded middle of the prediction was
+not tested. Paired, neighbor minus random is −0.004 (95% CI −0.010 to +0.002).
+
+**What this establishes.** A menu chosen by a data-dependent rule that is
+uncoupled from the selection statistic (neighbor, here) or coupled against it
+(worst) keeps the naive bootstrap at nominal. A menu built on the statistic's
+own argmax inflates it: 8.2% with one extension round, against 12.7% for
+Adaptive's two rounds on the same settings in §5. The recursive bootstrap
+corrects all four. Whether the distortion grades with coupling strength or
+switches on only for the argmax needs rules with genuine intermediate
+coupling (OPEN_QUESTIONS.md). e5's saved NeighborAdaptive arrays and figures
+are Adaptive's and have not been regenerated.

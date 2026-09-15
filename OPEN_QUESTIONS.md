@@ -35,6 +35,16 @@ more often. Which applies depends on where the edge sits in the menu, which
 a transcript does not reveal. Open: whether any transcript-only estimate of
 search-level power exists.
 
+## Does the naive bootstrap's distortion grade with coupling strength?
+
+SCOPE.md §14: only the anchor rule built on the selection statistic's argmax
+inflated naive type-I. The correlation-based neighbor rule did not, but under
+equicorrelated features that rule carried no coupling (its anchor's mean
+Sharpe rank was 11.0 of 20; random's was 10.7). A graded test needs rules with
+intermediate coupling. The cleanest is to anchor on the k-th best single
+feature for k = 2, 3, 5, 10, which sets coupling directly; the neighbor rule
+under heterogeneous_correlation is another. Pre-register before running.
+
 ## Unequal-length return streams
 
 Joint row resampling needs every specification evaluated on one shared time
