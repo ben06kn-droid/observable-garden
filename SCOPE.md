@@ -1122,3 +1122,34 @@ corrects all four. Whether the distortion grades with coupling strength or
 switches on only for the argmax needs rules with genuine intermediate
 coupling (OPEN_QUESTIONS.md). e5's saved NeighborAdaptive arrays and figures
 are Adaptive's and have not been regenerated.
+
+## 15. E16: winner-anchoring's distortion is the pointwise dominance the order-statistic lemma predicts
+
+**For a search that builds round 2 on its round-1 winner, the process null
+maximum was at least the realized-menu maximum in 99.9% of bootstrap
+replicates, and the naive p-value was at most the recursive one in all 500
+draws.** Pre-registered in `prereg/E16.md` and committed before running
+(`experiments/e16_pointwise_dominance.py`): winner- and worst-anchored
+two-step searches (max_features=2), n=500 fresh seeds (20000–20499), e15's
+configuration (K=20, M=50, T=500, ρ=0.3 equicorrelated, s=0), B=1500. Both
+nulls were built on the same resampled time indices, so each replicate's
+two maxima compare directly.
+
+| anchor | draws in the predicted direction (95% CI) | exact ties | replicates: M_P > M_C / equal / M_P < M_C | naive type-I (95% CI) | recursive type-I (95% CI) |
+|---|---|---|---|---|---|
+| winner (predicted p_naive ≤ p_recursive) | 500/500 (0.992–1.000) | 3.0% | 68.5% / 31.5% / 0.1% | 10.2% (7.8–13.2) | 4.6% (3.1–6.8) |
+| worst (predicted p_naive ≥ p_recursive) | 500/500 (0.992–1.000) | 6.6% | 0.0% / 86.3% / 13.7% | 4.2% (2.8–6.3) | 4.8% (3.2–7.0) |
+
+Pre-registered gate: the winner fraction, 1.000, is at least 0.90, so the
+lemma is supported as the mechanism behind §14 and E17–E22 proceed.
+
+For the winner rule, the process maximum is strictly larger in 68.5% of
+replicates, those where the resampled data's own winner differs from the
+frozen anchor and the best pair beats the best single. The remaining 0.1%
+are finite-sample departures from the exchangeable limit, too rare to
+reverse any draw's p-value ordering. The worst rule mirrors it: the
+realized-menu maximum is never below the process maximum and is strictly
+above it in only 13.7% of replicates, because the singles maximum usually
+dominates both menus. That is why worst-anchoring's conservatism is small
+(naive 4.2% against recursive 4.8%). The fresh-seed naive type-I for the
+winner rule, 10.2%, is consistent with e15's 8.2%.
