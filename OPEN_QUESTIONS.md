@@ -43,19 +43,18 @@ more often. Which applies depends on where the edge sits in the menu, which
 a transcript does not reveal. Open: whether any transcript-only estimate of
 search-level power exists.
 
-## Is the coupling effect graded per anchor, or a step near the top?
+## How should the winner-chasing audit combine anchors across rounds?
 
-E17 (SCOPE.md §16) answered the question across rules: naive type-I rises
-with how strongly an anchor rule tracks performance (pre-registered trend
-test, p = 0.0001). An exploratory breakdown of the same draws suggests the
-inflation comes from anchors among the top few features, while anchors
-ranked sixth or lower behave like the loser rule. If so, the winner-chasing
-audit should summarize a transcript by how often it anchors near the top,
-not by mean κ. Testing that needs anchors fixed at the k-th best single
-feature, k = 1, 2, 3, 5, 10, so that rank is set by design rather than
-selected by conditioning, on fresh seeds and pre-registered, before the
-audit is calibrated. The correlation-based neighbor rule under heterogeneous
-correlation is still untested (THEORY.md P6, E19(b)).
+E17b (SCOPE.md §18) settled the single-anchor question. Naive inflation
+follows the anchor's rank along the Gaussian-limit curve: flat across the
+top two ranks, falling through rank 5, and slightly conservative below. Mean
+κ is a poor summary of that curve. What is untested is a search with several
+data-dependent rounds, some anchored high and some low: whether their
+effects on the naive test add, or whether one inflating round dominates. The
+curve itself is measured only at K=20, ρ=0.3 and depth 2, with exchangeable
+features. E19(c) moves K and ρ for the winner rule. The correlation-based
+neighbor rule under heterogeneous correlation is still untested (THEORY.md
+P6, E19(b)).
 
 ## Does re-anchoring at depth inflate a little?
 

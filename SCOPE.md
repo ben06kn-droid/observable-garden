@@ -1401,3 +1401,79 @@ largest Sharpe in the transcript instead of Adaptive's selected value.
 
 So the scoring rule is not the source of the gap between 9.2% and e4's 13.6%.
 What remains may be mostly noise plus a small effect of K (OPEN_QUESTIONS.md).
+
+## 18. E17b: naive inflation grades with the anchor's rank, as the Gaussian limit predicts
+
+**Anchoring round 2 on the second-best feature inflated the naive bootstrap
+as much as anchoring on the winner. The third-best gave an intermediate rate,
+and from the fifth down the naive test was at or below nominal. Every rank's
+rate lay inside its 95% interval around the limit value fixed before
+running.** Pre-registered in `prereg/E17b.md` and launched from its commit
+(db6b64e, clean; `experiments/e17b_anchor_rank.py`).
+
+- `RankAnchor(k)` fixes round 2's anchor at the k-th best single feature,
+  k ∈ {1, 2, 3, 5, 10, 20}, with max_features=2.
+- n=1,000 draws paired across ranks (seeds 50000–50999), in E17's
+  configuration: K=20, M=50, T=500, ρ=0.3 equicorrelated, s=0, B=1500.
+- Naive and recursive nulls on common resampled indices.
+
+| anchor rank | mean κ | limit | naive type-I (95% CI) | KS p | recursive type-I (95% CI) | KS p | naive p ≤ recursive p |
+|---|---|---|---|---|---|---|---|
+| 1 | 1.000 | 9.1% | 0.095 (0.078–0.115) | <0.001 | 0.048 (0.036–0.063) | 0.326 | 100% |
+| 2 | 0.947 | 9.1% | 0.097 (0.080–0.117) | <0.001 | 0.048 (0.036–0.063) | 0.277 | 100% |
+| 3 | 0.895 | 6.6% | 0.063 (0.050–0.080) | <0.001 | 0.042 (0.031–0.056) | 0.203 | 99.4% |
+| 5 | 0.789 | 4.9% | 0.039 (0.029–0.053) | 0.439 | 0.039 (0.029–0.053) | 0.394 | 32.2% |
+| 10 | 0.526 | 4.3% | 0.038 (0.028–0.052) | 0.559 | 0.043 (0.032–0.057) | 0.487 | 5.1% |
+| 20 | 0.000 | 4.3% | 0.037 (0.027–0.051) | 0.559 | 0.043 (0.032–0.057) | 0.487 | 5.5% |
+
+**Decision.** U, rank 2 against rank 3: 34–0 (p < 10⁻¹⁰). L, rank 3
+against rank 10: 25–0 (p < 10⁻⁷). Both are significant, so the outcome is
+**graded**, as predicted. The winner-chasing audit therefore summarizes a
+transcript by a graded function of anchor rank, not by a count.
+
+**Secondary readings.**
+
+1. **Rank 1 against rank 2:** 1–3 (p = 0.63). No difference, as the limit
+   predicts. The two searches submitted the same value on 93.8% of draws (not
+   pre-registered): those where the winner's best partner was the runner-up.
+2. **Naive against 5%:** significantly above at ranks 1, 2 and 3 (binomial
+   p < 0.001, < 0.001 and 0.038), not at 5, 10 or 20.
+3. **Recursive:** not significantly above 5% at any rank. Held.
+4. **Monotonicity:** failed narrowly. Rank 2's 97 rejections are two more
+   than rank 1's 95; every other step is nonincreasing (rank 5 against 10 is
+   1–0, and 10 against 20 is 1–0).
+5. **Naive p against recursive p:** naive was at most recursive on every draw
+   at ranks 1 and 2, as P4's lemma predicts for both, and on 99.4% at rank 3.
+   From rank 5 down the order mostly reversed, the mirror's direction.
+
+**Against the limit (not a registered test).** The limit table was fixed
+before running.
+
+- **Every rank:** each observed rate lies inside its Wilson interval, and no
+  rank's rate differs from its limit value by a two-sided binomial test
+  (p = 0.16–0.75). At the bottom ranks, finite-T rates sit slightly below the
+  limit (3.7–3.9% against 4.3–4.9%).
+- **Nesting:** rejections were nested across ranks. Apart from 3 draws
+  between ranks 1 and 2, every draw that rejected with a lower-ranked anchor
+  also rejected with each higher-ranked one.
+- **Winner rule:** across four fresh seed blocks (e15, E16, E17, E17b) its
+  naive type-I was 41/500, 51/500, 35/500 and 95/1,000. These are homogeneous
+  (χ² = 4.02, 3 df, p = 0.26), and pooled they give 8.9% against the limit's
+  9.1%.
+
+**What this settles.**
+
+- **The P4 curve.** The lemma's order statistics give the whole curve, not
+  only its endpoints (THEORY.md P4). A search anchored on the rank-k feature,
+  k ≥ 2, submits max(Z_(1), g(Z_(k), Z_(1))), so ranks 1 and 2 coincide and
+  inflation declines from there. E17's exploratory hint of a step near the top
+  was the steep part of this curve.
+- **The audit.** Mean κ is a poor summary, because the curve is far from
+  linear in κ: 9.7% at κ = 0.95, 6.3% at 0.89, 3.9% at 0.79, then flat and
+  slightly conservative. The audit should map each anchor's rank to its
+  inflation, and the limit curve matched within sampling error here. How
+  anchors in different rounds of one search combine is untested
+  (OPEN_QUESTIONS.md).
+- **Scope.** One configuration: K=20, ρ=0.3, depth 2, exchangeable features.
+  E19(c) moves K and ρ for the winner rule. Other ranks under those changes,
+  and features that are not exchangeable (E19), are untested.

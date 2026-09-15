@@ -134,14 +134,31 @@ n = 500 draws (SCOPE.md §15):
 Outside exchangeability (heterogeneous volatilities, block correlation) the
 lemma's hypothesis fails; E19 probes how far the conclusion survives.
 
-**Between the endpoints (empirical, no proof).** The lemma covers only the
-winner and loser rules. E17 (SCOPE.md §16) drew the anchor with probability
-proportional to exp(τ z_k) at eight levels of τ: naive type-I rose from 3.6%
-(loser) through 5.0% (random) to 7.0% (winner), and the pre-registered trend
-test decided for graded coupling (p = 0.0001). An exploratory breakdown of
-the same draws puts the inflation on draws whose anchor is among the top few
-features, so "graded" is established across rules, not for individual
-anchors.
+**Between the endpoints.** The lemma's order statistics also cover
+fixed-rank anchors. In the application's setting, the search anchored on the
+rank-k feature submits
+
+    max(Z_(1), g(Z_(1), Z_(2)))   for k = 1
+    max(Z_(1), g(Z_(k), Z_(1)))   for k ≥ 2
+
+because the winner's best partner is the runner-up, and every other feature's
+best partner is the winner. Ranks 1 and 2 submit the same value. Rank 2's
+process maximum therefore equals the winner's, and the lemma makes its naive
+test anti-conservative too. After rank 2 the submitted value falls with k.
+The naive rate has no closed form here; a Monte Carlo of the limit (K = 20,
+ω = 0.3) gives 9.1%, 9.1%, 6.6%, 4.9%, 4.3% and 4.3% at ranks 1, 2, 3, 5,
+10 and 20.
+
+Evidence (SCOPE.md §16, §18):
+
+- **E17** drew the anchor with probability proportional to exp(τ z_k). Naive
+  type-I rose from 3.6% (loser) through 5.0% (random) to 7.0% (winner), and
+  its pre-registered trend test decided for graded coupling across rules
+  (p = 0.0001).
+- **E17b** fixed the anchor's rank, with the limit values above registered in
+  advance. It measured 9.5%, 9.7%, 6.3%, 3.9%, 3.8% and 3.7%, each inside its
+  95% interval around the limit value. The pre-registered outcome was graded:
+  rank 3 fell below rank 2 (34–0) and stayed above rank 10 (25–0).
 
 **At depth 3 (E18, SCOPE.md §17).** Winner anchoring inflated naive type-I to
 10.4% (n = 1,000), and the naive p-value was at most the recursive one on
@@ -255,7 +272,7 @@ nothing anticipates P4.
 | P1 | known | SCOPE.md §1 (null calibration of oblivious searchers) | E21 |
 | P2 | known | none needed | none |
 | P3 | ingredients known, tier new | `estimator/full_class.py` and tests; E17 full-class null (SCOPE.md §16) | E21, E22 |
-| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E18 at depth 3 (SCOPE.md §17) | E19 |
+| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E17b graded by rank, matching the limit (SCOPE.md §18); E18 at depth 3 (SCOPE.md §17) | E19, E19(c) |
 | P5 | new, corrected | exploratory limit check above; E17 at d = 2; E18 at d = 3 and 4 (SCOPE.md §17) | E22 |
 | P6 | ingredients known, one case open | e15 neighbor rule calibrated empirically | E19(b) |
 
