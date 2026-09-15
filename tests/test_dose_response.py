@@ -3,8 +3,11 @@ import pytest
 
 from environments.dgp import DGPConfig, generate
 from environments.sandbox import Sandbox
+from estimator.bootstrap import sharpe
 from estimator.divergence import divergence_rate, beam_entropy
-from searchers.dose_response import BeamAdaptive, DepthAdaptive, NeighborAdaptive
+from searchers.dose_response import (
+    BeamAdaptive, DepthAdaptive, NeighborAdaptive, RandomAnchor, WinnerAnchor, WorstAnchor,
+)
 from searchers.diagnostic import LatticeAdaptive
 from searchers.scripted import Adaptive
 
@@ -21,6 +24,10 @@ def make_sandbox(K=15, M=50, T=300, seed=0):
     lambda: BeamAdaptive(beam_width=15, seed=0),  # beam_width == K
     lambda: DepthAdaptive(seed=0),
     lambda: NeighborAdaptive(seed=0),
+    lambda: NeighborAdaptive(max_features=2, seed=0),
+    lambda: WinnerAnchor(max_features=2, seed=0),
+    lambda: RandomAnchor(max_features=2, seed=0),
+    lambda: WorstAnchor(max_features=2, seed=0),
 ])
 def test_replay_matches_run_on_real_data(searcher_factory):
     sandbox, config = make_sandbox()
@@ -31,6 +38,38 @@ def test_replay_matches_run_on_real_data(searcher_factory):
     base_columns = sandbox.base_feature_columns()
     replayed = searcher.replay(base_columns, annualization=np.sqrt(config.periods_per_year))
     assert replayed == pytest.approx(dist.mean, rel=1e-6)
+
+
+def test_neighbor_anchor_is_never_the_round1_winner():
+    for seed in range(25):
+        sandbox, _ = make_sandbox(K=12, seed=seed)
+        base = sandbox.base_feature_columns()
+        best_k = int(np.argmax(sharpe(base, axis=0)))
+        anchor = NeighborAdaptive(seed=seed)._anchor(12, base, best_k)
+        assert anchor != best_k
+        others = np.abs(np.corrcoef(base, rowvar=False)[best_k])
+        others[best_k] = 0.0
+        assert anchor == int(np.argmax(others))
+
+
+def test_anchor_rules():
+    sandbox, _ = make_sandbox(K=12, seed=4)
+    base = sandbox.base_feature_columns()
+    best_k = int(np.argmax(sharpe(base, axis=0)))
+    assert WinnerAnchor(seed=4)._anchor(12, base, best_k) == best_k
+    assert WorstAnchor(seed=4)._anchor(12, base, best_k) == int(np.argmin(sharpe(base, axis=0)))
+    other, _ = make_sandbox(K=12, seed=99)
+    other_base = other.base_feature_columns()
+    assert (RandomAnchor(seed=4)._anchor(12, base, best_k)
+            == RandomAnchor(seed=4)._anchor(12, other_base, int(np.argmax(sharpe(other_base, axis=0)))))
+
+
+def test_winner_anchor_matches_adaptive():
+    sandbox1, _ = make_sandbox(seed=6)
+    sandbox2, _ = make_sandbox(seed=6)
+    WinnerAnchor(max_features=3, seed=6).run(sandbox1)
+    Adaptive(max_features=3, seed=6).run(sandbox2)
+    assert sandbox1.submission[1].mean == pytest.approx(sandbox2.submission[1].mean, rel=1e-9)
 
 
 def test_beam_width_1_matches_adaptive():

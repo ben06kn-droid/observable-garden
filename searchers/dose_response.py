@@ -143,10 +143,11 @@ class NeighborAdaptive(Searcher):
         self.max_features = max_features
 
     def _anchor(self, K: int, base_columns: np.ndarray, best_k: int) -> int:
-        corr = np.corrcoef(base_columns, rowvar=False)[best_k]
-        corr = np.nan_to_num(corr, nan=0.0)
+        corr = np.abs(np.nan_to_num(np.corrcoef(base_columns, rowvar=False)[best_k], nan=0.0))
+        # Exclude the winner after taking |corr|: excluding first made |-inf| the maximum, so the
+        # anchor was always the winner itself (SCOPE.md §5's NeighborAdaptive result was that bug).
         corr[best_k] = -np.inf
-        return int(np.argmax(np.abs(corr)))
+        return int(np.argmax(corr))
 
     def _core(self, K: int, base_columns: np.ndarray, singles_score, support_score):
         best_k, best_sharpe = None, -np.inf
@@ -220,3 +221,30 @@ class NeighborAdaptive(Searcher):
         sr = sharpe(base_columns, axis=0, annualization=annualization)
         best_k = int(np.argmax(sr))
         return frozenset({self._anchor(K, base_columns, best_k)})
+
+
+class WinnerAnchor(NeighborAdaptive):
+    """Round 2 expands around the round-1 winner itself (Adaptive's rule): the anchor is maximally
+    coupled to the selection statistic."""
+    name = "winner_anchor"
+
+    def _anchor(self, K: int, base_columns: np.ndarray, best_k: int) -> int:
+        return best_k
+
+
+class RandomAnchor(NeighborAdaptive):
+    """Round 2 expands around a feature drawn from the searcher's own seed, independent of the data.
+    With max_features=2 the whole menu is data-oblivious, which makes this the control."""
+    name = "random_anchor"
+
+    def _anchor(self, K: int, base_columns: np.ndarray, best_k: int) -> int:
+        return int(np.random.default_rng(self.seed).integers(K))
+
+
+class WorstAnchor(NeighborAdaptive):
+    """Round 2 expands around the round-1 loser: coupling to the selection statistic in the opposite
+    direction."""
+    name = "worst_anchor"
+
+    def _anchor(self, K: int, base_columns: np.ndarray, best_k: int) -> int:
+        return int(np.argmin(sharpe(base_columns, axis=0)))
