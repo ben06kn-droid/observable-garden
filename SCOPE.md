@@ -692,7 +692,25 @@ spec §2.2's own difficulty knob (target oracle Sharpe swept over
 substitute inflating effect size for free
 (`experiments/e10_power_vs_signal_strength.py`):
 
-*[PENDING_E10_RESULTS]*
+| target oracle Sharpe | 0.5 | 1.0 | 2.0 |
+|---|---|---|---|
+| power, N=10 | 0.050 | 0.090 | 0.160 |
+| power, N=1000 | 0.060 | 0.110 | 0.350 |
+| mean true SR_OOS, N=10 | 0.048 | 0.120 | 0.442 |
+| mean true SR_OOS, N=1000 | 0.054 | 0.210 | 0.882 |
+
+With ρ held fixed, power tracks effect size cleanly and monotonically at
+both trial budgets — the curve the earlier, confounded ρ-sweep was
+mistaken for. It also separates two things the ρ-sweep couldn't: at fixed
+signal strength, more search (`N=10→1000`) raises both achieved
+performance and power somewhat on its own (e.g. target=2.0: power
+0.160→0.350) — a real, smaller, deconfounded version of "more search
+finds the signal better," uncontaminated by ρ's much larger "the task got
+easier" effect. And at the weakest tested signal (target=0.5, true
+`SR_OOS≈0.05`), power sits right at nominal α regardless of `N` — a search
+budget cannot buy power against an effect this weak in the clean regime;
+only a stronger true signal or (per the ρ-axis result above) a more
+forgiving correlation structure can.
 
 The ρ axis stays exactly where §9's main table already puts it to best
 use: showing the three corrections' bias diverge, which it does cleanly —

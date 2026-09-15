@@ -56,6 +56,10 @@ algebraically — checked against a reconstruction-free gold standard.
   over the same axis by construction. At ρ=0, power is only 4–16% (*below*
   nominal at N=10) — a correctly conservative test facing a weak
   alternative, stated as a limitation, not a rising trend to lead with.
+  The deconfounded axis is signal strength, holding ρ=0 fixed: power
+  tracks it cleanly (5%→9%→16% at N=10; 6%→11%→35% at N=1000, target
+  Sharpe 0.5→1.0→2.0) — no search budget buys power against a truly weak
+  signal (`SR_OOS≈0.05`) in the clean regime.
 
 Every number, caveat, and diagnostic behind these — including two real
 bugs found and fixed along the way — is in **`SCOPE.md`**. This is the
