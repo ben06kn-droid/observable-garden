@@ -48,7 +48,7 @@ algebraically — checked against a reconstruction-free gold standard.
   **2.03** — double the population ceiling — when the truth is 0.21. The
   bootstrap calls the decay to within 0.017; raw-N over-corrects by 14%;
   effective-N leaves a quarter of the overfitting standing.
-- **Power, worked out twice because the first version was wrong**:
+- **Power**:
   naively, power rises with correlation (16%→43%, ρ 0→0.9) — but that's
   the DGP getting easier (true achievable Sharpe rises sixfold over the
   same axis), not the estimator improving; at ρ=0 power is correctly
