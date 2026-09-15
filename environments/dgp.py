@@ -39,6 +39,7 @@ class DGPConfig:
     t_dof: float = 5.0           # Student-t degrees of freedom, if fat_tails
     periods_per_year: int = 252
     seed: int = 0
+    heterogeneous: bool = False   # use heterogeneous_correlation instead of equicorrelation
 
     def beta_values(self) -> np.ndarray:
         if self.beta is not None:
@@ -55,6 +56,7 @@ class DGPConfig:
             "sigma": self.sigma, "beta": list(self.beta_values()),
             "fat_tails": self.fat_tails, "t_dof": self.t_dof,
             "periods_per_year": self.periods_per_year,
+            "heterogeneous": self.heterogeneous,
         }
         blob = json.dumps(relevant, sort_keys=True).encode()
         return hashlib.sha256(blob).hexdigest()[:16]
@@ -79,6 +81,50 @@ def equicorrelation(K: int, rho: float) -> np.ndarray:
     return Sigma
 
 
+def heterogeneous_correlation(K: int, rho: float, seed: int) -> np.ndarray:
+    """Single-factor correlation structure: Sigma = outer(l,l) with the
+    diagonal reset to 1 (equivalently outer(l,l) + diag(1-l^2)) -- the
+    K-vector of loadings l is drawn once per (K, rho, seed), not shared
+    across features.
+
+    Replaces equicorrelation's feature-exchangeability. That symmetry is
+    harmless under s=0 (every null-calibration experiment in this project
+    ran at rho=0.3 under equicorrelation and it cost nothing -- SCOPE.md
+    §1). Under s>0 it isn't: every noise feature is equally (un)correlated
+    with the true signal, so which wrong features a search lands on has no
+    consequence, and the spread of achievable Sharpe across candidate
+    specifications collapses -- exactly what made the first version of
+    Experiment 2's target hard to predict for reasons having nothing to do
+    with the estimator (SCOPE.md §8/§9).
+
+    Loadings are centered near sqrt(rho) so the average pairwise
+    correlation is still ~rho, keeping the existing knob's interpretation
+    intact, with real heterogeneity around it. Automatically PSD by
+    construction (rank-1 outer(l,l) plus a nonnegative diagonal) -- no
+    feasibility check needed, unlike equicorrelation's negative-rho bound.
+    rho<=0 returns the identity: "no correlation" has only one meaning,
+    heterogeneous or not, and this keeps rho=0 a clean independent-features
+    baseline."""
+    if rho <= 0:
+        return np.eye(K)
+    rng = np.random.default_rng(seed + 500_009)  # decorrelated from true_signal_set's own draw
+    center = np.sqrt(rho)
+    loadings = np.clip(rng.uniform(center - 0.15, center + 0.15, size=K), 0.0, 0.97)
+    Sigma = np.outer(loadings, loadings)
+    np.fill_diagonal(Sigma, 1.0)
+    return Sigma
+
+
+def get_sigma_x(config: DGPConfig) -> np.ndarray:
+    """The single call site every other function should use instead of
+    calling equicorrelation directly -- switches structure via
+    config.heterogeneous without touching any existing caller's behavior
+    when it's left at its default False."""
+    if config.heterogeneous:
+        return heterogeneous_correlation(config.K, config.rho, config.seed)
+    return equicorrelation(config.K, config.rho)
+
+
 def true_signal_set(config: DGPConfig) -> tuple[np.ndarray, np.ndarray]:
     """Choose S (indices) and beta_full (K,), deterministic given config.seed."""
     rng = np.random.default_rng(config.seed)
@@ -91,7 +137,7 @@ def true_signal_set(config: DGPConfig) -> tuple[np.ndarray, np.ndarray]:
 
 def signal_variance(config: DGPConfig, S: np.ndarray, beta_full: np.ndarray) -> float:
     """v_s = Var[sum_{k in S} beta_k x_k] = beta_S^T Sigma_x[S,S] beta_S."""
-    Sigma_x = equicorrelation(config.K, config.rho)
+    Sigma_x = get_sigma_x(config)
     beta_S = beta_full[S]
     Sigma_SS = Sigma_x[np.ix_(S, S)]
     return float(beta_S @ Sigma_SS @ beta_S)
@@ -109,7 +155,7 @@ def _draw_noise(rng: np.random.Generator, shape: tuple[int, ...], config: DGPCon
 
 def _draw_features(rng: np.random.Generator, n: int, config: DGPConfig) -> np.ndarray:
     """(n, M, K) draw from MVN(0, Sigma_x), iid across period and asset."""
-    Sigma_x = equicorrelation(config.K, config.rho)
+    Sigma_x = get_sigma_x(config)
     L = np.linalg.cholesky(Sigma_x)
     z = rng.standard_normal((n, config.M, config.K))
     return z @ L.T
@@ -155,6 +201,46 @@ def oracle_sharpe_analytic(config: DGPConfig) -> float:
     return float(sr_period * np.sqrt(config.periods_per_year))
 
 
+def analytic_sharpe(config: DGPConfig, weights: np.ndarray) -> float:
+    """Population (T -> infinity) Sharpe of an ARBITRARY linear
+    specification with weight vector `weights` -- generalizes
+    oracle_sharpe_analytic (the special case weights == the true
+    beta_full) to any candidate a searcher might submit. This is the
+    T_oos -> infinity limit of what Sandbox.oos_sharpe_for_grading
+    estimates from a finite T_oos-period sample: scoring against it
+    instead removes OOS measurement noise entirely, so RMSE against it
+    measures only the deflation estimator's own accuracy, not a mix of
+    that and finite-sample noise in the target itself.
+
+    Same algebra as the oracle derivation above, generalized: with
+    s_i = weights . x_S[i] and c_i = beta . x_S[i] jointly Gaussian,
+
+        s_gs = w^T Sigma_x beta   (Cov(s_i, c_i))
+        v_g  = w^T Sigma_x w      (Var(s_i), the candidate's own signal variance)
+        v_s  = beta^T Sigma_x beta (Var(c_i), the true signal variance)
+        Var[R] = (v_g*v_s + s_gs^2 + v_g*sigma^2) / M
+        SR = s_gs / sqrt(Var[R]) * sqrt(periods_per_year)
+
+    Reduces exactly to oracle_sharpe_analytic when weights == beta_full
+    (v_g = v_s = s_gs, giving Var[R] = (2 v_s^2 + v_s sigma^2) / M, the
+    original formula) -- checked as a test, not just asserted. Verified
+    against simulation for oracle / partial-true / pure-noise weight
+    vectors (tests/test_analytic_sharpe.py)."""
+    beta_full = true_signal_set(config)[1]
+    Sigma_x = get_sigma_x(config)
+    weights = np.asarray(weights, dtype=float)
+
+    v_s = float(beta_full @ Sigma_x @ beta_full)
+    v_g = float(weights @ Sigma_x @ weights)
+    s_gs = float(weights @ Sigma_x @ beta_full)
+
+    var_R = (v_g * v_s + s_gs ** 2 + v_g * config.sigma ** 2) / config.M
+    if var_R <= 0:
+        return 0.0
+    sr_period = s_gs / np.sqrt(var_R)
+    return float(sr_period * np.sqrt(config.periods_per_year))
+
+
 def calibrate_sigma(target_annual_sharpe: float, config: DGPConfig) -> float:
     """Solve for sigma such that oracle_sharpe_analytic(config) == target, holding
     M, K, s, rho, beta fixed. Returns the required sigma; raises if infeasible."""
@@ -187,7 +273,7 @@ def oracle_sharpe_simulated(
 
     S, beta_full = true_signal_set(config)
     beta_S = beta_full[S]
-    Sigma_x = equicorrelation(config.K, config.rho)
+    Sigma_x = get_sigma_x(config)
     Sigma_SS = Sigma_x[np.ix_(S, S)]
     L = np.linalg.cholesky(Sigma_SS)
 
