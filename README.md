@@ -41,16 +41,21 @@ algebraically — checked against a reconstruction-free gold standard.
   menu gets more data-dependent (0.060 → 0.127 across 5 points, `figures/
   e5_dose_response_primary.png`) — not one searcher's quirk.
 - **Predictive power** (`s=3`, real signal, `figures/e9_decay_vs_N.png`,
-  `figures/e9_bias_vs_rho.png`): of the three corrections, only
-  **bootstrap deflation is unbiased** for average decay. Closed-form with
-  the raw trial count is conservative, less so as correlation rises. The
-  "sophisticated" eigenvalue correction is substantially anti-conservative
-  wherever trials are correlated at all.
-- **Power** (detecting real signal, same grid): counterintuitively rises
-  with feature correlation (16%→43% as ρ goes 0→0.9) — checked, not left
-  as a curiosity: correlated noise features are near-duplicates of the
-  true signal, so the search substitutes a plausible proxy almost as
-  often as it finds the real thing.
+  `figures/e9_bias_vs_rho.png`): only **bootstrap deflation is unbiased**
+  for average decay across the whole grid; closed-form (raw N) is
+  conservative, less so as correlation rises; the "sophisticated"
+  eigenvalue correction is substantially anti-conservative wherever trials
+  are correlated at all. One cell makes the case concretely: at ρ=0,
+  N=1000, a search reports Sharpe **2.03** — double the population ceiling
+  of 1.0 — when the truth is 0.21. Reading only the transcript, the
+  bootstrap calls the decay (1.82) to within 0.017; raw-N over-corrects by
+  14%; effective-N leaves a quarter of the overfitting standing.
+- **Power** (detecting real signal, same grid): rises with correlation
+  (16%→43%, ρ 0→0.9) — but that's the DGP getting easier, not the
+  estimator getting more sensitive: true achievable Sharpe rises sixfold
+  over the same axis by construction. At ρ=0, power is only 4–16% (*below*
+  nominal at N=10) — a correctly conservative test facing a weak
+  alternative, stated as a limitation, not a rising trend to lead with.
 
 Every number, caveat, and diagnostic behind these — including two real
 bugs found and fixed along the way — is in **`SCOPE.md`**. This is the

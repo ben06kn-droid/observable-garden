@@ -648,44 +648,78 @@ with `N` (§8), and whether effective-N's non-monotone-in-ρ anti-
 conservatism has the eigenvalue-shrinkage explanation offered here or a
 different one — both flagged as unverified, not folded into the headline.
 
-**One more thing the grid produced that the headline above doesn't cover:
-statistical power.** Every `deflate()` call in this experiment also
-returns a p-value — under `s=0` (every earlier experiment) that's a
-calibration check; under `s=3` (this one) it's a power measurement: how
-often does the bootstrap actually detect the genuine signal sitting under
-the search. Pulled from data already collected, no new runs
-(`figures/e9_predictive_power_v2_data.pkl`'s `p_value` field):
+**A conflation caught and corrected: "power rises with correlation" was
+never a finding about the estimator.** An earlier draft of this section
+reported power (frac. `p<0.05`) rising from 0.16 at ρ=0 to 0.43 at ρ=0.9
+and explained it via rising alignment between the submitted spec and the
+true signal (0.254 → 0.927). Both numbers are real, but the framing was
+wrong: power is a function of effect size, and mean true OOS Sharpe of the
+submitted spec — computed from data already on disk, no reanalysis needed
+— rises sixfold across the same axis:
 
 | ρ | 0.0 | 0.3 | 0.6 | 0.9 |
 |---|---|---|---|---|
-| power (frac. p<0.05), N=1000 | 0.16 | 0.36 | 0.41 | 0.43 |
+| mean true SR_OOS, N=1000 | 0.205 | 0.613 | 0.810 | 0.926 |
+| within-cell SD, N=1000 | 0.202 | 0.105 | 0.071 | 0.041 |
 
-(`sr_oracle` reads exactly 1.0000 in every one of the 1,200 draws across
-the whole grid — the fixed-ceiling calibration is doing exactly what it's
-supposed to, a clean sanity check in passing.)
+"Alignment climbs 0.254→0.927" and "true OOS Sharpe climbs 0.205→0.926"
+aren't an explanation and an observation — in this linear DGP, `SR ∝`
+alignment, so they're one fact stated twice. The genuinely explanatory
+number is the row underneath: **within-cell SD collapses from 0.20 to
+0.04.** At high ρ, heterogeneous Σ_x means essentially every path through
+the feature space arrives at nearly the same place near the ceiling —
+there is almost nothing left to get wrong. That's why detection gets
+easier (there's more effect size to detect) and why exact identification
+simultaneously gets rarer and stops mattering (§ above). Reported
+correctly, this is a property of the DGP's difficulty gradient across ρ,
+not evidence the estimator's sensitivity improves with correlation — that
+would license a conclusion about the method the data doesn't support.
 
-Power rising with correlation is the opposite of the naive intuition
-(more correlated noise should make the true signal harder to isolate,
-not easier) — checked rather than left as a curiosity. Over 30 fresh
-draws at `N=1000`, per ρ: mean alignment between the submitted
-specification and the true signal (`s_gs/sqrt(v_g v_s)`, the same
-quantities `analytic_sharpe` uses, bounded like a correlation) and the
-fraction of draws where the submitted support contains at least one
-literal true-signal feature:
+**Stated as a limitation, not folded into a rising trend that reads
+better than it is: power at ρ=0 is 0.04, 0.07, 0.16 at `N=10/100/1000`.**
+At `N=10`, power (0.040) is *below* nominal α=0.05 — the estimator does
+not reliably detect a real signal in the cleanest, hardest regime at this
+effect size. That is not a bug. `SR_OOS_true≈0.15-0.21` at ρ=0 is a weak
+alternative sitting under enormous overfitting noise (§ below), and a
+correctly conservative test has limited power against a weak alternative
+by construction — the same property that makes the null-calibration work
+in §§1-7 trustworthy in the first place. Stated plainly so it isn't
+mistaken for the headline number.
 
-| ρ | 0.0 | 0.3 | 0.6 | 0.9 |
-|---|---|---|---|---|
-| mean alignment with true signal | 0.254 | 0.636 | 0.831 | 0.927 |
-| frac. hitting an exact true feature | 0.633 | 0.500 | 0.433 | 0.333 |
+**The deconfounded power axis is signal strength, not correlation** —
+spec §2.2's own difficulty knob (target oracle Sharpe swept over
+`{0.5, 1.0, 2.0}`), holding ρ=0 fixed so there is no correlated-noise
+substitute inflating effect size for free
+(`experiments/e10_power_vs_signal_strength.py`):
 
-These move in opposite directions, and that's the resolution, not a
-contradiction: at higher ρ the search finds the *literal* true features
-less often (0.633 → 0.333), but heterogeneous Σ_x means many noise
-features share factor loadings with the true signal, so whatever
-plausible-looking feature the search substitutes in is itself strongly
-aligned with the true signal (alignment 0.93 at ρ=0.9) — a near-duplicate
-that works almost as well as the real thing. Exact identification gets
-rarer; practical detection gets easier; power goes up. At ρ=0 there are no
-such proxies — a search that doesn't hit one of the 3 true features out
-of 40 gets no partial credit at all, which is the harder, all-or-nothing
-regime the low power there reflects.
+*[PENDING_E10_RESULTS]*
+
+The ρ axis stays exactly where §9's main table already puts it to best
+use: showing the three corrections' bias diverge, which it does cleanly —
+effective-N's error peaks at ρ=0.3 (−0.937), the signature of
+double-counting correlation that raw-N ignores and effective-N
+over-corrects for in the opposite direction.
+
+**The single cell that makes the argument this whole project exists to
+make, currently sitting as one row in a twelve-row grid — elevated here on
+its own.** `ρ=0, N=1000`, mean over 100 draws:
+
+| | value |
+|---|---|
+| Reported in-sample Sharpe | 2.028 |
+| Oracle ceiling (no strategy can legitimately exceed this) | 1.000 |
+| True out-of-sample Sharpe | 0.205 |
+| Realized decay | 1.823 |
+| Bootstrap-predicted decay | 1.840 (off by **+0.017**) |
+| Raw-N DSR-predicted decay | 2.085 (off by +0.262) |
+| Effective-N DSR-predicted decay | 1.357 (off by −0.466) |
+
+A search reports 2.03 — double the population ceiling, a theoretically
+impossible number given what's known about this DGP, and exactly the kind
+of number that gets published because nobody can see the trial count
+behind it. The truth is 0.21. Reading only the transcript, the bootstrap
+calls the decay to within 0.017 on a decay of 1.82. Raw-N over-corrects by
+14% of the decay; effective-N leaves roughly a quarter of the overfitting
+standing. One cell, one table — this is the number a reviewer of the
+original proposal would ask for first, and it was sitting unremarked in
+row 3 of 12 until asked what the rest of the grid produced.
