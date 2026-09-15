@@ -436,6 +436,22 @@ Related prior art, for context on where this sits in the literature:
   that can reject more than one candidate as significant, for context on
   how the single-maximum framing here relates to the broader
   multiple-testing family.
+- **López de Prado, M. & Porcu, E. (2025), "The Deflated Sharpe Ratio: A
+  Unified Framework for Search-Adjusted Performance Inference," SSRN
+  7198158** — frames the deflated Sharpe ratio as judging reported
+  performance against what the research process could have produced
+  without skill, and unifies its implementations, including DSR-L (the
+  original location benchmark, the closed form this project uses as a
+  baseline) and DSR-LS (which adds the dispersion of the selected maximum).
+  In those terms, this project's bootstrap is a nonparametric construction
+  of the search null from a logged transcript.
+- **Bailey, D.H., Borwein, J., López de Prado, M. & Zhu, Q.J. (2017), "The
+  Probability of Backtest Overfitting," Journal of Computational Finance
+  20(4), 39–69** — also works from the matrix of trial returns, estimating
+  the probability that the in-sample winner underperforms out of sample by
+  combinatorially symmetric cross-validation (CSCV). A different question
+  from this project's significance test on the same object, and a necessary
+  citation for anyone working from a trial matrix.
 - **Politis, D.N. & Romano, J.P. (1994), "The Stationary Bootstrap,"
   Journal of the American Statistical Association 89(428)** — already
   cited in §1 as the resampling theory the joint row-bootstrap rests on;

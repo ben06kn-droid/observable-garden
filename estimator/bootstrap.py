@@ -1,4 +1,10 @@
-"""Bootstrapped null-maximum estimator: the replacement for closed-form DSR.
+"""Bootstrapped null-maximum estimator: a nonparametric search null within the DSR framework.
+
+The deflated Sharpe ratio judges a reported Sharpe against what the research
+process could have produced without skill (López de Prado & Porcu 2025). This
+module builds that null from the logged trials themselves, as White's (2000)
+Reality Check does, instead of DSR-L's closed-form location benchmark
+(estimator/deflated_sharpe.py).
 
 Given the full in-sample return matrix R (T x N) that a sandbox transcript
 provides, demean every column (impose the null that nothing in the candidate

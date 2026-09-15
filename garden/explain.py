@@ -138,9 +138,10 @@ squared eigenvalues of the trial correlation matrix. It equals N for
 uncorrelated trials and 1 for exact duplicates, and shows how much of the
 search was really distinct. It is never used in the correction.
 
-Plugging an eigenvalue-based effective N into the closed-form deflated
-Sharpe ratio (Bailey & López de Prado 2014) counts correlation twice. The
-closed form's variance term, the cross-sectional variance of trial Sharpes,
+Plugging a participation-ratio effective N into DSR-L, the closed-form
+deflated Sharpe ratio (Bailey & López de Prado 2014; López de Prado & Porcu
+2025), counts correlation twice. DSR-L's variance term, the cross-sectional
+variance of trial Sharpes,
 already shrinks as trials correlate, so shrinking N as well under-deflates:
 in this project's grid it left up to 0.94 Sharpe of overfitting standing at
 ρ=0.3 (SCOPE.md §10). The bootstrap accounts for correlation once, directly,

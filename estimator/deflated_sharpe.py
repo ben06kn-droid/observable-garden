@@ -1,5 +1,6 @@
-"""Closed-form deflated Sharpe ratio (Bailey & Lopez de Prado), kept around
-purely as the baseline the bootstrap is measured against (spec §1.2, §4.2).
+"""Closed-form deflated Sharpe ratio: DSR-L in López de Prado & Porcu (2025)'s
+terms, the original location benchmark of Bailey & López de Prado (2014). Kept
+as the baseline the bootstrap search null is measured against (spec §1.2, §4.2).
 
     SR_0 = sqrt(Var[SR_n]) * [ (1-gamma)*Phi^-1(1-1/N) + gamma*Phi^-1(1-1/(N*e)) ]
 

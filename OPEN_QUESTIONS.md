@@ -1,5 +1,13 @@
 # Open questions
 
+## The "no new estimator variants" rule and its carve-outs
+
+The project plan freezes estimator variants after SPA. Two planned additions
+are recorded here so the rule stays honest, because neither is a variant: the
+full-class null is the Reality Check run on an enumerated matrix of every
+specification a declared class contains, and `GumbelAnchored` is a new
+searcher, not a new null.
+
 Logged rather than pursued. The gate certifies one thing well; these are
 the places where improvising would be worse than saying no.
 

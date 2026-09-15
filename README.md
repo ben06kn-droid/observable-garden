@@ -44,23 +44,24 @@ run.csv --submitted <id> --menu-kind oblivious`, or from Python,
 menu` walks through whether your menu was fixed in advance. Exit codes are
 0 PASS, 1 FAIL, 2 INADMISSIBLE, 3 UNDECIDABLE, 4 DEGENERATE (the test statistic broke on this menu), 64 usage error.
 
-Bailey & López de Prado's deflated Sharpe ratio needs the number of trials
-behind a result — for human research, nobody knows that number. For an
-agent, it's observable: every specification it evaluates, kept or
-discarded, sits in a log. This estimator bootstraps directly over that
-log's observed trial correlation structure — no independence assumption,
-no invented trial count — validated against a synthetic DGP with a
-computable oracle before any claim about real backtests.
+The deflated Sharpe ratio judges a reported result against what the
+research process that produced it could have delivered without skill
+(López de Prado & Porcu 2025). Its closed-form benchmark, DSR-L, needs the
+number of trials behind a result — for human research, nobody knows that
+number. For an agent, it's observable: every specification it evaluates,
+kept or discarded, sits in a log. This estimator builds the search null
+nonparametrically from that log's observed trials — no independence
+assumption, no invented trial count — validated against a synthetic DGP with
+a computable oracle before any claim about real backtests.
 
 **Relationship to prior work.** The verdict engine is White's Reality
 Check (2000). That correction is twenty-six years old and is the right
 tool. What this adds is: (i) a characterization of when a *logged
 transcript* suffices to apply it — the candidate menu must be
 data-oblivious — and what breaks when a searcher generates candidates
-from its own realized results; (ii) a demonstration that the
-eigenvalue-based "effective N" variant of the deflated Sharpe ratio is
-anti-conservative, because the closed form already absorbs trial
-correlation through its variance term; (iii) a pre-flight power
+from its own realized results; (ii) a demonstration that plugging a
+participation-ratio effective N into DSR-L is anti-conservative, because
+DSR-L already absorbs trial correlation through its variance term; (iii) a pre-flight power
 calculation that tells you before searching whether your intended breadth
 can certify anything; and (iv) an instrumented sandbox for the case the
 correction was never able to reach, where the searcher is an LLM agent and
@@ -96,9 +97,10 @@ algebraically — checked against a reconstruction-free gold standard.
   menu gets more data-dependent (0.060 → 0.127 across 5 points) — not one
   searcher's quirk.
 - **Predictive power** (`s=3`, real signal): only **bootstrap deflation is
-  unbiased** for average decay; closed-form (raw N) is conservative, less
-  so as correlation rises; the "effective N" eigenvalue correction is
-  substantially anti-conservative wherever trials are correlated. One
+  unbiased** for average decay; closed-form DSR-L with the raw trial count
+  is conservative, less so as correlation rises; DSR-L with a
+  participation-ratio effective N is substantially anti-conservative
+  wherever trials are correlated. One
   cell makes the case concretely: at ρ=0, N=1000, a search reports Sharpe
   **2.03** — double the population ceiling — when the truth is 0.21. The
   bootstrap calls the decay to within 0.017; raw-N over-corrects by 14%;
