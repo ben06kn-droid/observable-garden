@@ -33,6 +33,18 @@ def type1_rate(p_values: np.ndarray, alpha: float = 0.05, confidence: float = 0.
     return rate, lo, hi
 
 
+def rmse(pred: np.ndarray, actual: np.ndarray) -> float:
+    pred, actual = np.asarray(pred, dtype=float), np.asarray(actual, dtype=float)
+    return float(np.sqrt(np.mean((pred - actual) ** 2)))
+
+
+def r_squared(pred: np.ndarray, actual: np.ndarray) -> float:
+    pred, actual = np.asarray(pred, dtype=float), np.asarray(actual, dtype=float)
+    ss_res = np.sum((actual - pred) ** 2)
+    ss_tot = np.sum((actual - actual.mean()) ** 2)
+    return float(1 - ss_res / ss_tot) if ss_tot > 0 else float("nan")
+
+
 def ks_critical_value(n: int, alpha: float = 0.05) -> float:
     """Asymptotic critical value for the two-sided one-sample KS test
     (Kolmogorov distribution approximation). A KS statistic below this
