@@ -6,206 +6,118 @@ signal.**
 The deflated Sharpe ratio of Bailey & López de Prado subtracts an expected
 null maximum from a reported result, but that subtraction needs the number
 of trials behind it — and for human research, nobody knows what that number
-is. The "garden of forking paths" (Gelman & Loken) is usually a metaphor for
-exactly this unknowability. For an agent it doesn't need to be: every
-specification it evaluates, kept or discarded, sits in a log. This estimator
-takes that log as its only input — a stationary bootstrap over the search's
-*observed* trial correlation structure, resampled jointly across trials so
-ten near-duplicate variants of one idea deflate like roughly one trial, not
-ten. No independence assumption, no invented trial count.
+is. For an agent it doesn't need to be: every specification it evaluates,
+kept or discarded, sits in a log. This estimator takes that log as its only
+input — a stationary bootstrap over the search's *observed* trial
+correlation structure, resampled jointly so ten near-duplicate variants of
+one idea deflate like roughly one trial, not ten. No independence
+assumption, no invented trial count.
 
-It's validated first against a synthetic data-generating process with a
-computable oracle, where "how much did the search cost you" has a right
-answer to check against, before any claim is made about real backtests. The
-long-run aim (`estimator_build_spec.md`, `The Observable Garden.pdf`) is an
-instrumented sandbox an agent searches against, where the estimator scores
-the agent's stated confidence against what its own transcript implies it
-should have expected — testing whether agents discount for the search
-they've just run, or are simply deaf to their own trial count.
+Validated first against a synthetic data-generating process with a
+computable oracle — where "how much did the search cost you" has a right
+answer to check against — before any claim about real backtests. Long-run
+aim (`estimator_build_spec.md`, `The Observable Garden.pdf`): an
+instrumented sandbox an agent searches against, scoring its stated
+confidence against what its own transcript implies it should have expected.
 
 ## How it works
 
 1. A search evaluates candidate specifications one at a time against a
    sandbox (`environments/sandbox.py`). Every evaluation is logged with its
-   full in-sample return stream, whether or not the search goes on to use it.
+   full return stream, used or not.
 2. The searcher submits one specification plus a predictive distribution
    over its own out-of-sample Sharpe.
 3. The estimator (`estimator/bootstrap.py`) demeans every logged column
-   (imposing the null that nothing in the transcript carries real edge),
-   then repeatedly draws one stationary-bootstrap time index and applies it
-   to *all* logged columns at once — preserving their observed correlation
-   structure exactly — and tracks the resampled maximum. That empirical
-   distribution gives a deflated Sharpe and a p-value: how surprising is the
-   reported result, given a search that looked exactly like this one?
+   (imposing the null), then repeatedly resamples one time index and
+   applies it to *all* columns at once — preserving their observed
+   correlation exactly — tracking the resampled maximum. That gives a
+   deflated Sharpe and a p-value.
 4. `environments/dgp.py` provides the synthetic world this is validated
-   against: a panel with a known signal set and a closed-form oracle Sharpe,
-   so "how much did the search cost" has a computable right answer.
+   against: a known signal set and a closed-form oracle Sharpe.
 
 ## Validated scope
 
-Full argument and citations in `SCOPE.md`. The short version: the bootstrap
-is exactly valid whenever the search's *candidate menu* is **data-oblivious**
-— fixed given the search's own configuration, independent of realized
-outcomes — for *any* trial count and *any* correlation structure among
-candidates, including exact duplicates. That's a strictly weaker condition
-than the "independent trials" framing usually attached to this kind of
-method, and it's what makes a huge, heavily-correlated grid search just as
-tractable as one honest pre-registered backtest.
+Full argument in `SCOPE.md`. Short version: the bootstrap is valid whenever
+the search's *candidate menu* is **data-oblivious** — fixed given the
+search's own configuration, independent of realized outcomes — for any
+trial count and any correlation among candidates, including exact
+duplicates. Strictly weaker than "independent trials," and it's what makes
+a huge, correlated grid search just as tractable as one honest backtest.
 
-It breaks for search where later trials are chosen conditional on earlier
-trials' *realized* outcomes within the same run — the structure of a real
-agent's tool-calling loop — and the reason is sharper than "the naive
-bootstrap has a bug": **a logged transcript licenses a valid correction only
-when the candidate set is fixed. When the search generates candidates
-conditional on its own earlier results, the transcript alone is not enough.**
-A **recursive bootstrap** (`estimator/recursive_bootstrap.py`) that
-re-derives each round's selection inside every replicate fixes this, but it
-depends on the specification class being algebraically rich enough to
-reconstruct candidates that were never actually evaluated (linearity, here)
-— which is a real, load-bearing dependency, not a detail, and is checked
-explicitly against a reconstruction-free gold standard
-(`estimator/procedure_level_bootstrap.py`). Full argument, including the
-experiment that isolates *why* it fails — adaptive candidate generation, not
-adaptive selection — is in `SCOPE.md` §§2–4.
+It breaks when later trials are chosen conditional on earlier *realized*
+outcomes — a real agent's tool-calling loop. A logged transcript licenses a
+valid correction only when the candidate set is fixed; when the search
+generates candidates conditional on its own results, the log alone isn't
+enough. A **recursive bootstrap** (`estimator/recursive_bootstrap.py`) that
+re-derives each round's selection per replicate fixes this, but depends on
+the specification class being algebraically rich enough to reconstruct
+untried candidates — a real dependency, checked against a
+reconstruction-free gold standard (`estimator/procedure_level_bootstrap.py`).
 
 ## Results
 
-*Updated as experiments run. See `figures/` for plots and `SCOPE.md` for the
-theory behind anything non-obvious below. Type-I rate = fraction of null
-draws with p < 0.05 (should be ≈0.05); reported with a 95% Wilson CI
-alongside the KS statistic, since a bare KS p-value near its critical value
-doesn't settle the question either way.*
+*Type-I rate = fraction of null draws with p<0.05 (should be ≈0.05). Every
+number below, every caveat, and every diagnostic that produced it is in
+`SCOPE.md`; this is the summary.*
 
-**Null calibration, properly powered (n=200 matched null draws, `K=25,
-M=60, T=600, B=1500`, `experiments/e1_null_calibration.py` /
-`e1_recursive_calibration.py`):**
+**Null calibration** — is the p-value actually uniform under the null,
+regardless of search shape? (`K=25, M=60, T=600`)
 
 | searcher | naive bootstrap | recursive bootstrap |
 |---|---|---|
-| Honest     | KS p = 0.777 — pass | KS p = 0.777 — pass |
-| Greedy     | KS p = 0.118 — pass | KS p = 0.118 — pass (identical to naive, as it must be — same math) |
-| GridSearch | KS p = 0.174 — pass | KS p = 0.144 — pass |
-| Adaptive   | **KS D = 0.205, p ≈ 0.0000 — fail, over 2x the critical value** | KS D = 0.088, p = 0.088 — pass, just under the n=200 critical value (0.096) |
+| Honest | pass | pass |
+| Greedy | pass | pass |
+| GridSearch | pass | pass |
+| Adaptive | **fail** — type-I 13.6% (n=500) | pass — type-I 3.4% (n=500) |
 
-**Isolating the cause** — Adaptive vs. `LatticeAdaptive` (same greedy
-selection rule, but evaluates the full fixed lattice unconditionally instead
-of building it round-by-round; `experiments/e2_lattice_control.py`, n=200,
-`K=20, M=60, T=600, B=1500`):
+Adaptive's candidate menu depends on realized outcomes; a control
+(`LatticeAdaptive`) isolated the cause as candidate *generation*, not
+*selection*. The recursive-bootstrap fix was validated against a
+reconstruction-free gold standard: agrees within noise (mean diff +0.019,
+SD 0.043 over 20 draws).
 
-| searcher | KS stat | KS p | type-I rate at α=0.05 (95% CI) |
-|---|---|---|---|
-| Adaptive | 0.211 | 0.0000 | 0.120 (0.082–0.172) — excludes nominal 5% |
-| LatticeAdaptive | 0.100 | 0.034 | 0.065 (0.038–0.108) — includes nominal 5% |
+**Dose-response** — does the failure scale with how data-dependent the
+candidate set is, or is it one searcher's quirk? (`experiments/
+e5_dose_response.py`, n=150, `K=20`; figure: `figures/
+e5_dose_response_primary.png`)
 
-Adaptive candidate *generation* — not adaptive *selection* — is what breaks
-the naive bootstrap: on the operationally relevant statistic (type-I rate),
-LatticeAdaptive isn't distinguishable from correctly calibrated; Adaptive is.
+| beam width `k` | 20 (full menu) | 16 | 4 | 2 | 1 (Adaptive) |
+|---|---|---|---|---|---|
+| naive type-I | 0.060 | 0.067 | 0.093 | 0.107 | 0.127 |
+| recursive type-I | 0.060 | 0.060 | 0.060 | 0.060 | 0.060 |
 
-**Validating the fix against a dependency-free gold standard**
-(`experiments/e3_procedure_level_validation.py`, 20 draws): the cheap
-recursive bootstrap vs. a procedure-level bootstrap that re-executes the
-actual search on nullified raw data (no linearity dependency) — mean
-difference in `mean_null_max` = +0.019 (SD 0.043), sign flipping roughly
-evenly across draws. No detectable systematic bias.
+Strictly monotone as `k` shrinks, no falsifier triggered — the effect isn't
+narrow to one searcher. (Recursive's five identical readings were checked
+directly, not assumed correct — verified mechanically correct, and it's one
+measurement at n=150, not five independent ones; `SCOPE.md` §5.) A
+structural variant (`NeighborAdaptive`, a different selection rule with the
+same *amount* of data-dependence) lands on the same rate as Adaptive: it's
+data-dependence itself that breaks the naive bootstrap, not the specific rule.
 
-**Definitive Adaptive check at n=500** (`experiments/e4_adaptive_n500.py`,
-`K=25, M=60, T=600, B=1500`) — properly powered enough that neither result
-is close to its critical value:
-
-| estimator | KS stat | KS p | type-I rate at α=0.05 (95% CI) |
-|---|---|---|---|
-| naive | 0.164 (critical: 0.061) | 0.0000 | 0.136 (0.109–0.169) — decisively excludes nominal 5% |
-| recursive | 0.041 (critical: 0.061) | 0.363 | 0.034 (0.021–0.054) — consistent with nominal 5% |
-
-Naive fails almost 3x its nominal rate; recursive is indistinguishable from
-correctly calibrated. The fix holds at proper statistical power, not just
-at the n=200 boundary case that motivated running this.
-
-**A monotone dose-response, not a one-searcher artifact**
-(`experiments/e5_dose_response.py`, n=150, `K=20, M=50, T=500, B=300` —
-scoped down from n=500/B=2000 for tractability; see `SCOPE.md` §5). Beam
-width `k` interpolates continuously between LatticeAdaptive (`k=K`, keeps
-every candidate) and Adaptive (`k=1`, argmax only):
-
-| variant | dose (mean divergence) | naive type-I (95% CI) | recursive type-I (95% CI) |
-|---|---|---|---|
-| LatticeAdaptive | 0.000 | 0.060 (0.032–0.110) | 0.060 (0.032–0.110) |
-| BeamAdaptive(16) | 0.331 | 0.067 (0.037–0.118) | 0.060 (0.032–0.110) |
-| BeamAdaptive(4) | 0.876 | 0.093 (0.056–0.151) | 0.060 (0.032–0.110) |
-| BeamAdaptive(2) | 0.932 | 0.107 (0.067–0.166) | 0.060 (0.032–0.110) |
-| Adaptive (k=1) | 0.950 | 0.127 (0.083–0.189) | 0.060 (0.032–0.110) |
-| DepthAdaptive (one more round) | 0.950 | 0.133 (0.088–0.197) | 0.060 (0.032–0.110) |
-| NeighborAdaptive (different rule) | 0.950 | 0.127 (0.083–0.189) | 0.060 (0.032–0.110) |
-
-(figures: `figures/e5_dose_response_primary.png`, `figures/e5_divergence_diagnostic.png`)
-
-Strictly monotone as `k` shrinks — no falsifier triggered (not flat, not
-non-monotone, and BeamAdaptive(2) already excludes nominal 5% two steps
-before the original Adaptive, so the effect isn't narrow to one searcher).
-NeighborAdaptive lands exactly on Adaptive's rate despite anchoring round 2
-on feature correlation rather than Sharpe-argmax: it's data-dependence per
-se that breaks the naive bootstrap, not that specific rule.
-
-**Recursive's five identical readings got checked, not narrated past.**
-Five-way exact agreement (0.060 everywhere) is the signature of a bug, so
-it was checked directly rather than reported as "flat across five
-independent points": `beam_width` mechanically restricts candidates
-correctly (instrumented directly — 94 evaluations for beam=2, matching
-`K+2(K-1)+2(K-2)` exactly, not the full lattice's ~1140), but greedy search
-converges to the *same* near-global optimum regardless of beam width on
-this DGP (1/300 mismatches on fresh draws, 0/300 on bootstrap replicates),
-so `sr_sel` and `M_b` genuinely coincide across the five `max_features=3`
-variants. Not a bug — but it means recursive's reading here is one
-measurement (n=150, Wilson CI 0.032–0.110, **consistent with** nominal —
-not "equal to" it, not five confirmations), not undermining recursive's
-separately-validated n=500 result on Adaptive, but thinner evidence on its
-own than it first looked. Full trace in `SCOPE.md` §5.
-
-**Diagnostic refinement: entropy vs. divergence, compared honestly.**
-Normalized `beam_entropy` (Shannon entropy of the round-1 beam distribution
-across replicates, ÷ `log(C(K, beam width))`) was predicted to track type-I
-more tightly than the Jaccard divergence rate, being a magnitude rather
-than a saturating rate. Measured: it doesn't (Pearson r = 0.861 vs
-divergence's 0.901; Spearman 0.935 vs 0.972) — both are strong, directional,
-and imperfect in different places. `SCOPE.md` §5 has the full comparison,
-including why BeamAdaptive(16) and BeamAdaptive(4) tie almost exactly in
-entropy (`C(20,16)=C(20,4)`, a parameter-choice artifact, not a diagnostic
-failure).
-
-Also caught a real bug along the way — `deflate()`'s default `sr_sel` isn't
-always a searcher's own submitted value, ~1.7% of the time in this DGP —
-detailed in `SCOPE.md` §5 along with why it didn't change any conclusion
-already reported here.
-
-**Next: the build spec's Experiment 2** (predictive power under the
-alternative — naive Sharpe vs. closed-form DSR vs. bootstrap deflation as
-predictors of out-of-sample Sharpe under `s=3`) has not been started.
-Everything above is null-calibration (`s=0`) work: it shows the estimator
-doesn't cry wolf, not that it has power to detect real decay. That's next.
-
-**Experiments 3-4 from the build spec** (scaling with trial budget,
-correlation sensitivity) — not yet run.
+**Next**: Experiment 2 (predictive power under the alternative, `s=3` —
+does deflation actually predict out-of-sample Sharpe better than naive or
+closed-form DSR?) plus the correlation sweep, folded in together
+(`experiments/e7_predictive_power.py`) — in progress.
 
 ## Repository layout
 
 ```
 environments/   the DGP (computable oracle) and the Sandbox contract
-searchers/      scripted.py: Honest, Greedy, GridSearch, Adaptive -- each
-                implements run() (against a Sandbox) and replay() (pure-
-                array, for the recursive bootstrap). diagnostic.py:
-                LatticeAdaptive, the selection-vs-generation control.
-estimator/      bootstrap.py (naive), recursive_bootstrap.py (re-derives
-                selection per replicate via replay()), procedure_level_
-                bootstrap.py (dependency-free gold standard: re-executes
-                run() on nullified data), deflated_sharpe.py (closed-form
-                baseline), metrics.py (type-I rate + Wilson CI, KS critical
-                value)
-experiments/    e1 (null calibration, both estimators), e2 (lattice
-                control), e3 (procedure-level validation), e4 (n=500
-                Adaptive), plus the diagnostic scripts behind SCOPE.md
-tests/          correctness tests -- duplicate-invariance
-                (estimator/bootstrap.py), run()/replay() agreement, the
-                lattice greedy-optimality property e2 leans on
+searchers/      scripted.py: Honest, Greedy, GridSearch, Adaptive.
+                dose_response.py: BeamAdaptive, DepthAdaptive, NeighborAdaptive.
+                diagnostic.py: LatticeAdaptive. Each implements run()
+                (against a Sandbox) and replay() (pure-array, for the
+                recursive bootstrap).
+estimator/      bootstrap.py (naive), recursive_bootstrap.py, procedure_
+                level_bootstrap.py (gold standard), deflated_sharpe.py
+                (closed-form baseline), divergence.py (candidate-set
+                instability diagnostics), metrics.py (type-I rate + CI,
+                RMSE/R², KS critical value)
+experiments/    e1-e5: null calibration through the dose-response sweep.
+                e6: precondition check before Experiment 2. e7: predictive
+                power + correlation sweep.
+tests/          correctness tests -- duplicate-invariance, run()/replay()
+                agreement, lattice greedy-optimality
 figures/        plots referenced above
 ```
 
