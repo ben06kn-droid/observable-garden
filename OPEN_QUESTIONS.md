@@ -69,6 +69,30 @@ rule for 80% power against 6%. It affects how the note words depth, not the
 gate, which treats any adaptive search without a declared class as
 UNDECIDABLE.
 
+## Is the gap between e4 and E18 for Adaptive real?
+
+e4 measured Adaptive's naive type-I at 13.6% (K=25, M=60, T=600, block length
+chosen on the transcript). E18 measured 9.2% (K=20, M=50, T=500, block length
+chosen on the base columns). Both runs had n=500. E18b ruled out the scoring
+rule (SCOPE.md §17).
+
+A rough calculation, not a test, suggests most of the rest may not be real:
+
+- In the Gaussian limit, for depth-3 greedy search at ρ=0.3, going from K=20
+  to K=25 raises naive type-I from 10.5% to 11.6%, about 1.1 points.
+- The remaining 3.3 points are small against the sampling error of two n=500
+  rates, whose difference has a standard error of about 2.0 points. That is
+  roughly 1.6 standard errors.
+- M and T do not enter the limit model, so any effect from them would be a
+  finite-sample one. The block-length rule is the one candidate the limit
+  model says nothing about.
+
+The economical reading is a small K effect plus noise, with M, T or the
+block-length rule contributing at most something modest. If it is worth
+closing, the single most informative run is E18's configuration with e4's
+block-length rule. The note avoids the question: it reports only E21's
+configuration, and e4 stays in SCOPE.md with its labels.
+
 ## Classes that cannot be enumerated from base returns
 
 Transcript format v2 registers one class, equal-weight feature subsets up to

@@ -1369,8 +1369,10 @@ decisions), as in E17.
   transcript. Its naive `sr_sel` is the transcript maximum rather than the
   searcher's own selection, but for Adaptive those are the same value: E18b
   (below) swapped only that rule on E18's draws and no p-value changed. The
-  rates differ (Fisher p = 0.036, not pre-registered). Configuration or the
-  block-length rule accounts for it; which one has not been tested.
+  rates differ (Fisher p = 0.036, not pre-registered). A rough limit
+  calculation attributes about a point of that to K and leaves the rest at
+  roughly 1.6 standard errors, so much of the gap may be noise
+  (OPEN_QUESTIONS.md).
 - **Depth.** The winner rule at d = 3 (10.4%) is not significantly above the
   d = 2 estimates pooled across e15, E16 and E17 (8.5%; Fisher p = 0.11,
   different seeds). DepthAdaptive's 9.6% against Adaptive's 9.2% is 3–1 paired
@@ -1397,5 +1399,5 @@ largest Sharpe in the transcript instead of Adaptive's selected value.
   no discordant draws (McNemar 0–0). Early-stopping greedy search selects its
   own transcript maximum.
 
-So the gap between 9.2% and e4's 13.6% comes from configuration (K=25, M=60,
-T=600) or the block-length rule, which this check did not separate.
+So the scoring rule is not the source of the gap between 9.2% and e4's 13.6%.
+What remains may be mostly noise plus a small effect of K (OPEN_QUESTIONS.md).
