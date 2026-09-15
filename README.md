@@ -46,6 +46,11 @@ algebraically — checked against a reconstruction-free gold standard.
   the raw trial count is conservative, less so as correlation rises. The
   "sophisticated" eigenvalue correction is substantially anti-conservative
   wherever trials are correlated at all.
+- **Power** (detecting real signal, same grid): counterintuitively rises
+  with feature correlation (16%→43% as ρ goes 0→0.9) — checked, not left
+  as a curiosity: correlated noise features are near-duplicates of the
+  true signal, so the search substitutes a plausible proxy almost as
+  often as it finds the real thing.
 
 Every number, caveat, and diagnostic behind these — including two real
 bugs found and fixed along the way — is in **`SCOPE.md`**. This is the

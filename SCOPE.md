@@ -647,3 +647,45 @@ is stated above rather than implied: why the ρ=0 consistency gap grows
 with `N` (§8), and whether effective-N's non-monotone-in-ρ anti-
 conservatism has the eigenvalue-shrinkage explanation offered here or a
 different one — both flagged as unverified, not folded into the headline.
+
+**One more thing the grid produced that the headline above doesn't cover:
+statistical power.** Every `deflate()` call in this experiment also
+returns a p-value — under `s=0` (every earlier experiment) that's a
+calibration check; under `s=3` (this one) it's a power measurement: how
+often does the bootstrap actually detect the genuine signal sitting under
+the search. Pulled from data already collected, no new runs
+(`figures/e9_predictive_power_v2_data.pkl`'s `p_value` field):
+
+| ρ | 0.0 | 0.3 | 0.6 | 0.9 |
+|---|---|---|---|---|
+| power (frac. p<0.05), N=1000 | 0.16 | 0.36 | 0.41 | 0.43 |
+
+(`sr_oracle` reads exactly 1.0000 in every one of the 1,200 draws across
+the whole grid — the fixed-ceiling calibration is doing exactly what it's
+supposed to, a clean sanity check in passing.)
+
+Power rising with correlation is the opposite of the naive intuition
+(more correlated noise should make the true signal harder to isolate,
+not easier) — checked rather than left as a curiosity. Over 30 fresh
+draws at `N=1000`, per ρ: mean alignment between the submitted
+specification and the true signal (`s_gs/sqrt(v_g v_s)`, the same
+quantities `analytic_sharpe` uses, bounded like a correlation) and the
+fraction of draws where the submitted support contains at least one
+literal true-signal feature:
+
+| ρ | 0.0 | 0.3 | 0.6 | 0.9 |
+|---|---|---|---|---|
+| mean alignment with true signal | 0.254 | 0.636 | 0.831 | 0.927 |
+| frac. hitting an exact true feature | 0.633 | 0.500 | 0.433 | 0.333 |
+
+These move in opposite directions, and that's the resolution, not a
+contradiction: at higher ρ the search finds the *literal* true features
+less often (0.633 → 0.333), but heterogeneous Σ_x means many noise
+features share factor loadings with the true signal, so whatever
+plausible-looking feature the search substitutes in is itself strongly
+aligned with the true signal (alignment 0.93 at ρ=0.9) — a near-duplicate
+that works almost as well as the real thing. Exact identification gets
+rarer; practical detection gets easier; power goes up. At ρ=0 there are no
+such proxies — a search that doesn't hit one of the 3 true features out
+of 40 gets no partial credit at all, which is the harder, all-or-nothing
+regime the low power there reflects.
