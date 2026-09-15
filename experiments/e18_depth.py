@@ -178,7 +178,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workers", type=int)
     parser.add_argument("--checkpoint-dir", default=".cache/e18_checkpoints")
-    parser.add_argument("--smoke", action="store_true", help="1% of the draws, no checkpoints, nothing saved")
+    parser.add_argument("--smoke", action="store_true", help="1%% of the draws, no checkpoints, nothing saved")
     args = parser.parse_args()
     git = git_state()
     if args.smoke:
