@@ -112,7 +112,13 @@ algebraically — checked against a reconstruction-free gold standard.
   not one searcher's quirk. What drives it is building on the search's own
   best results. Rules that anchor on a random or uncorrelated feature stay
   at or near nominal, and inflation rises with how strongly the anchor
-  tracks performance (SCOPE.md §14–17).
+  tracks performance (SCOPE.md §14–18).
+- **Wider searches make the naive correction worse.** For a search that
+  builds on its own best feature, naive type-I rose from 10% to 36% as the
+  candidate features grew from 10 to 80 with uncorrelated features, and
+  from 7% to 14% at correlation 0.3, matching a Gaussian-limit prediction
+  fixed in advance. The recursive and full-class corrections stayed at 4–5%
+  throughout (SCOPE.md §19).
 - **Predictive power** (`s=3`, real signal): only **bootstrap deflation is
   unbiased** for average decay; closed-form DSR-L with the raw trial count
   is conservative, less so as correlation rises; DSR-L with a

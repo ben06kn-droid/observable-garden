@@ -1475,5 +1475,77 @@ before running.
   anchors in different rounds of one search combine is untested
   (OPEN_QUESTIONS.md).
 - **Scope.** One configuration: K=20, ρ=0.3, depth 2, exchangeable features.
-  E19(c) moves K and ρ for the winner rule. Other ranks under those changes,
-  and features that are not exchangeable (E19), are untested.
+  E19(c) moves K and ρ for the winner rule (§19). Other ranks under those
+  changes, and features that are not exchangeable (E19), are untested.
+
+## 19. E19(c): naive inflation grows with the number of candidate features
+
+**For a search that builds on its own winner, the naive bootstrap's type-I
+rate rose from 10.0% to 36.2% as the candidate features grew from 10 to 80
+with uncorrelated features, and from 7.0% to 14.0% at feature correlation
+0.3. The recursive and full-class nulls stayed at 4.0–5.2% throughout.**
+Pre-registered in `prereg/E19c.md` (21dbbc1) and run from 17b43e8, clean
+(`experiments/e19c_feature_count.py`).
+
+- A winner-anchored search at depth 2 sees the first K of 80 features
+  generated per draw, K ∈ {10, 20, 40, 80}, so draws are paired across K.
+- ρ ∈ {0, 0.3}, M=50, T=500, s=0, B=1500. n=500 draws per ρ, seeds
+  70000–70499.
+- **Where it ran.** The first launch on the Mac was stopped for low memory
+  before saving anything. The second, with 4 workers, saved 125 draws at
+  ρ = 0 (seeds 70000–70124) before it was stopped the same way. The other 875
+  draws ran on EC2 from the same commit. Two of those EC2 draws, rerun on the
+  Mac, reproduced all 12 of their p-values exactly.
+
+| ρ | K | limit | naive type-I (95% CI) | recursive (95% CI) | full-class (95% CI) | draws with full-class p > recursive p |
+|---|---|---|---|---|---|---|
+| 0 | 10 | 10.1% | 0.100 (0.077–0.129) | 0.044 (0.029–0.066) | 0.044 (0.029–0.066) | 8.8% |
+| 0 | 20 | 15.5% | 0.142 (0.114–0.175) | 0.050 (0.034–0.073) | 0.050 (0.034–0.073) | 27.4% |
+| 0 | 40 | 24.2% | 0.224 (0.190–0.263) | 0.048 (0.032–0.070) | 0.048 (0.032–0.070) | 56.4% |
+| 0 | 80 | 35.7% | **0.362** (0.321–0.405) | 0.052 (0.036–0.075) | 0.052 (0.036–0.075) | 74.4% |
+| 0.3 | 10 | 7.3% | 0.070 (0.051–0.096) | 0.040 (0.026–0.061) | 0.040 (0.026–0.061) | 3.4% |
+| 0.3 | 20 | 9.1% | 0.084 (0.063–0.112) | 0.050 (0.034–0.073) | 0.050 (0.034–0.073) | 6.4% |
+| 0.3 | 40 | 11.3% | 0.120 (0.094–0.151) | 0.044 (0.029–0.066) | 0.044 (0.029–0.066) | 13.8% |
+| 0.3 | 80 | 13.7% | **0.140** (0.112–0.173) | 0.050 (0.034–0.073) | 0.050 (0.034–0.073) | 22.4% |
+
+KS tests reject uniformity of the naive p-values at p < 0.001 in every cell
+except ρ = 0.3, K = 10 (p = 0.10). For the recursive and full-class
+p-values, KS p ranges from 0.29 to 0.97.
+
+**Decision.** The trend test for naive rejections increasing in K gave
+p = 0.0001 at both ρ (statistics 1,252 and 579), the smallest value 10,000
+permutations can return. The note claims that naive inflation grows with the
+number of candidate features at both correlations.
+
+**Secondary readings.**
+
+1. **Against the limit (not a registered test).** Naive type-I matched the
+   limit table fixed in advance. Every cell lies inside its Wilson interval,
+   and two-sided binomial tests against the limit give p = 0.38–1.00.
+2. **Nominal nulls.** Recursive and full-class type-I are not significantly
+   above 5% in any cell. Held.
+3. **Full-class conservatism.** The limit predicted none, and there was none
+   at the level of decisions: full-class and recursive agreed on every
+   rejection decision in all eight cells, and the trend test for full-class
+   rejections falling with K gave p = 0.75 and 0.83. The share of draws where
+   the full-class p-value exceeds the recursive one did grow with K, from 9% to
+   74% at ρ = 0. The excess was at most 8 replicates in 1,501, and 1.0–2.4 on
+   average where the two differed; the full-class p was never the smaller.
+   So the class's growth, like K²/2, costs this search essentially nothing in
+   type-I. What it costs in power is E22's question.
+4. **Lemma direction.** The naive p-value was at most the recursive one on
+   every draw in every cell, as P4's lemma predicts.
+5. **Slope.** Naive type-I rose 8.7 points per doubling of K at ρ = 0, and 2.3
+   points at ρ = 0.3.
+
+**What this establishes.** For a search that builds on its own best result,
+the Reality Check applied to the logged specifications gets worse as the
+candidate set widens, and far worse when candidates are weakly correlated. At
+80 uncorrelated features, more than a third of searches on data with no signal
+reject at a nominal 5%. Correlation damps the effect because it shrinks the
+spread of the order statistics the search exploits. The recursive and
+full-class corrections stay nominal across the whole range.
+
+**Scope.** Winner anchoring at depth 2, with exchangeable features and T=500.
+Wide datasets with heterogeneous correlation (E19's other arms) and deeper
+searches (E18 covers only K=20) are not covered.

@@ -52,7 +52,9 @@ top two ranks, falling through rank 5, and slightly conservative below. Mean
 data-dependent rounds, some anchored high and some low: whether their
 effects on the naive test add, or whether one inflating round dominates. The
 curve itself is measured only at K=20, ρ=0.3 and depth 2, with exchangeable
-features. E19(c) moves K and ρ for the winner rule. The correlation-based
+features. E19(c) found the winner rule's inflation growing with K at both
+correlations tested (SCOPE.md §19); other ranks across K are untested. The
+correlation-based
 neighbor rule under heterogeneous correlation is still untested (THEORY.md
 P6, E19(b)).
 

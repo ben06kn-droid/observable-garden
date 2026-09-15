@@ -160,6 +160,15 @@ Evidence (SCOPE.md §16, §18):
   95% interval around the limit value. The pre-registered outcome was graded:
   rank 3 fell below rank 2 (34–0) and stayed above rank 10 (25–0).
 
+**Breadth.** In the same limit, the gap between the search's value, set by
+the top two order statistics, and the frozen menu's maximum grows with K, and
+grows faster when ω is small. The limit predicted naive type-I of 10.1%,
+15.5%, 24.2% and 35.7% at K = 10, 20, 40 and 80 with ω = 0, and 7.3%, 9.1%,
+11.3% and 13.7% at ω = 0.3. E19(c) (SCOPE.md §19) measured 10.0%, 14.2%,
+22.4% and 36.2%, and 7.0%, 8.4%, 12.0% and 14.0%, on draws nested across K.
+Every value lies inside its 95% interval, and the pre-registered trend test
+found growth in K at both correlations (p = 0.0001).
+
 **At depth 3 (E18, SCOPE.md §17).** Winner anchoring inflated naive type-I to
 10.4% (n = 1,000), and the naive p-value was at most the recursive one on
 every draw. A random round-2 anchor still re-anchors round 3 on the round-2
@@ -271,8 +280,8 @@ nothing anticipates P4.
 |---|---|---|---|
 | P1 | known | SCOPE.md §1 (null calibration of oblivious searchers) | E21 |
 | P2 | known | none needed | none |
-| P3 | ingredients known, tier new | `estimator/full_class.py` and tests; E17 full-class null (SCOPE.md §16) | E21, E22 |
-| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E17b graded by rank, matching the limit (SCOPE.md §18); E18 at depth 3 (SCOPE.md §17) | E19, E19(c) |
+| P3 | ingredients known, tier new | `estimator/full_class.py` and tests; E17 full-class null (SCOPE.md §16); E19(c) up to 3,240 members (SCOPE.md §19) | E21, E22 |
+| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E17b graded by rank, matching the limit (SCOPE.md §18); E18 at depth 3 (SCOPE.md §17); E19(c) growth in K (SCOPE.md §19) | E19 |
 | P5 | new, corrected | exploratory limit check above; E17 at d = 2; E18 at d = 3 and 4 (SCOPE.md §17) | E22 |
 | P6 | ingredients known, one case open | e15 neighbor rule calibrated empirically | E19(b) |
 
