@@ -41,7 +41,15 @@ On your own search: `garden audit run.npz` (fields `returns` T×N,
 run.csv --submitted <id> --menu-kind oblivious`, or from Python,
 `garden.audit(garden.from_matrix(R, submitted_index, menu_kind="oblivious"))`.
 `menu_kind` defaults to `unknown`, which returns UNDECIDABLE; `garden explain
-menu` walks through whether your menu was fixed in advance. Exit codes are
+menu` walks through whether your menu was fixed in advance. An adaptive search
+can still get a verdict from a version-2 transcript that declares the class of
+every specification it could have produced (`spec_class`, e.g.
+`subsets:max_size=3`), with `base_returns` for every feature it could have
+used and each logged specification's weights (`spec_members`). The gate then
+runs the Reality Check over the whole class (`garden explain full-class`).
+From a sandbox that enforces the class this is automatic
+(`spec_class_source="sandbox"`); in a supplied file the class and
+`base_returns` are attestations, like `menu_kind`. Exit codes are
 0 PASS, 1 FAIL, 2 INADMISSIBLE, 3 UNDECIDABLE, 4 DEGENERATE (the test statistic broke on this menu), 64 usage error.
 
 The deflated Sharpe ratio judges a reported result against what the

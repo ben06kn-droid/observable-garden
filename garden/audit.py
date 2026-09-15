@@ -8,8 +8,9 @@ from typing import Callable, Literal
 
 import numpy as np
 
-from estimator.bootstrap import sharpe
+from estimator.bootstrap import select_block_length, sharpe
 from garden._engine import null_max_bootstrap
+from garden._full_class_engine import full_class_null_max
 from garden._fmt import pct
 from garden.power import bootstrap_p_value, bootstrap_power, critical_value
 from garden.transcript import Transcript
@@ -29,10 +30,13 @@ ROUTES_FORWARD = (
     "Routes forward:\n"
     " 1. Sample splitting — search on part A, evaluate the single selected spec on held-out part B. "
     "No correction needed. Always available.\n"
-    " 2. Re-executable search — pass rerun= to garden.audit() and the procedure-level bootstrap applies, "
-    "with no reconstruction requirement.\n"
+    " 2. Declared class — if every specification the search could produce lies in a class fixed before it, "
+    "declare spec_class with base_returns and spec_members (transcript format v2) and the full-class test "
+    "applies, with no replay (`garden explain full-class`).\n"
     " 3. Recursive bootstrap (estimator.recursive_bootstrap) — if your specifications are linear in a "
-    "fixed base set."
+    "fixed base set.\n"
+    " 4. Re-executable search — pass rerun= to garden.audit() and the procedure-level bootstrap applies, "
+    "with no reconstruction requirement."
 )
 
 DEGENERATE_ROUTES = (
@@ -72,7 +76,7 @@ class Verdict:
     periods_per_year: int
     submitted: str
     submitted_rank: int
-    method: str                            # "reality_check" | "procedure_level"
+    method: str                            # "reality_check" | "full_class" | "procedure_level"
     B: int
     block_length: int
     effective_breadth: float               # reported only, never used in the correction
@@ -80,6 +84,9 @@ class Verdict:
     power_at_reference: float              # single pre-specified strategy, not search power (SCOPE.md §13)
     power_floor: float
     menu_kind: str
+    spec_class: str                        # declared class, "none" if not declared
+    spec_class_source: str | None          # "sandbox" (enforced during the search) or "attested"
+    class_size: int | None                 # number of specifications in the declared class
     degenerate_share: float                # share of top-decile replicates (they set the critical value) with a degenerate maximum
     degenerate_replicates: int             # count within the top decile
     tail_replicates: int
@@ -161,14 +168,27 @@ def audit(
     trial_sr = sharpe(R, axis=0, annualization=ann)
     sr = float(trial_sr[j])
     rank = int(1 + np.sum(trial_sr > sr))
+    oblivious = transcript.menu_kind == "oblivious"
+    declared = transcript.declared_class
+    use_full_class = not oblivious and rerun is None and declared is not None
+    if use_full_class and block_length is None:
+        base = transcript.base_returns
+        block_length = select_block_length(base - base.mean(axis=0))
     boot = null_max_bootstrap(R, B=B, block_length=block_length, annualization=ann, seed=seed, track_index=j,
                               support_min=support_min, q_min=q_min)
 
-    oblivious = transcript.menu_kind == "oblivious"
+    class_size = declared.size(transcript.base_returns.shape[1]) if declared is not None else None
+    floor_binds, cap_binds = boot.floor_binds, boot.cap_binds
     if not oblivious and rerun is not None:
         shifts = np.random.default_rng(seed).integers(1, T, size=rerun_B)
         null = np.array([float(rerun(int(s))) for s in shifts])
         method = "procedure_level"
+    elif use_full_class:
+        null, _, class_floor, class_cap = full_class_null_max(transcript.base_returns, declared, B=B,
+                                                              block_length=boot.block_length, annualization=ann,
+                                                              seed=seed)
+        floor_binds, cap_binds = floor_binds + class_floor, cap_binds + class_cap
+        method = "full_class"
     else:
         null = boot.M_b
         method = "reality_check"
@@ -197,7 +217,7 @@ def audit(
     over_limit = share > tail_share_max
     flips = screened_status is not None and screened_status != tested_status
 
-    if not oblivious and rerun is None:
+    if not oblivious and rerun is None and not use_full_class:
         status = "UNDECIDABLE"
     elif method == "reality_check" and (over_limit or flips):
         status = "DEGENERATE"
@@ -206,8 +226,10 @@ def audit(
 
     reasons: list[str] = []
     if status == "PASS":
+        breadth_label = (f"all {class_size:,} specifications in its declared class" if method == "full_class"
+                         else f"the {N:,} specifications this search evaluated")
         reasons.append(f"The reported {sr:.2f} clears the critical value of {c:.2f}: it survives correction "
-                       f"for the {N:,} specifications this search evaluated.")
+                       f"for {breadth_label}.")
         if power < power_floor:
             reasons.append(f"PASS — but power against a single pre-specified strategy with true Sharpe "
                            f"{reference_sharpe:.1f} is only {pct(power)}. Passes from low-power searches overstate "
@@ -274,6 +296,21 @@ def audit(
         reasons.append(f"Null from re-executing the search on {rerun_B} time-shifted surrogates "
                        f"(procedure-level bootstrap): valid for an adaptive menu, no reconstruction needed. "
                        f"The smallest attainable p-value at this B is {1 / (rerun_B + 1):.3f}.")
+    elif method == "full_class":
+        K = transcript.base_returns.shape[1]
+        reasons.append(f"Full-class null: the menu was {transcript.menu_kind}, so the logged specifications alone "
+                       f"do not license a correction, but the submitted specification lies in the declared class "
+                       f"{declared.name} ({class_size:,} specifications over {K} features). The Reality Check over "
+                       f"that whole class is valid however adaptively the search chose what to evaluate, and "
+                       f"conservative, because the class is at least as wide as the search (THEORY.md, P3).")
+        if transcript.spec_class_source == "sandbox":
+            reasons.append("Class source: sandbox. The sandbox refused every specification outside the class "
+                           "during the search, so the class was fixed before the search by construction.")
+        else:
+            reasons.append("Class source: attested. The class and base_returns are the supplier's claims: the "
+                           "verdict is valid only if every specification the search could have produced lies in "
+                           "the class and base_returns holds every feature it could have used, not only the ones "
+                           "it touched. Declaring a class after seeing results is itself snooping.")
     elif oblivious:
         reasons.append("Menu check: PASS — data-oblivious, so the Reality Check is valid for any trial count "
                        "and correlation structure.")
@@ -295,8 +332,9 @@ def audit(
         submitted=transcript.submitted, submitted_rank=rank, method=method, B=len(null),
         block_length=int(boot.block_length), effective_breadth=breadth, reference_sharpe=reference_sharpe,
         power_at_reference=power, power_floor=power_floor, menu_kind=transcript.menu_kind,
+        spec_class=transcript.spec_class, spec_class_source=transcript.spec_class_source, class_size=class_size,
         degenerate_share=share, degenerate_replicates=degenerate_k, tail_replicates=tail_n,
         degenerate_replicates_total=degenerate_total,
         degenerate_columns=degenerate_columns, screened_status=screened_status,
-        variance_floor_binds=boot.floor_binds, sharpe_cap_binds=boot.cap_binds, reasons=reasons,
+        variance_floor_binds=floor_binds, sharpe_cap_binds=cap_binds, reasons=reasons,
     )

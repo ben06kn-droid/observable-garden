@@ -176,8 +176,35 @@ value refused, and 4% of those with a sound one (SCOPE.md §11).
   White, H. (2000). A Reality Check for Data Snooping. Econometrica 68(5).
   Hansen, P.R. (2005). A Test for Superior Predictive Ability. JBES 23(4)."""
 
+FULL_CLASS = """\
+A full-class verdict applies when a search chose adaptively what to
+evaluate, but every specification it could have produced lies in a class
+declared before the search. The gate then runs the Reality Check over the
+whole class instead of over the logged specifications. The reported Sharpe
+is at most the class maximum, and the class does not depend on the data, so
+the test is valid however adaptive the search was. It is conservative,
+because the class is at least as wide as anything the search could reach
+(THEORY.md, P3); this is Sullivan, Timmermann & White's test over a whole
+rule universe. For greedy forward selection the extra width costs almost
+nothing: in the exchangeable limit, at depth 2, the search's selected value
+equals the class maximum (P5).
+
+The declaration has to be complete. base_returns must hold every feature
+the search could have used, not only the ones it touched, and every logged
+specification, including the submitted one, must lie in the class; the
+gate rejects transcripts where they do not. A class read from a sandbox
+that enforced it during the search is marked "sandbox". A class supplied
+with a file is "attested": the gate cannot check that it was fixed in
+advance, and declaring a class after seeing results is itself snooping.
+Registered classes: subsets:max_size=d (unit weights on up to d features,
+summed) and subsets:max_size=d,signs=both.
+
+  Sullivan, R., Timmermann, A. & White, H. (1999). Data-snooping, technical
+    trading rule performance, and the bootstrap. Journal of Finance 54(5)."""
+
 TOPICS = {
     "menu": MENU,
+    "full-class": FULL_CLASS,
     "reality-check": REALITY_CHECK,
     "pass": REALITY_CHECK,
     "fail": REALITY_CHECK,

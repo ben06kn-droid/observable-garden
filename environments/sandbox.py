@@ -68,9 +68,13 @@ class LogEntry:
 
 
 class Sandbox:
-    def __init__(self, data: DGPData, periods_per_year: int = 252):
+    def __init__(self, data: DGPData, periods_per_year: int = 252, spec_class=None):
+        """spec_class: an optional declared class (garden.spec_class.SubsetClass, or anything with `name`
+        and `contains(weights)`). When given, evaluate() refuses every specification outside it, so the
+        class is fixed before the search by construction."""
         self._data = data
         self.periods_per_year = periods_per_year
+        self.spec_class = spec_class
         self._log: list[LogEntry] = []
         self._submission: tuple[Specification, Distribution] | None = None
 
@@ -92,6 +96,8 @@ class Sandbox:
         """Every call is logged with its full return stream, regardless of
         whether the searcher goes on to use the result. OOS data is never
         touched here."""
+        if self.spec_class is not None and not self.spec_class.contains(spec.weights):
+            raise ValueError(f"specification {spec.name!r} is outside the declared class {self.spec_class.name}")
         signal = self._data.x_in @ spec.weights          # (T, M)
         R = (signal * self._data.r_in).mean(axis=1)       # (T,) portfolio return stream
         mean, std = float(R.mean()), float(R.std(ddof=1))

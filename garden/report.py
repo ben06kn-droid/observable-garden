@@ -47,7 +47,8 @@ def _wrap(text: str, indent: int = 2) -> list[str]:
 def render_verdict(v: Verdict) -> str:
     bound = v.p_value_is_lower_bound
     unreliable = " (unreliable)" if v.status == "DEGENERATE" else ""
-    source = "Reality Check bootstrap" if v.method == "reality_check" else "procedure-level re-execution"
+    source = {"reality_check": "Reality Check bootstrap", "full_class": "full-class bootstrap",
+              "procedure_level": "procedure-level re-execution"}[v.method]
     lo, hi = v.null_max_band
     out = [
         f"VERDICT: {v.status} — {TAGLINES[v.status]}",
@@ -55,6 +56,8 @@ def render_verdict(v: Verdict) -> str:
         _row("Specifications evaluated", f"{v.n_trials:,}"),
         _row("Periods", f"{v.n_periods:,} ({v.periods_per_year}/yr)"),
         f"  Submitted: {v.submitted} (rank {v.submitted_rank:,} of {v.n_trials:,} by in-sample Sharpe)",
+        *([f"  Declared class: {v.spec_class} ({v.class_size:,} specifications, source: {v.spec_class_source})"]
+          if v.class_size is not None else []),
         "",
         f"  Null maximum ({source}, B={v.B:,})",
         _row("mean", _num(v.null_max_mean), indent=4),
@@ -73,7 +76,8 @@ def render_verdict(v: Verdict) -> str:
     for reason in v.reasons:
         out.append("")
         out.extend(_wrap(reason))
-    out += ["", f"  Methodology: garden explain {EXPLAIN_TOPIC[v.status]}"]
+    topic = "full-class" if v.method == "full_class" and v.status != "DEGENERATE" else EXPLAIN_TOPIC[v.status]
+    out += ["", f"  Methodology: garden explain {topic}"]
     return "\n".join(out)
 
 

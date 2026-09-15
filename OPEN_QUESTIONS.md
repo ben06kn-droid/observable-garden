@@ -53,6 +53,25 @@ intermediate coupling. The cleanest is to anchor on the k-th best single
 feature for k = 2, 3, 5, 10, which sets coupling directly; the neighbor rule
 under heterogeneous_correlation is another. Pre-register before running.
 
+## Classes that cannot be enumerated from base returns
+
+Transcript format v2 registers one class, equal-weight feature subsets up to
+size d, because it is the only one whose members can be built from base
+returns. Threshold and lookback grids, like E20's, are not sums of base
+columns. A v3 `spec_class="explicit"`, where the supplier provides returns for
+the whole class directly, would give such searches a valid full-class verdict
+(the Sullivan–Timmermann–White setup). Everything else stays "none", which is
+UNDECIDABLE unless a rerun is provided.
+
+## The degeneracy check on the full-class path
+
+On the full-class path, the degeneracy check (SCOPE.md §11) still runs on the
+logged specifications, not on the whole class. A class containing sums of
+rarely-trading base columns could have degenerate members the search never
+logged. Extending the support screen to class members needs each member's
+distinct active periods per replicate, which the moments engine does not
+compute.
+
 ## Unequal-length return streams
 
 Joint row resampling needs every specification evaluated on one shared time
