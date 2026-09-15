@@ -78,6 +78,11 @@ Implemented for equal-weight feature subsets of size at most `d` in
 **Caveat.** Declaring `Θ` after seeing results is itself snooping. For agents,
 a tool grammar fixes `Θ` in advance, which is the practical point.
 
+**Evidence.** E17 (SCOPE.md §16), K=20, d=2, eight anchor rules, n=500 each:
+full-class type-I 2.0–3.8%, never significantly above 5%. It is conservative
+where the search does not chase winners (2.0–2.8% for rules from loser to
+τ = 1) and matches the recursive null under winner anchoring.
+
 ## P4. Winner anchoring is anti-conservative; loser anchoring is conservative (new)
 
 **Lemma.** Let `g` be symmetric and nondecreasing in each argument, and let
@@ -129,6 +134,15 @@ n = 500 draws (SCOPE.md §15):
 Outside exchangeability (heterogeneous volatilities, block correlation) the
 lemma's hypothesis fails; E19 probes how far the conclusion survives.
 
+**Between the endpoints (empirical, no proof).** The lemma covers only the
+winner and loser rules. E17 (SCOPE.md §16) drew the anchor with probability
+proportional to exp(τ z_k) at eight levels of τ: naive type-I rose from 3.6%
+(loser) through 5.0% (random) to 7.0% (winner), and the pre-registered trend
+test decided for graded coupling (p = 0.0001). An exploratory breakdown of
+the same draws puts the inflation on draws whose anchor is among the top few
+features, so "graded" is established across rules, not for individual
+anchors.
+
 ## P5. Greedy search and the lattice optimum (new, corrected)
 
 **Setting.** Scores are exchangeable: a size-`m` subset's limiting statistic is
@@ -164,6 +178,11 @@ limit every width returns the same value.
 So "the full-class null costs greedy search no power" holds exactly at `d = 2`
 or without early stopping, and approximately at larger `d`. E18 checks how
 closely recursive rates coincide across beam widths at `d = 3`.
+
+At finite `T`, even `d = 2` is not exact. In E17 (SCOPE.md §16) the
+winner-anchored search's recursive and full-class p-values differed on 36 of
+500 draws, each time by one replicate in 1,501 and always with the
+full-class null larger; no rejection decision differed.
 
 ## P6. When is the recursive bootstrap consistent? (known ingredients, one open case)
 
@@ -217,9 +236,9 @@ nothing anticipates P4.
 |---|---|---|---|
 | P1 | known | SCOPE.md §1 (null calibration of oblivious searchers) | E21 |
 | P2 | known | none needed | none |
-| P3 | ingredients known, tier new | `estimator/full_class.py` and tests | E17 (full-class null), E21, E22 |
-| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15) | E17, E19 |
-| P5 | new, corrected | SCOPE.md §5 identical recursive rates; exploratory limit check above | E18, E22 |
+| P3 | ingredients known, tier new | `estimator/full_class.py` and tests; E17 full-class null (SCOPE.md §16) | E21, E22 |
+| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16) | E19 |
+| P5 | new, corrected | SCOPE.md §5 identical recursive rates; exploratory limit check above; E17 at d = 2 | E18, E22 |
 | P6 | ingredients known, one case open | e15 neighbor rule calibrated empirically | E19(b) |
 
 ## References

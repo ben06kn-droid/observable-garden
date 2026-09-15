@@ -1156,3 +1156,97 @@ above it in only 13.7% of replicates, because the singles maximum usually
 dominates both menus. That is why worst-anchoring's conservatism is small
 (naive 4.2% against recursive 4.8%). The fresh-seed naive type-I for the
 winner rule, 10.2%, is consistent with e15's 8.2%.
+
+## 16. E17: the naive bootstrap's distortion rises with how strongly the anchor tracks performance
+
+**Across eight anchor rules running from loser-anchored to winner-anchored,
+naive type-I rose from 3.6% to 7.0% in step with coupling, and the
+pre-registered trend test decided for graded coupling (p = 0.0001).**
+Pre-registered in `prereg/E17.md` and launched from the commit that added it
+(0cfcf52, clean; `experiments/e17_graded_coupling.py`). `GumbelAnchored(τ)`
+with max_features=2 draws round 2's anchor with probability proportional to
+exp(τ z_k). n=500 draws paired across all eight levels (seeds 30000–30499),
+e15's configuration (K=20, M=50, T=500, ρ=0.3 equicorrelated, s=0), B=1500,
+with the naive, recursive and full-class nulls on common resampled indices. κ
+is the anchor's normalized Sharpe rank on the real data (1 best, 0 worst).
+
+| τ | mean κ | naive type-I (95% CI) | KS p | recursive type-I (95% CI) | KS p | full-class type-I (95% CI) | KS p |
+|---|---|---|---|---|---|---|---|
+| −∞ (loser) | 0.000 | 0.036 (0.023–0.056) | 0.094 | 0.040 (0.026–0.061) | 0.401 | 0.020 (0.011–0.036) | <0.001 |
+| −2 | 0.103 | 0.036 (0.023–0.056) | 0.086 | 0.040 (0.026–0.061) | 0.360 | 0.020 (0.011–0.036) | <0.001 |
+| −1 | 0.217 | 0.038 (0.024–0.059) | 0.172 | 0.042 (0.028–0.063) | 0.513 | 0.020 (0.011–0.036) | <0.001 |
+| 0 (random) | 0.502 | 0.050 (0.034–0.073) | 0.395 | 0.050 (0.034–0.073) | 0.395 | 0.024 (0.014–0.041) | <0.001 |
+| 1 | 0.780 | 0.062 (0.044–0.087) | 0.953 | 0.042 (0.028–0.063) | 0.530 | 0.028 (0.017–0.046) | 0.001 |
+| 2 | 0.904 | 0.068 (0.049–0.094) | 0.244 | 0.036 (0.023–0.056) | 0.680 | 0.032 (0.020–0.051) | 0.033 |
+| 4 | 0.964 | 0.070 (0.051–0.096) | 0.034 | 0.040 (0.026–0.061) | 0.584 | 0.038 (0.024–0.059) | 0.213 |
+| +∞ (winner) | 1.000 | 0.070 (0.051–0.096) | 0.009 | 0.038 (0.024–0.059) | 0.635 | 0.038 (0.024–0.059) | 0.635 |
+
+Within-draw permutation trend tests across τ (one-sided, 10,000
+permutations): naive, the primary test, p = 0.0001; recursive p = 0.80;
+full-class p = 0.0001.
+
+**Against the pre-registered predictions.**
+
+- Held: κ rises monotonically with τ. Naive point estimates are
+  nondecreasing in τ and at or below 5% for every τ ≤ 0. Recursive and
+  full-class are not significantly above 5% at any τ.
+- Missed: τ = +∞ was predicted to reproduce e15 and E16 at roughly 8–10%. It
+  gave 7.0% (5.1–9.6). The three fresh-seed estimates of the winner rule, 41,
+  51 and 35 rejections of 500 (e15, E16, E17), do not differ significantly
+  (χ² = 3.37, 2 df, p = 0.19; not pre-registered). Pooled, they give 8.5%.
+- Decision: trend p = 0.0001 < 0.01, so the note claims graded coupling.
+
+**What the trend test does and does not show (exploratory, computed after
+the decision).** The primary statistic rewards any increase across the eight
+levels, and part of the evidence comes from the conservative half. Restricted
+to τ ≤ 0 (3.6% → 5.0%) the trend gives p = 0.0002; restricted to τ ≥ 0,
+p = 0.0001; among the coupled levels τ ≥ 1 alone (6.2% → 7.0%), only
+p = 0.02. Paired McNemar tests put the clearest steps between loser and
+random (7–0, p = 0.016) and between random and τ = 1 (6–0, p = 0.031); τ = 1
+against winner is 5–1 (p = 0.22).
+
+Within a level, the inflation concentrates on draws whose anchor sits at the
+top. At τ = 1, 119 of 500 draws happened to anchor on the winner; they
+rejected 9.2% of the time, against 5.2% for the rest. At τ = 2 it was 8.2%
+(219 draws) against 5.7%. Pooled across levels, so that a draw counts once
+per level, naive rejection conditional on the anchor's rank was 7.8% at rank
+1 (n = 1,195), 8.7% at rank 2 (n = 323), 4.8% at rank 3 (n = 165), 6.2% at
+ranks 4–5 (n = 243), and 2.8–3.8% from rank 6 down. Conditioning on the
+anchor's rank selects draws, so these are not the type-I rates of any rule.
+They suggest that a rule's inflation tracks how often it anchors among the
+top few features, and anchors further down behave like the loser rule. A
+plausible mechanism, not tested: an anchor ranked second pairs with the
+winner, so the real menu already contains the best pair, exactly as under
+winner anchoring, while the frozen menu does not follow the replicate's own
+top features.
+
+**Full-class.** Within a draw the full-class null is identical at every
+level (same class, block length and resampled indices), so its p-value
+moves only with `sr_sel`; it was nonincreasing in `sr_sel` on every draw. It
+is conservative where the search does not chase winners, 2.0–2.8% at τ ≤ 1
+with KS rejecting uniformity, because the selected pair is often well below
+the class maximum (P3). It converges to the recursive null as the anchor
+approaches the winner. At τ = +∞ the two p-values differ on 36 of 500 draws,
+each time by exactly one replicate in 1,501 and always with the full-class
+p larger; no rejection decision differs. P5 says the winner-anchored search
+reaches the class maximum exactly at d = 2 in the Gaussian limit; the 36
+single-replicate differences are finite-T departures of the same kind as
+E16's 0.1% (§15). For the gate, the full-class verdict's cost is this
+conservatism for searches that do not chase winners, a power cost E22
+measures.
+
+**Recursive** stays flat at 3.6–5.0% (trend p = 0.80). At τ = 0 its
+p-values equal naive's on every draw, as they must: the random anchor comes
+from the searcher's own seed, so the menu is data-oblivious and replay
+rebuilds it unchanged.
+
+**What this changes.** The note's P4 section can claim more than the two
+endpoints: across intermediate rules, naive type-I rose with coupling, which
+the planned winner-chasing audit's κ relies on. What E17 cannot support is
+that intermediate coupling of an individual anchor produces intermediate
+inflation; the exploratory breakdown points instead to a step near the top of
+the ranking. That decides how the audit should summarize κ from a transcript
+(the share of anchors among the top few features, or a mean rank), so it
+needs its own pre-registered test before the audit is calibrated
+(OPEN_QUESTIONS.md). The class enforcement added to `environments/sandbox.py`
+after launch (034a633) has no effect without a declared class.

@@ -43,15 +43,19 @@ more often. Which applies depends on where the edge sits in the menu, which
 a transcript does not reveal. Open: whether any transcript-only estimate of
 search-level power exists.
 
-## Does the naive bootstrap's distortion grade with coupling strength?
+## Is the coupling effect graded per anchor, or a step near the top?
 
-SCOPE.md §14: only the anchor rule built on the selection statistic's argmax
-inflated naive type-I. The correlation-based neighbor rule did not, but under
-equicorrelated features that rule carried no coupling (its anchor's mean
-Sharpe rank was 11.0 of 20; random's was 10.7). A graded test needs rules with
-intermediate coupling. The cleanest is to anchor on the k-th best single
-feature for k = 2, 3, 5, 10, which sets coupling directly; the neighbor rule
-under heterogeneous_correlation is another. Pre-register before running.
+E17 (SCOPE.md §16) answered the question across rules: naive type-I rises
+with how strongly an anchor rule tracks performance (pre-registered trend
+test, p = 0.0001). An exploratory breakdown of the same draws suggests the
+inflation comes from anchors among the top few features, while anchors
+ranked sixth or lower behave like the loser rule. If so, the winner-chasing
+audit should summarize a transcript by how often it anchors near the top,
+not by mean κ. Testing that needs anchors fixed at the k-th best single
+feature, k = 1, 2, 3, 5, 10, so that rank is set by design rather than
+selected by conditioning, on fresh seeds and pre-registered, before the
+audit is calibrated. The correlation-based neighbor rule under heterogeneous
+correlation is still untested (THEORY.md P6, E19(b)).
 
 ## Classes that cannot be enumerated from base returns
 
