@@ -98,9 +98,14 @@ algebraically — checked against a reconstruction-free gold standard.
 ## Results
 
 - **Null calibration**: Honest/Greedy/GridSearch pass under the naive
-  bootstrap; **Adaptive fails** (type-I 13.6% vs. nominal 5%, n=500)
-  because its candidate menu depends on outcomes. A recursive bootstrap
-  fixes it (type-I 3.4%).
+  bootstrap; **Adaptive fails** because its candidate menu depends on
+  outcomes: naive type-I 13.6% against nominal 5% (n=500), where a
+  recursive bootstrap gives 3.4%. Those two figures come from an earlier
+  configuration (K=25 features, M=60, T=600) and block-length rule, not the
+  one used in the rest of this list. On K=20, M=50, T=500 the same test
+  gives 9.2% naive and 5.4% recursive (SCOPE.md §17). The scoring rule is
+  not the difference: for Adaptive, scoring its own selection or the
+  transcript maximum gives identical p-values (E18b).
 - **Dose-response**: naive type-I rises monotonically as the candidate
   menu gets more data-dependent: 5.4% → 6.0% → 8.0% → 8.4% → 9.2% from a
   full lattice to greedy search (n=500 per point, pre-registered). It is

@@ -1365,10 +1365,12 @@ decisions), as in E17.
   same shape at lower levels. Adaptive is 9.2% here against 12.7% there
   (Fisher p = 0.22).
 - **Adaptive in §3.** That run's 13.6% (e4) is not like-for-like. The script's
-  settings are K=25, M=60, T=600; its naive `sr_sel` is the transcript maximum
-  rather than the searcher's own selection; and its block length is chosen on
-  the transcript. The rates differ (Fisher p = 0.036, not pre-registered), and
-  which setting accounts for it has not been tested.
+  settings are K=25, M=60, T=600, and its block length is chosen on the
+  transcript. Its naive `sr_sel` is the transcript maximum rather than the
+  searcher's own selection, but for Adaptive those are the same value: E18b
+  (below) swapped only that rule on E18's draws and no p-value changed. The
+  rates differ (Fisher p = 0.036, not pre-registered). Configuration or the
+  block-length rule accounts for it; which one has not been tested.
 - **Depth.** The winner rule at d = 3 (10.4%) is not significantly above the
   d = 2 estimates pooled across e15, E16 and E17 (8.5%; Fisher p = 0.11,
   different seeds). DepthAdaptive's 9.6% against Adaptive's 9.2% is 3–1 paired
@@ -1381,3 +1383,19 @@ several times the Gaussian limit, so the note quotes the measured values, not
 the limit's. For depth re-anchoring, the registered outcome is (c), not
 detectably inflated, with the paired direction reported as exploratory
 (OPEN_QUESTIONS.md).
+
+**E18b: the scoring rule does not explain the gap to e4.** Pre-registered in
+`prereg/E18b.md` and launched from its commit (8383b11, clean;
+`experiments/e18b_scoring_rule.py`). On E18's 500 adaptive draws, with E18's
+block lengths and resampled indices, the naive null was compared against the
+largest Sharpe in the transcript instead of Adaptive's selected value.
+
+- **Reproduction held.** Under E18's rule the p-values equal E18's stored ones
+  on every draw.
+- **No change, as predicted.** The two `sr_sel` values never differed by more
+  than 4.4×10⁻¹⁵. Naive type-I was 0.092 (0.070–0.121) under both rules, with
+  no discordant draws (McNemar 0–0). Early-stopping greedy search selects its
+  own transcript maximum.
+
+So the gap between 9.2% and e4's 13.6% comes from configuration (K=25, M=60,
+T=600) or the block-length rule, which this check did not separate.
