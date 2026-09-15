@@ -68,7 +68,7 @@ def render_verdict(v: Verdict) -> str:
         _row("Power, single pre-specified strategy", f"{pct(v.power_at_reference)} (floor {pct(v.power_floor)})"),
         _row("Effective breadth (not used)", f"{v.effective_breadth:,.1f}"),
         _row("Degenerate tail share",
-             f"{v.degenerate_share:.3f} ({v.degenerate_replicates:,} of {v.screen_replicates:,} replicates)"),
+             f"{v.degenerate_share:.3f} ({v.degenerate_replicates:,} of top {v.tail_replicates:,} replicates)"),
     ]
     for reason in v.reasons:
         out.append("")

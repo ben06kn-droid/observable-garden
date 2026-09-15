@@ -17,12 +17,13 @@ from garden.transcript import Transcript
 Status = Literal["PASS", "FAIL", "INADMISSIBLE", "UNDECIDABLE", "DEGENERATE"]
 EXIT_CODES = {"PASS": 0, "FAIL": 1, "INADMISSIBLE": 2, "UNDECIDABLE": 3, "DEGENERATE": 4}
 
-# Degeneracy check (SCOPE.md §11), chosen by experiments/e13_degeneracy_calibration.py's pre-registered rule:
-# no refusals across 3,000 dense transcripts; all 23 sparse transcripts whose verdict flips under fixed
-# studentization refused.
-SUPPORT_MIN = 5
+# Degeneracy check (SCOPE.md §11), chosen by experiments/e14_degeneracy_recalibration.py's pre-registered
+# rule: no refusals across 9,000 dense transcripts; 90% of sparse transcripts with a broken critical value
+# refused, and 4% of those with a sound one.
+SUPPORT_MIN = 50
 Q_MIN = 0.0
-TAIL_SHARE_MAX = 0.001
+TAIL_FRACTION = 0.10
+TAIL_SHARE_MAX = 0.5
 
 ROUTES_FORWARD = (
     "Routes forward:\n"
@@ -79,9 +80,10 @@ class Verdict:
     power_at_reference: float              # single pre-specified strategy, not search power (SCOPE.md §13)
     power_floor: float
     menu_kind: str
-    degenerate_share: float                # share of Reality Check replicates whose maximum was degenerate
-    degenerate_replicates: int
-    screen_replicates: int
+    degenerate_share: float                # share of top-decile replicates (they set the critical value) with a degenerate maximum
+    degenerate_replicates: int             # count within the top decile
+    tail_replicates: int
+    degenerate_replicates_total: int       # count across all replicates, for information
     degenerate_columns: list[str]          # spec ids that most often set a degenerate maximum
     screened_status: str | None            # verdict with degenerate resamples excluded (Reality Check path)
     variance_floor_binds: int
@@ -148,8 +150,9 @@ def audit(
 
     support_min, q_min, tail_share_max: the degeneracy check (SCOPE.md §11). A replicate's maximum is
     degenerate when its column's resample has fewer than support_min distinct active periods, or a standard
-    deviation below q_min times the full-sample one. The verdict is DEGENERATE when the share of degenerate
-    maxima exceeds tail_share_max, or when excluding degenerate resamples would change the verdict.
+    deviation below q_min times the full-sample one. The verdict is DEGENERATE when, among the top
+    TAIL_FRACTION of replicates (the ones that set the critical value), the share with a degenerate maximum
+    exceeds tail_share_max, or when excluding degenerate resamples would change the verdict.
     """
     R = transcript.returns
     T, N = R.shape
@@ -178,9 +181,13 @@ def audit(
     breadth = effective_breadth(R)
     tested_status = _classify(p, power, alpha, power_floor)
 
-    degenerate_k = int(boot.argmax_degenerate.sum())
-    share = degenerate_k / B
-    worst = Counter(boot.argmax_column[boot.argmax_degenerate].tolist()).most_common(3)
+    tail = boot.M_b >= np.quantile(boot.M_b, 1 - TAIL_FRACTION)
+    tail_n = int(tail.sum())
+    degenerate_k = int(boot.argmax_degenerate[tail].sum())
+    degenerate_total = int(boot.argmax_degenerate.sum())
+    share = degenerate_k / tail_n
+    culprits = boot.argmax_degenerate & tail if degenerate_k else boot.argmax_degenerate
+    worst = Counter(boot.argmax_column[culprits].tolist()).most_common(3)
     degenerate_columns = [str(transcript.spec_ids[k]) for k, _ in worst]
     screened_status = None
     if method == "reality_check":
@@ -224,8 +231,9 @@ def audit(
     elif status == "DEGENERATE":
         causes = []
         if over_limit:
-            causes.append(f"{degenerate_k:,} of {B:,} replicates ({share:.1%}, above the {tail_share_max:.1%} "
-                          f"limit) took their null maximum from a degenerate resample")
+            causes.append(f"{degenerate_k:,} of the {tail_n:,} largest null maxima, the top "
+                          f"{TAIL_FRACTION:.0%} that set the critical value ({share:.1%}, above the "
+                          f"{tail_share_max:.0%} limit), came from degenerate resamples")
         if flips:
             causes.append(f"excluding degenerate resamples changes the verdict from {tested_status} to "
                           f"{screened_status}")
@@ -257,9 +265,10 @@ def audit(
                            "bound.")
         reasons.append(ROUTES_FORWARD)
 
-    if status != "DEGENERATE" and degenerate_k and not (status == "UNDECIDABLE" and (over_limit or flips)):
-        reasons.append(f"{degenerate_k:,} of {B:,} replicates took their maximum from a degenerate resample; "
-                       f"that is within the {tail_share_max:.1%} limit, and excluding them leaves the verdict "
+    if status != "DEGENERATE" and degenerate_total and not (status == "UNDECIDABLE" and (over_limit or flips)):
+        reasons.append(f"{degenerate_total:,} of {B:,} replicates took their maximum from a degenerate resample, "
+                       f"{degenerate_k:,} of them among the top {TAIL_FRACTION:.0%} that set the critical value; "
+                       f"that is within the {tail_share_max:.0%} limit, and excluding them leaves the verdict "
                        f"unchanged.")
     if method == "procedure_level":
         reasons.append(f"Null from re-executing the search on {rerun_B} time-shifted surrogates "
@@ -286,7 +295,8 @@ def audit(
         submitted=transcript.submitted, submitted_rank=rank, method=method, B=len(null),
         block_length=int(boot.block_length), effective_breadth=breadth, reference_sharpe=reference_sharpe,
         power_at_reference=power, power_floor=power_floor, menu_kind=transcript.menu_kind,
-        degenerate_share=share, degenerate_replicates=degenerate_k, screen_replicates=B,
+        degenerate_share=share, degenerate_replicates=degenerate_k, tail_replicates=tail_n,
+        degenerate_replicates_total=degenerate_total,
         degenerate_columns=degenerate_columns, screened_status=screened_status,
         variance_floor_binds=boot.floor_binds, sharpe_cap_binds=boot.cap_binds, reasons=reasons,
     )

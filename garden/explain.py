@@ -166,6 +166,12 @@ data-dependent, so the remedies are a menu redefined before looking, or a
 statistic whose denominator cannot collapse: White's (2000) mean return, or
 Hansen's (2005) studentization by the full-sample standard deviation.
 
+The thresholds are fewer than 50 active periods, and more than half of the
+top 10% of replicates, the ones that set the critical value. They come from
+a pre-registered calibration on fresh seeds: no refusals across 9,000
+transcripts of dense rules, 90% of sparse menus with a broken critical
+value refused, and 4% of those with a sound one (SCOPE.md §11).
+
   White, H. (2000). A Reality Check for Data Snooping. Econometrica 68(5).
   Hansen, P.R. (2005). A Test for Superior Predictive Ability. JBES 23(4)."""
 

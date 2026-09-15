@@ -19,6 +19,12 @@ the gate should also offer a statistic whose denominator cannot collapse,
 White's mean return or Hansen's studentization by a full-sample standard
 deviation, is a v2 question; Phase 2's SPA will answer part of it.
 
+The detection thresholds are not finished either. e14 chose a support
+threshold of 50, the largest value in its pre-registered grid, so a larger
+one might separate broken from sound critical values slightly better.
+Testing that needs a new run on fresh seeds, and it is deliberately not
+being pursued before SPA.
+
 ## Search-level power
 
 The gate prints power for a single pre-specified strategy. That is neither

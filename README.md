@@ -140,6 +140,15 @@ algebraically — checked against a reconstruction-free gold standard.
   maximum and raise true power. Across the six cells the residuals showed no
   consistent sign (mean −0.007; Σz² = 2.5 on 6 df), so any bias is small
   relative to sampling noise at n=100.
+- **A fifth verdict, DEGENERATE, for menus where the test statistic
+  breaks.** Re-estimating Sharpe in every replicate lets rules that rarely
+  trade set the null maximum: one 10,000-rule band-filter menu gave
+  critical values from 2.03 to 155 across seeds. The gate refuses when more
+  than half of the replicates that set the critical value came from
+  resamples with fewer than 50 active periods, or when excluding them would
+  flip the verdict. A pre-registered calibration on fresh seeds refused 0
+  of 9,000 dense transcripts, 90% of sparse menus with a broken critical
+  value, and 4% of those with a sound one (SCOPE.md §11).
 
 Every number, caveat, and diagnostic behind these — including three real
 bugs found and fixed along the way — is in **`SCOPE.md`**. This is the
@@ -160,6 +169,7 @@ garden/         the gate: transcript format, audit, preflight, explain, CLI, exa
 environments/   DGP + Sandbox contract
 searchers/      scripted, dose-response, and diagnostic searchers
 estimator/      naive/recursive/procedure-level bootstrap, closed-form baseline, metrics
-experiments/    e1-e11, numbered in the order they ran
+experiments/    e1-e14 in the order they ran; _parallel.py runs draws across processes with checkpoints
+cloud/          EC2 setup and detached-run scripts
 tests/, figures/
 ```

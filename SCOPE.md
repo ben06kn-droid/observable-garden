@@ -914,16 +914,32 @@ menu contains sparse rules; for that case they are load-bearing.
 **What follows.** Filtering rules by how often they trade would make the
 menu data-dependent (§1), so the gate cannot fix this by exclusion. It
 detects it and refuses instead: status DEGENERATE (exit code 4) when more
-than 0.1% of replicates take their maximum from a resample with fewer than 5
-distinct active periods, or when excluding those resamples would change the
-verdict. The thresholds come from `experiments/e13_degeneracy_calibration.py`'s
-pre-registered rule: no refusals across 3,000 dense transcripts, and all 23
-sparse transcripts whose verdict flips under fixed studentization refused.
-They are provisional. The same rule also refused 343 of 397 sparse
-transcripts whose verdicts agreed, many with critical values no more
-distorted than dense ones (median 1.01× the fixed-studentization value in
-the 368-rule grid), because a verdict flip is too narrow a definition of a
-broken bar. Phase 2's SPA, implemented with Hansen's
+than half of the top 10% of replicates, the ones that set the critical
+value, take their maximum from a resample with fewer than 50 distinct active
+periods, or when excluding those resamples would change the verdict.
+
+Calibration took two pre-registered runs. e13
+(`experiments/e13_degeneracy_calibration.py`) defined a broken bar as a
+verdict that flips under fixed studentization. Only 23 transcripts met that
+definition, and its rule chose thresholds that also refused 343 of 397
+sparse transcripts whose verdicts agreed, many with critical values no more
+distorted than dense ones (median 1.01× the fixed-studentization value in the
+368-rule grid). e14 (`experiments/e14_degeneracy_recalibration.py`, committed
+before it ran, fresh seeds, 9,000 dense and 2,200 sparse transcripts) called
+a bar broken when the verdict flips or the critical value falls outside the
+central 99% of the dense ratio, [0.959, 1.105], and allowed at most 10%
+refusals of sound bars. Its rule chose the thresholds above:
+
+| population | refused | 95% CI |
+|---|---|---|
+| dense transcripts | 0 of 9,000 | upper bound 0.033% |
+| sparse, broken bar | 792 of 882 (89.8%) | 87.6–91.6% |
+| sparse, sound bar | 54 of 1,318 (4.1%) | 3.2–5.3% |
+
+In the 368-rule grid, where e13 over-refused, that is 148 of 187 broken bars
+and 3 of 813 sound ones. The chosen support threshold, 50, is the largest
+value in e14's grid, so a larger one might do slightly better; testing that
+would need fresh seeds again. Phase 2's SPA, implemented with Hansen's
 fixed full-sample studentization, is the natural structural fix and should
 be run against the band-filter grid above. Whether the gate should offer a
 mean-return statistic is logged in `OPEN_QUESTIONS.md`.
