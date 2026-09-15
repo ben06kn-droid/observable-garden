@@ -94,10 +94,20 @@ structural variant (`NeighborAdaptive`, a different selection rule with the
 same *amount* of data-dependence) lands on the same rate as Adaptive: it's
 data-dependence itself that breaks the naive bootstrap, not the specific rule.
 
-**Next**: Experiment 2 (predictive power under the alternative, `s=3` —
-does deflation actually predict out-of-sample Sharpe better than naive or
-closed-form DSR?) plus the correlation sweep, folded in together
-(`experiments/e7_predictive_power.py`) — in progress.
+**Predictive power under the alternative** (`s=3`, real signal, with the
+correlation sweep folded in — `experiments/e7_predictive_power.py`, `N ∈
+{10,100,1000} × ρ ∈ {0,0.3,0.6,0.9}`, n=100/cell) — a mixed result, not the
+clean win that would most simply close this project's remaining gap.
+Closed-form DSR (raw N) narrowly beats bootstrap deflation on per-draw RMSE
+in 11/12 cells, and every predictor's R² is negative — none out-predicts a
+flat mean of `SR_OOS` here. Bootstrap *does* track mean realized decay
+more closely than closed-form at every grid point, a different (and
+favorable) criterion from per-draw RMSE. The ρ=0 consistency check (should
+show bootstrap ≈ closed-form) didn't pass cleanly — traced to ρ=0 not
+meaning "independent trials" for a combinatorial searcher (confirmed: mean
+trial correlation ≈0.10 at ρ=0), though the gap's growth with `N` remains
+unexplained. Full account, including the ruled-out hypothesis, in
+`SCOPE.md` §8.
 
 ## Repository layout
 

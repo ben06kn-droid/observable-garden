@@ -436,3 +436,89 @@ question. Finding the exact boundary of the transcript-only claim — and
 having three concrete routes past it, rather than one clean result that
 would have quietly assumed obliviousness — is the more interesting thing to
 have going into Phase 2.
+
+## 8. Experiment 2: predictive power under the alternative — a complicated result
+
+Everything above is null-calibration (`s=0`): it shows the estimator
+doesn't cry wolf. It says nothing about whether deflation actually predicts
+out-of-sample Sharpe better than the alternatives — the number a reviewer
+of the original proposal would ask for first. Before spending this
+experiment's budget, a cheap precondition check
+(`experiments/e6_pilot_signal_landscape.py`) confirmed the `s=3` DGP isn't
+degenerately unimodal the way `s=0`'s search landscape turned out to be
+(§5): GridSearch at `N ∈ {10,100,1000}` picks a different support on 100%
+of 20 draws, and realized decay grows monotonically with `N` (0.26 → 0.93
+→ 1.13). Worth running the full sweep.
+
+`experiments/e7_predictive_power.py`: `N ∈ {10,100,1000} × ρ ∈
+{0,0.3,0.6,0.9}`, `K=40`, `s=3`, sigma calibrated per `ρ` so the oracle
+ceiling stays fixed at Sharpe 1.0 across the grid, n=100 draws/cell,
+GridSearch as the trial-budget knob. Four predictors of `SR_OOS` compared:
+naive `SR_IS`, closed-form DSR (raw `N` and effective `N`), bootstrap
+deflation.
+
+**Per-draw RMSE: closed-form (raw N) wins, not bootstrap — reported
+straight, not the hoped-for headline.** In 11 of 12 grid cells, closed-form
+DSR with the raw (uncorrected) trial count has the lowest RMSE against
+`SR_OOS`, narrowly but consistently ahead of bootstrap deflation; the
+effective-N variant is usually worse than both. Every predictor's R² is
+negative at every grid point, deflated ones included — none of them beat
+predicting the flat mean of `SR_OOS` for every draw. Deflation clearly
+improves on naive `SR_IS` (whose RMSE is far worse throughout), but at this
+configuration none of the three corrections has positive per-draw
+predictive power; `SR_OOS`'s own measurement noise (`T_oos=300`) likely
+swamps the differences between methods that are all noisy statistics of a
+noisy quantity.
+
+**Decay tracking tells a different, more favorable story — a different
+criterion, not a contradiction.** Averaged over draws, bootstrap's
+predicted decay (`SR_IS - SR_deflated`) sits closer to realized decay
+(`SR_IS - SR_OOS`) than closed-form's does, at every one of the 12 grid
+points — e.g. at `N=1000, ρ=0`: realized 1.784, bootstrap 1.838 (off by
+0.054), closed-form 2.075 (off by 0.291). Bootstrap is the better estimate
+of *average* decay; closed-form is the better *per-draw point predictor* on
+RMSE. Those are different properties — an unbiased-but-noisier estimator
+can lose on RMSE to a biased-but-stabler one when per-draw noise dominates,
+which is the regime `SR_OOS` measurement noise appears to put this
+experiment in. Reported as two separate findings rather than collapsed
+into one "which method wins" verdict, because they don't agree and
+forcing an answer would hide that.
+
+**The ρ=0 "free" consistency check did not pass cleanly, and the reason
+was checked rather than assumed.** Spec §4.4's premise: at ρ=0, bootstrap
+and closed-form should agree. They don't — mean(bootstrap − closed-form)
+is +0.051, +0.117, +0.237 at `N=10/100/1000`, growing with `N`, not flat.
+Two hypotheses were checked, one ruled out and one confirmed:
+
+- *Trial-Sharpe skewness growing with N, breaking closed-form's Gaussian
+  assumption more as N grows* — checked directly (15 draws per N,
+  `scipy.stats.skew` on the trial-Sharpe vector): skewness is 0.170, 0.005,
+  −0.015 at `N=10/100/1000` — flat to slightly declining, not growing.
+  Ruled out.
+- *"ρ=0" does not mean "trials independent" for a combinatorial searcher* —
+  checked directly: mean absolute off-diagonal trial correlation at ρ=0 is
+  **0.098 at N=100 and 0.099 at N=1000** — nowhere near zero. GridSearch's
+  candidate subsets share constituent features (the pair `{a,b}` and the
+  pair `{a,c}` both carry feature `a`'s contribution), so trials are
+  correlated by construction regardless of the feature-level `ρ` parameter.
+  Confirmed: `ρ=0` does not buy independent trials for this searcher, so
+  the premise behind treating it as a clean agreement check was already
+  weaker than the spec's framing suggested.
+
+This explains *that* the two methods should be expected to diverge even at
+`ρ=0` for a combinatorial searcher — closed-form's raw-N formula assumes
+independence that isn't actually present. It does **not** explain why the
+gap *grows* with `N`, since the measured correlation level itself is flat
+across `N` (0.098 → 0.099). That part is still open, stated as such rather
+than forced into the tidy story the first hypothesis would have been.
+
+**Net assessment.** This is not the clean "bootstrap beats the
+alternatives" result that would most simply close the gap the project
+still has (§7: a rigorous negative result, a fix, a boundary, a
+dose-response — no single number yet showing the method beats what it's
+meant to replace). It's a real, mixed result: deflation beats naive
+prediction; bootstrap tracks average decay better than closed-form;
+closed-form has lower per-draw variance and wins on RMSE anyway; the
+ρ=0 baseline check surfaced a genuine, partially-explained anomaly rather
+than a clean pass. Reported in full rather than led with the more flattering
+half of it.
