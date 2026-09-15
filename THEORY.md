@@ -187,6 +187,30 @@ rule's anchor had mean Sharpe rank 11.0 of 20, against 10.7 for a random
 anchor (SCOPE.md §14). e15 found no calibration problem for this rule; that is
 evidence, not a proof.
 
+## Prior work checked for P4, P5 and the coupling κ
+
+Read from full text, not summaries:
+
+- **Nikolopoulos (2026)** scales the expected maximum over correlated
+  candidates by an effective multiplicity, and treats the Reality Check and SPA
+  as the right layer for a search-adjusted p-value. It does not analyze
+  searches that build on their own best results, and it has no measure based
+  on the order of evaluations.
+- **Miao, Pritchard & Zou (2026)** log AI agents' analysis paths and build a
+  reference distribution, the m-value, from them. They run no data-snooping
+  test and do not analyze the order in which agents try specifications.
+- **Liu, Qu, Gaboardi, Garg & Ullman (2024)** define the adaptivity of a data
+  analysis as its rounds of query dependence, bounded by static analysis of
+  program code. That is a measure of depth, not of how strongly the next query
+  depends on the performance of earlier ones. The text contains nothing on
+  argmax selection, specification search or multiple testing.
+
+None of the three states the winner-anchoring direction (P4) or the greedy and
+lattice identity (P5) for data-snooping tests, or measures coupling from
+evaluation order. The note plan's literature check (§3.1) is broader than
+these papers and is not finished, so the note should not yet claim that
+nothing anticipates P4.
+
 ## Evidence map
 
 | Result | Status | Evidence so far | Planned |
@@ -228,6 +252,9 @@ tags) except where an entry says otherwise:
   Sharpe ratio. *Journal of Empirical Finance* 15(5), 850–859.
 - Leeb, H. & Pötscher, B.M. (2005). Model selection and inference: facts and
   fiction. *Econometric Theory* 21(1), 21–59.
+- Liu, J., Qu, W., Gaboardi, M., Garg, D. & Ullman, J. (2024). Program
+  analysis for adaptive data analysis. *Proceedings of the ACM on Programming
+  Languages* 8(PLDI), 914–938.
 - López de Prado, M. & Porcu, E. The deflated Sharpe ratio: a unified
   framework for search-adjusted performance inference. SSRN 7198158,
   doi:10.2139/ssrn.7198158. Title, authors and DOI confirmed; the SSRN listing
