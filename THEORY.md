@@ -200,16 +200,18 @@ evidence, not a proof.
 
 ## References
 
-All verified against the publication record (journal, volume, issue, pages):
+Checked against publisher metadata (Crossref, or the publisher's own page
+tags) except where an entry says otherwise:
 
 - Andrews, D.W.K. (2000). Inconsistency of the bootstrap when a parameter is on
-  the boundary of the parameter space. *Econometrica* 68(2), 399–406.
+  the boundary of the parameter space. *Econometrica* 68(2), 399–405.
 - Bailey, D.H. & López de Prado, M. (2014). The deflated Sharpe ratio:
   correcting for selection bias, backtest overfitting, and non-normality.
   *Journal of Portfolio Management* 40(5), 94–107.
-- Bailey, D.H., Borwein, J., López de Prado, M. & Zhu, Q.J. (2017). The
-  probability of backtest overfitting. *Journal of Computational Finance* 20(4),
-  39–69.
+- Bailey, D.H., Borwein, J., López de Prado, M. & Zhu, Q.J. The probability
+  of backtest overfitting. *Journal of Computational Finance*, published online
+  19 September 2016, doi:10.21314/JCF.2016.322. Volume, issue and pages not
+  yet confirmed from publisher metadata.
 - Berk, R., Brown, L., Buja, A., Zhang, K. & Zhao, L. (2013). Valid
   post-selection inference. *Annals of Statistics* 41(2), 802–837.
 - Chernozhukov, V., Chetverikov, D. & Kato, K. (2013). Gaussian approximations
@@ -226,8 +228,12 @@ All verified against the publication record (journal, volume, issue, pages):
   Sharpe ratio. *Journal of Empirical Finance* 15(5), 850–859.
 - Leeb, H. & Pötscher, B.M. (2005). Model selection and inference: facts and
   fiction. *Econometric Theory* 21(1), 21–59.
-- López de Prado, M. & Porcu, E. (2025). The deflated Sharpe ratio: a unified
-  framework for search-adjusted performance inference. SSRN 7198158.
+- López de Prado, M. & Porcu, E. The deflated Sharpe ratio: a unified
+  framework for search-adjusted performance inference. SSRN 7198158,
+  doi:10.2139/ssrn.7198158. Title, authors and DOI confirmed; the SSRN listing
+  is reported as dated September 2025 while Crossref registers 2026. SSRN
+  blocks automated access, so the paper's definitions of DSR-L, DSR-LS and
+  DSR-EO have not been read directly: confirm them against the paper.
 - Miao, J., Pritchard, J.K. & Zou, J. (2026). The agentic garden of forking
   paths. arXiv:2607.01507.
 - Nikolopoulos, S.D. (2026). Spurious predictability in financial machine
