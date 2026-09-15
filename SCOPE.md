@@ -370,7 +370,77 @@ calibration work (`s=0`); it establishes that the estimator doesn't cry
 wolf, not that it has power to detect real decay when there's something to
 detect. That's the natural next block of work.
 
-## 6. This is a known phenomenon, not a novel one
+## 6. Prior art: this is White's Reality Check, not a new estimator
+
+Section 1's bootstrap — demean every column, resample the time index
+jointly across all of them, track the maximum per replicate, read off a
+p-value from where the observed statistic lands in that null distribution
+— is **White, H. (2000), "A Reality Check for Data Snooping,"
+Econometrica 68(5), 1097–1126**, implemented independently here against
+this project's own sandbox and DGP rather than adapted from published code.
+`estimator/bootstrap.py` is a Reality Check test, with annualized Sharpe as
+the per-candidate performance statistic and a zero benchmark. That should be stated
+plainly rather than left for a reader to notice, because a reader who
+recognizes the method and finds no citation reasonably concludes either
+carelessness or an attempt to pass off known work as new — and either
+conclusion is fatal to everything else in this document.
+
+What is not simply a replication of White (2000):
+
+- **The obliviousness boundary** (§§1–5 above) — White's original theorem
+  is stated for a fixed candidate set; this project characterizes exactly
+  what "fixed" has to mean for a *logged* transcript to license the
+  correction (data-oblivious menus, §1), demonstrates the failure mode when
+  it doesn't hold (Adaptive, §2), and fixes it where the specification
+  class permits reconstruction (recursive bootstrap, §3), validated
+  against a reconstruction-free gold standard (procedure-level bootstrap,
+  §3, §5).
+- **The effective-N double-counting result** (§10's bias table; a
+  dedicated write-up with the literature check is planned) — a property of
+  the closed-form DSR baseline, not of the Reality Check itself.
+- **The pinned-selector power decomposition** (§10) — isolating the pure
+  multiple-testing cost of search breadth from the benefit of having
+  searched, which is a question about *using* the test, not a variant of
+  the test.
+
+Related prior art, for context on where this sits in the literature:
+
+- **Sullivan, R., Timmermann, A. & White, H. (1999), "Data-Snooping,
+  Technical Trading Rule Performance, and the Bootstrap," Journal of
+  Finance 54(5)** — the Reality Check applied to a universe of technical
+  trading rules across roughly a century of Dow Jones data. GridSearch's
+  large-`N`, heavily-correlated regime (§1) is structurally the same
+  setup: many overlapping, correlated candidate rules evaluated against
+  one series.
+- **Hansen, P.R. (2005), "A Test for Superior Predictive Ability,"
+  Journal of Business & Economic Statistics 23(4)** — the higher-power
+  successor to the Reality Check. Where White recenters every candidate
+  at its own sample mean under the null (so hopeless candidates still
+  contribute to the resampled maximum), Hansen's SPA excludes candidates
+  sufficiently far below the benchmark from recentering, tightening the
+  test. Not yet implemented here; it is the obvious check on whether the
+  power collapse in §10 is a property of the problem or of the Reality
+  Check's conservatism.
+- **Romano, J.P. & Wolf, M. (2005), "Stepwise Multiple Testing as
+  Formalized Data Snooping," Econometrica 73(4)** — a stepwise procedure
+  that can reject more than one candidate as significant, for context on
+  how the single-maximum framing here relates to the broader
+  multiple-testing family.
+- **Politis, D.N. & Romano, J.P. (1994), "The Stationary Bootstrap,"
+  Journal of the American Statistical Association 89(428)** — already
+  cited in §1 as the resampling theory the joint row-bootstrap rests on;
+  named here again because it is the mechanism underneath White (2000)
+  itself, not an independent addition on top of it.
+
+`estimator_build_spec.md` §1.2 originally presented Bailey & López de
+Prado's closed-form deflated Sharpe ratio as the prior art this project
+improves on. That is corrected there. The closed form is a parametric
+shortcut for approximately the quantity the Reality Check estimates
+non-parametrically, and it stays in this repository as a baseline. White
+(2000) is the actual predecessor, and this project's contribution sits
+inside that framework rather than beside it.
+
+## 7. This is a known phenomenon, not a novel one
 
 - **Leeb & Pötscher (2005)**, *Model Selection and Inference: Facts and
   Fiction*, Econometric Theory — proves the sampling distribution of a
@@ -388,12 +458,12 @@ detect. That's the natural next block of work.
   selective-inference program: conditioning on a data-dependent selection
   event changes the correct reference null distribution, and substituting
   the marginal/unconditional null is systematically anti-conservative. This
-  is the analytic alternative to re-simulation (§6, route 2).
+  is the analytic alternative to re-simulation (§8, route 2).
 - **Benjamini & Yekutieli (2005)**, *False Discovery Rate–Adjusted Multiple
   Confidence Intervals for Selected Parameters* — the same principle inside
   the multiple-comparisons framing this project otherwise sits in.
 
-## 7. What's validated, what's fixed, and what's still open
+## 8. What's validated, what's fixed, and what's still open
 
 **Validated at n=200, properly powered, matched seeds:** the naive bootstrap
 is correctly calibrated for any search whose candidate menu is data-oblivious
@@ -437,7 +507,7 @@ having three concrete routes past it, rather than one clean result that
 would have quietly assumed obliviousness — is the more interesting thing to
 have going into Phase 2.
 
-## 8. Experiment 2: predictive power under the alternative — a complicated result
+## 9. Experiment 2: predictive power under the alternative — a complicated result
 
 Everything above is null-calibration (`s=0`): it shows the estimator
 doesn't cry wolf. It says nothing about whether deflation actually predicts
@@ -514,7 +584,7 @@ than forced into the tidy story the first hypothesis would have been.
 
 **Net assessment.** This is not the clean "bootstrap beats the
 alternatives" result that would most simply close the gap the project
-still has (§7: a rigorous negative result, a fix, a boundary, a
+still has (§8: a rigorous negative result, a fix, a boundary, a
 dose-response — no single number yet showing the method beats what it's
 meant to replace). It's a real, mixed result: deflation beats naive
 prediction; bootstrap tracks average decay better than closed-form;
@@ -523,7 +593,7 @@ closed-form has lower per-draw variance and wins on RMSE anyway; the
 than a clean pass. Reported in full rather than led with the more flattering
 half of it.
 
-## 9. Experiment 2 rerun with both DGP fixes: bias is the metric that actually distinguishes the three corrections
+## 10. Experiment 2 rerun with both DGP fixes: bias is the metric that actually distinguishes the three corrections
 
 *Figures: `figures/e9_decay_vs_N.png` (spec §4.3's decay-vs-trial-budget
 figure, one panel per ρ) and `figures/e9_bias_vs_rho.png` (spec §4.4's
@@ -533,7 +603,7 @@ plot_predictive_power.py`, no new experiment runs.*
 
 Two changes, made in a specific order because the order is what makes them
 defensible. First, a criterion was written down and checked *before*
-touching the DGP or looking at any RMSE (§8's own instinct, made explicit):
+touching the DGP or looking at any RMSE (§9's own instinct, made explicit):
 target SD across draws must exceed the ~0.917 Lo(2002) measurement-noise
 floor a 300-period OOS realization carries. It failed for **both**
 equicorrelation and a new heterogeneous Σ_x (`environments/dgp.py`'s
@@ -618,10 +688,10 @@ less independent breadth to over-penalize in the first place.
 **The ρ=0 consistency check replicates exactly, confirming it's a property
 of the searcher, not the Σ_x variant.** +0.033, +0.102, +0.245 at
 `N=10/100/1000` — essentially identical to the original grid's +0.051,
-+0.117, +0.237 (§8's explanation: `heterogeneous_correlation` returns the
++0.117, +0.237 (§9's explanation: `heterogeneous_correlation` returns the
 identity at ρ≤0, same as equicorrelation there, so nothing about this
 specific comparison should have changed, and it didn't). The still-open
-question from §8 — why the gap *grows* with `N` — remains open here too.
+question from §9 — why the gap *grows* with `N` — remains open here too.
 
 **Net assessment.** The honest headline is the one proposed before this
 section was written, and the data supports it with real texture rather
@@ -644,7 +714,7 @@ budget, `figures/e9_decay_vs_N.png`), and §4.4 (correlation sensitivity,
 folded in rather than run separately, `figures/e9_bias_vs_rho.png`) are
 all covered by the single grid in this section. What's genuinely left open
 is stated above rather than implied: why the ρ=0 consistency gap grows
-with `N` (§8), and whether effective-N's non-monotone-in-ρ anti-
+with `N` (§9), and whether effective-N's non-monotone-in-ρ anti-
 conservatism has the eigenvalue-shrinkage explanation offered here or a
 different one — both flagged as unverified, not folded into the headline.
 
@@ -761,7 +831,7 @@ direction). Power falls in trial count at fixed effect size (the table
 just above). Both are real; neither is the other; a real searcher's
 observed power is their sum.
 
-The ρ axis stays exactly where §9's main table already puts it to best
+The ρ axis stays exactly where §10's main table already puts it to best
 use: showing the three corrections' bias diverge, which it does cleanly —
 effective-N's error peaks at ρ=0.3 (−0.937), the signature of
 double-counting correlation that raw-N ignores and effective-N

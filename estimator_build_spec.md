@@ -16,7 +16,20 @@ The question: how much of `SR_sel` is attributable to having looked at `N` thing
 
 ### 1.2 The existing answer and its weakness
 
-Bailey and López de Prado's deflated Sharpe ratio subtracts an expected maximum under the null:
+The estimator below is White's Reality Check (White, H. (2000), "A Reality
+Check for Data Snooping," Econometrica 68(5)) — a stationary-bootstrap test
+over the observed maximum of a candidate set, applied here to a logged
+search transcript rather than a fixed list of trading rules. It is not a
+new statistical procedure; the contribution is characterizing when a
+*logged transcript* suffices to apply it (see `SCOPE.md` §§1, 6), where
+that breaks for a searcher that generates candidates from its own results,
+and a fix for the case where the specification class permits it.
+
+Bailey and López de Prado's closed-form deflated Sharpe ratio is a
+parametric shortcut for approximately the same quantity White's bootstrap
+estimates non-parametrically, and is the baseline this project's estimator
+is compared against throughout — not the prior art it replaces. It
+subtracts an expected maximum under the null:
 
 ```
 SR_0 = sqrt(Var[SR_n]) * [ (1 - γ) * Φ⁻¹(1 - 1/N) + γ * Φ⁻¹(1 - 1/(N·e)) ]

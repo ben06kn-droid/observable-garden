@@ -11,6 +11,20 @@ log's observed trial correlation structure — no independence assumption,
 no invented trial count — validated against a synthetic DGP with a
 computable oracle before any claim about real backtests.
 
+**Relationship to prior work.** The verdict engine is White's Reality
+Check (2000). That correction is twenty-six years old and is the right
+tool. What this adds is: (i) a characterization of when a *logged
+transcript* suffices to apply it — the candidate menu must be
+data-oblivious — and what breaks when a searcher generates candidates
+from its own realized results; (ii) a demonstration that the
+eigenvalue-based "effective N" variant of the deflated Sharpe ratio is
+anti-conservative, because the closed form already absorbs trial
+correlation through its variance term; (iii) a pre-flight power
+calculation that tells you before searching whether your intended breadth
+can certify anything; and (iv) an instrumented sandbox for the case the
+correction was never able to reach, where the searcher is an LLM agent and
+the trial count is observable for the first time.
+
 ## How it works
 
 A search evaluates candidate specs against a sandbox that logs every
