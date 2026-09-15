@@ -1163,7 +1163,8 @@ winner rule, 10.2%, is consistent with e15's 8.2%.
 naive type-I rose from 3.6% to 7.0% in step with coupling, and the
 pre-registered trend test decided for graded coupling (p = 0.0001).**
 Pre-registered in `prereg/E17.md` and launched from the commit that added it
-(0cfcf52, clean; `experiments/e17_graded_coupling.py`). `GumbelAnchored(τ)`
+(254cdda, clean; recorded in the data file under its pre-rewrite hash
+0cfcf52, see `prereg/COMMIT_MAP.md`; `experiments/e17_graded_coupling.py`). `GumbelAnchored(τ)`
 with max_features=2 draws round 2's anchor with probability proportional to
 exp(τ z_k). n=500 draws paired across all eight levels (seeds 30000–30499),
 e15's configuration (K=20, M=50, T=500, ρ=0.3 equicorrelated, s=0), B=1500,
@@ -1249,4 +1250,4 @@ the ranking. That decides how the audit should summarize κ from a transcript
 (the share of anchors among the top few features, or a mean rank), so it
 needs its own pre-registered test before the audit is calibrated
 (OPEN_QUESTIONS.md). The class enforcement added to `environments/sandbox.py`
-after launch (034a633) has no effect without a declared class.
+after launch (575678a) has no effect without a declared class.
