@@ -452,6 +452,27 @@ Related prior art, for context on where this sits in the literature:
   combinatorially symmetric cross-validation (CSCV). A different question
   from this project's significance test on the same object, and a necessary
   citation for anyone working from a trial matrix.
+- **Nikolopoulos, S.D. (2026), "Spurious Predictability in Financial
+  Machine Learning," arXiv:2604.15531** — a falsification audit for machine
+  learning backtest workflows. It defines effective multiplicity K_eff as the
+  spectral participation ratio of the correlation matrix of in-sample
+  statistics, the same quantity this project reports as effective breadth,
+  and shows E[max] = Θ(√log K_eff) under structured correlated search. There
+  K_eff scales a maximum of unit-variance statistics, where no double
+  counting arises; this project's anti-conservativeness result (§10) is
+  specific to plugging it into DSR-L, whose cross-sectional variance term
+  already shrinks as trials correlate. The paper treats the Reality Check and
+  SPA as the appropriate layer for a search-adjusted p-value and does not
+  analyze searches that build on their own best results.
+- **Miao, J., Pritchard, J.K. & Zou, J. (2026), "The Agentic Garden of
+  Forking Paths," arXiv:2607.01507** — logs every specification fitted by
+  persona-conditioned AI agents over ten sequential rounds, and defines the
+  m-value, the probability that a plausible analysis path yields a result at
+  least as extreme as the reported one, estimated by an "Agentic Bootstrap"
+  over agent-sampled paths. The closest prior work to this project's agent
+  arm: it builds a reference distribution from logged agent search, but in
+  general empirical research rather than backtests, without a data-snooping
+  test, and without analyzing the order in which agents try specifications.
 - **Politis, D.N. & Romano, J.P. (1994), "The Stationary Bootstrap,"
   Journal of the American Statistical Association 89(428)** — already
   cited in §1 as the resampling theory the joint row-bootstrap rests on;

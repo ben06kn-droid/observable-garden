@@ -6,7 +6,8 @@ from environments.sandbox import Sandbox
 from estimator.bootstrap import sharpe
 from estimator.divergence import divergence_rate, beam_entropy
 from searchers.dose_response import (
-    BeamAdaptive, DepthAdaptive, NeighborAdaptive, RandomAnchor, WinnerAnchor, WorstAnchor,
+    BeamAdaptive, DepthAdaptive, GumbelAnchored, NeighborAdaptive, RandomAnchor, WinnerAnchor, WorstAnchor,
+    normalized_rank,
 )
 from searchers.diagnostic import LatticeAdaptive
 from searchers.scripted import Adaptive
@@ -28,6 +29,8 @@ def make_sandbox(K=15, M=50, T=300, seed=0):
     lambda: WinnerAnchor(max_features=2, seed=0),
     lambda: RandomAnchor(max_features=2, seed=0),
     lambda: WorstAnchor(max_features=2, seed=0),
+    lambda: GumbelAnchored(tau=1.0, seed=0),
+    lambda: GumbelAnchored(tau=-2.0, max_features=3, seed=0),
 ])
 def test_replay_matches_run_on_real_data(searcher_factory):
     sandbox, config = make_sandbox()
@@ -62,6 +65,34 @@ def test_anchor_rules():
     other_base = other.base_feature_columns()
     assert (RandomAnchor(seed=4)._anchor(12, base, best_k)
             == RandomAnchor(seed=4)._anchor(12, other_base, int(np.argmax(sharpe(other_base, axis=0)))))
+
+
+def test_gumbel_anchor_limits_and_data_independence_at_zero():
+    sandbox, _ = make_sandbox(K=12, seed=4)
+    base = sandbox.base_feature_columns()
+    sr = sharpe(base, axis=0)
+    best_k = int(np.argmax(sr))
+    assert GumbelAnchored(tau=np.inf, seed=4)._anchor(12, base, best_k) == best_k
+    assert GumbelAnchored(tau=-np.inf, seed=4)._anchor(12, base, best_k) == int(np.argmin(sr))
+    other = make_sandbox(K=12, seed=99)[0].base_feature_columns()
+    assert (GumbelAnchored(tau=0.0, seed=4)._anchor(12, base, best_k)
+            == GumbelAnchored(tau=0.0, seed=4)._anchor(12, other, 0))
+
+
+def test_gumbel_coupling_rises_with_tau():
+    base = make_sandbox(K=12, seed=4)[0].base_feature_columns()
+    best_k = int(np.argmax(sharpe(base, axis=0)))
+    kappa = [np.mean([normalized_rank(base, GumbelAnchored(tau=tau, seed=s)._anchor(12, base, best_k))
+                      for s in range(400)])
+             for tau in (-2.0, 0.0, 2.0)]
+    assert kappa[0] < 0.4 < kappa[1] < 0.6 < kappa[2]
+
+
+def test_normalized_rank_endpoints():
+    base = make_sandbox(K=12, seed=4)[0].base_feature_columns()
+    sr = sharpe(base, axis=0)
+    assert normalized_rank(base, int(np.argmax(sr))) == 1.0
+    assert normalized_rank(base, int(np.argmin(sr))) == 0.0
 
 
 def test_winner_anchor_matches_adaptive():

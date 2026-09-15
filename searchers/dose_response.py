@@ -248,3 +248,33 @@ class WorstAnchor(NeighborAdaptive):
 
     def _anchor(self, K: int, base_columns: np.ndarray, best_k: int) -> int:
         return int(np.argmin(sharpe(base_columns, axis=0)))
+
+
+class GumbelAnchored(NeighborAdaptive):
+    """Round 2 expands around a feature drawn with probability proportional to exp(tau * z_k), where z_k
+    is feature k's single-feature Sharpe standardized across features. Uses the Gumbel-max trick with the
+    noise drawn once from the searcher's seed, so a replay on resampled data reuses the same noise. tau
+    sets the coupling to the selection statistic: +inf anchors on the winner, 0 is uniform random, and
+    -inf anchors on the loser."""
+    name = "gumbel_anchored"
+
+    def __init__(self, tau: float, max_features: int = 2, seed: int = 0):
+        super().__init__(max_features=max_features, seed=seed)
+        self.tau = tau
+
+    def _anchor(self, K: int, base_columns: np.ndarray, best_k: int) -> int:
+        if self.tau == np.inf:
+            return best_k
+        sr = sharpe(base_columns, axis=0)
+        if self.tau == -np.inf:
+            return int(np.argmin(sr))
+        spread = sr.std()
+        z = (sr - sr.mean()) / spread if spread > 0 else np.zeros(K)
+        return int(np.argmax(self.tau * z + np.random.default_rng(self.seed).gumbel(size=K)))
+
+
+def normalized_rank(base_columns: np.ndarray, k: int) -> float:
+    """Where feature k's single-feature Sharpe ranks among all features: 1 for the best, 0 for the worst.
+    Averaged over a search's anchors, this is the coupling kappa."""
+    sr = sharpe(base_columns, axis=0)
+    return float(np.sum(sr < sr[k]) / (len(sr) - 1))
