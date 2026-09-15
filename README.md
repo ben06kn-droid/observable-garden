@@ -94,20 +94,33 @@ structural variant (`NeighborAdaptive`, a different selection rule with the
 same *amount* of data-dependence) lands on the same rate as Adaptive: it's
 data-dependence itself that breaks the naive bootstrap, not the specific rule.
 
-**Predictive power under the alternative** (`s=3`, real signal, with the
-correlation sweep folded in — `experiments/e7_predictive_power.py`, `N ∈
-{10,100,1000} × ρ ∈ {0,0.3,0.6,0.9}`, n=100/cell) — a mixed result, not the
-clean win that would most simply close this project's remaining gap.
-Closed-form DSR (raw N) narrowly beats bootstrap deflation on per-draw RMSE
-in 11/12 cells, and every predictor's R² is negative — none out-predicts a
-flat mean of `SR_OOS` here. Bootstrap *does* track mean realized decay
-more closely than closed-form at every grid point, a different (and
-favorable) criterion from per-draw RMSE. The ρ=0 consistency check (should
-show bootstrap ≈ closed-form) didn't pass cleanly — traced to ρ=0 not
-meaning "independent trials" for a combinatorial searcher (confirmed: mean
-trial correlation ≈0.10 at ρ=0), though the gap's growth with `N` remains
-unexplained. Full account, including the ruled-out hypothesis, in
-`SCOPE.md` §8.
+**Predictive power under the alternative** (`s=3`, real signal, correlation
+sweep folded in). First pass (`experiments/e7_predictive_power.py`) scored
+against a 300-period OOS realization under equicorrelation — RMSE/R² came
+back uninformative for a reason unrelated to the estimator: a
+pre-registered criterion (target SD vs. the ~0.917 Lo(2002)
+measurement-noise floor, checkable with no estimator involved) failed for
+*both* equicorrelation and a new heterogeneous Σ_x, showing the 300-period
+realization itself — not the correlation structure — was the problem
+(`SCOPE.md` §8). Rerun scoring against the exact analytic OOS Sharpe
+instead (`environments/dgp.py`'s `analytic_sharpe`, generalizing the
+oracle formula to any weight vector) plus heterogeneous Σ_x
+(`experiments/e9_predictive_power_v2.py`):
+
+**Bias — not RMSE — is what actually distinguishes the three corrections.**
+Bootstrap deflation is the only one close to unbiased for average decay
+across the whole grid (±0.03–0.08 everywhere). Closed-form with the raw
+trial count is conservative, but only where trials aren't too correlated —
+the bias shrinks toward zero as ρ rises, rather than being a fixed margin.
+The eigenvalue-based "effective N" alternative is substantially
+anti-conservative everywhere trials are correlated at all (the regime real
+searches live in), peaking in severity at moderate ρ rather than the
+highest tested. R² stays deeply negative throughout for a *different*
+reason than the first pass: this design fixes the oracle ceiling across
+draws, so the between-draw target variance is modest by construction, not
+because of leftover noise. Full account, including what's still an open
+question (why the ρ=0 gap grows with `N`) and what's a stated-but-unverified
+hypothesis (why effective-N's badness peaks mid-range), in `SCOPE.md` §9.
 
 ## Repository layout
 

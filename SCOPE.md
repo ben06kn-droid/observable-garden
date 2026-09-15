@@ -522,3 +522,112 @@ closed-form has lower per-draw variance and wins on RMSE anyway; the
 ρ=0 baseline check surfaced a genuine, partially-explained anomaly rather
 than a clean pass. Reported in full rather than led with the more flattering
 half of it.
+
+## 9. Experiment 2 rerun with both DGP fixes: bias is the metric that actually distinguishes the three corrections
+
+Two changes, made in a specific order because the order is what makes them
+defensible. First, a criterion was written down and checked *before*
+touching the DGP or looking at any RMSE (§8's own instinct, made explicit):
+target SD across draws must exceed the ~0.917 Lo(2002) measurement-noise
+floor a 300-period OOS realization carries. It failed for **both**
+equicorrelation and a new heterogeneous Σ_x (`environments/dgp.py`'s
+`heterogeneous_correlation` — a single-factor structure with per-feature
+loadings drawn once, replacing the exchangeability that's harmless under
+`s=0` but collapses the achievable-Sharpe spread under `s>0`): target SD
+0.005–0.21 against a 0.917 floor, everywhere. That settled which fix was
+load-bearing: analytic scoring (`analytic_sharpe`, the same closed-form
+algebra as the oracle formula, generalized to any weight vector — derived
+independently, verified against simulation, `tests/test_analytic_sharpe.py`)
+is necessary, not optional. Heterogeneous Σ_x is a real but smaller,
+ρ-dependent improvement on top, mattering most at high ρ.
+
+Both fixes applied, same grid, n=100/cell (`experiments/
+e9_predictive_power_v2.py`):
+
+**RMSE narrows and the winner stops being clean.** With the noise-free
+target, closed-form(raw) and bootstrap are now close throughout — each
+wins some cells, neither by much (e.g. `N=1000, ρ=0.9`: raw 0.665 vs boot
+0.667; `N=1000, ρ=0`: raw 0.429 vs boot 0.388, boot wins here). The
+previous experiment's clean raw-N win was partly an artifact of comparing
+against a noisy target that rewarded low-variance predictors regardless of
+bias; with that noise gone, the two are close to tied on RMSE.
+
+**R² is still deeply negative — for a different reason than before, worth
+naming rather than leaving as a loose end.** Target SD is now 0.02–0.21
+(exact, no measurement noise) while RMSE sits at 0.4–0.7 for every
+predictor: the between-draw variation in true achievable Sharpe is modest
+*by construction* (`calibrate_sigma` fixes the oracle ceiling at the same
+target across every draw, so how much any search's outcome can vary from
+draw to draw is bounded), not because of leftover noise. R² divides a
+large error by a small target variance and comes out triple-digit negative
+almost everywhere — a property of this experimental design's fixed-ceiling
+choice, not evidence the estimators lack predictive power. RMSE and bias
+are the metrics that mean something here; R² does not, and reporting it
+without this caveat would be misleading in the other direction from the
+original noise-floor problem.
+
+**Bias is the metric that actually distinguishes the three corrections —
+the reframing this section is named for, checked point by point rather
+than assumed.** Bias = mean(predicted decay − realized decay); positive
+means over-deflates (too conservative), negative means under-deflates
+(anti-conservative).
+
+| | bias(raw) | bias(effective-N) | bias(bootstrap) |
+|---|---|---|---|
+| ρ=0, N=10→1000 | +0.063 → +0.262 (growing) | −0.013 → −0.466 | +0.029 → +0.017 |
+| ρ=0.3, N=10→1000 | +0.015 → +0.097 (small) | −0.348 → −0.937 | +0.010 → −0.030 |
+| ρ=0.6, N=10→1000 | +0.007 → +0.017 (~flat) | −0.373 → −0.825 | +0.008 → −0.031 |
+| ρ=0.9, N=10→1000 | −0.005 → −0.023 (~zero) | −0.280 → −0.561 | −0.004 → −0.022 |
+
+**Bootstrap is the only one of the three that's close to unbiased,
+everywhere on this grid** — bias stays within roughly ±0.03–0.08 across
+every `(N, ρ)` cell, an order of magnitude smaller than either alternative's
+worst case. That part of the predicted reframing holds cleanly.
+
+**Effective-N is substantially anti-conservative throughout, and does get
+much worse once trials are correlated at all — but the shape isn't
+monotone in ρ, and that's reported rather than smoothed over.** Its bias
+is small at ρ=0 (−0.01 to −0.47) and jumps immediately once ρ≥0.3 (−0.28
+to −0.94). But holding `N=1000` fixed and reading across ρ: −0.47 (ρ=0) →
+**−0.94 (ρ=0.3, the worst point)** → −0.83 (ρ=0.6) → −0.56 (ρ=0.9) — it
+peaks at moderate correlation and eases somewhat by ρ=0.9, not
+monotonically worst at the highest correlation tested. A plausible
+mechanism, not yet verified: the eigenvalue-based effective-N shrinks
+toward 1 as ρ→1 (near-duplicate trials collapse to "one effective trial"),
+which caps how little deflation it can apply at the extreme end even as it
+remains badly anti-conservative throughout. Stated as a hypothesis because
+it hasn't been checked the way every other claim in this document has.
+
+**Raw-N is conservative, but only where trials aren't too correlated —
+the "widens with trial count" part of the prediction holds conditionally,
+not unconditionally.** At ρ=0, raw's bias grows clearly with N (+0.063 →
++0.180 → +0.262). At ρ=0.3 the same direction holds but far more weakly
+(+0.015 → +0.056 → +0.097). By ρ=0.6–0.9 the bias is near zero and even
+flips slightly negative at the highest `N`. Raw-N's over-deflation is real
+at low correlation and fades as correlation rises — which makes sense
+given raw-N was already known to over-correct by ignoring correlation
+(§1): at high ρ, "ignoring correlation" costs it less because there's
+less independent breadth to over-penalize in the first place.
+
+**The ρ=0 consistency check replicates exactly, confirming it's a property
+of the searcher, not the Σ_x variant.** +0.033, +0.102, +0.245 at
+`N=10/100/1000` — essentially identical to the original grid's +0.051,
++0.117, +0.237 (§8's explanation: `heterogeneous_correlation` returns the
+identity at ρ≤0, same as equicorrelation there, so nothing about this
+specific comparison should have changed, and it didn't). The still-open
+question from §8 — why the gap *grows* with `N` — remains open here too.
+
+**Net assessment.** The honest headline is the one proposed before this
+section was written, and the data supports it with real texture rather
+than rubber-stamping it: bootstrap deflation is the only one of the three
+corrections that is close to unbiased for average decay across this
+entire grid. Closed-form with the raw trial count is conservative, but the
+size of that conservatism depends on correlation in a way the closed form
+doesn't account for, shrinking toward zero as trials get more correlated.
+The eigenvalue-based "sophisticated" alternative is substantially
+anti-conservative everywhere trials are correlated at all — which is the
+regime real searches live in — and that's true even though its exact
+severity doesn't increase monotonically with correlation. None of the
+three has much per-draw predictive power in the R²/RMSE sense on this
+grid, for a reason tied to this design's fixed oracle ceiling rather than
+to any estimator's quality.

@@ -110,7 +110,8 @@ def report(results):
         print(f"{N:>6} {rho:>5.1f} " + " ".join(f"{r[0]:>10.4f}" for r in row) + " | " +
               " ".join(f"{r[1]:>8.3f}" for r in row))
 
-    print("\n-- bias: mean(predicted decay - realized decay), signed -- positive = under-deflates --")
+    print("\n-- bias: mean(predicted decay - realized decay), signed -- "
+          "positive = over-deflates (too conservative), negative = under-deflates (anti-conservative) --")
     print(f"{'N':>6} {'rho':>5} {'bias(raw)':>11} {'bias(eff)':>11} {'bias(boot)':>12}")
     for (N, rho), cell in results.items():
         realized_decay = cell["sr_is"] - cell[actual_key]
