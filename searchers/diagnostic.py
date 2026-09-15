@@ -85,3 +85,50 @@ class LatticeAdaptive(Searcher):
         """Dose 0: the full menu, always. Divergence rate is 0 by
         construction -- nothing about the menu depends on realized data."""
         return frozenset(range(base_columns.shape[1]))
+
+
+class PinnedSelector(Searcher):
+    """Diagnostic searcher: builds a menu of `max_trials` OTHER candidates
+    the same way GridSearch does (same combinatorial generation, same
+    random-thinning seed), evaluates and logs every one of them -- but
+    ALWAYS submits a specific, externally supplied weight vector regardless
+    of what any of those trials found.
+
+    Exists to isolate the pure multiple-testing cost of a larger transcript
+    from a confound found in experiments/e10_power_vs_signal_strength.py:
+    letting a real searcher (GridSearch) pick its own best spec means
+    `sr_sel` improves as `N` grows (a bigger search finds a better
+    specification), which pushed power UP with N there -- the opposite of
+    what P(M_b >= sr_sel) should do when sr_sel is genuinely held fixed
+    and the transcript (hence M_b) grows. Pinning the submission to a
+    known weight vector (typically the true signal triple) removes that
+    confound: for a FIXED draw, the pinned spec's in-sample Sharpe doesn't
+    depend on N at all (it's the same evaluate() call on the same data
+    regardless of how many other trials are also logged), so any change in
+    power as N sweeps is now purely the bootstrap's response to a bigger
+    transcript -- experiments/e11_power_vs_N_pinned.py."""
+    name = "pinned_selector"
+
+    def __init__(self, pinned_weights: np.ndarray, subset_sizes=(1, 2, 3), max_trials: int | None = None, seed: int = 0):
+        super().__init__(seed=seed)
+        self.pinned_weights = np.asarray(pinned_weights, dtype=float)
+        self.subset_sizes = subset_sizes
+        self.max_trials = max_trials
+
+    def _combos(self, K: int) -> list[tuple[int, ...]]:
+        combos = list(itertools.chain.from_iterable(
+            itertools.combinations(range(K), size) for size in self.subset_sizes
+        ))
+        if self.max_trials is not None and len(combos) > self.max_trials:
+            rng = np.random.default_rng(self.seed)
+            keep = rng.choice(len(combos), size=self.max_trials, replace=False)
+            combos = [combos[i] for i in keep]
+        return combos
+
+    def run(self, sandbox: Sandbox) -> None:
+        K = sandbox.num_features
+        for combo in self._combos(K):
+            sandbox.evaluate(Specification(weights=_one_hot_sum(K, combo), name=f"menu_{combo}"))
+        pinned_spec = Specification(weights=self.pinned_weights, name="pinned")
+        result = sandbox.evaluate(pinned_spec)
+        sandbox.submit(pinned_spec, Distribution.degenerate(result.sharpe))
