@@ -525,6 +525,12 @@ half of it.
 
 ## 9. Experiment 2 rerun with both DGP fixes: bias is the metric that actually distinguishes the three corrections
 
+*Figures: `figures/e9_decay_vs_N.png` (spec §4.3's decay-vs-trial-budget
+figure, one panel per ρ) and `figures/e9_bias_vs_rho.png` (spec §4.4's
+correlation-sensitivity figure, all three methods at N=1000). Both are
+built directly from the results table below — `experiments/
+plot_predictive_power.py`, no new experiment runs.*
+
 Two changes, made in a specific order because the order is what makes them
 defensible. First, a criterion was written down and checked *before*
 touching the DGP or looking at any RMSE (§8's own instinct, made explicit):
@@ -631,3 +637,13 @@ severity doesn't increase monotonically with correlation. None of the
 three has much per-draw predictive power in the R²/RMSE sense on this
 grid, for a reason tied to this design's fixed oracle ceiling rather than
 to any estimator's quality.
+
+**Experiment 2, as specified, is done.** §4.2 (predictive power: RMSE/R²
+across all three corrections), §4.3 (scaling: decay tracked against trial
+budget, `figures/e9_decay_vs_N.png`), and §4.4 (correlation sensitivity,
+folded in rather than run separately, `figures/e9_bias_vs_rho.png`) are
+all covered by the single grid in this section. What's genuinely left open
+is stated above rather than implied: why the ρ=0 consistency gap grows
+with `N` (§8), and whether effective-N's non-monotone-in-ρ anti-
+conservatism has the eigenvalue-shrinkage explanation offered here or a
+different one — both flagged as unverified, not folded into the headline.
