@@ -57,6 +57,18 @@ selected by conditioning, on fresh seeds and pre-registered, before the
 audit is calibrated. The correlation-based neighbor rule under heterogeneous
 correlation is still untested (THEORY.md P6, E19(b)).
 
+## Does re-anchoring at depth inflate a little?
+
+At depth 3, a search that picks its round-2 anchor at random still builds
+round 3 on its round-2 winner. E18 (SCOPE.md §17) registered this as not
+detectably inflated: 5.3% naive type-I at n=1,000, below the 6.9% that test
+could detect. An independent draw of the same rule gave 6.4%. Within both,
+the naive p-value was at most the recursive one on 99.9% of draws. A
+one-point inflation is plausible; resolving it needs about 3,000 draws per
+rule for 80% power against 6%. It affects how the note words depth, not the
+gate, which treats any adaptive search without a declared class as
+UNDECIDABLE.
+
 ## Classes that cannot be enumerated from base returns
 
 Transcript format v2 registers one class, equal-weight feature subsets up to

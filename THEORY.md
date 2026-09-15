@@ -143,6 +143,14 @@ the same draws puts the inflation on draws whose anchor is among the top few
 features, so "graded" is established across rules, not for individual
 anchors.
 
+**At depth 3 (E18, SCOPE.md §17).** Winner anchoring inflated naive type-I to
+10.4% (n = 1,000), and the naive p-value was at most the recursive one on
+every draw. A random round-2 anchor still re-anchors round 3 on the round-2
+winner. The pre-registered test found that not detectably inflated (5.3%;
+minimum detectable rate about 6.9%). In paired p-values, though, the naive
+p-value was at most the recursive one on 99.9% of draws, so the direction
+the lemma suggests is present at a size of a point or less.
+
 ## P5. Greedy search and the lattice optimum (new, corrected)
 
 **Setting.** Scores are exchangeable: a size-`m` subset's limiting statistic is
@@ -183,6 +191,16 @@ At finite `T`, even `d = 2` is not exact. In E17 (SCOPE.md §16) the
 winner-anchored search's recursive and full-class p-values differed on 36 of
 500 draws, each time by one replicate in 1,501 and always with the
 full-class null larger; no rejection decision differed.
+
+**Measured at d = 3 and 4 (E18, SCOPE.md §17), n = 500.** The replayed value
+fell below the full-class maximum on 0.87% of replicates for greedy search
+and on 0.30–0.33% for beams of width 2 to 16, and at d = 4 on 0.95%. It was
+never above. The limit predicts 0.19% and 0.28%, with no difference between
+widths, so finite-T departures are larger than the early-stopping effect the
+table isolates. Recursive rejection decisions agreed across every beam width
+and with the full-class null on all 500 draws. The consequence holds for
+verdicts; for the size of the mismatch, quote the measured values, not the
+limit.
 
 ## P6. When is the recursive bootstrap consistent? (known ingredients, one open case)
 
@@ -237,8 +255,8 @@ nothing anticipates P4.
 | P1 | known | SCOPE.md §1 (null calibration of oblivious searchers) | E21 |
 | P2 | known | none needed | none |
 | P3 | ingredients known, tier new | `estimator/full_class.py` and tests; E17 full-class null (SCOPE.md §16) | E21, E22 |
-| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16) | E19 |
-| P5 | new, corrected | SCOPE.md §5 identical recursive rates; exploratory limit check above; E17 at d = 2 | E18, E22 |
+| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E18 at depth 3 (SCOPE.md §17) | E19 |
+| P5 | new, corrected | exploratory limit check above; E17 at d = 2; E18 at d = 3 and 4 (SCOPE.md §17) | E22 |
 | P6 | ingredients known, one case open | e15 neighbor rule calibrated empirically | E19(b) |
 
 ## References

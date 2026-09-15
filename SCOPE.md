@@ -228,6 +228,25 @@ replicates × 3 methods a many-hour job; naive and recursive, where the
 dose-response signal actually lives, get the full sweep, procedure-level
 gets a validation spot-check as described below).
 
+**Superseded by E18 (§17).** The run described in this section used n=150
+and B=300 and had the anchor bug. E18 reran the dose axis on the same K, M and
+T with n=500 draws and B=1,500, pre-registered. Its table replaces the
+original:
+
+| variant | naive type-I (95% CI) | recursive type-I (95% CI) |
+|---|---|---|
+| LatticeAdaptive | 0.054 (0.037–0.077) | 0.054 (0.037–0.077) |
+| BeamAdaptive(16) | 0.060 (0.042–0.084) | 0.054 (0.037–0.077) |
+| BeamAdaptive(4) | 0.080 (0.059–0.107) | 0.054 (0.037–0.077) |
+| BeamAdaptive(2) | 0.084 (0.063–0.112) | 0.054 (0.037–0.077) |
+| Adaptive (k=1) | 0.092 (0.070–0.121) | 0.054 (0.037–0.077) |
+| DepthAdaptive | 0.096 (0.073–0.125) | 0.058 (0.041–0.082) |
+
+The shape is the same and the levels are lower. The original table is kept
+below because the rest of this section discusses its numbers.
+
+Original run (n=150, B=300):
+
 | variant | dose (mean divergence) | naive type-I (95% CI) | recursive type-I (95% CI) |
 |---|---|---|---|
 | LatticeAdaptive | 0.000 | 0.060 (0.032–0.110) | 0.060 (0.032–0.110) |
@@ -1251,3 +1270,114 @@ the ranking. That decides how the audit should summarize κ from a transcript
 needs its own pre-registered test before the audit is calibrated
 (OPEN_QUESTIONS.md). The class enforcement added to `environments/sandbox.py`
 after launch (575678a) has no effect without a declared class.
+
+## 17. E18: search depth, re-anchoring, and whether recursive nulls coincide across beam widths
+
+**At depth 3, the winner-anchored search inflated naive type-I to 10.4%,
+while random and neighbor anchors stayed below what 1,000 draws can detect.
+Greedy and beam searches reached the full-class maximum on 99.1–99.7% of
+bootstrap replicates, and their recursive rejection decisions agreed on every
+draw.** Pre-registered in `prereg/E18.md` and launched from the commit after
+it (ab90365, clean; recorded in the data file under its pre-rewrite hash
+eaf3782, see `prereg/COMMIT_MAP.md`; `experiments/e18_depth.py`). K=20, M=50,
+T=500, ρ=0.3 equicorrelated, s=0, B=1500. The four anchor rules ran on n=1,000
+draws (seeds 40000–40999) and the other searchers on the first 500 of them,
+with the naive, recursive and full-class nulls on common resampled indices.
+Wall time was 82 minutes on 32 cores.
+
+| searcher | n | mean κ | naive type-I (95% CI) | KS p | recursive (95% CI) | KS p | full-class (95% CI) | KS p |
+|---|---|---|---|---|---|---|---|---|
+| winner | 1,000 | 1.000 | **0.104** (0.087–0.124) | <0.001 | 0.059 (0.046–0.075) | 0.592 | 0.059 (0.046–0.075) | 0.558 |
+| neighbor | 1,000 | 0.475 | 0.050 (0.038–0.065) | 0.749 | 0.048 (0.036–0.063) | 0.714 | 0.019 (0.012–0.029) | <0.001 |
+| random | 1,000 | 0.498 | 0.053 (0.041–0.069) | 0.559 | 0.047 (0.036–0.062) | 0.428 | 0.022 (0.015–0.033) | <0.001 |
+| gumbel0 | 1,000 | 0.499 | 0.064 (0.050–0.081) | 0.880 | 0.055 (0.042–0.071) | 0.649 | 0.027 (0.019–0.039) | <0.001 |
+| lattice | 500 | – | 0.054 (0.037–0.077) | 0.300 | 0.054 (0.037–0.077) | 0.300 | 0.054 (0.037–0.077) | 0.300 |
+| beam16 | 500 | – | 0.060 (0.042–0.084) | 0.565 | 0.054 (0.037–0.077) | 0.300 | 0.054 (0.037–0.077) | 0.300 |
+| beam4 | 500 | – | 0.080 (0.059–0.107) | 0.103 | 0.054 (0.037–0.077) | 0.300 | 0.054 (0.037–0.077) | 0.300 |
+| beam2 | 500 | – | 0.084 (0.063–0.112) | 0.008 | 0.054 (0.037–0.077) | 0.300 | 0.054 (0.037–0.077) | 0.300 |
+| adaptive | 500 | – | 0.092 (0.070–0.121) | 0.001 | 0.054 (0.037–0.077) | 0.300 | 0.054 (0.037–0.077) | 0.300 |
+| depth (d=4) | 500 | – | 0.096 (0.073–0.125) | <0.001 | 0.058 (0.041–0.082) | 0.274 | 0.058 (0.041–0.082) | 0.258 |
+
+**Against the pre-registered readings.**
+
+1. **Identity.** `winner` and `adaptive` gave identical p-values on their 500
+   shared draws. Held.
+2. **Random-rule consistency.** random 5.3% (4.1–6.9) and gumbel0 6.4%
+   (5.0–8.1) each lie inside the other's interval. Held.
+3. **Depth re-anchoring.** Predicted (a), partly inflated, for both rules.
+   **Missed: both are (c), not detectably inflated.** neighbor had 50/1,000
+   rejections (binomial p = 0.52) and random 53/1,000 (p = 0.35). McNemar
+   separated each from winner (54–0 and 51–0, p < 10⁻¹⁵). A true rate below
+   about 6.9% is not excluded.
+4. **P5's mechanism.** Replicates on which the replayed value equals the
+   full-class maximum: lattice 99.13%, beam16 99.70%, beam4 99.70%, beam2
+   99.67%, adaptive 99.13%, all at or above 99%. On none of the 3.75 million
+   dose-axis replicates was the replayed value above the class maximum. Held.
+5. **P5's consequence.** Recursive rejection decisions of lattice and every
+   beam width agreed with adaptive's on all 500 draws. Exact p-value
+   agreement was 1.000 for lattice and 0.962–0.964 for the beams. Held.
+6. **Nominal nulls.** No recursive or full-class rate is significantly above
+   5%. The highest, winner's 5.9% for both, has binomial p = 0.11. Held.
+7. **Dose axis.** Naive type-I 0.054 → 0.060 → 0.080 → 0.084 → 0.092 is
+   nondecreasing. Held. In adjacent McNemar tests every discordant draw
+   points the predicted way (lattice–beam16 0–3, p = 0.25; beam16–beam4
+   0–10, p = 0.002; beam4–beam2 0–2, p = 0.50; beam2–adaptive 0–4,
+   p = 0.13).
+
+**The gray result: gumbel0 (not a registered test).** Reading 3 was
+registered for neighbor and random only. gumbel0 is random's rule with
+independent anchor draws, and under the same binomial rule it would have
+counted as inflated: 64/1,000, p = 0.028, one rejection above the threshold
+of 63. Pooled with random, it is 117/2,000 (5.85%, p = 0.048). Paired within
+each rule, the naive p-value was at most the recursive one on 99.9% of draws
+for both random and gumbel0. Every draw where only one of the two nulls
+rejected was a naive rejection (6–0, p = 0.031; 9–0, p = 0.004). So the
+direction the pre-registration predicted is present in the paired p-values,
+and its size at α = 5% is at the edge of what n = 1,000 detects. The
+registered outcome (c) stands, and the note says "not detectably inflated".
+The neighbor rule does not show the same dominance (naive ≤ recursive on 68%
+of draws, 2–0), because its replay re-selects the anchor from resampled
+correlations (THEORY.md P6).
+
+**P5 at depth 3, against the Gaussian limit.** The replayed value fell below
+the class maximum on 0.87% of replicates for greedy search (adaptive and
+lattice) and on 0.30–0.33% for beams of width 2 to 16; at d = 4, DepthAdaptive
+fell below on 0.95%. THEORY.md's Gaussian limit predicts 0.19% at d = 3 and
+0.28% at d = 4 for greedy search, and no difference between widths, since in
+the limit every width returns the same value. At finite T, then, greedy's
+shortfall is 3–5 times the limit's, and width 2 already removes about two
+thirds of it. The 99% threshold held with room; the limit's magnitudes did
+not. LatticeAdaptive selects with Adaptive's greedy rule, so the two had
+identical recursive p-values and replicate counts; their `sr_sel` differed by
+at most 9×10⁻¹⁶. Each beam's recursive p-value differed from adaptive's on
+18–19 of 500 draws, always by one replicate in 1,501.
+
+**Full-class against recursive.** The full-class p-value was at least the
+recursive one on every draw of every searcher (P2, P3). For greedy, beam and
+depth searches it was at most two replicates larger and never changed a
+decision. For the anchor rules that do not chase winners it was far more
+conservative (1.9–2.7% type-I, differing from recursive in 2.5–2.9% of
+decisions), as in E17.
+
+**Against earlier numbers.**
+
+- **Dose axis.** It replaces §5's table (n=150, B=300, anchor bug) with the
+  same shape at lower levels. Adaptive is 9.2% here against 12.7% there
+  (Fisher p = 0.22).
+- **Adaptive in §3.** That run's 13.6% (e4) is not like-for-like. The script's
+  settings are K=25, M=60, T=600; its naive `sr_sel` is the transcript maximum
+  rather than the searcher's own selection; and its block length is chosen on
+  the transcript. The rates differ (Fisher p = 0.036, not pre-registered), and
+  which setting accounts for it has not been tested.
+- **Depth.** The winner rule at d = 3 (10.4%) is not significantly above the
+  d = 2 estimates pooled across e15, E16 and E17 (8.5%; Fisher p = 0.11,
+  different seeds). DepthAdaptive's 9.6% against Adaptive's 9.2% is 3–1 paired
+  (p = 0.63).
+
+**What this changes for the note.** P5's consequence holds at d = 3 at the
+level that matters: recursive verdicts for greedy search at any beam width,
+and full-class verdicts, agreed on every draw. The replicate-level mismatch is
+several times the Gaussian limit, so the note quotes the measured values, not
+the limit's. For depth re-anchoring, the registered outcome is (c), not
+detectably inflated, with the paired direction reported as exploratory
+(OPEN_QUESTIONS.md).

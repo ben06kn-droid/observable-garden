@@ -101,9 +101,13 @@ algebraically — checked against a reconstruction-free gold standard.
   bootstrap; **Adaptive fails** (type-I 13.6% vs. nominal 5%, n=500)
   because its candidate menu depends on outcomes. A recursive bootstrap
   fixes it (type-I 3.4%).
-- **Dose-response**: type-I rate rises monotonically as the candidate
-  menu gets more data-dependent (0.060 → 0.127 across 5 points) — not one
-  searcher's quirk.
+- **Dose-response**: naive type-I rises monotonically as the candidate
+  menu gets more data-dependent: 5.4% → 6.0% → 8.0% → 8.4% → 9.2% from a
+  full lattice to greedy search (n=500 per point, pre-registered). It is
+  not one searcher's quirk. What drives it is building on the search's own
+  best results. Rules that anchor on a random or uncorrelated feature stay
+  at or near nominal, and inflation rises with how strongly the anchor
+  tracks performance (SCOPE.md §14–17).
 - **Predictive power** (`s=3`, real signal): only **bootstrap deflation is
   unbiased** for average decay; closed-form DSR-L with the raw trial count
   is conservative, less so as correlation rises; DSR-L with a
@@ -179,7 +183,8 @@ garden/         the gate: transcript format, audit, preflight, explain, CLI, exa
 environments/   DGP + Sandbox contract
 searchers/      scripted, dose-response, and diagnostic searchers
 estimator/      naive/recursive/procedure-level bootstrap, closed-form baseline, metrics
-experiments/    e1-e14 in the order they ran; _parallel.py runs draws across processes with checkpoints
+experiments/    e1-e18 in the order they ran; _parallel.py runs draws across processes with checkpoints
+prereg/         pre-registrations, each committed before its experiment ran; COMMIT_MAP.md
 cloud/          EC2 setup and detached-run scripts
 tests/, figures/
 ```
