@@ -38,30 +38,31 @@ algebraically — checked against a reconstruction-free gold standard.
   because its candidate menu depends on outcomes. A recursive bootstrap
   fixes it (type-I 3.4%).
 - **Dose-response**: type-I rate rises monotonically as the candidate
-  menu gets more data-dependent (0.060 → 0.127 across 5 points, `figures/
-  e5_dose_response_primary.png`) — not one searcher's quirk.
-- **Predictive power** (`s=3`, real signal, `figures/e9_decay_vs_N.png`,
-  `figures/e9_bias_vs_rho.png`): only **bootstrap deflation is unbiased**
-  for average decay across the whole grid; closed-form (raw N) is
-  conservative, less so as correlation rises; the "sophisticated"
-  eigenvalue correction is substantially anti-conservative wherever trials
-  are correlated at all. One cell makes the case concretely: at ρ=0,
-  N=1000, a search reports Sharpe **2.03** — double the population ceiling
-  of 1.0 — when the truth is 0.21. Reading only the transcript, the
-  bootstrap calls the decay (1.82) to within 0.017; raw-N over-corrects by
-  14%; effective-N leaves a quarter of the overfitting standing.
-- **Power** (detecting real signal, same grid): rises with correlation
-  (16%→43%, ρ 0→0.9) — but that's the DGP getting easier, not the
-  estimator getting more sensitive: true achievable Sharpe rises sixfold
-  over the same axis by construction. At ρ=0, power is only 4–16% (*below*
-  nominal at N=10) — a correctly conservative test facing a weak
-  alternative, stated as a limitation, not a rising trend to lead with.
-  The deconfounded axis is signal strength, holding ρ=0 fixed: power
-  tracks it cleanly (5%→9%→16% at N=10; 6%→11%→35% at N=1000, target
-  Sharpe 0.5→1.0→2.0) — no search budget buys power against a truly weak
-  signal (`SR_OOS≈0.05`) in the clean regime.
+  menu gets more data-dependent (0.060 → 0.127 across 5 points) — not one
+  searcher's quirk.
+- **Predictive power** (`s=3`, real signal): only **bootstrap deflation is
+  unbiased** for average decay; closed-form (raw N) is conservative, less
+  so as correlation rises; the "effective N" eigenvalue correction is
+  substantially anti-conservative wherever trials are correlated. One
+  cell makes the case concretely: at ρ=0, N=1000, a search reports Sharpe
+  **2.03** — double the population ceiling — when the truth is 0.21. The
+  bootstrap calls the decay to within 0.017; raw-N over-corrects by 14%;
+  effective-N leaves a quarter of the overfitting standing.
+- **Power, worked out twice because the first version was wrong**:
+  naively, power rises with correlation (16%→43%, ρ 0→0.9) — but that's
+  the DGP getting easier (true achievable Sharpe rises sixfold over the
+  same axis), not the estimator improving; at ρ=0 power is correctly
+  *below nominal* for a weak signal, not a flaw. A second, subtler
+  confound: power appearing to rise with trial budget `N` at fixed signal
+  strength turned out to mean the searcher finds a *better* spec at
+  larger `N`, not that searching more is free. Pinning the submitted spec
+  to the true signal and growing only the transcript around it isolates
+  the real cost: power **falls** 15%→6%→2% (`N`=10→100→1000) at one
+  signal strength, 69%→42%→26% at a stronger one — the pure
+  multiple-testing cost of having looked, and the number this project
+  exists to produce.
 
-Every number, caveat, and diagnostic behind these — including two real
+Every number, caveat, and diagnostic behind these — including three real
 bugs found and fixed along the way — is in **`SCOPE.md`**. This is the
 summary.
 
@@ -79,6 +80,6 @@ pytest -q
 environments/   DGP + Sandbox contract
 searchers/      scripted, dose-response, and diagnostic searchers
 estimator/      naive/recursive/procedure-level bootstrap, closed-form baseline, metrics
-experiments/    e1-e9, numbered in the order they ran
+experiments/    e1-e11, numbered in the order they ran
 tests/, figures/
 ```

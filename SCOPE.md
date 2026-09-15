@@ -701,16 +701,65 @@ substitute inflating effect size for free
 
 With ρ held fixed, power tracks effect size cleanly and monotonically at
 both trial budgets — the curve the earlier, confounded ρ-sweep was
-mistaken for. It also separates two things the ρ-sweep couldn't: at fixed
-signal strength, more search (`N=10→1000`) raises both achieved
-performance and power somewhat on its own (e.g. target=2.0: power
-0.160→0.350) — a real, smaller, deconfounded version of "more search
-finds the signal better," uncontaminated by ρ's much larger "the task got
-easier" effect. And at the weakest tested signal (target=0.5, true
+mistaken for. And at the weakest tested signal (target=0.5, true
 `SR_OOS≈0.05`), power sits right at nominal α regardless of `N` — a search
 budget cannot buy power against an effect this weak in the clean regime;
 only a stronger true signal or (per the ρ-axis result above) a more
 forgiving correlation structure can.
+
+**A second confound, caught on the same review that caught the first
+one: the table above still isn't a clean read on `N`.** Power rises with
+`N` at fixed target Sharpe in the table above (e.g. target=2.0:
+0.160→0.350) — but `deflate()`'s p-value is `P(M_b ≥ sr_sel)`, and adding
+columns to the transcript can only make `M_b` stochastically *larger*
+holding `sr_sel` fixed, so `p` should rise and power should *fall* as `N`
+grows, always, if `sr_sel` genuinely doesn't change. Power rising means
+`sr_sel` wasn't fixed: GridSearch finds a materially better specification
+at larger `N` (more of the search space gets tried), so "search finds the
+signal better" and "search costs you at test time" were still tangled
+into one number — exactly the same shape of error the ρ-confound was, one
+level down.
+
+**Isolated properly**: `searchers/diagnostic.py`'s `PinnedSelector` builds
+the identical combinatorial menu GridSearch does — same transcript size
+and correlation structure growing with `N` — but always submits the true
+signal triple, regardless of what any trial in that menu finds. For a
+fixed draw this makes the submitted Sharpe exactly `N`-invariant by
+construction (checked directly before running anything at scale: constant
+to six decimals across `N=10/100/1000`, locked in as a regression test);
+only the transcript around it grows. Whatever power does now is purely
+the bootstrap's response to a larger transcript
+(`experiments/e11_power_vs_N_pinned.py`, same ρ=0, same target-Sharpe
+levels, n=100/cell):
+
+| | N=10 | N=100 | N=1000 |
+|---|---|---|---|
+| power, target Sharpe=1.0 (mean pinned SR_IS=1.017) | 0.150 | 0.060 | 0.020 |
+| power, target Sharpe=2.0 (mean pinned SR_IS=2.020) | 0.690 | 0.420 | 0.260 |
+
+Power falls monotonically in `N` at both signal levels, exactly as
+predicted before running this — a ~7.5× relative drop at the moderate
+signal, ~2.65× at the strong one. **This is the pure multiple-testing
+cost of having looked**, decoupled from the benefit of having looked:
+holding the quality of what you found completely fixed, reporting it out
+of a 1000-trial search rather than a 10-trial one costs you most of your
+power to have it recognized as real. It's also the answer to why the
+original (unpinned) table above showed power *rising* with `N`: that
+number is the *net* of two real, opposing forces — search quality
+improving with `N` (pushing power up) and the multiple-testing penalty
+growing with `N` (pushing power down) — and in that specific experiment
+the first force happened to dominate the second. That net-effect number
+is not wrong, and it's the one an actual practitioner whose search
+quality floats with budget would experience — but it is not "the
+estimator's sensitivity," and reporting it as a rising power curve
+without this decomposition would have handed a reviewer a claim the data
+doesn't support.
+
+Two separable curves, together: power rises in true effect size at fixed
+search extent (this section's first table, both `N` levels move the same
+direction). Power falls in trial count at fixed effect size (the table
+just above). Both are real; neither is the other; a real searcher's
+observed power is their sum.
 
 The ρ axis stays exactly where §9's main table already puts it to best
 use: showing the three corrections' bias diverge, which it does cleanly —
