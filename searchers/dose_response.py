@@ -273,6 +273,27 @@ class GumbelAnchored(NeighborAdaptive):
         return int(np.argmax(self.tau * z + np.random.default_rng(self.seed).gumbel(size=K)))
 
 
+class RankAnchor(NeighborAdaptive):
+    """Round 2 expands around the feature whose single-feature Sharpe ranks `rank`-th, 1 being the round-1
+    winner. Fixing the rank sets the anchor's coupling by design, instead of selecting draws by the rank a
+    rule happened to pick. A replay re-ranks on the data it is given."""
+    name = "rank_anchor"
+
+    def __init__(self, rank: int, max_features: int = 2, seed: int = 0):
+        super().__init__(max_features=max_features, seed=seed)
+        if rank < 1:
+            raise ValueError(f"rank must be at least 1, got {rank}")
+        self.rank = rank
+
+    def _anchor(self, K: int, base_columns: np.ndarray, best_k: int) -> int:
+        if self.rank > K:
+            raise ValueError(f"rank {self.rank} exceeds the {K} features")
+        # Rank from the winner the search found, then the rest by Sharpe, so rank 1 is always the winner and
+        # no other rank can be, even when floating-point near-ties reorder the top of the Sharpe sort.
+        order = [j for j in np.argsort(-sharpe(base_columns, axis=0), kind="stable") if j != best_k]
+        return int(([best_k] + order)[self.rank - 1])
+
+
 def normalized_rank(base_columns: np.ndarray, k: int) -> float:
     """Where feature k's single-feature Sharpe ranks among all features: 1 for the best, 0 for the worst.
     Averaged over a search's anchors, this is the coupling kappa."""

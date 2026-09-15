@@ -6,8 +6,8 @@ from environments.sandbox import Sandbox
 from estimator.bootstrap import sharpe
 from estimator.divergence import divergence_rate, beam_entropy
 from searchers.dose_response import (
-    BeamAdaptive, DepthAdaptive, GumbelAnchored, NeighborAdaptive, RandomAnchor, WinnerAnchor, WorstAnchor,
-    normalized_rank,
+    BeamAdaptive, DepthAdaptive, GumbelAnchored, NeighborAdaptive, RandomAnchor, RankAnchor, WinnerAnchor,
+    WorstAnchor, normalized_rank,
 )
 from searchers.diagnostic import LatticeAdaptive
 from searchers.scripted import Adaptive
@@ -31,6 +31,9 @@ def make_sandbox(K=15, M=50, T=300, seed=0):
     lambda: WorstAnchor(max_features=2, seed=0),
     lambda: GumbelAnchored(tau=1.0, seed=0),
     lambda: GumbelAnchored(tau=-2.0, max_features=3, seed=0),
+    lambda: RankAnchor(rank=1, seed=0),
+    lambda: RankAnchor(rank=3, seed=0),
+    lambda: RankAnchor(rank=15, max_features=3, seed=0),
 ])
 def test_replay_matches_run_on_real_data(searcher_factory):
     sandbox, config = make_sandbox()
@@ -77,6 +80,37 @@ def test_gumbel_anchor_limits_and_data_independence_at_zero():
     other = make_sandbox(K=12, seed=99)[0].base_feature_columns()
     assert (GumbelAnchored(tau=0.0, seed=4)._anchor(12, base, best_k)
             == GumbelAnchored(tau=0.0, seed=4)._anchor(12, other, 0))
+
+
+def test_rank_anchor_sets_the_anchor_rank():
+    for seed in range(10):
+        base = make_sandbox(K=12, seed=seed)[0].base_feature_columns()
+        sr = sharpe(base, axis=0)
+        best_k = int(np.argmax(sr))
+        order = np.argsort(-sr)
+        assert RankAnchor(rank=1, seed=seed)._anchor(12, base, best_k) == best_k
+        assert RankAnchor(rank=12, seed=seed)._anchor(12, base, best_k) == int(np.argmin(sr))
+        for rank in (2, 3, 5, 10):
+            anchor = RankAnchor(rank=rank, seed=seed)._anchor(12, base, best_k)
+            assert anchor == int(order[rank - 1]) and anchor != best_k
+            assert normalized_rank(base, anchor) == pytest.approx((12 - rank) / 11)
+
+
+def test_rank_anchor_rejects_ranks_outside_the_features():
+    base = make_sandbox(K=12, seed=4)[0].base_feature_columns()
+    with pytest.raises(ValueError):
+        RankAnchor(rank=0)
+    with pytest.raises(ValueError):
+        RankAnchor(rank=13)._anchor(12, base, 0)
+
+
+def test_rank_one_and_last_match_winner_and_worst_anchor():
+    for rule, rank in ((WinnerAnchor, 1), (WorstAnchor, 15)):
+        sandbox1, _ = make_sandbox(seed=7)
+        sandbox2, _ = make_sandbox(seed=7)
+        rule(max_features=2, seed=7).run(sandbox1)
+        RankAnchor(rank=rank, max_features=2, seed=7).run(sandbox2)
+        assert sandbox1.submission[1].mean == pytest.approx(sandbox2.submission[1].mean, rel=1e-12)
 
 
 def test_gumbel_coupling_rises_with_tau():
