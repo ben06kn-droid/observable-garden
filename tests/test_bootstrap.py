@@ -116,3 +116,32 @@ def test_stationary_bootstrap_indices_valid_range_and_length():
     idx = stationary_bootstrap_indices(T=500, L=10, rng=rng)
     assert idx.shape == (500,)
     assert idx.min() >= 0 and idx.max() < 500
+
+
+# -- regression: block length with columns that never trade -------------------
+
+def test_block_length_selection_skips_columns_that_never_trade():
+    rng = np.random.default_rng(12)
+    R = rng.standard_normal((500, 6))
+    R[:, 2] = 0.0  # Politis-White is undefined for a constant column and used to crash the median
+    assert select_block_length(R) == select_block_length(np.delete(R, 2, axis=1))
+    assert select_block_length(np.zeros((100, 3))) == 1
+
+
+def test_vectorized_stationary_bootstrap_matches_the_reference_sampler():
+    from estimator.bootstrap import stationary_bootstrap_index_matrix
+
+    T, L, n = 400, 8, 3000
+    ref = np.stack([stationary_bootstrap_indices(T, L, np.random.default_rng(i)) for i in range(n)])
+    vec = stationary_bootstrap_index_matrix(T, L, n, np.random.default_rng(99))
+    assert vec.shape == (n, T) and vec.min() >= 0 and vec.max() < T
+
+    def continuation(idx):
+        return np.mean(idx[:, 1:] == (idx[:, :-1] + 1) % T)
+
+    expected = (1 - 1 / L) + (1 / L) / T  # continue the block, or restart exactly one step ahead
+    assert continuation(vec) == pytest.approx(expected, abs=0.005)
+    assert continuation(vec) == pytest.approx(continuation(ref), abs=0.005)
+    marginal = np.bincount(vec.ravel(), minlength=T) * T / vec.size
+    assert np.abs(marginal - 1).max() < 0.35
+    assert stationary_bootstrap_index_matrix(T, 1, 5, np.random.default_rng(0)).shape == (5, T)

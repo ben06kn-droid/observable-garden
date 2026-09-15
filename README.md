@@ -1,7 +1,48 @@
 # observable-garden
 
 **An estimator for how much of a reported backtest is search rather than
-signal.**
+signal, and a gate that turns it into a verdict.**
+
+## Quickstart
+
+```
+pip install -e .
+garden audit --example null_grid     # FAIL          exit 1
+garden audit --example real_edge     # PASS          exit 0
+garden audit --example overwide      # INADMISSIBLE  exit 2
+garden audit --example null_grid --menu-kind unknown   # UNDECIDABLE  exit 3
+```
+
+Moving-average crossover searches on simulated prices, where the right
+answer is known by construction (`garden/examples.py`):
+
+| example | search | verdict |
+|---|---|---|
+| `null_grid` | 362 rules, 10 years, no edge anywhere | **FAIL**: best Sharpe 0.57 vs. critical value 0.97 |
+| `real_edge` | 32 rules, 10 years, one rule with true Sharpe 1.5 | **PASS**: 1.74 vs. 0.79 |
+| `overwide` | 10,000 rules, 4 years, one rule with true Sharpe 0.75 | **INADMISSIBLE**: 8% power for a single pre-specified strategy with true Sharpe 1.0 |
+
+These are fixed transcripts in `garden/data/` (data seed 0; `python -m
+garden.examples` regenerates them), so the quickstart is deterministic. On
+other seeds the verdicts vary the way a calibrated test should: across 20
+data seeds `null_grid` fails 19 times, the 5% type-I rate the test is
+designed to have, and `real_edge` passes all 20. Every verdict prints its
+null maximum, critical value, power, and a reason per check, so it can be
+checked by eye.
+
+Before a search, size it:
+
+```
+garden preflight --specs 1000 --periods 2520 --reference-sharpe 1.0 --rho 0.5
+```
+
+On your own search: `garden audit run.npz` (fields `returns` T×N,
+`spec_ids`, `submitted`, `menu_kind`, `periods_per_year`), `garden audit
+run.csv --submitted <id> --menu-kind oblivious`, or from Python,
+`garden.audit(garden.from_matrix(R, submitted_index, menu_kind="oblivious"))`.
+`menu_kind` defaults to `unknown`, which returns UNDECIDABLE; `garden explain
+menu` walks through whether your menu was fixed in advance. Exit codes are
+0 PASS, 1 FAIL, 2 INADMISSIBLE, 3 UNDECIDABLE, 4 DEGENERATE (the test statistic broke on this menu), 64 usage error.
 
 Bailey & López de Prado's deflated Sharpe ratio needs the number of trials
 behind a result — for human research, nobody knows that number. For an
@@ -75,6 +116,30 @@ algebraically — checked against a reconstruction-free gold standard.
   signal strength, 69%→42%→26% at a stronger one — the pure
   multiple-testing cost of having looked, and the number this project
   exists to produce.
+- **An underpowered pass overstates the edge, steeply.** Bootstrap
+  `sr_deflated` is unbiased unconditionally (mean error −0.005 across
+  Experiment 2's 1,200 draws), but not conditional on passing. Oversampled
+  at one breadth (N=100), 200 passes per signal strength
+  (`experiments/e12_type_m_by_power.py`), a passing result's deflated
+  Sharpe is **11.9×** the truth at 6% search power, 3.1× at 9%, 1.55× at
+  16%, 1.10× at 30%, and 0.75× / 0.67× at 66% / 89%. The fall is monotone,
+  as predicted before running (Gelman & Carlin's type-M error). Above about
+  30% power it reverses: a strong search's winner is mostly signal, and
+  subtracting the null maximum over-deflates it. The bundled `overwide`
+  example shows the low-power end live: on the 6 of 20 data seeds where it
+  passes instead of returning INADMISSIBLE, the winning rules have true
+  Sharpes of 0.13–0.58 and deflated Sharpes of 0.65–1.07, and every one
+  carries the gate's warning. The warning quotes this curve rather than
+  interpolating on it, because the gate's single-strategy power is not on
+  the search-power axis (SCOPE.md §12).
+- **Preflight against measurement, signed.** Predicted minus measured
+  power in the six pinned-experiment cells (n=100 each): +0.002, −0.017,
+  −0.010 at true Sharpe ≈1.0 (N=10/100/1,000), and +0.006, +0.013, −0.038
+  at ≈2.0. Independence should make preflight conservative: correlated
+  trials (about 0.1 mean correlation in these menus) lower the true null
+  maximum and raise true power. Across the six cells the residuals showed no
+  consistent sign (mean −0.007; Σz² = 2.5 on 6 df), so any bias is small
+  relative to sampling noise at n=100.
 
 Every number, caveat, and diagnostic behind these — including three real
 bugs found and fixed along the way — is in **`SCOPE.md`**. This is the
@@ -91,6 +156,7 @@ pytest -q
 ## Layout
 
 ```
+garden/         the gate: transcript format, audit, preflight, explain, CLI, examples
 environments/   DGP + Sandbox contract
 searchers/      scripted, dose-response, and diagnostic searchers
 estimator/      naive/recursive/procedure-level bootstrap, closed-form baseline, metrics

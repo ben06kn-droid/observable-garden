@@ -379,7 +379,8 @@ p-value from where the observed statistic lands in that null distribution
 Econometrica 68(5), 1097–1126**, implemented independently here against
 this project's own sandbox and DGP rather than adapted from published code.
 `estimator/bootstrap.py` is a Reality Check test, with annualized Sharpe as
-the per-candidate performance statistic and a zero benchmark. That should be stated
+the per-candidate performance statistic, re-estimated in every replicate,
+and a zero benchmark (§11 shows why the re-estimation matters). That should be stated
 plainly rather than left for a reader to notice, because a reader who
 recognizes the method and finds no citation reasonably concludes either
 carelessness or an attempt to pass off known work as new — and either
@@ -860,3 +861,152 @@ calls the decay to within 0.017 on a decay of 1.82. Raw-N over-corrects by
 standing. One cell, one table — this is the number a reviewer of the
 original proposal would ask for first, and it was sitting unremarked in
 row 3 of 12 until asked what the rest of the grid produced.
+
+## 11. Sharpe is a fragile statistic for data-snooping corrections over sparse strategies
+
+**The same 10,000-rule menu produced critical values from 2.03 to 155
+across 20 data seeds.** Same rules, same sample length, same test; only the
+simulated prices changed. A bar that moves by a factor of 75 is not measuring
+the search.
+
+The cause is the statistic. A Reality Check that re-estimates each
+candidate's Sharpe ratio inside every bootstrap replicate can be dominated
+by candidates that are rarely in the market. A resample that catches few of
+such a rule's active periods can shrink its standard deviation faster than
+its mean, and the ratio explodes. A handful of those rules then set the null
+maximum, and the verdict is decided by the arithmetic of near-empty
+resamples rather than by the breadth of the search. Realistic trading-rule
+universes (band filters, breakouts, event rules) contain exactly such
+rules. None of the experiments in §§1–10 are affected: `Specification` is
+linear in continuous features, so every candidate there takes a position in
+every period.
+
+**Evidence**, found while building the gate's bundled examples
+(`garden/examples.py`): a 10,000-rule moving-average crossover grid with
+band filters, 4 years of simulated daily prices, 20 data seeds.
+
+- The critical value at α=0.05 ranged from **2.03 to 155** across seeds.
+- On one seed, the top decile of bootstrap null maxima came from rules in
+  the market on a median **0.3%** of days, against a median of 30% across
+  all rules, and the argmax search submitted a rule active on 2.9% of days.
+  In a 10-year, 368-rule band grid, the argmax search submitted a rule
+  active on 0.2% of days: five days in ten years.
+- `estimator.bootstrap.sharpe` returned **1.2×10¹⁵** on one replicate, a
+  resample with no active periods where floating-point round-off left a
+  nonzero standard deviation.
+
+Dropping band filters, so every rule is long-short or long-only and the
+least active rule trades on at least 16% of days, brought the critical
+value to 1.60–1.74 across the same 20 seeds.
+
+**Why the published formulations don't fail this way, and why neither is
+free.** White (2000) used a non-studentized statistic, mean performance,
+which has no denominator to collapse. But a non-studentized maximum is
+dominated by high-variance candidates, including poor ones, which is
+Hansen's (2005) reason for studentizing. Hansen studentizes by a standard
+deviation estimated once from the full sample and held fixed across
+replicates, which cannot collapse either. This project's estimator
+re-estimates the standard deviation inside every replicate, the only one of
+the three formulations whose denominator can go to zero. White's mean-based
+statistic and Hansen's fixed studentization both look incidental until a
+menu contains sparse rules; for that case they are load-bearing.
+
+**What follows.** Filtering rules by how often they trade would make the
+menu data-dependent (§1), so the gate cannot fix this by exclusion. It
+detects it and refuses instead: status DEGENERATE (exit code 4) when more
+than 0.1% of replicates take their maximum from a resample with fewer than 5
+distinct active periods, or when excluding those resamples would change the
+verdict. The thresholds come from `experiments/e13_degeneracy_calibration.py`'s
+pre-registered rule: no refusals across 3,000 dense transcripts, and all 23
+sparse transcripts whose verdict flips under fixed studentization refused.
+They are provisional. The same rule also refused 343 of 397 sparse
+transcripts whose verdicts agreed, many with critical values no more
+distorted than dense ones (median 1.01× the fixed-studentization value in
+the 368-rule grid), because a verdict flip is too narrow a definition of a
+broken bar. Phase 2's SPA, implemented with Hansen's
+fixed full-sample studentization, is the natural structural fix and should
+be run against the band-filter grid above. Whether the gate should offer a
+mean-return statistic is logged in `OPEN_QUESTIONS.md`.
+
+## 12. Type-M exaggeration as a function of power
+
+**Passing results from low-power searches overstate the edge by up to an
+order of magnitude, and the gate's own power figure cannot tell you how
+much.** Bootstrap `sr_deflated` is unbiased unconditionally (§10: mean error
+−0.005 across 1,200 draws). Conditional on passing it is not, and a pooled
+figure hides how much: across §10's grid the 369 passes overstated the true
+Sharpe by 1.84×, but passes come mostly from high-power cells, so that
+number describes the regime where exaggeration is mildest.
+
+`experiments/e12_type_m_by_power.py` measures it where the gate's warning
+fires. §10's regime (ρ=0, K=40, T=600, GridSearch, argmax submission) at one
+breadth, N=100, sweeping target oracle Sharpe so power moves from near α to
+high. Each cell draws until it has 200 passes; a draw's bootstrap stops as
+soon as it cannot pass, which gives the same pass/fail as the full B=1500
+and makes failing draws nearly free. Prediction, stated in the script
+before running: both the ratio and the gap fall monotonically as power
+rises.
+
+| target Sharpe | draws | search power (95% CI) | true Sharpe of passing picks | deflated ÷ true (95% CI) | deflated − true (95% CI) | gate single-strategy power (median) |
+|---|---|---|---|---|---|---|
+| 0.5 | 3,471 | 0.058 (0.050–0.066) | 0.067 | 11.94 (10.02–14.66) | +0.728 (+0.704 to +0.755) | 0.001 |
+| 1.0 | 2,136 | 0.094 (0.082–0.107) | 0.262 | 3.11 (2.78–3.53) | +0.553 (+0.515 to +0.594) | 0.003 |
+| 1.5 | 1,218 | 0.164 (0.144–0.186) | 0.543 | 1.55 (1.42–1.72) | +0.299 (+0.244 to +0.356) | 0.008 |
+| 2.0 | 672 | 0.298 (0.264–0.333) | 0.820 | 1.10 (1.02–1.18) | +0.079 (+0.017 to +0.141) | 0.015 |
+| 3.0 | 303 | 0.660 (0.605–0.711) | 1.411 | 0.75 (0.70–0.79) | −0.357 (−0.437 to −0.277) | 0.076 |
+| 4.0 | 226 | 0.885 (0.837–0.920) | 2.038 | 0.67 (0.64–0.71) | −0.672 (−0.764 to −0.577) | 0.774 |
+
+**The prediction holds on both rows.** Two things it did not predict:
+
+- **The bias changes sign near 30% power.** Below it, a pass requires the
+  winner's noise to land far out in the tail, so its deflated Sharpe
+  overstates the truth. Above it, the winner is mostly signal, its reported
+  Sharpe carries little selection luck, and subtracting the mean null
+  maximum over-deflates it. "Conditional on passing, sr_deflated is
+  upward-biased" is true only in the low-power regime, which is where the
+  gate's warning fires.
+- **The gate's single-strategy power is not on the search-power axis.**
+  Computed at the passing pick's own true Sharpe, it read 0.1%–7.6% in the
+  cells where search power was 6%–66%. The search passes because it
+  selects a lucky pick, not because that pick's true edge would usually
+  clear the bar. So the gate cannot index this table with its own power
+  figure: doing so would print 12× for a search whose real exaggeration is
+  1.6×. The warning quotes the curve and says it cannot place the search on
+  it.
+
+Scope: one DGP, one breadth, one searcher. The monotone shape is the
+general part (it is the standard type-M result); the crossover near 30% and
+the exact ratios belong to this configuration.
+
+## 13. Single-strategy power is not a bound on search power
+
+The gate prints power for a single pre-specified strategy. An earlier draft
+called it a lower bound on search power, reasoning that a search's maximum
+can only raise the reported Sharpe. That holds within one transcript, where
+the null maximum is shared, but the comparison is across designs, and
+measured it fails. Matched cells, same DGP (ρ=0, K=40, M=60, T=600), n=100
+each: GridSearch submitting its best spec (e10, plus N=100 cells run for
+this comparison with e10's seeds) against the pinned selector submitting the
+true signal triple (e11):
+
+| N | target Sharpe | search power | single-strategy (pinned) power | search − pinned | z | mean true Sharpe of search's pick |
+|---|---|---|---|---|---|---|
+| 10 | 1.0 | 0.09 | 0.15 | −0.06 | −1.3 | 0.120 |
+| 100 | 1.0 | 0.11 | 0.06 | +0.05 | +1.3 | 0.145 |
+| 1,000 | 1.0 | 0.11 | 0.02 | +0.09 | +2.6 | 0.210 |
+| 10 | 2.0 | 0.16 | 0.69 | −0.53 | −9.0 | 0.442 |
+| 100 | 2.0 | 0.26 | 0.42 | −0.16 | −2.4 | 0.732 |
+| 1,000 | 2.0 | 0.35 | 0.26 | +0.09 | +1.4 | 0.882 |
+
+The sign depends on breadth. The edge here sits in one feature triple among
+10,700 candidate subsets. A 10-specification search rarely contains it (its
+pick's mean true Sharpe is 0.12 and 0.44 against oracle ceilings of 1.0 and
+2.0), so it forgoes most of the edge and detects far less often than a
+strategy pinned to it. A 1,000-specification search reaches specifications
+carrying part of the edge and adds selection luck on top, so it detects
+more often. The bundled `overwide` example, whose rules all share exposure
+to one crossover signal, is on the "more often" side: 6 of 20 seeds passed
+at 7–11% single-strategy power. Which side a real search is on depends on
+where the edge sits in its menu, which the transcript does not reveal, so
+the gate prints the single-strategy figure and states no direction.
+INADMISSIBLE does not need the bound: it only ever replaces FAIL.

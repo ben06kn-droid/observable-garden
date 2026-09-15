@@ -17,26 +17,55 @@ import numpy as np
 from arch.bootstrap import optimal_block_length
 
 
-def sharpe(R: np.ndarray, axis: int = 0, annualization: float = 1.0) -> np.ndarray:
+SHARPE_CAP = 100.0
+VARIANCE_FLOOR = 1e-10
+GUARD_COUNTS = {"zero_variance": 0, "variance_floor": 0, "sharpe_cap": 0}
+
+
+def reset_guard_counts() -> None:
+    for key in GUARD_COUNTS:
+        GUARD_COUNTS[key] = 0
+
+
+def sharpe(R: np.ndarray, axis: int = 0, annualization: float = 1.0,
+           var_reference: np.ndarray | None = None) -> np.ndarray:
     """Per-period Sharpe (mean/std, ddof=1) along `axis`, scaled by `annualization`
     (pass sqrt(periods_per_year) to match environments.sandbox's convention).
-    Zero-variance columns return 0 rather than inf/nan."""
+
+    Guards against degenerate resamples (SCOPE.md §11), counted in GUARD_COUNTS so
+    a run can show whether they ever changed an output: variance at or below
+    VARIANCE_FLOOR x `var_reference` (a column's full-sample variance; by default
+    its own, so only exact zeros) gives Sharpe 0, and |Sharpe| is capped at
+    SHARPE_CAP annualized."""
     mean = R.mean(axis=axis)
     std = R.std(axis=axis, ddof=1)
+    var = std * std
+    reference = var if var_reference is None else var_reference
+    live = (std > 0) & (var > VARIANCE_FLOOR * reference)
+    GUARD_COUNTS["zero_variance"] += int(np.sum(std == 0))
+    GUARD_COUNTS["variance_floor"] += int(np.sum((std > 0) & ~live))
     with np.errstate(invalid="ignore", divide="ignore"):
-        sr = np.where(std > 0, mean / np.where(std > 0, std, 1.0), 0.0)
-    return sr * annualization
+        sr = np.where(live, mean / np.where(live, std, 1.0), 0.0) * annualization
+    capped = np.abs(sr) > SHARPE_CAP
+    GUARD_COUNTS["sharpe_cap"] += int(np.sum(capped))
+    return np.where(capped, np.sign(sr) * SHARPE_CAP, sr)
 
 
 def select_block_length(R: np.ndarray) -> int:
     """One shared block length for the joint resampling scheme: the median of
     each column's own Politis-White-optimal stationary block length. Median
     (not mean) so a handful of near-white-noise columns don't get dragged
-    around by one highly autocorrelated outlier column."""
+    around by one highly autocorrelated outlier column. Columns with no
+    variance (a rule that never trades) have no dependence to measure, and
+    columns where Politis-White is undefined return NaN; both are skipped."""
     T, N = R.shape
-    if N == 0:
+    live = R.std(axis=0) > 0 if N else np.zeros(0, dtype=bool)
+    if not live.any():
         return 1
-    lengths = optimal_block_length(R)["stationary"].to_numpy()
+    lengths = optimal_block_length(R[:, live])["stationary"].to_numpy()
+    lengths = lengths[np.isfinite(lengths)]
+    if lengths.size == 0:
+        return 1
     L = int(round(np.median(lengths)))
     return int(np.clip(L, 1, max(1, T // 4)))
 
@@ -56,6 +85,22 @@ def stationary_bootstrap_indices(T: int, L: int, rng: np.random.Generator) -> np
         idx[pos:pos + length] = (start + np.arange(length)) % T
         pos += length
     return idx
+
+
+def stationary_bootstrap_index_matrix(T: int, L: int, n: int, rng: np.random.Generator) -> np.ndarray:
+    """(n, T) stationary bootstrap index sequences in one vectorized draw, with the same
+    distribution as n calls to stationary_bootstrap_indices. Uses the equivalent Markov form:
+    each period starts a new block at a uniform index with probability 1/L, otherwise continues
+    the previous block circularly, which gives geometric block lengths with mean L. It consumes a
+    different random stream, so it cannot reproduce results drawn with the per-replicate sampler."""
+    if L <= 1:
+        return rng.integers(T, size=(n, T))
+    new_block = rng.random((n, T)) < 1.0 / L
+    new_block[:, 0] = True
+    starts = rng.integers(T, size=(n, T))
+    positions = np.arange(T)
+    block_start = np.maximum.accumulate(np.where(new_block, positions, 0), axis=1)
+    return (np.take_along_axis(starts, block_start, axis=1) + positions - block_start) % T
 
 
 @dataclass
@@ -94,11 +139,12 @@ def null_max_bootstrap(
     L = block_length if block_length is not None else select_block_length(R_demeaned)
     rng = np.random.default_rng(seed)
 
+    var_full = R_demeaned.var(axis=0, ddof=1)
     M_b = np.empty(B)
     for b in range(B):
         idx = stationary_bootstrap_indices(T, L, rng)
         R_boot = R_demeaned[idx, :]
-        M_b[b] = sharpe(R_boot, axis=0, annualization=annualization).max()
+        M_b[b] = sharpe(R_boot, axis=0, annualization=annualization, var_reference=var_full).max()
 
     return BootstrapResult(M_b=M_b, block_length=L, B=B)
 
