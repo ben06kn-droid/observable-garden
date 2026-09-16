@@ -494,13 +494,36 @@ Read from full text, not summaries:
   the error mechanism would misattribute it. Same scope limit as above:
   adaptive risk estimation, not a max-test null.
 
+- **Hsu, Hsu & Kuan (2010)**, read from the authors' full text. §2 opens
+  "Given `m` models for some variable, let `d_{k,t}` (`k = 1, 2, ..., m` and
+  `t = 1, 2, ..., n`) denote their performance measures", testing
+  `H₀ᵏ: μₖ ≤ 0, k = 1,…,m`. The model set is fixed and finite. Its only
+  data-dependent element is Romano & Wolf's block-size selection, not
+  candidate generation, and the paper considers no menu chosen from the
+  evaluation data and states no sign for one.
+- **Dwork, Feldman, Hardt, Pitassi, Reingold & Roth (2015)**, read from the
+  arXiv full text. The setting is "an arbitrary adaptive data analyst [who]
+  chooses queries to ask (as a function of past answers)", and the sample
+  complexity for `m` adaptively chosen queries is symmetric in that count
+  (`n₀ = O(√(log m)/τ²)` for the multiplicative-weights route). Nothing in the
+  bounds depends on *which* query is currently best, so there is no anchoring
+  direction and no sign: the guarantee is a differential-privacy transfer
+  theorem, not a null for a maximum test.
+
+- **Hansen (2005)**, read from the published text. §2 states the setting in
+  his own words: "In White's framework, `m` alternative forecasts (where `m`
+  is a fixed number) are compared with a benchmark forecast." §2.1 asks
+  "whether any of the models, `k = 1,…,m`, are better than the benchmark".
+  The menu is fixed and finite, and his objection to the Reality Check is that
+  its least-favorable configuration behaves badly *when many poor models are
+  included in that fixed set* — his remedy is a sample-dependent null, with
+  poor alternatives recentered rather than discarded. That is a different
+  problem from a menu chosen using the evaluation data: the paper does not
+  consider adaptive candidate generation and states no sign for it.
+
 Checked only against publisher metadata and secondary summaries, not read in
-full — their §8 characterizations are to be verified at drafting:
-**Hansen (2005)** (whose conservativeness concern is padding a *fixed* menu
-with poor alternatives, not a data-chosen menu), **Romano & Wolf (2005)** (a
-fixed number `S` of strategies), **Hsu, Hsu & Kuan (2010)** (given `m` models,
-`k = 1,…,m`), and **Dwork et al. (2015)** (bounds symmetric in the raw query
-count, with no anchoring dependence).
+full — its §8 characterization is to be verified before being asserted:
+**Romano & Wolf (2005)** (a fixed number `S` of strategies).
 
 The Ladder line (Blum & Hardt 2015, Thm 3.1; Hardt 2017, Cor. 2.3 with `B`
 from eq. 3) anticipates the mechanism — error governed by updates of the
