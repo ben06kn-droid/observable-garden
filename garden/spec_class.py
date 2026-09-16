@@ -9,6 +9,18 @@ base returns:
 
 "none" declares no class. The weight convention is the sum, matching Specification weights built by the
 searchers (a mean would be a different class, although Sharpe ratios are identical under both).
+
+A second kind covers classes that cannot be built from base returns at all, such as the crossover rules
+of prereg/E20.md, whose positions are signs of moving-average differences rather than weight vectors:
+
+    explicit                        the supplier hands over every member's return stream directly
+    explicit:members=M              the same, asserting the class holds exactly M members
+
+Membership there is by specification id, not by weight vector, so ExplicitClass has no contains(weights):
+garden/transcript.py checks that every logged spec_id appears among the supplied class_ids and that each
+logged return column matches its class column. This is the Sullivan-Timmermann-White setup, and it is
+only as good as the declaration: a class assembled after seeing results is snooping, which is what
+spec_class_source records.
 """
 from __future__ import annotations
 
@@ -52,6 +64,36 @@ class SubsetClass:
         return np.repeat(idx, len(patterns), axis=0), np.tile(patterns, (len(idx), 1))
 
 
+@dataclass(frozen=True)
+class ExplicitClass:
+    """A class supplied as return streams rather than described algebraically. `n_members` is an optional
+    assertion checked against the supplied columns."""
+    n_members: int | None = None
+
+    @property
+    def name(self) -> str:
+        return "explicit" if self.n_members is None else f"explicit:members={self.n_members}"
+
+    def size(self, K: int | None = None) -> int | None:
+        """The class's size comes from the supplied columns, not from a feature count."""
+        return self.n_members
+
+
+def _explicit(params: dict[str, str]) -> ExplicitClass:
+    unknown = set(params) - {"members"}
+    if unknown:
+        raise ValueError(f"unknown explicit parameter(s): {', '.join(sorted(unknown))}")
+    if "members" not in params:
+        return ExplicitClass()
+    try:
+        members = int(params["members"])
+    except ValueError:
+        raise ValueError(f"members must be an integer, got {params['members']!r}") from None
+    if members < 1:
+        raise ValueError("members must be at least 1")
+    return ExplicitClass(n_members=members)
+
+
 def _subsets(params: dict[str, str]) -> SubsetClass:
     unknown = set(params) - {"max_size", "signs"}
     if unknown:
@@ -70,10 +112,12 @@ def _subsets(params: dict[str, str]) -> SubsetClass:
     return SubsetClass(max_size=max_size, signed=signs == "both")
 
 
-REGISTRY: dict[str, Callable[[dict[str, str]], SubsetClass]] = {"subsets": _subsets}
+REGISTRY: dict[str, Callable[[dict[str, str]], SubsetClass | ExplicitClass]] = {
+    "subsets": _subsets, "explicit": _explicit,
+}
 
 
-def parse(spec: str) -> SubsetClass | None:
+def parse(spec: str) -> SubsetClass | ExplicitClass | None:
     spec = spec.strip()
     if spec == "none":
         return None

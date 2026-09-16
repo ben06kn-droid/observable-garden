@@ -13,6 +13,7 @@ from garden._engine import null_max_bootstrap
 from garden._full_class_engine import full_class_null_max
 from garden._fmt import pct
 from garden.power import bootstrap_p_value, bootstrap_power, critical_value
+from garden.spec_class import ExplicitClass
 from garden.transcript import Transcript
 
 Status = Literal["PASS", "FAIL", "INADMISSIBLE", "UNDECIDABLE", "DEGENERATE"]
@@ -171,18 +172,32 @@ def audit(
     oblivious = transcript.menu_kind == "oblivious"
     declared = transcript.declared_class
     use_full_class = not oblivious and rerun is None and declared is not None
+    explicit_class = isinstance(declared, ExplicitClass)
     if use_full_class and block_length is None:
-        base = transcript.base_returns
+        base = transcript.class_returns if explicit_class else transcript.base_returns
         block_length = select_block_length(base - base.mean(axis=0))
     boot = null_max_bootstrap(R, B=B, block_length=block_length, annualization=ann, seed=seed, track_index=j,
                               support_min=support_min, q_min=q_min)
 
-    class_size = declared.size(transcript.base_returns.shape[1]) if declared is not None else None
+    if declared is None:
+        class_size = None
+    elif explicit_class:
+        class_size = int(transcript.class_returns.shape[1])
+    else:
+        class_size = declared.size(transcript.base_returns.shape[1])
     floor_binds, cap_binds = boot.floor_binds, boot.cap_binds
     if not oblivious and rerun is not None:
         shifts = np.random.default_rng(seed).integers(1, T, size=rerun_B)
         null = np.array([float(rerun(int(s))) for s in shifts])
         method = "procedure_level"
+    elif use_full_class and explicit_class:
+        # The class is supplied as return streams, so the Reality Check runs on it directly: no weights to
+        # reconstruct and nothing to enumerate (prereg/E20.md).
+        class_boot = null_max_bootstrap(transcript.class_returns, B=B, block_length=boot.block_length,
+                                        annualization=ann, seed=seed)
+        null = class_boot.M_b
+        floor_binds, cap_binds = floor_binds + class_boot.floor_binds, cap_binds + class_boot.cap_binds
+        method = "full_class"
     elif use_full_class:
         null, _, class_floor, class_cap = full_class_null_max(transcript.base_returns, declared, B=B,
                                                               block_length=boot.block_length, annualization=ann,
@@ -297,15 +312,20 @@ def audit(
                        f"(procedure-level bootstrap): valid for an adaptive menu, no reconstruction needed. "
                        f"The smallest attainable p-value at this B is {1 / (rerun_B + 1):.3f}.")
     elif method == "full_class":
-        K = transcript.base_returns.shape[1]
+        scope = (f"{class_size:,} specifications supplied as return streams" if explicit_class
+                 else f"{class_size:,} specifications over {transcript.base_returns.shape[1]} features")
         reasons.append(f"Full-class null: the menu was {transcript.menu_kind}, so the logged specifications alone "
                        f"do not license a correction, but the submitted specification lies in the declared class "
-                       f"{declared.name} ({class_size:,} specifications over {K} features). The Reality Check over "
+                       f"{declared.name} ({scope}). The Reality Check over "
                        f"that whole class is valid however adaptively the search chose what to evaluate, and "
                        f"conservative, because the class is at least as wide as the search (THEORY.md, P3).")
         if transcript.spec_class_source == "sandbox":
             reasons.append("Class source: sandbox. The sandbox refused every specification outside the class "
                            "during the search, so the class was fixed before the search by construction.")
+        elif explicit_class:
+            reasons.append("Class source: attested. The supplied class is the supplier's claim: the verdict is "
+                           "valid only if every specification the search could have produced appears among the "
+                           "streams in class_returns. Assembling a class after seeing results is itself snooping.")
         else:
             reasons.append("Class source: attested. The class and base_returns are the supplier's claims: the "
                            "verdict is valid only if every specification the search could have produced lies in "
