@@ -93,6 +93,20 @@ applies to `max_Θ`, and P2 gives validity.
 a transcript plus a class declaration suffices, with no replay. It is the
 Sullivan–Timmermann–White (1999) move, testing the whole rule universe, and the
 analogue of simultaneous post-selection inference (Berk et al. 2013).
+
+**The same trade-off, priced on the estimation side.** Efron (2014) draws this
+line for standard errors after model selection. Berk et al.'s intervals are
+conservative but cover "regardless of the preceding model-selection
+procedure", which he notes is the appropriate choice when it is difficult to
+say what procedure was used; his own bootstrap-smoothing methods assume the
+selection procedure is known and are correspondingly tighter. Those are tiers
+two and three of the record hierarchy in another field: procedure unknown, so
+take the declared-class bound and pay its conservatism (P3); procedure known
+and re-executable, so replay it and pay nothing (P6, and the procedure-level
+bootstrap). The analogue is structural rather than an identity — Efron sets
+standard errors for an estimate, not a critical value for a search-adjusted
+maximum — but it prices the same trade-off, and it was reached independently
+there.
 Implemented at two tiers. Where the class can be enumerated from base returns,
 `estimator/full_class.py` builds it: equal-weight feature subsets of size at
 most `d`, 210 columns at K=20, d=2; 1,350 at d=3. Where it cannot — crossover
