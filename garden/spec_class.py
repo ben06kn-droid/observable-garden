@@ -79,6 +79,69 @@ class ExplicitClass:
         return self.n_members
 
 
+@dataclass(frozen=True)
+class ClassLadder:
+    """Nested classes Theta_1 subset Theta_2 subset ... declared together, up front.
+
+    The bar is priced once, over the union (the largest level), so climbing the
+    ladder changes nothing about what the search is held to. A searcher can work
+    a small class first and expand later without the critical value moving. The
+    benefit is computational and organizational, never statistical.
+
+    Not a registry class, and deliberately not parseable from a string: a
+    transcript records the *union*, because the union is what the declaration
+    means for inference. garden/watch.py keeps the level structure as its own
+    layer. See its `open` for why the sandbox is handed `union` rather than the
+    ladder itself."""
+    levels: tuple[SubsetClass, ...]
+
+    def __post_init__(self):
+        if len(self.levels) < 2:
+            raise ValueError("a ladder needs at least two levels; use the class itself otherwise")
+        for lower, upper in zip(self.levels, self.levels[1:]):
+            if lower == upper:
+                raise ValueError(f"ladder levels must be strictly nested; {lower.name} repeats")
+            if not _nested(lower, upper):
+                raise ValueError(
+                    f"ladder levels must be nested: {lower.name} is not contained in {upper.name}"
+                )
+
+    @property
+    def name(self) -> str:
+        return " < ".join(level.name for level in self.levels)
+
+    @property
+    def union(self) -> SubsetClass:
+        """The largest level. Every member of every level lies in it, so it is
+        what the null maximum is taken over and what a transcript declares."""
+        return self.levels[-1]
+
+    def size(self, K: int) -> int:
+        return self.union.size(K)
+
+    def contains(self, weights) -> bool:
+        return self.union.contains(weights)
+
+    def level_of(self, weights) -> int | None:
+        """Index of the smallest level holding these weights, or None if the
+        specification lies outside the ladder entirely."""
+        for i, level in enumerate(self.levels):
+            if level.contains(weights):
+                return i
+        return None
+
+
+def _nested(lower: SubsetClass, upper: SubsetClass) -> bool:
+    """Is every member of `lower` also a member of `upper`?
+
+    A subset class is fixed by two knobs: how many features a member may carry,
+    and whether negative weights are allowed. Widening either can only add
+    members, so containment is the conjunction of the two comparisons."""
+    if lower.max_size > upper.max_size:
+        return False
+    return upper.signed or not lower.signed
+
+
 def _explicit(params: dict[str, str]) -> ExplicitClass:
     unknown = set(params) - {"members"}
     if unknown:

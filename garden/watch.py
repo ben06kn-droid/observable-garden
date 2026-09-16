@@ -88,7 +88,7 @@ from garden._engine import null_max_bootstrap as engine_null_max
 from garden._full_class_engine import full_class_null_max
 from garden.audit import Verdict, audit
 from garden.power import analytic_power, bootstrap_p_value, critical_value, null_max_critical_value
-from garden.spec_class import WEIGHT_TOLERANCE, SubsetClass
+from garden.spec_class import WEIGHT_TOLERANCE, ClassLadder, SubsetClass
 from garden.transcript import from_sandbox
 
 _IMPLEMENTED = True
@@ -126,6 +126,14 @@ DIAGNOSTIC_KEYS = (
     "anchor_sharpe_rank",      # NOT kappa: rank among specs evaluated so far
     "winner_chasing_warning",
     "considered", "evaluated", "considered_ratio",
+    "level", "level_name", "off_ladder",
+)
+
+# How a ladder may be climbed. Fixed at open and pre-registered, because a rule
+# chosen after seeing results is a data-dependent class declaration.
+PROMOTION_RULES = (
+    "explicit",   # the searcher calls promote(); evaluating above the level is refused
+    "auto",       # evaluating a member of a higher level promotes to it
 )
 
 # What `status()` hands back to the searcher. Everything above is always
@@ -172,6 +180,11 @@ class WatchState:
     reasons: list[str] = field(default_factory=list)
     # Set when status is INADMISSIBLE: the largest class that would clear the floor.
     admissible_class_size: int | None = None
+    # Ladder structure, None when a single class was declared. `class_size` and
+    # `critical_value` above always refer to the union, which is what the search
+    # is held to however far up the ladder it has climbed.
+    ladder: list[dict] | None = None
+    promotion: str | None = None
 
     def to_dict(self) -> dict:
         out = {k: v for k, v in asdict(self).items() if k != "bar"}
@@ -209,7 +222,8 @@ class Watch:
 
     def __init__(self, sandbox: Sandbox, state: WatchState, seed: int | None = 0,
                  agent_view: frozenset[str] = AGENT_VIEWS["standing"],
-                 base_sharpe: np.ndarray | None = None):
+                 base_sharpe: np.ndarray | None = None,
+                 ladder: ClassLadder | None = None, promotion: str | None = None):
         self._sandbox = sandbox
         self.state = state
         self._seed = seed
@@ -226,6 +240,53 @@ class Watch:
         self._kappas: list[float] = []
         self._chases: list[bool] = []
         self._considered: set[str] = set()
+        self._ladder = ladder
+        self._promotion = promotion
+        self._level = 0
+        self._off_ladder = False
+
+    # -- ladder --------------------------------------------------------------
+
+    @property
+    def level(self) -> int:
+        """Current ladder level, 0 when a single class was declared."""
+        return self._level
+
+    def promote(self) -> int:
+        """Move up one level of the declared ladder.
+
+        The bar does not move: it was priced over the union at open, so every
+        level is already covered by it. Promotion only widens what `evaluate`
+        will accept, which is why this is a computational convenience and not a
+        change to what the search is held to."""
+        if self._ladder is None:
+            raise ValueError("no ladder was declared, so there is no level to promote to")
+        if self._level + 1 >= len(self._ladder.levels):
+            raise ValueError(
+                f"already at the top level ({self._ladder.levels[self._level].name}); "
+                f"anything wider is off the declared ladder"
+            )
+        self._level += 1
+        return self._level
+
+    def _check_level(self, spec: Specification) -> None:
+        """Enforce the ladder's levels. The union is enforced by the sandbox."""
+        if self._ladder is None:
+            return
+        where = self._ladder.level_of(spec.weights)
+        if where is None:
+            return                      # outside the union: the sandbox refuses it
+        if where <= self._level:
+            return
+        if self._promotion == "auto":
+            self._level = where
+            return
+        raise ValueError(
+            f"specification {spec.name!r} sits at ladder level {where} "
+            f"({self._ladder.levels[where].name}) but the search is at level {self._level} "
+            f"({self._ladder.levels[self._level].name}). The promotion rule is 'explicit': "
+            f"call promote() first. Nothing about the bar changes when you do."
+        )
 
     # -- latent forking ------------------------------------------------------
 
@@ -375,6 +436,10 @@ class Watch:
             "considered": len(self._considered),
             "evaluated": evaluated,
             "considered_ratio": len(self._considered) / evaluated if evaluated else None,
+            "level": self._level,
+            "level_name": (self._ladder.levels[self._level].name if self._ladder
+                           else self.state.class_name),
+            "off_ladder": self._off_ladder,
         }
 
     @property
@@ -398,7 +463,17 @@ class Watch:
         Nothing here recomputes the bar. `cleared` compares this specification's
         in-sample Sharpe against the critical value fixed at open, which is why
         the search can call this as often as it likes."""
-        result = self._sandbox.evaluate(spec)      # raises if outside the class
+        self._check_level(spec)
+        try:
+            result = self._sandbox.evaluate(spec)  # raises if outside the class / union
+        except ValueError:
+            # The specification was refused and nothing entered the transcript, so
+            # this run's numbers are untouched. The verdict degrades anyway: the
+            # attempt is evidence that candidate generation reaches outside the
+            # declared class, which is exactly P3's premise failing. A class that
+            # does not contain everything the search could produce is not a class.
+            self._off_ladder = True
+            raise
         sr = float(result.sharpe)
         support = frozenset(
             np.flatnonzero(np.abs(np.asarray(spec.weights, dtype=float)) > WEIGHT_TOLERANCE).tolist())
@@ -465,7 +540,7 @@ class Watch:
                 predicted_oos = Distribution.degenerate(float(predicted_oos))
             self._sandbox.submit(spec, predicted_oos)
         transcript = from_sandbox(self._sandbox, menu_kind=WATCHED_MENU_KIND)
-        return audit(
+        verdict = audit(
             transcript,
             alpha=self.state.alpha,
             B=self.state.B,
@@ -473,6 +548,27 @@ class Watch:
             power_floor=self.state.power_floor,
             block_length=self.state.block_length,
             seed=self._seed,
+        )
+        if not self._off_ladder:
+            return verdict
+        # Watch overriding audit, not audit deciding: the transcript on its own
+        # looks fine, because the offending specification was refused and never
+        # logged. Only watch saw the attempt, and the attempt is the evidence --
+        # a search that reaches outside its declared class has shown the class
+        # does not contain everything it could produce, which is the premise the
+        # whole declared-class tier rests on (THEORY.md P3).
+        return replace(
+            verdict,
+            status="UNDECIDABLE",
+            reasons=[
+                "UNDECIDABLE: the search attempted a specification outside the declared ladder. "
+                "It was refused and never entered the transcript, so the numbers below are "
+                "unaffected -- but the attempt shows candidate generation can reach outside the "
+                "declared class, and a class that does not contain everything the search could "
+                "produce cannot license a correction. Declare a class that covers the search's "
+                "whole reach, or re-run within this one.",
+                *verdict.reasons,
+            ],
         )
 
 
@@ -515,6 +611,7 @@ def open(
     block_length: int | None = None,
     seed: int | None = 0,
     agent_view: str | frozenset[str] = "standing",
+    promotion: str = "explicit",
 ) -> Watch:
     """Price the bar over `spec_class` and decide whether the search is worth starting.
 
@@ -538,15 +635,26 @@ def open(
     membership is enforced at `evaluate` and `spec_class_source` records
     "sandbox" -- fixed before the search by construction, which is the tier's
     premise. `open` refuses a Sandbox carrying a different class."""
+    ladder = spec_class if isinstance(spec_class, ClassLadder) else None
+    if ladder is not None:
+        if promotion not in PROMOTION_RULES:
+            raise ValueError(f"promotion must be one of {PROMOTION_RULES}, got {promotion!r}")
+        # The bar is the union's, and so is everything the transcript records: a
+        # ladder name would not round-trip through garden.spec_class.parse, and
+        # the union is what the declaration means for inference anyway.
+        spec_class = ladder.union
     if not isinstance(spec_class, SubsetClass):
         raise ValueError(
-            f"watch prices its bar with the moment engine, which takes a SubsetClass; got "
-            f"{type(spec_class).__name__}. An ExplicitClass is a deferred second code path, "
-            f"not a limitation of the tier -- see OPEN_QUESTIONS.md."
+            f"watch prices its bar with the moment engine, which takes a SubsetClass or a "
+            f"ClassLadder of them; got {type(spec_class).__name__}. An ExplicitClass is a deferred "
+            f"second code path, not a limitation of the tier -- see OPEN_QUESTIONS.md."
         )
     enforced = getattr(sandbox, "spec_class", None)
     if enforced is not None and enforced != spec_class:
-        raise ValueError(f"the sandbox enforces {enforced.name}, not {spec_class.name}")
+        raise ValueError(
+            f"the sandbox enforces {enforced.name}, not {spec_class.name}"
+            + (" (a ladder's sandbox must enforce the union)" if ladder is not None else "")
+        )
     if isinstance(agent_view, str):
         if agent_view not in AGENT_VIEWS:
             raise ValueError(f"unknown agent_view {agent_view!r}; presets: {', '.join(AGENT_VIEWS)}")
@@ -615,9 +723,13 @@ def open(
         power_floor=power_floor, block_length=L, B=B,
         variance_floor_binds=floor_binds, sharpe_cap_binds=cap_binds,
         reasons=reasons, admissible_class_size=admissible,
+        ladder=([{"name": lv.name, "size": lv.size(K)} for lv in ladder.levels]
+                if ladder is not None else None),
+        promotion=promotion if ladder is not None else None,
     )
     # Unannualized, matching searchers.dose_response.normalized_rank's own call.
     # Rank is scale-invariant either way; matching exactly is what lets the
     # equivalence test in tests/test_watch.py mean something.
     return Watch(sandbox, state, seed=seed, agent_view=agent_view,
-                 base_sharpe=sharpe(base, axis=0))
+                 base_sharpe=sharpe(base, axis=0),
+                 ladder=ladder, promotion=promotion if ladder is not None else None)

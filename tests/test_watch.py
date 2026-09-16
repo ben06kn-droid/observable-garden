@@ -419,6 +419,165 @@ def test_consider_counts_distinct_identifiers():
     assert r.diagnostics["considered_ratio"] == pytest.approx(3.0)
 
 
+# -- Step 3: class ladder ----------------------------------------------------
+
+def test_ladder_requires_strictly_nested_levels():
+    from garden.spec_class import ClassLadder
+    ClassLadder((SubsetClass(max_size=1), SubsetClass(max_size=3)))          # fine
+    ClassLadder((SubsetClass(max_size=2), SubsetClass(max_size=2, signed=True)))
+    with pytest.raises(ValueError, match="at least two levels"):
+        ClassLadder((SubsetClass(max_size=2),))
+    with pytest.raises(ValueError, match="repeats"):
+        ClassLadder((SubsetClass(max_size=2), SubsetClass(max_size=2)))
+    with pytest.raises(ValueError, match="nested"):
+        ClassLadder((SubsetClass(max_size=3), SubsetClass(max_size=1)))
+    with pytest.raises(ValueError, match="nested"):   # signed cannot narrow to unsigned
+        ClassLadder((SubsetClass(max_size=1, signed=True), SubsetClass(max_size=2)))
+
+
+def test_the_bar_is_priced_at_the_union():
+    """The property the whole ladder rests on: working a small class first must
+    not change what the search is held to. Opening on a ladder gives bit-identical
+    numbers to opening on its union alone, so climbing is free rather than a
+    second look at the data."""
+    from garden.spec_class import ClassLadder
+    union = SubsetClass(max_size=3)
+    ladder = ClassLadder((SubsetClass(max_size=1), SubsetClass(max_size=2), union))
+
+    a = watch_mod.open(sandbox_with(K=7, spec_class=union, seed=100), ladder, B=B_FAST, seed=101)
+    b = watch_mod.open(sandbox_with(K=7, spec_class=union, seed=100), union, B=B_FAST, seed=101)
+
+    np.testing.assert_array_equal(a.state.bar, b.state.bar)
+    assert a.state.critical_value == b.state.critical_value
+    assert a.state.class_size == b.state.class_size == union.size(7)
+    assert a.state.power_at_reference == b.state.power_at_reference
+    assert [lv["name"] for lv in a.state.ladder] == [
+        "subsets:max_size=1", "subsets:max_size=2", "subsets:max_size=3"]
+    assert b.state.ladder is None
+
+
+def test_standing_is_reported_per_level():
+    from garden.spec_class import ClassLadder
+    union = SubsetClass(max_size=2)
+    ladder = ClassLadder((SubsetClass(max_size=1), union))
+    sb = sandbox_with(K=7, spec_class=union, seed=102)
+    w = watch_mod.open(sb, ladder, B=500, seed=103)
+    K = sb.num_features
+
+    r = w.evaluate(single(K, 0))
+    assert r.diagnostics["level"] == 0
+    assert r.diagnostics["level_name"] == "subsets:max_size=1"
+    assert w.promote() == 1
+    r = w.evaluate(pair(K, 0, 1))
+    assert r.diagnostics["level"] == 1
+    assert r.diagnostics["level_name"] == "subsets:max_size=2"
+    # The bar never moved while the level changed.
+    assert r.critical_value == w.state.critical_value
+
+
+def test_explicit_promotion_refuses_an_above_level_specification():
+    from garden.spec_class import ClassLadder
+    union = SubsetClass(max_size=2)
+    ladder = ClassLadder((SubsetClass(max_size=1), union))
+    sb = sandbox_with(K=7, spec_class=union, seed=104)
+    w = watch_mod.open(sb, ladder, B=500, seed=105, promotion="explicit")
+    w.evaluate(single(sb.num_features, 0))
+    with pytest.raises(ValueError, match="promotion rule is 'explicit'"):
+        w.evaluate(pair(sb.num_features, 0, 1))
+    assert w.level == 0
+
+
+def test_auto_promotion_climbs_on_use():
+    from garden.spec_class import ClassLadder
+    union = SubsetClass(max_size=2)
+    ladder = ClassLadder((SubsetClass(max_size=1), union))
+    sb = sandbox_with(K=7, spec_class=union, seed=106)
+    w = watch_mod.open(sb, ladder, B=500, seed=107, promotion="auto")
+    w.evaluate(single(sb.num_features, 0))
+    assert w.level == 0
+    r = w.evaluate(pair(sb.num_features, 0, 1))
+    assert w.level == 1 and r.diagnostics["level"] == 1
+
+
+def test_promote_refuses_past_the_top():
+    from garden.spec_class import ClassLadder
+    union = SubsetClass(max_size=2)
+    ladder = ClassLadder((SubsetClass(max_size=1), union))
+    sb = sandbox_with(K=7, spec_class=union, seed=108)
+    w = watch_mod.open(sb, ladder, B=500, seed=109)
+    assert w.promote() == 1
+    with pytest.raises(ValueError, match="already at the top level"):
+        w.promote()
+
+
+def test_off_ladder_attempt_drops_the_verdict_to_undecidable():
+    """The specification is refused and never logged, so the numbers are intact.
+    The verdict degrades anyway: reaching outside the declared class shows the
+    class does not contain everything the search could produce."""
+    from garden.spec_class import ClassLadder
+    union = SubsetClass(max_size=2)
+    ladder = ClassLadder((SubsetClass(max_size=1), union))
+    sb = sandbox_with(K=7, spec_class=union, seed=110)
+    K = sb.num_features
+    w = watch_mod.open(sb, ladder, B=B_FAST, seed=111, promotion="auto")
+
+    for k in range(K):
+        w.evaluate(single(K, k))
+    before = w.sandbox.returns_matrix().shape[1]
+
+    triple = np.zeros(K)
+    triple[[0, 1, 2]] = 1.0                       # size 3: outside the union
+    with pytest.raises(ValueError, match="outside the declared class"):
+        w.evaluate(Specification(weights=triple, name="triple"))
+    assert w.sandbox.returns_matrix().shape[1] == before   # nothing was logged
+
+    best = int(np.argmax([r.sr_is for r in w.log]))
+    verdict = w.submit(single(K, best), Distribution.degenerate(w.log[best].sr_is))
+    assert verdict.status == "UNDECIDABLE"
+    assert "outside the declared ladder" in verdict.reasons[0]
+
+
+def test_a_ladder_run_that_stays_on_ladder_matches_the_union_verdict():
+    """Climbing costs nothing: a run that never leaves the ladder gets exactly
+    the verdict it would have got with the union declared and no ladder."""
+    from garden.spec_class import ClassLadder
+    union = SubsetClass(max_size=2)
+    ladder = ClassLadder((SubsetClass(max_size=1), union))
+
+    sb_a = sandbox_with(K=7, spec_class=union, seed=112)
+    w = watch_mod.open(sb_a, ladder, B=B_FAST, seed=113, promotion="auto")
+    K = sb_a.num_features
+    for k in range(K):
+        w.evaluate(single(K, k))
+    got = w.submit(single(K, 0), Distribution.degenerate(w.log[0].sr_is))
+
+    sb_b = sandbox_with(K=7, spec_class=union, seed=112)
+    v = watch_mod.open(sb_b, union, B=B_FAST, seed=113)
+    for k in range(K):
+        v.evaluate(single(K, k))
+    expected = v.submit(single(K, 0), Distribution.degenerate(v.log[0].sr_is))
+
+    assert got.status == expected.status
+    assert got.p_value == pytest.approx(expected.p_value)
+    assert got.critical_value == pytest.approx(expected.critical_value)
+
+
+def test_ladder_sandbox_must_enforce_the_union():
+    from garden.spec_class import ClassLadder
+    ladder = ClassLadder((SubsetClass(max_size=1), SubsetClass(max_size=2)))
+    sb = sandbox_with(K=7, spec_class=SubsetClass(max_size=1), seed=114)
+    with pytest.raises(ValueError, match="must enforce the union"):
+        watch_mod.open(sb, ladder, B=200, seed=115)
+
+
+def test_unknown_promotion_rule_is_refused():
+    from garden.spec_class import ClassLadder
+    ladder = ClassLadder((SubsetClass(max_size=1), SubsetClass(max_size=2)))
+    sb = sandbox_with(K=7, spec_class=SubsetClass(max_size=2), seed=116)
+    with pytest.raises(ValueError, match="promotion must be one of"):
+        watch_mod.open(sb, ladder, B=200, seed=117, promotion="whenever")
+
+
 def test_open_refuses_a_sandbox_enforcing_a_different_class():
     """The tier's premise is that the class was fixed before the search. If the
     sandbox is enforcing one class and watch is asked to price another, the two
