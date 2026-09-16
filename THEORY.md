@@ -468,11 +468,45 @@ Read from full text, not summaries:
   depends on the performance of earlier ones. The text contains nothing on
   argmax selection, specification search or multiple testing.
 
-None of the three states the winner-anchoring direction (P4) or the greedy and
-lattice identity (P5) for data-snooping tests, or measures coupling from
-evaluation order. The note plan's literature check (§3.1) is broader than
-these papers and is not finished, so the note should not yet claim that
-nothing anticipates P4.
+- **White (2000)**, read from the published text. §2 fixes the specification
+  set: the asymptotics hold `l` fixed and finite as `T → ∞` while treating the
+  specifications as the products of a specification search. The paper does not
+  state what "fixed" requires when the specifications were themselves chosen
+  from the evaluation data — the condition P1 makes explicit. §5 lists as open
+  "permitting the number of specifications tested to increase with the sample
+  size, application of the method to the results of cross-validation, and the
+  use of recentering, rescaling", which is the citation for the large-`K`
+  remark and for the cross-validation aside.
+- **Blum & Hardt (2015)**, read from the arXiv text. The Ladder Mechanism
+  releases a new estimate only when it beats the running best by a margin, so
+  the *mechanism* is organized around updates of the best-so-far. Theorem 3.1
+  bounds `|min_{i≤t} R_D(f_i) − R_t|` with failure probability
+  `exp(−2ε²n + (1/η + 2)log(4t/η) + 1)`, giving leaderboard error
+  `O(log^{1/3}(kn) / n^{1/3})` — logarithmic in the query count `k`. It is an
+  adaptive risk-estimation guarantee, not a null for a maximum test: no sign,
+  no mirror, no anchor.
+- **Hardt (2017)**, read from the arXiv text. This is where the update-count
+  dependence is explicit: eq. (3) defines `B = |{t > 1 : R_t < R_{t−1}}|`, the
+  number of update rounds, and **Corollary 2.3** gives
+  `Pr{max_t |R_S(f_t) − R(f_t)| > 18ε√B} < O(kδ/ε)` — error scaling with the
+  updates of the running best. Lemma 2.1 is the privacy step
+  (`(ε√B, O(δ))`-differential privacy), not the error bound, and citing it for
+  the error mechanism would misattribute it. Same scope limit as above:
+  adaptive risk estimation, not a max-test null.
+
+Checked only against publisher metadata and secondary summaries, not read in
+full — their §8 characterizations are to be verified at drafting:
+**Hansen (2005)** (whose conservativeness concern is padding a *fixed* menu
+with poor alternatives, not a data-chosen menu), **Romano & Wolf (2005)** (a
+fixed number `S` of strategies), **Hsu, Hsu & Kuan (2010)** (given `m` models,
+`k = 1,…,m`), and **Dwork et al. (2015)** (bounds symmetric in the raw query
+count, with no anchoring dependence).
+
+The Ladder line (Blum & Hardt 2015, Thm 3.1; Hardt 2017, Cor. 2.3 with `B`
+from eq. 3) anticipates the mechanism — error governed by updates of the
+running best, not by query count — in adaptive risk estimation. No checked
+source states the sign for a data-snooping max test, the loser-anchored
+reversal, random-anchor exact calibration, or the rank mixture.
 
 ## Evidence map
 
@@ -529,6 +563,10 @@ tags) except where an entry says otherwise:
   Sharpe ratio. *Journal of Empirical Finance* 15(5), 850–859.
 - Leeb, H. & Pötscher, B.M. (2005). Model selection and inference: facts and
   fiction. *Econometric Theory* 21(1), 21–59.
+- Leeb, H. & Pötscher, B.M. (2006). Can one estimate the conditional
+  distribution of post-model-selection estimators? *Annals of Statistics*
+  34(5), 2554–2591, doi:10.1214/009053606000000821. The conditional-law
+  result; cite this ahead of the 2005 paper for post-selection inference.
 - Liu, J., Qu, W., Gaboardi, M., Garg, D. & Ullman, J. (2024). Program
   analysis for adaptive data analysis. *Proceedings of the ACM on Programming
   Languages* 8(PLDI), 914–938.
