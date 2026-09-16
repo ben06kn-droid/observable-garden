@@ -14,9 +14,20 @@ For an agent, they are. Every specification it evaluates, kept or thrown away,
 sits in a log. This project asks what that log licenses you to conclude. It
 builds the search's null distribution from the log itself — no assumed
 independence, no invented trial count — and wraps it in a tool that returns a
-verdict: **PASS**, **FAIL**, **INADMISSIBLE** (the search was too broad to
-prove anything), **UNDECIDABLE** (the log alone is not enough), or
-**DEGENERATE** (the statistic broke on this menu).
+verdict:
+
+| verdict | what it means | exit |
+|---|---|---|
+| **PASS** | the result clears the bar once the search behind it is priced in | 0 |
+| **FAIL** | the search could have certified an edge, and this result did not clear it | 1 |
+| **INADMISSIBLE** | the search was too broad to certify anything, so not clearing the bar says nothing | 2 |
+| **UNDECIDABLE** | the log alone does not license a correction, because the menu was not fixed in advance | 3 |
+| **DEGENERATE** | the statistic broke on this menu, so the critical value measures near-empty resamples | 4 |
+
+The distinction that matters most is FAIL against INADMISSIBLE: one is a real
+negative result, the other is a non-result, and conflating them is how a
+search that never could have proved anything gets read as evidence of
+absence.
 
 Everything is validated against simulated data where the right answer is known
 by construction, before any claim about real backtests.
@@ -72,6 +83,11 @@ results?
 - **Correcting by an "effective number of trials" double-counts.** Shrinking
   the trial count for correlation, when the closed-form deflated Sharpe
   already absorbs it, leaves real overfitting standing.
+- **One case makes the size of the problem concrete.** With uncorrelated
+  trials and a thousand of them, a search reports a Sharpe of **2.03** —
+  double what the data-generating process can actually deliver — when the
+  truth is **0.21**. Reading nothing but the transcript, the bootstrap calls
+  that decay to within **0.017**.
 
 The first three are plotted in `figures/`: `headline_breadth.png` (the
 correction degrading as the candidate set widens), `headline_anchor_rank.png`
@@ -83,6 +99,30 @@ as the search narrows around its own results). Regenerate them with
 Every number, caveat and diagnostic behind these is in **`SCOPE.md`**; the
 propositions and proofs are in **`THEORY.md`**; each experiment was
 pre-registered in **`prereg/`** before it ran.
+
+## Relationship to prior work
+
+The verdict engine is White's Reality Check (2000). That correction is
+twenty-six years old and is the right tool; nothing here replaces it. What
+this project adds sits inside that framework:
+
+- **Where a logged transcript is enough.** White's asymptotics hold the
+  specification set fixed as the sample grows, while treating those
+  specifications as the products of a search. They do not say what "fixed"
+  requires when the specifications were themselves chosen from the evaluation
+  data. This project makes that condition explicit — the menu must be
+  data-oblivious — shows what fails without it, and supplies two repairs that
+  restore validity when it does not hold.
+- **Sizing a search before running it.** A pre-flight power calculation tells
+  you, in advance, whether the breadth you intend can certify anything at all.
+  Most of the searches that return INADMISSIBLE should never have been run at
+  that width.
+- **The case the correction could not reach.** An instrumented sandbox for
+  searchers whose trial count is observable for the first time: an agent's
+  every evaluation, kept or discarded, is in a log.
+
+`SCOPE.md` §6 places this against Sullivan–Timmermann–White (1999), Hansen
+(2005), Romano & Wolf (2005) and the deflated Sharpe ratio literature.
 
 ## How it works
 
