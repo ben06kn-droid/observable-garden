@@ -521,9 +521,22 @@ Read from full text, not summaries:
   problem from a menu chosen using the evaluation data: the paper does not
   consider adaptive candidate generation and states no sign for it.
 
-Checked only against publisher metadata and secondary summaries, not read in
-full — its §8 characterization is to be verified before being asserted:
-**Romano & Wolf (2005)** (a fixed number `S` of strategies).
+- **Romano & Wolf (2005)**, read from the published text. §2.1 fixes the
+  setting: "The column index `s` corresponds to strategies and there are a
+  **fixed number `S`** of them", with column `S + 1` reserved for the
+  benchmark and each statistic `w_{T,s}` a function of strategy `s`'s column
+  and the benchmark's only. Their stepwise procedure rejects more false
+  hypotheses than a single-step method, but over that same fixed set. As in
+  Hsu, Hsu & Kuan, the only data-dependent element is the bootstrap's
+  block-size selection, not candidate generation; no menu chosen from the
+  evaluation data is considered, and no sign is stated for one.
+
+Every source named in the note's §8 has now been read from full text. All of
+them fix the candidate set in advance — White holds `l` fixed, Hansen has "`m`
+alternative forecasts (where `m` is a fixed number)", Romano & Wolf "a fixed
+number `S`", Hsu, Hsu & Kuan "given `m` models" — and none states the sign of
+the realized-menu error when the menu itself was chosen from the evaluation
+data.
 
 The Ladder line (Blum & Hardt 2015, Thm 3.1; Hardt 2017, Cor. 2.3 with `B`
 from eq. 3) anticipates the mechanism — error governed by updates of the
