@@ -1,8 +1,12 @@
 # Note outline: fixed and adaptive candidate sets under the DSR
 
+**Status: the message to López de Prado was sent on 2026-09-16.** Drafting and
+sending are done; this file is kept as the record of the decisions behind it,
+not as a to-do list.
+
 Drafting decisions for the note addressed to López de Prado & Porcu, recorded
-here so the wordings survive to step 4. The note itself is drafted after E21
-runs. Section numbers are the note's, not this repository's.
+so the wordings and their provenance survive. Section numbers are the note's,
+not this repository's.
 
 Terminology is THEORY.md's Terminology table: trial, candidate set, `ŜR_c`,
 `F_{M_K}`, liberal, DSR-EO.
