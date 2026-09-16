@@ -69,6 +69,13 @@ results?
   the trial count for correlation, when the closed-form deflated Sharpe
   already absorbs it, leaves real overfitting standing.
 
+The first three are plotted in `figures/`: `headline_breadth.png` (the
+correction degrading as the candidate set widens), `headline_anchor_rank.png`
+(inflation tracking how closely the search follows its own winner, against a
+prediction fixed beforehand) and `headline_dose_response.png` (the same effect
+as the search narrows around its own results). Regenerate them with
+`python -m experiments.plot_headline_figures`.
+
 Every number, caveat and diagnostic behind these is in **`SCOPE.md`**; the
 propositions and proofs are in **`THEORY.md`**; each experiment was
 pre-registered in **`prereg/`** before it ran.
