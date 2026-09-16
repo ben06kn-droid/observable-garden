@@ -455,17 +455,29 @@ Related prior art, for context on where this sits in the literature:
   that can reject more than one candidate as significant, for context on
   how the single-maximum framing here relates to the broader
   multiple-testing family.
-- **López de Prado, M. & Porcu, E. (2025), "The Deflated Sharpe Ratio: A
+- **López de Prado, M. & Porcu, E. (2026), "The Deflated Sharpe Ratio: A
   Unified Framework for Search-Adjusted Performance Inference," SSRN
   7198158** — frames the deflated Sharpe ratio as judging reported
   performance against what the research process could have produced
   without skill, and unifies its implementations, including DSR-L (the
   original location benchmark, the closed form this project uses as a
-  baseline) and DSR-LS (which adds the dispersion of the selected maximum).
-  In those terms, this project's bootstrap is a nonparametric construction
-  of the search null from a logged transcript. (The DSR-L and DSR-LS
-  descriptions here come from summaries of the paper's abstract; SSRN blocks
-  automated access, so they have not yet been checked against the paper.)
+  baseline), DSR-LS (which adds the dispersion of the selected maximum) and
+  DSR-EO, which estimates the full search distribution at the sample's own
+  `T`. In those terms, this project's three bootstraps are all numerical
+  DSR-EO implementations: none is DSR-L or DSR-LS. (Crossref registers 2026,
+  deposited 30 August 2026; an earlier version of this entry said 2025. The
+  definitions were confirmed by the project owner, who read the main text and
+  supplement in full — SSRN blocks automated access, so they have not been
+  checked from this repository.)
+- **López de Prado, M., Lipton, A. & Zoonekynd, V. (2026), "Sharpe Ratio
+  Inference: A New Standard for Decision Making and Reporting," Journal of
+  Portfolio Management 52(6), 6–50** — the reporting standard the deflated
+  Sharpe ratio sits inside.
+- **López de Prado, M. & Fabozzi, F.J. (2026), "The False Discovery Rate in
+  Finance: Identification Failure and Search-Adjusted Estimation," SSRN
+  6450418** — the human analogue of this project's observability point: when
+  the candidate set is latent, any count of trials is a floor. Title and
+  authors confirmed via Crossref; the paper has not been opened here.
 - **Bailey, D.H., Borwein, J., López de Prado, M. & Zhu, Q.J., "The
   Probability of Backtest Overfitting," Journal of Computational Finance
   (published online 2016, doi:10.21314/JCF.2016.322)** — also works from the
