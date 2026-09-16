@@ -55,8 +55,11 @@ curve itself is measured only at K=20, ρ=0.3 and depth 2, with exchangeable
 features. E19(c) found the winner rule's inflation growing with K at both
 correlations tested (SCOPE.md §19); other ranks across K are untested. The
 correlation-based
-neighbor rule under heterogeneous correlation is still untested (THEORY.md
-P6, E19(b)).
+neighbor rule was tested under heterogeneous correlation in E19(b) (SCOPE.md
+§20): the recursive bootstrap stayed calibrated as the correlations
+separated, but separation was partial (anchor stability 0.192 against 0.088),
+so P6's exact-tie case is still open and needs a structure that separates the
+correlations fully.
 
 ## Does re-anchoring at depth inflate a little?
 

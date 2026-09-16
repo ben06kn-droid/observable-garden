@@ -1549,3 +1549,85 @@ full-class corrections stay nominal across the whole range.
 **Scope.** Winner anchoring at depth 2, with exchangeable features and T=500.
 Wide datasets with heterogeneous correlation (E19's other arms) and deeper
 searches (E18 covers only K=20) are not covered.
+
+## 20. E19: P4's conclusion survives unequal correlation, and both corrections stay calibrated
+
+**When the lemma's hypothesis fails, its conclusion still holds: the process
+maximum was at least the frozen-menu maximum on 99.89% and 99.91% of
+replicates, naive type-I was inflated exactly as the limit predicted, and the
+recursive and full-class corrections stayed at 4.4–5.0% in every cell.**
+Pre-registered in `prereg/E19.md` and run from its commit (8f4acb5, clean;
+`experiments/e19_heterogeneous.py`).
+
+- Structure: the generator's `heterogeneous=True`, a single-factor
+  correlation `outer(l, l)` with unit diagonal and loadings on √ρ ± 0.15.
+  Volatilities stay equal; the generator was not changed.
+- ρ=0.3, M=50, T=500, s=0, B=1500, depth 2, n=500 per cell, seeds
+  70000–70499 (E19(c)'s block, so each draw index has an equicorrelated
+  counterpart at the same K).
+- **Where it ran.** Three local attempts were stopped for low memory, saving
+  29 of 80 cells (all of `winner_het_K20`, 225 draws of `winner_het_K80`).
+  The remaining 51 cells ran on EC2 from the same commit, resumed from those
+  checkpoints.
+
+| cell | limit | naive type-I (95% CI) | KS p | recursive (95% CI) | KS p | full-class (95% CI) | KS p | naive p ≤ rec p | M_P ≥ M_C |
+|---|---|---|---|---|---|---|---|---|---|
+| winner, K=20 | 9.1% | 0.088 (0.066–0.116) | <0.001 | 0.048 (0.032–0.070) | 0.470 | 0.048 (0.032–0.070) | 0.493 | 100% | 0.99894 |
+| winner, K=80 | 14.4% | 0.142 (0.114–0.175) | <0.001 | 0.050 (0.034–0.073) | 0.402 | 0.050 (0.034–0.073) | 0.402 | 100% | 0.99908 |
+| neighbor, heterogeneous | – | 0.040 (0.026–0.061) | 0.847 | 0.044 (0.029–0.066) | 0.780 | 0.024 (0.014–0.041) | <0.001 | 26.8% | 0.90704 |
+| neighbor, equicorrelated | – | 0.048 (0.032–0.070) | 0.972 | 0.050 (0.034–0.073) | 0.989 | 0.026 (0.015–0.044) | <0.001 | 22.0% | 0.88469 |
+
+**The four pre-registered decisions, all in the predicted direction.**
+
+1. **P4's conclusion (primary).** Dominance is 0.99894 at K=20 and 0.99908 at
+   K=80, both above the 0.99 threshold. So the note states that winner
+   anchoring's dominance survives unequal correlation, with the lemma
+   covering the exchangeable case and this measurement the tested departure.
+2. **Naive inflation.** 44/500 rejections at K=20 (binomial p = 0.0003) and
+   71/500 at K=80 (p < 0.0001).
+3. **Corrections.** Neither recursive nor full-class is significantly above
+   5% in any of the four cells.
+4. **Anchor separation.** Replicate anchor stability is higher under
+   heterogeneity on 426 of 495 decided seeds (means 0.192 against 0.088,
+   sign test p = 4×10⁻⁶⁴). Paired, the difference averages +0.104 and is
+   positive on 85.2% of seeds.
+
+**Where the dominance fails, and why it doesn't matter here.** Violations are
+real but small and rare: 70.4% (K=20) and 66.2% (K=80) of draws contain at
+least one violating replicate, averaging 1.6 and 1.4 violations out of 1,500,
+never more than 8. The worst single gap was −0.195. None of them reversed a
+verdict: the naive p-value was at most the recursive one on every draw in
+both winner cells. This is what "the conclusion survives without the
+hypothesis" looks like in finite samples — the inequality is no longer
+pointwise-exact, but the ordering it implies is untouched.
+
+**Against the limit (not a registered test).** The limit table was fixed
+before running. Naive type-I of 8.8% and 14.2% sits inside the Wilson
+interval around the predicted 9.14% and 14.38%, with two-sided binomial
+p = 0.88 and 0.95.
+
+**Heterogeneous against equicorrelated (secondary, and underpowered by
+design).** At the same K and seeds, naive type-I was 8.8% heterogeneous
+against 8.4% equicorrelated at K=20, and 14.2% against 14.0% at K=80
+(seed-matched discordance 43–41 and 10–9; Fisher p = 0.91 and 1.00). As the
+pre-registration stated, n=500 cannot resolve the one-point difference the
+limit predicts, so this neither confirms nor refutes it.
+
+**Arm (b): P6's open case, partly relaxed.** Heterogeneity separates the
+correlations more than equicorrelation does, but not cleanly: the neighbor
+rule's anchor is the highest-loading feature on 27.6% of draws against 6.8%,
+and stability rises to 0.192 from 0.088, so most replicates still pick their
+anchor by estimation noise. Coupling is unchanged (mean κ 0.480 against
+0.483), and the rule's naive test stays nominal in both structures. The
+recursive bootstrap stayed calibrated as separation increased (4.4% and
+5.0%), which is evidence for P6's consistency in this regime, not a proof,
+and the exact-tie case remains untested. The full-class null is conservative
+for this rule (2.4% and 2.6%, KS rejecting uniformity), exceeding the
+recursive p-value on 96.8% and 95.6% of draws, as in E17 and E19(c) for
+searches that do not chase winners.
+
+**Scope.** Single-factor heterogeneous correlation with equal volatilities,
+depth 2, ρ=0.3, T=500. Block correlation structures and unequal volatilities
+were not tested; the generator has no volatility knob, and the limit says
+volatility spread would move naive type-I by under a point, which n=500
+could not detect.

@@ -131,8 +131,22 @@ n = 500 draws (SCOPE.md §15):
 | winner | 500/500 | 0.1% |
 | loser | 500/500 | 0.0% |
 
-Outside exchangeability (heterogeneous volatilities, block correlation) the
-lemma's hypothesis fails; E19 probes how far the conclusion survives.
+Outside exchangeability the lemma's hypothesis fails: with unequal
+correlations the pair statistic's denominator depends on which pair is
+formed, so the search can prefer a weaker but less correlated partner. E19
+(SCOPE.md §20) measured how far the conclusion survives that, under a
+single-factor correlation with loadings on √ρ ± 0.15, n = 500 per cell:
+
+| structure | K | replicates with M_P ≥ M_C | naive type-I | recursive | full-class |
+|---|---|---|---|---|---|
+| heterogeneous correlation | 20 | 99.894% | 0.088 | 0.048 | 0.048 |
+| heterogeneous correlation | 80 | 99.908% | 0.142 | 0.050 | 0.050 |
+
+Violations are real but rare and small (at most 8 replicates of 1,500 in a
+draw, worst gap −0.195), and none reversed an ordering: the naive p-value was
+at most the recursive one on every draw. So the conclusion holds where the
+proof does not. Block correlation and unequal volatilities remain untested;
+in the limit, volatility spread moves naive type-I by under a point.
 
 **Between the endpoints.** The lemma's order statistics also cover
 fixed-rank anchors. In the application's setting, the search anchored on the
@@ -250,6 +264,17 @@ rule's anchor had mean Sharpe rank 11.0 of 20, against 10.7 for a random
 anchor (SCOPE.md §14). e15 found no calibration problem for this rule; that is
 evidence, not a proof.
 
+E19(b) (SCOPE.md §20) moved the rule toward the regular case by separating
+the population correlations, and only partly succeeded: the anchor is the
+highest-loading feature on 27.6% of draws against 6.8% under equicorrelation,
+and replicate anchor stability rises to 0.192 from 0.088, so most replicates
+still choose the anchor by estimation noise. Across that increase in
+separation the recursive bootstrap stayed calibrated (type-I 4.4% and 5.0%,
+n = 500 each) and coupling was unchanged (mean κ 0.480 against 0.483). More
+evidence, still not a proof, and the exact-tie case remains open: a design
+that separates the correlations fully would be needed to test the regular
+case.
+
 ## Prior work checked for P4, P5 and the coupling κ
 
 Read from full text, not summaries:
@@ -281,9 +306,9 @@ nothing anticipates P4.
 | P1 | known | SCOPE.md §1 (null calibration of oblivious searchers) | E21 |
 | P2 | known | none needed | none |
 | P3 | ingredients known, tier new | `estimator/full_class.py` and tests; E17 full-class null (SCOPE.md §16); E19(c) up to 3,240 members (SCOPE.md §19) | E21, E22 |
-| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E17b graded by rank, matching the limit (SCOPE.md §18); E18 at depth 3 (SCOPE.md §17); E19(c) growth in K (SCOPE.md §19) | E19 |
+| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E17b graded by rank, matching the limit (SCOPE.md §18); E18 at depth 3 (SCOPE.md §17); E19(c) growth in K (SCOPE.md §19); E19 off-exchangeability (SCOPE.md §20) | block correlation, unequal volatilities |
 | P5 | new, corrected | exploratory limit check above; E17 at d = 2; E18 at d = 3 and 4 (SCOPE.md §17) | E22 |
-| P6 | ingredients known, one case open | e15 neighbor rule calibrated empirically | E19(b) |
+| P6 | ingredients known, one case open | e15 neighbor rule calibrated empirically; E19(b) calibrated as separation rises (SCOPE.md §20) | a design that separates the correlations fully |
 
 ## References
 
