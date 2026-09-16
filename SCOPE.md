@@ -1631,3 +1631,96 @@ depth 2, ρ=0.3, T=500. Block correlation structures and unequal volatilities
 were not tested; the generator has no volatility knob, and the limit says
 volatility spread would move naive type-I by under a point, which n=500
 could not detect.
+
+## 21. E20: the sign result transfers to non-additive scoring; the gate's paths hold; the size is small
+
+**Winner-anchored search inflates the naive test relative to loser-anchored
+search when the scoring is not additive, decisively so in paired terms, but
+the absolute inflation is about one point. Both of the gate's valid paths
+worked, and the P3 inequality held exactly on every draw.** Pre-registered in
+`prereg/E20.md` and run from its amended commit (123753e, clean;
+`experiments/e20_non_additive.py`).
+
+- Moving-average crossover rules on driftless random walks: a rule's position
+  is the sign of a difference of moving averages, so no rule's return stream
+  is a linear combination of the others. The recursive bootstrap does not
+  apply, and the class cannot be enumerated from base returns.
+- T=5040 after a 200-period burn-in equal to the slowest window; 362 rules per
+  asset; n=2000 draws per world; B=1500; rerun_B=500.
+- Two worlds: a single price path (effective breadth ≈ 3) and a panel of five
+  independent paths (≈ 16, 1,810 rules).
+
+| null | single | panel |
+|---|---|---|
+| naive, winner-anchored | 0.059 (0.050–0.071) | 0.052 (0.043–0.063) |
+| naive, loser-anchored | 0.036 (0.029–0.046) | 0.034 (0.027–0.043) |
+| procedure-level, winner | 0.043 (0.035–0.053) | 0.032 (0.025–0.040) |
+| procedure-level, loser | 0.042 (0.034–0.052) | 0.035 (0.028–0.044) |
+| explicit class, same shifts | 0.025 (0.019–0.033) | 0.019 (0.014–0.026) |
+| explicit class, bootstrap | 0.024 (0.018–0.032) | 0.019 (0.014–0.027) |
+
+**The five pre-registered decisions.**
+
+1. **Procedure-level nominal (the gate on everything else).** Held in both
+   worlds: Wilson lower bounds 0.035 and 0.025, both at most 5%. Both point
+   estimates sit below 5%, and the KS tests reject uniformity (p = 0.005 and
+   0.015), so the gold standard is somewhat conservative here rather than
+   exactly calibrated — see "resolution" below.
+2. **The exact P3 check.** Held, cleanly. The explicit-class p-value was at
+   least the procedure-level one on **every** draw in both worlds, and across
+   4 million shift comparisons (2 worlds × 2 searchers × 2,000 draws × 500
+   shifts) there were **zero** per-shift violations beyond the 10⁻¹⁰
+   tolerance. Computing both sides from one Sharpe vector per shift made the
+   inequality exact by construction, which is what it was for.
+3. **The gate's own path: valid, but the agreement clause failed.** Validity
+   held — the bootstrap Reality Check over the class has Wilson upper bounds
+   of 0.032 and 0.027, below 5%. Agreement with the shift-based version was
+   **0.982 and 0.989, against a pre-registered threshold of 0.99**. Both miss.
+4. **Naive, winner-anchored: predicted inflated.** Single: 119/2000 = 5.9%,
+   binomial p = 0.031, **inflated**. Panel: 104/2000 = 5.2%, p = 0.355, **not
+   detectably inflated** — the third outcome fixed in advance.
+5. **Naive, loser-anchored: predicted at or below nominal.** **Conservative**
+   in both worlds (3.6% and 3.4%, two-sided p < 0.01).
+
+**The sign result, which is what this experiment was for.** Paired on the same
+draws, winner-anchored search rejected where loser-anchored did not on 47
+draws against 1 in the reverse direction (single) and 36 against 0 (panel),
+both p < 10⁻⁴. The asymmetry P4 predicts for additive scoring therefore
+survives a class where its lemma does not apply, even though the absolute
+inflation is only about a point above nominal.
+
+**What the worlds do and do not show (exploratory).** The two worlds are not
+distinguishable from each other: 119/2000 against 104/2000 gives Fisher
+p = 0.335. So it is wrong to read this as the effect appearing in one world
+and vanishing in the other. Both sit near the 6.3% the design could detect,
+one just above and one just below, and the inflated / not-detectably-inflated
+split is a threshold artefact rather than a difference between breadths. The
+pre-registration predicted the panel would be the sensitive cell because its
+effective breadth is five times larger; that reasoning gained no support.
+
+**Why rule 3's agreement missed (exploratory).** 37 draws disagreed in the
+single world and 23 on the panel. They are mostly borderline: their p-values
+sit a median of 0.019 from α, and the direction is balanced (17 against 20,
+and 12 against 11), so neither null systematically rejects more than the
+other. But the disagreements run out to 0.25 and 0.62 from α, so a handful are
+not boundary effects and are not explained here. The two nulls are different
+constructions — a stationary bootstrap against circular shifts — and the
+pre-registered 0.99 threshold assumed they would track each other more
+closely than they do.
+
+**Resolution (exploratory).** The shift nulls carry about 489 distinct
+p-values of the 501 that rerun_B=500 allows, against roughly 1,070 of 1,501
+for the bootstrap nulls. The shift null is the coarser object, as the
+pre-registration said it would be, and that coarseness is the most likely
+source of both the procedure-level arm's non-uniformity and part of rule 3's
+disagreement.
+
+**The declared class is conservative, as P3 says it must be.** Its p-value
+exceeded the procedure-level one on 99.2% (single) and 99.6% (panel) of draws,
+with mean gaps of +0.09 and +0.13. That conservatism is the price of needing
+no re-execution, and it is what E22 will measure as a power cost.
+
+**Scope.** Crossover rules on driftless random walks, depth-2 refinement on a
+declared grid, one and five assets. Nothing here tests non-additive
+specifications with a real edge, and the searches are scripted rather than an
+agent's tool-calling loop.

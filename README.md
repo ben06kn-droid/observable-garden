@@ -51,11 +51,15 @@ results?
   branch from a random or unrelated candidate stay honest. The distortion
   grows with how strongly the anchor tracks performance, along a curve that
   the order statistics predict in advance — and it survives when the
-  assumptions behind that prediction are broken.
+  assumptions behind that prediction are broken, including for trading rules
+  whose scoring is not a weighted sum at all, though it is much smaller there.
 - **Two repairs hold.** Replaying the search inside each resample, or
   declaring in advance the whole class of specifications it could have
-  produced, both stay correctly calibrated everywhere they have been tested.
-  The second needs no re-execution, only an honest declaration.
+  produced, both stay correctly calibrated everywhere they have been tested —
+  including moving-average rules, which cannot be written as sums of anything
+  and so defeat the first repair entirely. The second needs no re-execution,
+  only an honest declaration, and it is conservative: it buys validity at some
+  cost in power.
 - **Breadth is not free, and a lucky pass is worse than no pass.** Holding the
   reported result fixed, every extra specification makes an edge harder to
   certify. Results that scrape past an underpowered search overstate the edge

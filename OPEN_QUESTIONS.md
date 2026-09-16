@@ -97,6 +97,24 @@ closing, the single most informative run is E18's configuration with e4's
 block-length rule. The note avoids the question: it reports only E21's
 configuration, and e4 stays in SCOPE.md with its labels.
 
+## Why do the two class nulls disagree on about 1.5% of draws?
+
+E20 (SCOPE.md §21) ran the declared-class test two ways on identical draws:
+the stationary bootstrap the gate actually uses, and the class maximum on the
+same circular shifts as the procedure-level null. Their rejection decisions
+agreed on 98.2% and 98.9% of draws, against a pre-registered threshold of
+99%, so that clause failed in both worlds.
+
+Most disagreements are borderline — a median of 0.019 from α, balanced in
+direction, so neither null systematically rejects more — and the shift null is
+the coarser object, carrying about 489 distinct p-values against the
+bootstrap's 1,070. But a handful of disagreements sit far from α (out to 0.25
+and 0.62), and those are not explained by boundary effects or resolution. The
+two constructions differ in more than granularity, and the pre-registration
+assumed they would track each other more closely than they do. Worth knowing
+which is closer to the truth before the gate's bootstrap path is relied on for
+a class supplied this way.
+
 ## Classes that cannot be enumerated from base returns
 
 Transcript format v2 registers one class, equal-weight feature subsets up to

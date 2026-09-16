@@ -88,6 +88,14 @@ full-class type-I 2.0–3.8%, never significantly above 5%. It is conservative
 where the search does not chase winners (2.0–2.8% for rules from loser to
 τ = 1) and matches the recursive null under winner anchoring.
 
+E20 (SCOPE.md §21) tested the route itself, on a class that cannot be
+enumerated from base returns: crossover rules, supplied as return streams.
+Comparing the class maximum against the search's own pick on the *same*
+nullified surrogates, `sr_sel ≤ max_Θ` held on every one of 4 million shift
+comparisons, with no violation beyond 10⁻¹⁰. The resulting test was valid
+(type-I 1.9–2.5%) and conservative, its p-value exceeding the re-execution
+gold standard's on more than 99% of draws by an average of 0.09 to 0.13.
+
 ## P4. Winner anchoring is anti-conservative; loser anchoring is conservative (new)
 
 **Lemma.** Let `g` be symmetric and nondecreasing in each argument, and let
@@ -187,6 +195,17 @@ grows faster when ω is small. The limit predicted naive type-I of 10.1%,
 22.4% and 36.2%, and 7.0%, 8.4%, 12.0% and 14.0%, on draws nested across K.
 Every value lies inside its 95% interval, and the pre-registered trend test
 found growth in K at both correlations (p = 0.0001).
+
+**Outside additive scoring.** The lemma needs a symmetric, nondecreasing pair
+statistic, which crossover rules do not provide: a rule's position is the sign
+of a difference of moving averages, not a weight vector. E20 (SCOPE.md §21)
+predicted the direction anyway, without a guarantee, and found it: paired on
+the same draws, winner-anchored search rejected where loser-anchored did not
+on 47 draws against 1 (single asset) and 36 against 0 (five-asset panel), both
+p < 10⁻⁴, with loser-anchoring conservative in both worlds. The asymmetry
+therefore survives where the proof does not. Its size does not: naive type-I
+was 5.9% and 5.2% against nominal 5%, about a point, and the two worlds were
+not distinguishable from each other (Fisher p = 0.335).
 
 **At depth 3 (E18, SCOPE.md §17).** Winner anchoring inflated naive type-I to
 10.4% (n = 1,000), and the naive p-value was at most the recursive one on
@@ -310,8 +329,8 @@ nothing anticipates P4.
 |---|---|---|---|
 | P1 | known | SCOPE.md §1 (null calibration of oblivious searchers) | E21 |
 | P2 | known | none needed | none |
-| P3 | ingredients known, tier new | `estimator/full_class.py` and tests; E17 full-class null (SCOPE.md §16); E19(c) up to 3,240 members (SCOPE.md §19) | E21, E22 |
-| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E17b graded by rank, matching the limit (SCOPE.md §18); E18 at depth 3 (SCOPE.md §17); E19(c) growth in K (SCOPE.md §19); E19 off-exchangeability (SCOPE.md §20) | block correlation, unequal volatilities |
+| P3 | ingredients known, tier new | `estimator/full_class.py` and tests; E17 full-class null (SCOPE.md §16); E19(c) up to 3,240 members (SCOPE.md §19); E20 explicit class, exact on 4M shift comparisons (SCOPE.md §21) | E21, E22 |
+| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E17b graded by rank, matching the limit (SCOPE.md §18); E18 at depth 3 (SCOPE.md §17); E19(c) growth in K (SCOPE.md §19); E19 off-exchangeability (SCOPE.md §20); E20 sign result outside additive scoring (SCOPE.md §21) | block correlation, unequal volatilities |
 | P5 | new, corrected | exploratory limit check above; E17 at d = 2; E18 at d = 3 and 4 (SCOPE.md §17) | E22 |
 | P6 | ingredients known, one case open | e15 neighbor rule calibrated empirically; E19(b) calibrated as separation rises (SCOPE.md §20) | a design that separates the correlations fully |
 
