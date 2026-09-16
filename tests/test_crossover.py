@@ -99,6 +99,30 @@ def test_blocks_must_match_the_matrix_width():
         AdaptiveCrossover(grid, blocks=0)
 
 
+@pytest.mark.parametrize("blocks", [1, 3])
+def test_run_from_sharpes_matches_run(blocks):
+    grid = CrossoverGrid()
+    if blocks == 1:
+        _, P, fwd = make_returns(seed=21)
+    else:
+        P, fwd = panel(blocks, 800, grid.rules, WARMUP, np.random.default_rng(21))
+    R = returns_from_positions(P, fwd)
+    ann = np.sqrt(252)
+    mu, sd = R.mean(axis=0), R.std(axis=0, ddof=1)
+    sharpes = np.where(sd > 0, mu / np.where(sd > 0, sd, 1.0), 0.0) * ann
+    for anchor in ("winner", "loser"):
+        searcher = AdaptiveCrossover(grid, anchor=anchor, blocks=blocks)
+        a, b = searcher.run(R, ann), searcher.run_from_sharpes(sharpes)
+        assert (a.selected, a.anchor, a.evaluated) == (b.selected, b.anchor, b.evaluated)
+        assert a.sharpe == pytest.approx(b.sharpe, rel=1e-12)
+
+
+def test_run_from_sharpes_checks_width():
+    grid, P, fwd = make_returns(seed=22)
+    with pytest.raises(OffGridError):
+        AdaptiveCrossover(grid).run_from_sharpes(np.zeros(10))
+
+
 def test_single_block_is_the_default_and_unchanged():
     grid, P, fwd = make_returns(seed=13)
     R = returns_from_positions(P, fwd)

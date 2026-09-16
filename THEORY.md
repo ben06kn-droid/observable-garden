@@ -72,8 +72,13 @@ applies to `max_Θ`, and P2 gives validity.
 a transcript plus a class declaration suffices, with no replay. It is the
 Sullivan–Timmermann–White (1999) move, testing the whole rule universe, and the
 analogue of simultaneous post-selection inference (Berk et al. 2013).
-Implemented for equal-weight feature subsets of size at most `d` in
-`estimator/full_class.py`: 210 columns at K=20, d=2; 1,350 at d=3.
+Implemented at two tiers. Where the class can be enumerated from base returns,
+`estimator/full_class.py` builds it: equal-weight feature subsets of size at
+most `d`, 210 columns at K=20, d=2; 1,350 at d=3. Where it cannot — crossover
+rules, whose positions are signs of moving-average differences rather than
+weight vectors — transcript format v3 takes the class as supplied return
+streams (`spec_class="explicit"`), checked by specification id and then column
+by column, and the gate runs the Reality Check directly on them (prereg/E20.md).
 
 **Caveat.** Declaring `Θ` after seeing results is itself snooping. For agents,
 a tool grammar fixes `Θ` in advance, which is the practical point.

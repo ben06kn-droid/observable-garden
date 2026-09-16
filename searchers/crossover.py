@@ -112,18 +112,13 @@ class AdaptiveCrossover:
         block, local = divmod(index, width)
         return [block * width + j for j in self.grid.neighbours(local)]
 
-    def run(self, R: np.ndarray, annualization: float = 1.0) -> SearchResult:
-        """R: (T, blocks * len(grid.rules)) rule returns, one block of grid columns per asset. Works
-        identically on real data and on a nullified surrogate, which is what makes the procedure-level null
-        cheap. With blocks > 1 the coarse round spans every asset and refinement stays within whichever
-        asset supplied the anchor."""
+    def _walk(self, score) -> SearchResult:
+        """The search itself: a coarse round across every block, then `rounds` refinements around the
+        anchor. `score(columns) -> values` is the only thing that differs between running on a return
+        matrix and running from an already-computed Sharpe vector."""
         width = len(self.grid.rules)
-        if R.shape[1] != width * self.blocks:
-            raise OffGridError(f"R has {R.shape[1]} columns, the declared grid has {width * self.blocks} "
-                               f"({self.blocks} block(s) of {width})")
-
         coarse = [b * width + c for b in range(self.blocks) for c in self.grid.coarse(self.coarse_step)]
-        scores = column_sharpes(R, coarse, annualization)
+        scores = np.asarray(score(coarse), dtype=float)
         evaluated = {c: float(v) for c, v in zip(coarse, scores)}
         anchor = coarse[int(np.argmax(scores) if self.anchor_rule == "winner" else np.argmin(scores))]
 
@@ -131,7 +126,7 @@ class AdaptiveCrossover:
             fresh = [c for c in self._neighbours(anchor) if c not in evaluated]
             if not fresh:
                 break
-            for c, v in zip(fresh, column_sharpes(R, fresh, annualization)):
+            for c, v in zip(fresh, np.asarray(score(fresh), dtype=float)):
                 evaluated[c] = float(v)
             nearby = self._neighbours(anchor) + [anchor]
             anchor = max(nearby, key=lambda c: evaluated[c])
@@ -139,3 +134,28 @@ class AdaptiveCrossover:
         selected = max(evaluated, key=lambda c: evaluated[c])
         return SearchResult(selected=selected, sharpe=evaluated[selected],
                             evaluated=tuple(sorted(evaluated)), anchor=anchor)
+
+    def _check_width(self, n_columns: int) -> int:
+        width = len(self.grid.rules)
+        if n_columns != width * self.blocks:
+            raise OffGridError(f"got {n_columns} columns, the declared grid has {width * self.blocks} "
+                               f"({self.blocks} block(s) of {width})")
+        return width
+
+    def run(self, R: np.ndarray, annualization: float = 1.0) -> SearchResult:
+        """R: (T, blocks * len(grid.rules)) rule returns, one block of grid columns per asset. Works
+        identically on real data and on a nullified surrogate, which is what makes the procedure-level null
+        cheap. With blocks > 1 the coarse round spans every asset and refinement stays within whichever
+        asset supplied the anchor."""
+        self._check_width(R.shape[1])
+        return self._walk(lambda columns: column_sharpes(R, columns, annualization))
+
+    def run_from_sharpes(self, sharpes: np.ndarray) -> SearchResult:
+        """The same search, reading a Sharpe that has already been computed for every class column.
+
+        E20's shift loop needs that vector anyway, for the class maximum. Reusing it removes a redundant
+        recomputation per shift and guarantees both sides of the P3 inequality -- the search's selected
+        value and the class maximum -- come from one vector, so a tie cannot register as a violation."""
+        sharpes = np.asarray(sharpes, dtype=float)
+        self._check_width(sharpes.shape[0])
+        return self._walk(lambda columns: sharpes[list(columns)])

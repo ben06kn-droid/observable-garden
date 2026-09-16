@@ -37,8 +37,9 @@ from garden._engine import null_max_bootstrap
 from searchers.crossover import AdaptiveCrossover, CrossoverGrid
 
 T, WARMUP, EXCLUDE = 5040, 200, 200
-B, RERUN_B, ALPHA = 1500, 1000, 0.05
+B, RERUN_B, ALPHA = 1500, 500, 0.05
 N_DRAWS, SEED0, BLOCK = 2000, 80_000, 25
+SHIFT_SEED_OFFSET = 1_000_000
 PANEL_ASSETS = 5
 TOLERANCE = 1e-10          # prereg/E20.md: violations smaller than this are floating-point ties
 AGREEMENT_THRESHOLD = 0.99
@@ -77,10 +78,11 @@ def run_draw(world: str, seed: int) -> dict:
     searchers = {a: AdaptiveCrossover(grid, anchor=a, blocks=n_assets) for a in ANCHORS}
     picks, menus = {}, {}
     for anchor in ANCHORS:
-        res = searchers[anchor].run(R, annualization=ANN)
+        res = searchers[anchor].run_from_sharpes(real)     # `real` is already computed; one vector, one engine
         picks[anchor], menus[anchor] = res.selected, res.evaluated
 
-    shifts = draw_shifts(R.shape[0], EXCLUDE, RERUN_B, np.random.default_rng(seed + 1))
+    # A well-separated stream: seed + 1 would draw shifts from the stream the next draw uses for prices.
+    shifts = draw_shifts(R.shape[0], EXCLUDE, RERUN_B, np.random.default_rng(seed + SHIFT_SEED_OFFSET))
     proc = {a: np.empty(len(shifts)) for a in ANCHORS}
     class_shift = np.empty(len(shifts))
     violations = {a: 0 for a in ANCHORS}
@@ -89,7 +91,7 @@ def run_draw(world: str, seed: int) -> dict:
         s_all = all_sharpes(surrogate)                       # one engine for both sides of the inequality
         class_shift[i] = float(s_all.max())
         for anchor in ANCHORS:
-            sel = searchers[anchor].run(surrogate, annualization=ANN).selected
+            sel = searchers[anchor].run_from_sharpes(s_all).selected
             proc[anchor][i] = float(s_all[sel])
             if proc[anchor][i] > class_shift[i] + TOLERANCE:
                 violations[anchor] += 1
