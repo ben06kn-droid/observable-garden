@@ -78,15 +78,17 @@ Non-goals (stated here so they are not quietly relaxed later)
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 
 import numpy as np
 
 from environments.sandbox import Distribution, Sandbox, Specification
+from estimator.bootstrap import sharpe
+from garden._engine import null_max_bootstrap as engine_null_max
 from garden._full_class_engine import full_class_null_max
 from garden.audit import Verdict, audit
-from garden.power import analytic_power, critical_value, null_max_critical_value, required_sharpe
-from garden.spec_class import SubsetClass
+from garden.power import analytic_power, bootstrap_p_value, critical_value, null_max_critical_value
+from garden.spec_class import WEIGHT_TOLERANCE, SubsetClass
 from garden.transcript import from_sandbox
 
 _IMPLEMENTED = True
@@ -96,6 +98,48 @@ _IMPLEMENTED = True
 WATCHED_MENU_KIND = "adaptive"
 
 OpenStatus = ("OK", "INADMISSIBLE")
+
+# Replicates for the shadow realized-menu null. Measured on this machine at
+# T=500: 0.007s per evaluate() call at N=200 columns, 0.016s at N=800. A
+# 200-step search recomputing every step costs well under a second in total, so
+# it runs every step -- no stride, no opt-out.
+SHADOW_B = 500
+
+# Winner-chasing warning, on the chase rate (not on kappa: see _kappa_for for
+# why kappa cannot carry this, and _chased_for for what replaces it).
+# A random-anchored search chases at roughly 1/K; a search that always builds on
+# its running best chases at 1. The threshold sits between those, far enough
+# above 1/K that it is not tripped by coincidence at any realistic K, and is the
+# number an agent experiment pre-registers.
+CHASE_WARN_THRESHOLD = 0.5
+CHASE_WINDOW = 10          # trailing steps the rate is measured over
+CHASE_WARN_MIN_STEPS = 3   # so a single extension cannot trip it
+
+DIAGNOSTIC_KEYS = (
+    "shadow_p_value",          # realized-menu p-value on the columns evaluated so far
+    "class_p_value",           # best-so-far against the class bar fixed at open
+    "chased",                  # did this candidate build on the best-so-far?
+    "chase_rate",              # fraction of the trailing window that did
+    "kappa",                   # E17 anchor rank, defined only at depth 2 (see _kappa_for)
+    "kappa_mean",              # running mean over steps where kappa is defined
+    "kappa_undefined_reason",
+    "anchor_sharpe_rank",      # NOT kappa: rank among specs evaluated so far
+    "winner_chasing_warning",
+    "considered", "evaluated", "considered_ratio",
+)
+
+# What `status()` hands back to the searcher. Everything above is always
+# computed and logged; this only governs what is *visible*.
+#
+# This split exists because a diagnostic an agent can see is part of the
+# treatment, not instrumentation of it. Showing a drift warning turns the
+# experiment into "gate plus a coaching signal" rather than "gate". Each arm of
+# the agent experiment pins its own view in the pre-registration.
+AGENT_VIEWS = {
+    "standing": frozenset(),                       # cleared / margin only: the gate, nothing else
+    "shadow": frozenset({"shadow_p_value", "class_p_value"}),
+    "full": frozenset(DIAGNOSTIC_KEYS),
+}
 
 
 @dataclass
@@ -163,12 +207,175 @@ class WatchReport:
 class Watch:
     """Opened by `watch.open(...)`, not constructed directly."""
 
-    def __init__(self, sandbox: Sandbox, state: WatchState, seed: int | None = 0):
+    def __init__(self, sandbox: Sandbox, state: WatchState, seed: int | None = 0,
+                 agent_view: frozenset[str] = AGENT_VIEWS["standing"],
+                 base_sharpe: np.ndarray | None = None):
         self._sandbox = sandbox
         self.state = state
         self._seed = seed
+        self._agent_view = frozenset(agent_view)
+        unknown = self._agent_view - set(DIAGNOSTIC_KEYS)
+        if unknown:
+            raise ValueError(f"unknown diagnostic(s) in agent_view: {', '.join(sorted(unknown))}")
+        # Computed once: the base-column Sharpe ordering is a property of the
+        # sandbox, not of the search, so kappa does not re-derive it per step.
+        self._base_sharpe = base_sharpe
         self._reports: list[WatchReport] = []
         self._best = -np.inf
+        self._best_support: frozenset[int] | None = None
+        self._kappas: list[float] = []
+        self._chases: list[bool] = []
+        self._considered: set[str] = set()
+
+    # -- latent forking ------------------------------------------------------
+
+    def consider(self, names) -> int:
+        """Record specifications the searcher named but did not evaluate.
+
+        Irrelevant to validity under the declared tier -- the bar already covers
+        every member of the class, evaluated or not. The number is the point:
+        it is the only direct measurement of how far the logged trial count sits
+        below the true one (estimator_build_spec.md 8, "latent forking").
+
+        "Considered" needs a definition that survives across runs and models.
+        For an agent it is a trace-parsing rule, and the pre-registration fixes
+        it as: distinct specification identifiers named in the trace and not
+        evaluated. Passing anything else makes the ratio incomparable."""
+        if isinstance(names, str):
+            names = [names]
+        self._considered.update(str(n) for n in names)
+        return len(self._considered)
+
+    # -- diagnostics ---------------------------------------------------------
+
+    def _normalized_rank(self, k: int) -> float:
+        """searchers.dose_response.normalized_rank, off the cached ordering.
+
+        Not imported: `garden` is the product surface and `searchers` is
+        experiment scaffolding, so the dependency would run the wrong way. The
+        expression is kept identical and tests/test_watch.py asserts agreement,
+        the same arrangement estimator/spa.py uses for garden.power."""
+        sr = self._base_sharpe
+        return float(np.sum(sr < sr[k]) / (len(sr) - 1))
+
+    def _kappa_for(self, support: frozenset[int]) -> tuple[float | None, str | None]:
+        """E17's coupling kappa for this step, or None with a reason.
+
+        kappa is the normalized Sharpe rank of the feature a candidate was built
+        around (SCOPE.md 18: 1 best, 0 worst). It is defined on a *feature*, not
+        on a specification, so it exists here only where the step reproduces
+        E17's setting: extending a single-feature best-so-far by exactly one
+        feature. Anywhere else it is undefined and reported as None rather than
+        approximated, because a lookalike under the same name would silently
+        break every cross-reference to E17's rank curve.
+
+        Its job is comparability to that rank curve, and it holds only while the
+        best-so-far is a single feature -- in practice, until the first step that
+        improves on it. After that kappa has no job here, and the live
+        winner-chasing signal is `chased` / `chase_rate` instead. The two are
+        different quantities measuring different things and deliberately share
+        neither a name nor a warning."""
+        if self._best_support is None:
+            return None, "first evaluation: there is no anchor yet"
+        if len(self._best_support) != 1:
+            return None, (f"anchor spans {len(self._best_support)} features; kappa is defined on a "
+                          f"single anchor feature (E17)")
+        if not (support > self._best_support and len(support) == 2):
+            return None, "candidate does not extend the best-so-far by exactly one feature"
+        (anchor,) = self._best_support
+        return self._normalized_rank(anchor), None
+
+    def _chased_for(self, support: frozenset[int]) -> bool | None:
+        """Did this candidate build on the current best? None on the first step.
+
+        This is the live winner-chasing statistic, stated in terms of what
+        THEORY.md's Corollary 3.1 says causes the liberal error: a menu grown
+        around the top-ranked realized result. Unlike kappa it is defined at
+        every step and at any depth, which is what a running warning needs.
+
+        The indicator form -- support contains the best-so-far's support -- is
+        used rather than a graded overlap (Jaccard) because a threshold on it is
+        far easier to interpret and to pre-register.
+
+        Known limitation, measured: containment can also arise from *enumeration
+        order* with no data dependence at all. A searcher that walks a lattice in
+        itertools.combinations order emits every subset before its supersets, so
+        LatticeAdaptive -- whose generation is provably oblivious, and which E21
+        uses as the control for exactly that -- still scores 0.4-0.6 here and can
+        trip the warning. The statistic cannot separate "grew around the realized
+        best" from "enumerated in a nested order". See OPEN_QUESTIONS.md."""
+        if self._best_support is None:
+            return None
+        return support >= self._best_support
+
+    def _chase_rate(self) -> float | None:
+        if not self._chases:
+            return None
+        window = self._chases[-CHASE_WINDOW:]
+        return float(np.mean(window))
+
+    def _winner_chasing_warning(self) -> str | None:
+        """Fires on the chase rate alone.
+
+        Not on the shadow p-value: liberality is a property of a test's
+        distribution across draws, not of one run, so it is not observable live.
+        Not on kappa either: kappa stops being defined once the best-so-far is
+        more than one feature, which happens at the first improving step, so a
+        kappa-triggered warning would fire mainly on searches that fail to
+        progress -- the opposite of the intent. The shadow p-value is shown
+        beside the warning as the symptom, never as its trigger."""
+        if len(self._chases) < CHASE_WARN_MIN_STEPS:
+            return None
+        rate = self._chase_rate()
+        if rate is None or rate < CHASE_WARN_THRESHOLD:
+            return None
+        window = min(len(self._chases), CHASE_WINDOW)
+        return (
+            f"Winner-chasing: {rate:.0%} of the last {window} candidates were built on the best result "
+            f"so far, at or above {CHASE_WARN_THRESHOLD:.0%}. Nothing about this run is at risk: the bar "
+            f"was fixed over the declared class at open, it has not moved, and the verdict is "
+            f"unaffected. The warning describes what the realized-menu (naive) test would have done "
+            f"with this transcript, which is why the shadow p-value is shown alongside. It is not a "
+            f"reason to stop or to change what you evaluate next."
+        )
+
+    def _diagnostics(self, support: frozenset[int], sr: float) -> dict:
+        R = self._sandbox.returns_matrix()
+        ann = np.sqrt(self.state.periods_per_year)
+        col_sr = sharpe(R, axis=0, annualization=ann)
+        best_sr = float(col_sr.max())
+
+        shadow = engine_null_max(R, B=SHADOW_B, block_length=self.state.block_length,
+                                 annualization=ann, seed=self._seed)
+        kappa, reason = self._kappa_for(support)
+        if kappa is not None:
+            self._kappas.append(kappa)
+        chased = self._chased_for(support)
+        if chased is not None:
+            self._chases.append(chased)
+
+        evaluated = R.shape[1]
+        return {
+            # Reported against their own nulls and NOT differenced. The gap
+            # between them has two same-signed parts -- the realized-menu test is
+            # liberal to the extent the search chased its winner, and the
+            # declared-class test is conservative by the class's unexplored
+            # breadth -- so the difference overstates the first. Characterizing
+            # it as "the liberal error" would be wrong.
+            "shadow_p_value": bootstrap_p_value(shadow.M_b, best_sr),
+            "class_p_value": bootstrap_p_value(self.state.bar, best_sr),
+            "chased": chased,
+            "chase_rate": self._chase_rate(),
+            "kappa": kappa,
+            "kappa_mean": float(np.mean(self._kappas)) if self._kappas else None,
+            "kappa_undefined_reason": reason,
+            "anchor_sharpe_rank": (float(np.sum(col_sr < sr) / (evaluated - 1))
+                                   if evaluated > 1 else None),
+            "winner_chasing_warning": self._winner_chasing_warning(),
+            "considered": len(self._considered),
+            "evaluated": evaluated,
+            "considered_ratio": len(self._considered) / evaluated if evaluated else None,
+        }
 
     @property
     def log(self) -> list[WatchReport]:
@@ -193,7 +400,15 @@ class Watch:
         the search can call this as often as it likes."""
         result = self._sandbox.evaluate(spec)      # raises if outside the class
         sr = float(result.sharpe)
-        self._best = max(self._best, sr)
+        support = frozenset(
+            np.flatnonzero(np.abs(np.asarray(spec.weights, dtype=float)) > WEIGHT_TOLERANCE).tolist())
+
+        # Diagnostics read the anchor *before* the best-so-far is updated: kappa
+        # asks which feature this candidate was built around.
+        diagnostics = self._diagnostics(support, sr)
+
+        if sr > self._best:
+            self._best, self._best_support = sr, support
         c = self.state.critical_value
         report = WatchReport(
             in_class=True,
@@ -207,16 +422,23 @@ class Watch:
             critical_value=c,
             call_index=result.call_index,
             spec_name=spec.name,
+            diagnostics=diagnostics,
         )
         self._reports.append(report)
         return report
 
     def status(self) -> WatchReport:
-        """The most recent report, without evaluating anything. This is the tool
-        an agent polls; the control arm of the experiment is denied it."""
+        """The most recent report, with `diagnostics` filtered to `agent_view`.
+
+        The full diagnostics are always computed and kept in `log`; this is the
+        searcher-visible surface. Which keys are exposed changes what an agent
+        experiment is measuring, so each arm pins its view in the
+        pre-registration -- the control arm is denied `status` entirely."""
         if not self._reports:
             raise ValueError("nothing evaluated yet, so there is no standing to report")
-        return self._reports[-1]
+        full = self._reports[-1]
+        return replace(full, diagnostics={k: v for k, v in full.diagnostics.items()
+                                          if k in self._agent_view})
 
     def submit(self, spec: Specification | None = None, predicted_oos=None) -> Verdict:
         """Submit, then return the full audit verdict on the resulting transcript.
@@ -292,8 +514,15 @@ def open(
     B: int = 10_000,
     block_length: int | None = None,
     seed: int | None = 0,
+    agent_view: str | frozenset[str] = "standing",
 ) -> Watch:
     """Price the bar over `spec_class` and decide whether the search is worth starting.
+
+    `agent_view` names which diagnostics `status()` exposes: a preset from
+    AGENT_VIEWS ("standing", "shadow", "full") or an explicit set of keys.
+    Everything is computed and logged regardless; this governs only what the
+    searcher can see, because a visible diagnostic is part of the treatment. Each
+    arm of an agent experiment pins its view in the pre-registration.
 
     This is the only moment the design is still changeable, so it is the only
     moment an INADMISSIBLE verdict is useful: it is returned *before* any
@@ -318,6 +547,10 @@ def open(
     enforced = getattr(sandbox, "spec_class", None)
     if enforced is not None and enforced != spec_class:
         raise ValueError(f"the sandbox enforces {enforced.name}, not {spec_class.name}")
+    if isinstance(agent_view, str):
+        if agent_view not in AGENT_VIEWS:
+            raise ValueError(f"unknown agent_view {agent_view!r}; presets: {', '.join(AGENT_VIEWS)}")
+        agent_view = AGENT_VIEWS[agent_view]
 
     base = sandbox.base_feature_columns()            # (T, K), adds nothing to the transcript
     T, K = base.shape
@@ -383,4 +616,8 @@ def open(
         variance_floor_binds=floor_binds, sharpe_cap_binds=cap_binds,
         reasons=reasons, admissible_class_size=admissible,
     )
-    return Watch(sandbox, state, seed=seed)
+    # Unannualized, matching searchers.dose_response.normalized_rank's own call.
+    # Rank is scale-invariant either way; matching exactly is what lets the
+    # equivalence test in tests/test_watch.py mean something.
+    return Watch(sandbox, state, seed=seed, agent_view=agent_view,
+                 base_sharpe=sharpe(base, axis=0))

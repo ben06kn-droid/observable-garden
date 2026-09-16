@@ -169,6 +169,29 @@ than to `SubsetClass`: a tool grammar emits rules, most of which are not
 equal-weight feature subsets. Whoever builds that arm should start here rather
 than rediscover it.
 
+## watch's chase rate cannot separate winner-chasing from enumeration order
+
+`garden/watch.py` warns on the chase rate: the fraction of a trailing window
+whose candidate support contains the best-so-far's support. It separates the
+cases it was built for — a search that always extends its running best scores
+exactly 1, a random-anchored one about 1/K, and enumerating singles exactly 0.
+
+It also fires on searches that are not chasing at all. Containment follows from
+enumeration order alone: a lattice walked in `itertools.combinations` order emits
+every subset before its supersets. Measured across four seeds at K=8,
+`LatticeAdaptive` scores 0.4–0.6 and tripped the warning on two of them, despite
+generation that is oblivious by construction — it is E21's control for precisely
+that property, and `round1_beam` returns the whole feature set with no reference
+to realized data.
+
+The warning is informational and never touches the verdict, so this costs
+nothing but a misleading label. Two routes if it is worth fixing: require the
+chase to be *informative*, counting a step only when the contained best-so-far is
+itself high-ranked among evaluated specs (folding κ's rank idea in without
+reusing the name); or report the excess over the chase rate the same menu would
+show under a shuffled evaluation order, which is zero by construction for any
+oblivious enumeration but is heavier to pre-register.
+
 ## garden watch is coupled to whatever can build a Sandbox
 
 `watch.open` takes a configured `Sandbox` rather than a base-return matrix,
