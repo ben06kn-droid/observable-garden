@@ -17,10 +17,18 @@ until now said it does not offer.
 
 **Selective recentering.** White recenters every candidate at its own sample
 mean, so candidates with no hope of beating the benchmark still push the
-resampled maximum up and cost the test power. Hansen recenters only those not
-too far below the benchmark. This is the check SCOPE.md §6 asks for: whether
-the power collapse of §10 is a property of the problem or of the Reality
-Check's conservatism.
+resampled maximum up and cost the test power. Hansen recenters a candidate
+far below the benchmark at *zero* instead of at its own mean.
+
+That is not a discarding rule, and Hansen is explicit about the
+misreading: an earlier version of the paper "has been incorrectly quoted for
+'discarding the poor models'". The candidate stays in the maximum; only its
+recentering changes. Nor is `sqrt(2 log log n)` the only admissible rate —
+Hansen notes others (e.g. `n^(1/4)/4`) work equally well. Wording that says
+SPA "excludes" candidates is the error to avoid.
+
+This is the check SCOPE.md §6 asks for: whether the power collapse of §10 is
+a property of the problem or of the Reality Check's conservatism.
 
 Specification, from the published text (JBES 23(4), §2.2-§3.1):
 
@@ -35,8 +43,13 @@ with the bootstrap statistic, for a recentering rule g,
 Hansen's three recentering rules, which bracket the p-value:
 
     g_u(x) = x                                         (upper; mu_k = 0 for all k)
-    g_c(x) = x * 1{ x >= -sqrt((omega_hat_k^2/n) * 2 log log n) }   (consistent)
+    g_c(x) = x * 1{ sqrt(n) x / omega_hat_k >= -sqrt(2 log log n) }  (consistent)
     g_l(x) = max(0, x)                                 (lower; mu_k = min(dbar_k, 0))
+
+Hansen writes g_c twice, studentized in §2.1 and raw in §3.1
+(`x >= -sqrt((omega_hat_k^2/n) 2 log log n)`); the forms are algebraically
+identical and `consistent_keep_mask` implements both so a test can pin them
+together.
 
 `g_u` imposes the least favourable configuration and is exactly White's
 Reality Check, so `p_upper` is this module's cross-check against
@@ -60,6 +73,7 @@ passing `R` already differenced against it.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -95,26 +109,88 @@ def long_run_variance(D: np.ndarray, q: float) -> np.ndarray:
     return omega2
 
 
+def consistent_keep_mask(dbar: np.ndarray, omega: np.ndarray, n: int,
+                         form: str = "studentized") -> np.ndarray:
+    """Hansen's consistent rule: True where a candidate keeps its own mean as
+    the recentering, False where it is recentered at zero instead.
+
+    The paper states the same rule twice, and the two parameterisations are
+    algebraically identical (divide through by omega_k / sqrt(n)):
+
+        studentized  (§2.1)   sqrt(n) * dbar_k / omega_k >= -sqrt(2 log log n)
+        raw          (§3.1)   dbar_k                     >= -sqrt((omega_k^2/n) 2 log log n)
+
+    The studentized form is the primary one here because it keeps the
+    threshold a pure constant, so a scaling slip in omega cannot quietly move
+    it. `tests/test_spa.py` asserts the two agree, which is the cheap guard
+    against getting that scaling wrong."""
+    if form == "studentized":
+        return np.sqrt(n) * dbar / omega >= -np.sqrt(2.0 * np.log(np.log(n)))
+    if form == "raw":
+        return dbar >= -np.sqrt((omega ** 2 / n) * 2.0 * np.log(np.log(n)))
+    raise ValueError(f"form must be 'studentized' or 'raw', got {form!r}")
+
+
 @dataclass
 class SPAResult:
     """p_lower <= p_consistent <= p_upper is Hansen's reported bracket.
     `p_upper` is the least-favourable-configuration case, i.e. White's
-    Reality Check computed on this studentized statistic."""
+    Reality Check computed on this studentized statistic.
+
+    Each p-value has a matching critical value built from the same float
+    expression, so `p <= alpha` and `statistic > critical` can never disagree
+    at the boundary (garden/power.py's guarantee, carried over)."""
     statistic: float
     p_lower: float
     p_consistent: float
     p_upper: float
+    critical_lower: float
+    critical_consistent: float
+    critical_upper: float
+    alpha: float
     omega: np.ndarray          # (N,) fixed full-sample long-run std devs
     t_stats: np.ndarray        # (N,) sqrt(n) * dbar_k / omega_k
     block_length: int
     B: int
     N: int
     n_recentered: int          # candidates the consistent rule left recentered
+    submitted: int | None      # index tested, or None when testing the menu's best
 
     @property
     def p_value(self) -> float:
         """The one to quote: Hansen's consistent rule."""
         return self.p_consistent
+
+    @property
+    def critical(self) -> float:
+        """Critical value matching `p_value`."""
+        return self.critical_consistent
+
+    @property
+    def rejects(self) -> bool:
+        return self.statistic > self.critical_consistent
+
+
+def _p_value(null: np.ndarray, stat: float) -> float:
+    """garden.power.bootstrap_p_value, inlined.
+
+    `estimator` is imported by `garden`, not the reverse, so importing it here
+    would invert the dependency. The expression is kept character-identical
+    instead, and tests/test_spa.py asserts agreement against garden.power so
+    any future drift fails loudly rather than silently."""
+    return float((1 + np.sum(null >= stat)) / (len(null) + 1))
+
+
+def _critical_value(null: np.ndarray, alpha: float) -> float:
+    """garden.power.critical_value, inlined (see `_p_value`). Same float
+    expression as `_p_value`, so the two cannot disagree at the boundary.
+    inf when B is too small for any result to reject."""
+    null = np.asarray(null, dtype=float)
+    B = len(null)
+    k = int(np.sum((1 + np.arange(B + 1)) / (B + 1) < alpha)) - 1
+    if k < 0:
+        return math.inf
+    return float(np.sort(null)[B - 1 - k])
 
 
 def spa_test(
@@ -123,16 +199,36 @@ def spa_test(
     block_length: int | None = None,
     seed: int | None = None,
     variance_floor: float = 1e-12,
+    submitted: int | None = None,
+    alpha: float = 0.05,
 ) -> SPAResult:
     """Hansen's SPA on an (T, N) matrix of per-period returns, one column per
     evaluated specification, against a zero benchmark.
+
+    `submitted`: index of the specification actually submitted. The statistic
+    becomes that column's studentized mean rather than the menu's best, while
+    the null stays the maximum over the whole menu -- so the multiplicity
+    correction is unchanged and a sub-maximal submission is judged against the
+    same bar. Omit it to test the menu's best, which is Hansen's own framing.
+    Testing a sub-maximal submission is necessarily conservative: the statistic
+    falls, the null does not move.
+
+    `block_length`: taken from the caller so the gate can share one block
+    length across the Reality Check and SPA. Computed from the demeaned matrix
+    when omitted, matching every other call site in the repo.
 
     Columns whose long-run variance is at or below `variance_floor` carry no
     signal to test and are dropped from the maximum rather than dividing by
     something near zero. Unlike the Reality Check's per-replicate guards
     (`estimator.bootstrap.GUARD_COUNTS`), this is a property of the full
     sample only, so it cannot vary between replicates and cannot move a
-    critical value."""
+    critical value.
+
+    One deliberate deviation from the paper: Hansen counts bootstrap
+    exceedances strictly (`T* > T`), while the gate counts them inclusively
+    and adds one to each side, `(1 + #{T* >= T}) / (B + 1)`. The gate's
+    convention is the more conservative of the two and is used here so SPA's
+    p-values are comparable with the Reality Check's without adjustment."""
     R = np.asarray(R, dtype=float)
     if R.ndim != 2:
         raise ValueError("R must be (T, N)")
@@ -142,7 +238,11 @@ def spa_test(
     if n < 3:
         raise ValueError("SPA needs at least 3 periods for a long-run variance")
 
-    L = block_length if block_length is not None else select_block_length(R)
+    if submitted is not None and not 0 <= submitted < R.shape[1]:
+        raise ValueError(f"submitted index {submitted} out of range for {R.shape[1]} columns")
+
+    # Demeaned, matching garden/audit.py and every experiment call site.
+    L = block_length if block_length is not None else select_block_length(R - R.mean(axis=0))
     q = 1.0 / max(L, 1)
 
     dbar = R.mean(axis=0)
@@ -154,19 +254,28 @@ def spa_test(
 
     root_n = np.sqrt(n)
     t_stats = np.where(live, root_n * dbar / omega, -np.inf)
-    statistic = float(max(t_stats.max(), 0.0))
+    if submitted is None:
+        statistic = float(max(t_stats.max(), 0.0))
+    else:
+        if not live[submitted]:
+            raise ValueError(f"submitted column {submitted} has zero long-run variance")
+        # The null below is still the maximum over the whole menu, so the
+        # multiplicity correction is identical; only the bar being cleared moves.
+        statistic = float(max(t_stats[submitted], 0.0))
 
     # Hansen's three recentering rules, as the quantity subtracted from dbar*.
-    threshold = -np.sqrt((omega2 / n) * 2.0 * np.log(np.log(n))) if n >= 3 else np.zeros(N)
+    keep = consistent_keep_mask(dbar, omega, n)
     subtract = {
         "upper": dbar,
-        "consistent": np.where(dbar >= threshold, dbar, 0.0),
+        "consistent": np.where(keep, dbar, 0.0),
         "lower": np.maximum(dbar, 0.0),
     }
-    n_recentered = int(np.sum((dbar >= threshold) & live))
+    n_recentered = int(np.sum(keep & live))
 
     rng = np.random.default_rng(seed)
-    exceed = {key: 0 for key in RECENTERINGS}
+    # Retained rather than counted: a critical value needs the draws themselves.
+    # Three float64 arrays of length B (240 KB at B=10,000).
+    nulls = {key: np.empty(B) for key in RECENTERINGS}
     # R[idx, :] materializes (chunk, n, N), so the cap has to count columns too:
     # a wide menu (N ~ 10,000 at E21's K=40) would otherwise ask for hundreds of GB.
     chunk = max(1, min(B, int(2e7 // max(n * N, 1))))
@@ -180,19 +289,23 @@ def spa_test(
         for key in RECENTERINGS:
             z = root_n * (dbar_star - subtract[key]) / omega
             z[:, ~live] = -np.inf
-            t_star = np.maximum(z.max(axis=1), 0.0)
-            exceed[key] += int(np.sum(t_star > statistic))
+            nulls[key][drawn:drawn + size] = np.maximum(z.max(axis=1), 0.0)
         drawn += size
 
     return SPAResult(
         statistic=statistic,
-        p_lower=exceed["lower"] / B,
-        p_consistent=exceed["consistent"] / B,
-        p_upper=exceed["upper"] / B,
+        p_lower=_p_value(nulls["lower"], statistic),
+        p_consistent=_p_value(nulls["consistent"], statistic),
+        p_upper=_p_value(nulls["upper"], statistic),
+        critical_lower=_critical_value(nulls["lower"], alpha),
+        critical_consistent=_critical_value(nulls["consistent"], alpha),
+        critical_upper=_critical_value(nulls["upper"], alpha),
+        alpha=alpha,
         omega=omega,
         t_stats=t_stats,
         block_length=L,
         B=B,
         N=N,
         n_recentered=n_recentered,
+        submitted=submitted,
     )

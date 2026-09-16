@@ -445,11 +445,14 @@ Related prior art, for context on where this sits in the literature:
   Journal of Business & Economic Statistics 23(4)** — the higher-power
   successor to the Reality Check. Where White recenters every candidate
   at its own sample mean under the null (so hopeless candidates still
-  contribute to the resampled maximum), Hansen's SPA excludes candidates
-  sufficiently far below the benchmark from recentering, tightening the
-  test. Not yet implemented here; it is the obvious check on whether the
-  power collapse in §10 is a property of the problem or of the Reality
-  Check's conservatism.
+  contribute to the resampled maximum), Hansen's SPA recenters a candidate
+  sufficiently far below the benchmark at zero instead of at its own mean,
+  tightening the test. It does not discard it: Hansen notes an earlier
+  version of the paper "has been incorrectly quoted for 'discarding the
+  poor models'", and the candidate still enters the maximum. Implemented in
+  `estimator/spa.py`, not yet wired into the gate; it is the obvious check
+  on whether the power collapse in §10 is a property of the problem or of
+  the Reality Check's conservatism.
 - **Romano, J.P. & Wolf, M. (2005), "Stepwise Multiple Testing as
   Formalized Data Snooping," Econometrica 73(4)** — a stepwise procedure
   that can reject more than one candidate as significant, for context on

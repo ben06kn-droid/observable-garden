@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from estimator.bootstrap import null_max_bootstrap
-from estimator.spa import hansen_kappa, long_run_variance, spa_test
+from estimator.spa import consistent_keep_mask, hansen_kappa, long_run_variance, spa_test
 
 
 def test_kappa_matches_hansen_closed_form():
@@ -42,10 +42,17 @@ def test_p_value_bracket_is_ordered():
 
 def test_upper_rule_is_the_reality_check_least_favourable_configuration():
     """g_u recenters every column at its own mean, which is exactly what the
-    realized-menu bootstrap does. The two need not agree numerically (one
-    studentizes with a fixed long-run sigma, the other re-estimates Sharpe per
-    replicate), but on a well-behaved dense menu they should agree on the
-    verdict at 5%."""
+    realized-menu bootstrap does: it is Hansen's mu_hat^u = 0 least favourable
+    configuration.
+
+    A note on what this can and cannot assert. The build plan expected SPA-upper
+    to *reproduce* null_max_bootstrap's p-value exactly, as a free correctness
+    test. It cannot: the two share a recentering but not a statistic. The
+    Reality Check here maximises a Sharpe whose denominator is re-estimated
+    inside every replicate; SPA-upper maximises a mean studentized by a single
+    fixed long-run sigma. They coincide in role, not in arithmetic. Agreement on
+    the verdict at 5% over a well-behaved dense menu is the honest version, and
+    that difference in denominators is the entire point of SPA for SCOPE.md §11."""
     rng = np.random.default_rng(4)
     R = rng.standard_normal((400, 30)) * 0.01
     out = spa_test(R, B=2000, block_length=1, seed=5)
@@ -116,6 +123,132 @@ def test_detects_a_real_edge():
     out = spa_test(R, B=1500, block_length=1, seed=14)
     assert out.p_consistent < 0.05
     assert int(np.argmax(out.t_stats)) == 7
+
+
+def test_hansens_two_threshold_forms_agree():
+    """Hansen states the consistent rule studentized in §2.1 and raw in §3.1.
+    They are the same rule; this pins the scaling so a stray sqrt(n) or omega
+    cannot drift the threshold unnoticed."""
+    rng = np.random.default_rng(20)
+    for n in (50, 250, 1000):
+        dbar = rng.standard_normal(200) * 0.01
+        omega = np.abs(rng.standard_normal(200)) * 0.02 + 0.001
+        np.testing.assert_array_equal(
+            consistent_keep_mask(dbar, omega, n, form="studentized"),
+            consistent_keep_mask(dbar, omega, n, form="raw"),
+        )
+
+
+def test_p_value_and_critical_value_agree():
+    """garden/power.py guarantees p < alpha and sr > c never disagree at the
+    boundary, by building both from the same float expression. SPA inlines
+    those functions (estimator cannot import garden without inverting the
+    dependency), so this pins the two implementations together."""
+    rng = np.random.default_rng(30)
+    for trial in range(25):
+        R = rng.standard_normal((200, 12)) * 0.01 + rng.uniform(-0.002, 0.002)
+        out = spa_test(R, B=400, block_length=1, seed=trial, alpha=0.05)
+        for p, c in ((out.p_lower, out.critical_lower),
+                     (out.p_consistent, out.critical_consistent),
+                     (out.p_upper, out.critical_upper)):
+            assert (p < out.alpha) == (out.statistic > c)
+
+
+def test_inlined_p_value_matches_gardens():
+    """The inlined expressions must equal garden.power's, or the comment
+    claiming they are character-identical is a lie."""
+    from garden.power import bootstrap_p_value, critical_value
+    from estimator.spa import _critical_value, _p_value
+
+    rng = np.random.default_rng(31)
+    null = rng.standard_normal(500)
+    for stat in (-1.0, 0.0, 0.3, 1.0, 2.5):
+        assert _p_value(null, stat) == bootstrap_p_value(null, stat)
+    for alpha in (0.01, 0.05, 0.10):
+        assert _critical_value(null, alpha) == critical_value(null, alpha)
+
+
+def test_submitted_spec_is_tested_not_the_menu_best():
+    """Task: judge the spec actually submitted. The null is the menu maximum
+    either way, so naming a sub-maximal submission can only raise the p-value."""
+    rng = np.random.default_rng(32)
+    R = rng.standard_normal((400, 20)) * 0.01
+    R[:, 3] += 0.004          # the menu's best
+    R[:, 11] += 0.001         # a weaker spec, the one "submitted"
+
+    best = spa_test(R, B=1500, block_length=1, seed=33)
+    sub = spa_test(R, B=1500, block_length=1, seed=33, submitted=11)
+
+    assert best.submitted is None and sub.submitted == 11
+    assert int(np.argmax(best.t_stats)) == 3
+    # Same null, lower statistic -> weakly larger p-value.
+    assert sub.statistic < best.statistic
+    assert sub.p_consistent > best.p_consistent
+    # The null itself must not have moved: identical critical values.
+    assert sub.critical_consistent == pytest.approx(best.critical_consistent, rel=1e-12)
+
+
+def test_submitting_the_best_matches_the_default():
+    """Naming the argmax explicitly must reproduce the default exactly."""
+    rng = np.random.default_rng(34)
+    R = rng.standard_normal((300, 10)) * 0.01
+    R[:, 6] += 0.003
+    default = spa_test(R, B=600, block_length=1, seed=35)
+    best = int(np.argmax(default.t_stats))
+    named = spa_test(R, B=600, block_length=1, seed=35, submitted=best)
+    assert named.statistic == pytest.approx(default.statistic, rel=1e-12)
+    assert named.p_consistent == pytest.approx(default.p_consistent, rel=1e-12)
+    assert named.critical_consistent == pytest.approx(default.critical_consistent, rel=1e-12)
+
+
+def test_block_length_is_taken_from_the_caller():
+    rng = np.random.default_rng(36)
+    R = rng.standard_normal((300, 8)) * 0.01
+    assert spa_test(R, B=200, block_length=7, seed=37).block_length == 7
+    # Default must match the repo-wide convention: chosen on the demeaned matrix.
+    from estimator.bootstrap import select_block_length
+    expected = select_block_length(R - R.mean(axis=0))
+    assert spa_test(R, B=200, seed=37).block_length == expected
+
+
+def test_submitted_index_out_of_range_raises():
+    R = np.random.default_rng(38).standard_normal((100, 4)) * 0.01
+    with pytest.raises(ValueError, match="out of range"):
+        spa_test(R, B=50, block_length=1, seed=39, submitted=4)
+
+
+def test_duplicate_invariance():
+    """estimator_build_spec.md §6 test 4, carried over to SPA: duplicating every
+    column adds no information, and joint row resampling means both copies take
+    identical values in every replicate. Under g_c the duplicate also inherits
+    the same omega_k and so the same recentering decision, so the property holds
+    by construction -- which makes this a real regression test, not a formality."""
+    T, N = 1000, 20
+    rng = np.random.default_rng(21)
+    R = rng.standard_normal((T, N)) * 0.01
+    R_dup = np.concatenate([R, R], axis=1)
+
+    once = spa_test(R, B=800, block_length=1, seed=22)
+    twice = spa_test(R_dup, B=800, block_length=1, seed=22)
+
+    assert twice.statistic == pytest.approx(once.statistic, rel=1e-12)
+    assert twice.p_consistent == pytest.approx(once.p_consistent, abs=0.02)
+    assert twice.p_upper == pytest.approx(once.p_upper, abs=0.02)
+
+
+def test_duplicate_invariance_with_correlated_base_trials():
+    """The harder version of the same test: base trials share a latent factor
+    before duplication, mirroring test_bootstrap.py's second duplicate test."""
+    T, N = 1000, 15
+    rng = np.random.default_rng(23)
+    factor = rng.standard_normal(T)
+    R = 0.6 * factor[:, None] + 0.8 * rng.standard_normal((T, N))
+    R_dup = np.concatenate([R, R], axis=1)
+
+    once = spa_test(R, B=800, block_length=1, seed=24)
+    twice = spa_test(R_dup, B=800, block_length=1, seed=24)
+    assert twice.statistic == pytest.approx(once.statistic, rel=1e-12)
+    assert twice.p_consistent == pytest.approx(once.p_consistent, abs=0.03)
 
 
 def test_pure_null_is_not_liberal():
