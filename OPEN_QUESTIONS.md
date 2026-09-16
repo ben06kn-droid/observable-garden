@@ -149,3 +149,22 @@ rejected by the loaders rather than silently aligned. Truncating to the
 common window discards data; resampling calendar time and evaluating each
 column on its own support changes what "the same replicate" means across
 columns. Neither has been validated.
+
+## garden watch and explicit classes
+
+`garden/watch.py` prices its bar with `_full_class_engine.full_class_null_max`,
+which is moment-based and takes a `SubsetClass`, and refuses out-of-class
+specifications with `SubsetClass.contains(weights)`. `ExplicitClass` offers
+neither, so watch rejects it at open.
+
+That is a deferred path, not a property of the declared-class tier. `garden.audit`
+already prices an explicit class by running the Reality Check on the supplied
+`class_returns`, and `garden.transcript` already checks membership by spec id.
+Watch could draw the bar once at open from the class streams and refuse by id in
+`evaluate`; the tier argument — the bar is fixed before any evaluation, and
+nothing inside the class moves it — does not depend on which kind of class it is.
+
+It matters for the agent arm. An LLM's natural class is closer to `ExplicitClass`
+than to `SubsetClass`: a tool grammar emits rules, most of which are not
+equal-weight feature subsets. Whoever builds that arm should start here rather
+than rediscover it.
