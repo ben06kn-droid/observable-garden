@@ -168,3 +168,15 @@ It matters for the agent arm. An LLM's natural class is closer to `ExplicitClass
 than to `SubsetClass`: a tool grammar emits rules, most of which are not
 equal-weight feature subsets. Whoever builds that arm should start here rather
 than rediscover it.
+
+## garden watch is coupled to whatever can build a Sandbox
+
+`watch.open` takes a configured `Sandbox` rather than a base-return matrix,
+because `Sandbox.evaluate` computes `x_in @ weights` across assets and needs the
+full `(T, M, K)` panel; a `(T, K)` matrix of per-feature returns cannot
+reconstruct one. That is the honest signature, but it means watch can only be
+pointed at data something can turn into a `DGPData`-shaped panel.
+
+For real data that is a panel loader, which is the public-data notebook's job.
+Until one exists, watch runs on simulated panels only — a scope limit of the
+entry point, not of the method.

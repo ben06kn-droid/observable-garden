@@ -108,7 +108,11 @@ class WatchState:
     status: str                     # "OK" | "INADMISSIBLE"
     critical_value: float
     bar: np.ndarray                 # (B,) null maximum over Theta
-    power_at_reference: float       # analytic, single pre-specified strategy (SCOPE.md 13)
+    # P(a true-edge spec's estimated Sharpe clears `critical_value`), with the
+    # Sharpe sampling law at T. Measured against the PRICED bar above, not an
+    # analytic independent-max one, so it agrees with realized power at every
+    # correlation. Single pre-specified strategy, not search power (SCOPE.md 13).
+    power_at_reference: float
     class_name: str
     class_size: int
     n_features: int
@@ -214,15 +218,30 @@ class Watch:
             raise ValueError("nothing evaluated yet, so there is no standing to report")
         return self._reports[-1]
 
-    def submit(self, spec: Specification, predicted_oos) -> Verdict:
+    def submit(self, spec: Specification | None = None, predicted_oos=None) -> Verdict:
         """Submit, then return the full audit verdict on the resulting transcript.
+
+        Called with no arguments, it audits whatever the sandbox already has
+        recorded. That is what makes the same call work for both kinds of
+        searcher: scripted ones (searchers/scripted.py) call `sandbox.submit`
+        themselves inside `run`, while an agent calls this with a spec. Step 5's
+        type-I and power validations need the watched verdict for both.
 
         The transcript records menu_kind="adaptive", which is what routes
         `audit` to the full-class branch -- the only tier a watched search is
         entitled to."""
-        if not isinstance(predicted_oos, Distribution):
-            predicted_oos = Distribution.degenerate(float(predicted_oos))
-        self._sandbox.submit(spec, predicted_oos)
+        if spec is None:
+            if self._sandbox.submission is None:
+                raise ValueError(
+                    "nothing submitted: either pass a specification, or let the searcher call "
+                    "sandbox.submit() first and then call submit() with no arguments"
+                )
+        else:
+            if predicted_oos is None:
+                raise ValueError("passing a specification also needs its predicted out-of-sample Sharpe")
+            if not isinstance(predicted_oos, Distribution):
+                predicted_oos = Distribution.degenerate(float(predicted_oos))
+            self._sandbox.submit(spec, predicted_oos)
         transcript = from_sandbox(self._sandbox, menu_kind=WATCHED_MENU_KIND)
         return audit(
             transcript,
@@ -309,8 +328,14 @@ def open(
     bar, L, floor_binds, cap_binds = full_class_null_max(
         base, spec_class, B=B, block_length=block_length, annualization=ann, seed=seed)
     c = critical_value(bar, alpha)
-    power = analytic_power(
-        reference_sharpe, null_max_critical_value(class_size, T, ppy, alpha, 0.0), T, ppy)
+    # Power MUST be measured against the bar just priced, not against an
+    # analytic independent-max critical value. Using the latter would make the
+    # INADMISSIBLE decision here disagree with realized power everywhere except
+    # rho = 0, since correlated class members lower the bootstrap bar. The only
+    # analytic part is the Sharpe sampling law at T (Lo 2002); the threshold it
+    # is compared against is the priced one, and it is the same `c` that
+    # `evaluate` uses for `cleared`.
+    power = analytic_power(reference_sharpe, c, T, ppy)
 
     admissible = None
     reasons = []
@@ -338,9 +363,16 @@ def open(
             f"specification. Lengthen the sample or raise the reference Sharpe."
         )
         reasons.append("Returned before any evaluation, while the design can still be changed.")
+        reasons.append(
+            "That size assumes independent specifications and is deliberately conservative: "
+            "correlated members act as fewer, which lowers the class bar and raises power, so a "
+            "highly correlated class can safely be wider than the number above and its realized "
+            "power will come in higher than this estimate."
+        )
     reasons.append(
-        "Power is for a single pre-specified strategy, not for the search (SCOPE.md §13), and "
-        "assumes independent specifications, which is the worst case."
+        f"Power is for a single pre-specified strategy, not for the search (SCOPE.md §13). It is "
+        f"measured against the bootstrap critical value priced over this class ({c:.3f}), the same "
+        f"one `cleared` uses, so it already reflects however correlated the class turned out to be."
     )
 
     state = WatchState(

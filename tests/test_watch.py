@@ -141,6 +141,59 @@ def test_inadmissible_with_no_workable_class_size_says_so():
     assert any("Lengthen the sample" in r for r in w.state.reasons)
 
 
+def test_power_is_measured_against_the_priced_bar():
+    """The threshold power is computed against must be the bootstrap critical
+    value read off this class's own bar -- the same one `cleared` uses -- not an
+    analytic independent-max value. Otherwise the INADMISSIBLE decision at open
+    and realized power disagree at every correlation but zero."""
+    from garden.power import analytic_power
+    cls = SubsetClass(max_size=2)
+    sb = sandbox_with(spec_class=cls, T=400)
+    w = watch_mod.open(sb, cls, B=B_FAST, reference_sharpe=1.0, seed=13)
+    expected = analytic_power(1.0, w.state.critical_value, w.state.n_periods, PPY)
+    assert w.state.power_at_reference == pytest.approx(expected, rel=1e-12)
+
+
+def test_the_priced_bar_differs_from_the_analytic_one_under_correlation():
+    """The test that would have caught the bug. At rho=0 the bootstrap bar and
+    the analytic independent-max value nearly coincide, so a power figure built
+    on the wrong one still looks right; under correlation the class bar falls
+    and they separate."""
+    from garden.power import analytic_power, null_max_critical_value
+    cls = SubsetClass(max_size=2)
+    config = DGPConfig(M=30, T=400, T_oos=100, K=8, s=0, rho=0.6, sigma=1.0, seed=14)
+    sb = Sandbox(generate(config), periods_per_year=PPY, spec_class=cls)
+    w = watch_mod.open(sb, cls, B=B_FAST, reference_sharpe=1.0, seed=15)
+
+    analytic_c = null_max_critical_value(w.state.class_size, w.state.n_periods, PPY, 0.05, 0.0)
+    assert w.state.critical_value < analytic_c          # correlated members lower the bar
+    # Power follows the priced bar, so it exceeds what the analytic bar implies.
+    assert w.state.power_at_reference > analytic_power(1.0, analytic_c, w.state.n_periods, PPY)
+
+
+def test_submit_with_no_arguments_audits_the_recorded_submission():
+    """Scripted searchers call sandbox.submit() themselves inside run(), so the
+    no-argument form is how step 5 gets a watched verdict for them."""
+    from searchers.scripted import Greedy
+    cls = SubsetClass(max_size=1)
+    sb = sandbox_with(spec_class=cls, seed=16)
+    w = watch_mod.open(sb, cls, B=B_FAST, seed=17)
+    Greedy(seed=16).run(w.sandbox)
+    verdict = w.submit()
+    assert verdict.method == "full_class"
+    assert verdict.menu_kind == watch_mod.WATCHED_MENU_KIND
+    assert verdict.status in ("PASS", "FAIL", "INADMISSIBLE", "DEGENERATE")
+
+
+def test_submit_with_no_arguments_raises_when_nothing_was_submitted():
+    cls = SubsetClass(max_size=1)
+    sb = sandbox_with(spec_class=cls)
+    w = watch_mod.open(sb, cls, B=500, seed=18)
+    w.evaluate(single(sb.num_features, 0))
+    with pytest.raises(ValueError, match="nothing submitted"):
+        w.submit()
+
+
 def test_open_refuses_a_sandbox_enforcing_a_different_class():
     """The tier's premise is that the class was fixed before the search. If the
     sandbox is enforcing one class and watch is asked to price another, the two
@@ -189,7 +242,8 @@ def test_watched_greedy_reproduces_the_unwatched_verdict():
     watched = sandbox_with(spec_class=cls, seed=11)
     w = watch_mod.open(watched, cls, B=B_FAST, seed=12)
     Greedy(seed=11).run(w.sandbox)
-    got = audit(from_sandbox(w.sandbox, menu_kind=watch_mod.WATCHED_MENU_KIND), B=B_FAST, seed=12)
+    # Through watch's own submit path, which is what step 5 will use.
+    got = w.submit()
 
     assert got.status == expected.status
     assert got.p_value == pytest.approx(expected.p_value)
