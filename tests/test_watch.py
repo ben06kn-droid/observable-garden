@@ -114,13 +114,40 @@ def test_explicit_class_is_deferred_at_open():
 
 def test_open_returns_inadmissible_before_any_evaluation():
     """A class too broad to certify anything is refused at open, while the
-    design can still be changed, and names a size that would clear the floor."""
-    sb = sandbox_with(K=40, T=120)
+    design can still be changed, and names a size that would clear the floor.
+
+    This is the case that makes preflight real: the sample is long enough that
+    *some* class would work, so the number returned is actionable."""
+    sb = sandbox_with(K=40, T=1500)
     wide = SubsetClass(max_size=3)
-    w = watch_mod.open(sb, wide, B=500, reference_sharpe=0.5, power_floor=0.90, seed=8)
+    w = watch_mod.open(sb, wide, B=500, reference_sharpe=1.0, power_floor=0.50, seed=8)
     assert w.state.status == "INADMISSIBLE"
     assert w.state.admissible_class_size is not None
-    assert w.state.admissible_class_size < w.state.class_size
+    assert 1 <= w.state.admissible_class_size < w.state.class_size
+    assert any("would clear the floor" in r for r in w.state.reasons)
+    # Refused before anything was evaluated.
+    assert w.sandbox.returns_matrix().shape[1] == 0
+
+
+def test_inadmissible_with_no_workable_class_size_says_so():
+    """The honest answer when the sample is simply too short: not even one
+    pre-specified specification reaches the floor, so no class size is named
+    and the reason points at the sample rather than the breadth."""
+    sb = sandbox_with(K=40, T=120)
+    w = watch_mod.open(sb, SubsetClass(max_size=3), B=200, reference_sharpe=0.5,
+                       power_floor=0.90, seed=8)
+    assert w.state.status == "INADMISSIBLE"
+    assert w.state.admissible_class_size is None
+    assert any("Lengthen the sample" in r for r in w.state.reasons)
+
+
+def test_open_refuses_a_sandbox_enforcing_a_different_class():
+    """The tier's premise is that the class was fixed before the search. If the
+    sandbox is enforcing one class and watch is asked to price another, the two
+    disagree about what Theta is and the run has no standing."""
+    sb = sandbox_with(spec_class=SubsetClass(max_size=1))
+    with pytest.raises(ValueError, match="enforces"):
+        watch_mod.open(sb, SubsetClass(max_size=3), B=100, seed=10)
 
 
 # -- The bar is fixed --------------------------------------------------------
