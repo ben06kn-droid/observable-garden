@@ -58,8 +58,14 @@ correlation-based
 neighbor rule was tested under heterogeneous correlation in E19(b) (SCOPE.md
 §20): the recursive bootstrap stayed calibrated as the correlations
 separated, but separation was partial (anchor stability 0.192 against 0.088),
-so P6's exact-tie case is still open and needs a structure that separates the
-correlations fully.
+which turns out to be the harder case rather than the easier one. Under exact
+ties the recursive bootstrap now has a sketch (THEORY.md P6): the anchor is
+asymptotically independent of the Sharpe vector, and non-winners are
+exchangeable, so the submitted value has the limit law of a random anchor and
+the replicate's bias about the anchor's *identity* does not bias the value's
+law. Partial separation breaks both premises at once and has no argument, only
+the measurement that it stayed calibrated. Formalizing the sketch, and finding
+an argument for the separated case, are the two open tasks.
 
 ## Does re-anchoring at depth inflate a little?
 

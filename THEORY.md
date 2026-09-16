@@ -266,38 +266,81 @@ and with the full-class null on all 500 draws. The consequence holds for
 verdicts; for the size of the mismatch, quote the measured values, not the
 limit.
 
-## P6. When is the recursive bootstrap consistent? (known ingredients, one open case)
+## P6. When is the recursive bootstrap consistent? (ingredients known, one case sketched, one open)
 
-**Statement.** If the map from `Z` to the search's selected value is continuous
-except on a set of limit-law probability zero, the recursive bootstrap
-consistently estimates `F_P`. The route is stationary-bootstrap consistency
-(Politis & Romano 1994) plus the continuous mapping theorem.
+**Statement.** If the finite-`T` map from the data to the search's selected
+value converges to a limit map continuous except on a set of limit-law
+probability zero, the recursive bootstrap consistently estimates `F_P`.
 
-**Covered.** Under the P4 and P5 scoring, the selected value is a function of
-order statistics. Early stopping makes it discontinuous only where `r_{m+1} = r_m`
-ties, which have probability zero under a continuous limit law.
+**Route, stated properly.** Two ingredients, and the plain continuous mapping
+theorem is neither of them.
 
-**Open.** Anchor rules based on other statistics, such as the most-correlated
-neighbor, are not functions of `Z` alone. Under equicorrelation, the population
-correlations with the winner tie exactly, so the anchor is chosen by
-estimation noise in the sample correlations. That noise lives at a different
-scale from the Sharpe limit, and neither the continuous mapping argument nor
-standard bootstrap results cover it (compare Andrews 2000 on bootstrap failure
-at irregular points). e15's measured coupling agrees: the fixed neighbor
-rule's anchor had mean Sharpe rank 11.0 of 20, against 10.7 for a random
-anchor (SCOPE.md §14). e15 found no calibration problem for this rule; that is
-evidence, not a proof.
+- The map applied inside a replicate is the **finite-`T`** map — sample means
+  over sample standard deviations, and a pair statistic divided by a sample
+  covariance — not the limit map `g`. Plain CMT does not cover that. The
+  *extended* continuous mapping theorem does (van der Vaart 1998, Thm
+  18.11(i); van der Vaart & Wellner 1996, Thm 1.11.1), and it requires the
+  finite-`T` maps to converge to `g` uniformly on compacts. That holds here
+  because the sample covariance converges, and the maps are deterministic
+  given `T`, which is the fixed-map form those theorems assume.
+- Bootstrap consistency is needed for the **joint** law of all `K` Sharpe
+  ratios, not one at a time. With `K` fixed it follows from the delta method
+  applied to the joint mean and covariance limit (Ledoit & Wolf 2008),
+  together with stationary-bootstrap consistency (Politis & Romano 1994).
 
-E19(b) (SCOPE.md §20) moved the rule toward the regular case by separating
-the population correlations, and only partly succeeded: the anchor is the
-highest-loading feature on 27.6% of draws against 6.8% under equicorrelation,
-and replicate anchor stability rises to 0.192 from 0.088, so most replicates
-still choose the anchor by estimation noise. Across that increase in
-separation the recursive bootstrap stayed calibrated (type-I 4.4% and 5.0%,
-n = 500 each) and coupling was unchanged (mean κ 0.480 against 0.483). More
-evidence, still not a proof, and the exact-tie case remains open: a design
-that separates the correlations fully would be needed to test the regular
-case.
+**Covered.** Under the P4 and P5 scoring the selected value is a function of
+order statistics of `Z`. Early stopping makes it discontinuous only where
+`r_{m+1} = r_m`, which has probability zero under a continuous limit law.
+
+**Sketched: the correlation-anchored rule under equicorrelation.** The
+neighbor rule's anchor is not a function of `Z`. Under equicorrelation the
+population correlations with the winner tie exactly, so the anchor is an
+argmax over a parameter that is tied in the population, and bootstraps are
+known to misestimate such argmax laws (Andrews 2000 is the right family). An
+earlier version of this section said the correlation noise "lives at a
+different scale" from the Sharpe limit. That was wrong: `√T(ρ̂ − ω)` and
+`√T·SR` are both `O(1)`. The obstruction is non-regularity, not scale.
+
+The anchor's identity enters the submitted value only through `Z_a`, and two
+premises make that harmless in the limit:
+
+1. **Selection is asymptotically independent of `Z`.** `Z` is a mean over a
+   standard deviation, so it depends on the sample covariance only at
+   `O_p(T^{-1/2})`; asymptotically it is a function of the sample mean vector
+   alone. For iid Gaussian data the sample mean and sample covariance are
+   exactly independent, and for symmetric innovations asymptotically so, the
+   cross-covariance being a third moment. The anchor, a function of the sample
+   correlations, is therefore asymptotically independent of `Z` given the
+   winner.
+2. **Non-winners are exchangeable.** Under equicorrelation, conditional on the
+   winner's identity, the remaining coordinates of `Z` are exchangeable, so
+   the law of `Z_a` does not depend on which non-winner `a` is.
+
+Together these give the submitted value the same limit law as under a
+uniformly random anchor, which is data-oblivious and so covered by P1. The
+same two premises hold inside a replicate in the limit, so the bootstrap law
+of the value is also the random-anchor law and the recursive test is
+consistent. This predicts what e15 measured: the fixed neighbor rule behaved
+like a random anchor, mean anchor rank 11.0 of 20 against 10.7 (SCOPE.md §14).
+
+At finite `T` the second premise fails inside a replicate. Resampling draws
+from the empirical distribution, whose sample correlations are not
+exchangeable, so the replicate's anchor is biased toward the neighbor observed
+on the real data — E19(b) measured exactly that, anchor stability 0.088
+against the 1/19 ≈ 0.053 a uniform anchor gives (SCOPE.md §20). Because the
+value's law does not depend on *which* non-winner is the anchor, that identity
+bias does not bias the value's law, and it vanishes as `ρ̂ → ω`. This is a
+sketch resting on two named premises, not a proof; formalizing it is the open
+task here.
+
+**Open: partial separation.** E19(b)'s heterogeneous correlation is the regime
+where both premises fail at once. The loadings differ, so `Z_a`'s law depends
+on `a`'s loading and the non-winners are no longer exchangeable; and the
+bootstrap is still biased about which `a` it picks (stability 0.192 against
+0.088). The recursive bootstrap stayed calibrated there — type-I 4.4% and
+5.0% at n = 500 each, coupling unchanged at mean κ 0.480 against 0.483 — but
+that is evidence, and no argument is offered for it. The sketch above does not
+reach this case.
 
 ## Prior work checked for P4, P5 and the coupling κ
 
@@ -332,7 +375,7 @@ nothing anticipates P4.
 | P3 | ingredients known, tier new | `estimator/full_class.py` and tests; E17 full-class null (SCOPE.md §16); E19(c) up to 3,240 members (SCOPE.md §19); E20 explicit class, exact on 4M shift comparisons (SCOPE.md §21) | E21, E22 |
 | P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E17b graded by rank, matching the limit (SCOPE.md §18); E18 at depth 3 (SCOPE.md §17); E19(c) growth in K (SCOPE.md §19); E19 off-exchangeability (SCOPE.md §20); E20 sign result outside additive scoring (SCOPE.md §21) | block correlation, unequal volatilities |
 | P5 | new, corrected | exploratory limit check above; E17 at d = 2; E18 at d = 3 and 4 (SCOPE.md §17) | E22 |
-| P6 | ingredients known, one case open | e15 neighbor rule calibrated empirically; E19(b) calibrated as separation rises (SCOPE.md §20) | a design that separates the correlations fully |
+| P6 | ingredients known; equicorrelated case sketched, partial separation open | e15 neighbor rule calibrated empirically; E19(b) calibrated as separation rises (SCOPE.md §20) | formalize the sketch's two premises; find an argument for partial separation |
 
 ## References
 
@@ -387,6 +430,15 @@ tags) except where an entry says otherwise:
 - Tibshirani, R.J., Taylor, J., Lockhart, R. & Tibshirani, R. (2016). Exact
   post-selection inference for sequential regression procedures. *Journal of
   the American Statistical Association* 111(514), 600–620.
+- van der Vaart, A.W. (1998). *Asymptotic Statistics*. Cambridge University
+  Press, doi:10.1017/cbo9780511802256. P6 cites the extended continuous
+  mapping theorem as Thm 18.11(i). That theorem number was corroborated from
+  papers and course notes citing it, not read in the book.
+- van der Vaart, A.W. & Wellner, J.A. (1996). *Weak Convergence and Empirical
+  Processes*. Springer, doi:10.1007/978-1-4757-2545-2. P6 cites the extended
+  continuous mapping theorem as Thm 1.11.1, which is the numbering of this
+  1996 edition; a second edition (2023, doi:10.1007/978-3-031-29040-4) may
+  renumber it. Corroborated the same way, from secondary sources.
 - White, H. (2000). A reality check for data snooping. *Econometrica* 68(5),
   1097–1126.
 - Zhang, D. & Wu, W.B. (2017). Gaussian approximation for high dimensional
