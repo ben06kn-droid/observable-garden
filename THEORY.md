@@ -29,6 +29,27 @@ P4–P6 are the parts to have reviewed.
   estimates the law of the maximum over a declared class `Θ`.
 - The test reports `p = P*(M ≥ sr_sel)` under whichever null is used.
 
+## Terminology
+
+This file and SCOPE.md use the repository's vocabulary; the note addressed to
+López de Prado & Porcu uses theirs. The mapping, so the two agree:
+
+| here | in the note | source |
+|---|---|---|
+| evaluated specification, logged column | trial | L&P fn. 1: a trial occurs whenever a Sharpe ratio is computed |
+| menu `C(D)` | candidate set `S(D)` | eq. (1), where `S` is written as fixed |
+| `sr_sel` | `ŜR_c` | S1 |
+| realized-menu null `F_C` | `F_{M_K}` for the observed candidate set | eq. (2) |
+| process null `F_P` | `F_{M_K}` under the second reading of Definition 1 | Definition 1; S1 |
+| least-favorable null (White) | the boundary `s₁ = … = s_K = 0` of `H₀^FW` | S7.3, eqs. (15)–(16) |
+| naive / recursive / full-class bootstrap | three numerical DSR-EO implementations | S8.3–S8.4 |
+| anti-conservative | liberal | S7.1 |
+| `p = P*(M ≥ sr_sel)` | `p^ex_K = 1 − F_{M_K}(ŜR_c)`, reject when DSR ≥ 1−α | eqs. (13)–(14) |
+
+`K` is always the logged menu size with correlated trials, never an effective
+count: see the effective-N result in SCOPE.md §10 for why shrinking `K` for
+correlation double-counts it.
+
 ## P1. Fixed menus are valid (known)
 
 **Statement.** If `C = c(X, U)`, where `U` is randomness independent of the
@@ -127,8 +148,11 @@ evaluates every pair containing the anchor.
   is `M_C = max(Z_(1), max_{j≠a} g(Z_a, Z_j))` with `a` frozen at the observed
   winner. By the lemma, `M_P ≥ M_C` on every draw. So `F_P` stochastically
   dominates `F_C`, and the naive p-value is at most the process p-value. The
-  inequality is strict whenever the replicate's winner differs from `a` and the
-  best pair beats the best single.
+  inequality is strict when the frozen anchor ranks third or lower in the
+  replicate, `g` is strictly increasing, and the best pair beats the best
+  single. It is not strict merely because the replicate's winner differs from
+  `a`: if `a` ranks second, `max_{j≠a} g(z_a, z_j) = g(z_(2), z_(1))`, which
+  is the bound.
 - **Loser anchor.** Here `M_P = max(Z_(1), g(Z_(K), Z_(1)))`. By the mirror,
   `M_C ≥ M_P` on every draw, so the naive test is conservative. The effect is
   small because `Z_(1)` usually dominates both.
@@ -172,9 +196,12 @@ because the winner's best partner is the runner-up, and every other feature's
 best partner is the winner. Ranks 1 and 2 submit the same value. Rank 2's
 process maximum therefore equals the winner's, and the lemma makes its naive
 test anti-conservative too. After rank 2 the submitted value falls with k.
-The naive rate has no closed form here; a Monte Carlo of the limit (K = 20,
-ω = 0.3) gives 9.1%, 9.1%, 6.6%, 4.9%, 4.3% and 4.3% at ranks 1, 2, 3, 5,
-10 and 20.
+The lemma therefore fixes the sign at ranks 1 and 2 (liberal) and at rank K
+(conservative, by the mirror). It says nothing about the interior: those ranks
+are decided by whether the rank-k process null stochastically exceeds the
+uniform mixture of P4′, which has no closed form and is reported by Monte
+Carlo. At K = 20, ω = 0.3 the limit gives 9.1%, 9.1%, 6.6%, 4.9%, 4.3% and
+4.3% at ranks 1, 2, 3, 5, 10 and 20, crossing nominal between ranks 3 and 5.
 
 Evidence (SCOPE.md §16, §18):
 
@@ -189,12 +216,29 @@ Evidence (SCOPE.md §16, §18):
 
 **Breadth.** In the same limit, the gap between the search's value, set by
 the top two order statistics, and the frozen menu's maximum grows with K, and
-grows faster when ω is small. The limit predicted naive type-I of 10.1%,
-15.5%, 24.2% and 35.7% at K = 10, 20, 40 and 80 with ω = 0, and 7.3%, 9.1%,
-11.3% and 13.7% at ω = 0.3. E19(c) (SCOPE.md §19) measured 10.0%, 14.2%,
-22.4% and 36.2%, and 7.0%, 8.4%, 12.0% and 14.0%, on draws nested across K.
-Every value lies inside its 95% interval, and the pre-registered trend test
-found growth in K at both correlations (p = 0.0001).
+grows faster when ω is small. Under exchangeability `F_C` does not depend on
+the data, so the realized-menu test's limit type-I at level α has the closed
+form
+
+    1 − F_P(F_C⁻¹(1 − α)),
+
+evaluated by Monte Carlo in `experiments/limit_model.py`. Alongside it,
+sup|F_P − F_C| is the uniform distortion of the p-value distribution (López de
+Prado & Porcu, eq. 12), which the type-I rate at a single α does not capture.
+
+| ω | K | limit type-I | E19(c) measured | sup\|F_P − F_C\| |
+|---|---|---|---|---|
+| 0 | 10 | 10.0% | 10.0% | 0.142 |
+| 0 | 20 | 15.6% | 14.2% | 0.273 |
+| 0 | 40 | 24.1% | 22.4% | 0.416 |
+| 0 | 80 | 35.9% | 36.2% | 0.548 |
+| 0.3 | 10 | 7.3% | 7.0% | 0.048 |
+| 0.3 | 20 | 9.2% | 8.4% | 0.086 |
+| 0.3 | 40 | 11.3% | 12.0% | 0.129 |
+| 0.3 | 80 | 13.7% | 14.0% | 0.169 |
+
+Every measured value lies inside its 95% interval, and the pre-registered
+trend test found growth in K at both correlations (p = 0.0001; SCOPE.md §19).
 
 **Outside additive scoring.** The lemma needs a symmetric, nondecreasing pair
 statistic, which crossover rules do not provide: a rule's position is the sign
@@ -215,6 +259,42 @@ minimum detectable rate about 6.9%). In paired p-values, though, the naive
 p-value was at most the recursive one on 99.9% of draws, so the direction
 the lemma suggests is present at a size of a point or less.
 
+## P4′. The realized-menu null is a uniform mixture over anchor ranks (new)
+
+**Statement.** Under the exchangeable scoring of P4, freeze the anchor at its
+value on the real data. In a replicate its rank is uniform on 1..K and
+independent of that replicate's order statistics, so
+
+    F_C = (1/K) Σ_k F_P(k),
+
+where `F_P(k)` is the process null of the search that anchors on the rank-k
+feature.
+
+*Proof.* Conditional on the replicate's order statistics, the frozen index is
+exchangeable with every other index, so its rank is uniform and independent of
+them. The realized-menu maximum is the rank-k process maximum on the event
+that the frozen anchor has rank k; average over k. ∎
+
+**Corollary 4.1.** A uniformly random anchor is exactly calibrated under the
+realized-menu test: its process null *is* the mixture, so the test has exact
+level. Monte Carlo of the limit, with an independently drawn rank per draw:
+5.00% ± 0.02 at K=20, ω=0.3 (`experiments/limit_model.py`), and E17 measured
+5.0% at τ = 0.
+
+**Corollary 4.2.** Ranks 1 and 2 are liberal and rank K conservative, by P4.
+Interior ranks are decided by the mixture criterion and have no closed form.
+Limit values at K=20, ω=0.3, against E17b's measurements (SCOPE.md §18):
+
+| anchor rank | 1 | 2 | 3 | 5 | 10 | 20 |
+|---|---|---|---|---|---|---|
+| limit type-I | 9.1% | 9.1% | 6.6% | 4.9% | 4.3% | 4.3% |
+| measured | 9.5% | 9.7% | 6.3% | 3.9% | 3.8% | 3.7% |
+| sup·\|F_P − F_C\| | 0.087 | 0.087 | 0.038 | 0.004 | 0.015 | 0.015 |
+
+The Kolmogorov distance is the uniform distortion of the p-value distribution
+(López de Prado & Porcu, eq. 12), and it is what vanishes at the calibrated
+interior rank rather than the type-I rate alone.
+
 ## P5. Greedy search and the lattice optimum (new, corrected)
 
 **Setting.** Scores are exchangeable: a size-`m` subset's limiting statistic is
@@ -224,8 +304,11 @@ with value `r_m = (z_(1) + … + z_(m)) / c_m`.
 
 **Statement.**
 
-1. Greedy forward selection, and beam search of any width, extends the top-`m`
-   set to the top-`(m+1)` set at every step, so it visits `r_1, r_2, …, r_d`.
+1. Greedy forward selection extends the top-`m` set to the top-`(m+1)` set at
+   every step. Beam search of any width keeps the top-`m` set *within its
+   beam* at every level, since the beam is the best `w` supports of that size
+   and the top-`m` set is the best of them. Either way the search visits
+   `r_1, r_2, …, r_d`.
 2. **Without early stopping,** the selected value `max_{m≤d} r_m` equals the
    maximum over the full lattice of subsets of size at most `d`.
 3. **With early stopping** (stop when a step does not improve), the selected
@@ -233,19 +316,30 @@ with value `r_m = (z_(1) + … + z_(m)) / c_m`.
    lattice maximum, and equal whenever the first local maximum is global. At
    `d = 2` it is always equal.
 
-**Consequences.** The process null of greedy or beam search is at most the
-full-class null, so by P2 the full-class test stays valid. The two coincide
-except on the event where `r_m` is not unimodal. This explains SCOPE.md §5's
+**Consequences, in two parts.** *Validity* needs no limit argument and holds
+at finite `T`: greedy and beam search only ever evaluate members of `Θ_d`, so
+`sr_sel ≤ max_{Θ_d}` exactly, and P3 with P2 gives a valid test. *Coincidence*
+is the limit statement: the process null of greedy or beam search equals the
+full-class null except on the event where `r_m` is not unimodal. Only the
+second needs exchangeability, and only the second is approximate. This explains SCOPE.md §5's
 observation that recursive p-values were identical across beam widths: in this
 limit every width returns the same value.
 
-**Exploratory size of the gap** (Gaussian limit, K = 20, ω = 0.3, 10⁶ draws):
+**Exploratory size of the gap** (Gaussian limit, K = 20, ω = 0.3, 2×10⁶ draws,
+reproduced by `experiments/limit_model.py`):
 
-| d | greedy below lattice maximum | within the top 5% of lattice maxima | `r_m` not unimodal | largest shortfall |
-|---|---|---|---|---|
-| 2 | 0 | 0 | 0 | none |
-| 3 | 0.19% | 0.19% | 0.57% | 0.054 |
-| 4 | 0.28% | 0.32% | 0.79% | 0.083 |
+| d | greedy below lattice maximum | `r_m` not unimodal | 99.9th-percentile shortfall |
+|---|---|---|---|
+| 2 | 0 | 0 | 0 |
+| 3 | 0.19% | 0.57% | 0.043 |
+| 4 | 0.28% | 0.80% | 0.066 |
+
+The last column reports a quantile of the shortfall among draws that fall
+short. An earlier version printed the sample maximum (0.054 and 0.083); a
+maximum over draws is seed-dependent and grows with the draw count, so it
+cannot reproduce and should not have been tabulated. That version also carried
+a "within the top 5% of lattice maxima" column, dropped here because the
+script does not compute it.
 
 So "the full-class null costs greedy search no power" holds exactly at `d = 2`
 or without early stopping, and approximately at larger `d`. E18 checks how
@@ -393,13 +487,27 @@ tags) except where an entry says otherwise:
   yet confirmed from publisher metadata.
 - Berk, R., Brown, L., Buja, A., Zhang, K. & Zhao, L. (2013). Valid
   post-selection inference. *Annals of Statistics* 41(2), 802–837.
+- Blum, A. & Hardt, M. (2015). The Ladder: a reliable leaderboard for machine
+  learning competitions. *Proceedings of the 32nd International Conference on
+  Machine Learning* (PMLR 37), 1006–1014; arXiv:1502.04585. Title, authors and
+  arXiv identifier confirmed from the arXiv API; the PMLR volume and pages
+  from secondary sources, not the proceedings page.
 - Chernozhukov, V., Chetverikov, D. & Kato, K. (2013). Gaussian approximations
   and multiplier bootstrap for maxima of sums of high-dimensional random
   vectors. *Annals of Statistics* 41(6), 2786–2819.
+- Dwork, C., Feldman, V., Hardt, M., Pitassi, T., Reingold, O. & Roth, A.
+  (2015). The reusable holdout: preserving validity in adaptive data analysis.
+  *Science* 349(6248), 636–638. The companion, Preserving statistical validity
+  in adaptive data analysis, is *STOC 2015*, 117–126.
 - Efron, B. (2014). Estimation and accuracy after model selection. *Journal of
   the American Statistical Association* 109(507), 991–1007.
+- Freedman, D.A. (1983). A note on screening regression equations. *The
+  American Statistician* 37(2), 152–155.
 - Hansen, P.R. (2005). A test for superior predictive ability. *Journal of
   Business & Economic Statistics* 23(4), 365–380.
+- Hardt, M. (2017). Climbing a shaky ladder: better adaptive risk estimation.
+  arXiv:1706.02733. Single-authored, confirmed from the arXiv API; the m-class
+  bounds sometimes attributed to this paper are Feldman, Frostig & Hardt's.
 - Hsu, P.-H., Hsu, Y.-C. & Kuan, C.-M. (2010). Testing the predictive ability
   of technical analysis using a new stepwise test without data snooping bias.
   *Journal of Empirical Finance* 17(3), 471–484.
@@ -410,12 +518,23 @@ tags) except where an entry says otherwise:
 - Liu, J., Qu, W., Gaboardi, M., Garg, D. & Ullman, J. (2024). Program
   analysis for adaptive data analysis. *Proceedings of the ACM on Programming
   Languages* 8(PLDI), 914–938.
-- López de Prado, M. & Porcu, E. The deflated Sharpe ratio: a unified
+- López de Prado, M. & Fabozzi, F.J. (2026). The false discovery rate in
+  finance: identification failure and search-adjusted estimation. SSRN
+  6450418, doi:10.2139/ssrn.6450418. Title and authors confirmed via Crossref;
+  the paper itself has not been opened from this repository, so cite it only
+  for what that metadata supports.
+- López de Prado, M., Lipton, A. & Zoonekynd, V. (2026). Sharpe ratio
+  inference: a new standard for decision making and reporting. *Journal of
+  Portfolio Management* 52(6), 6–50, doi:10.3905/jpm.2026.1.837. The page
+  range is the main text's, confirmed via Crossref; the supplement's "50–66"
+  refers to something else.
+- López de Prado, M. & Porcu, E. (2026). The deflated Sharpe ratio: a unified
   framework for search-adjusted performance inference. SSRN 7198158,
-  doi:10.2139/ssrn.7198158. Title, authors and DOI confirmed; the SSRN listing
-  is reported as dated September 2025 while Crossref registers 2026. SSRN
-  blocks automated access, so the paper's definitions of DSR-L, DSR-LS and
-  DSR-EO have not been read directly: confirm them against the paper.
+  doi:10.2139/ssrn.7198158. Crossref registers 2026, deposited 30 August 2026,
+  consistent with the 24 August 2026 version. The project owner has read the
+  main text and supplement in full and confirmed the DSR-L, DSR-LS and DSR-EO
+  definitions; SSRN blocks automated access, so they have not been checked
+  from this repository.
 - Miao, J., Pritchard, J.K. & Zou, J. (2026). The agentic garden of forking
   paths. arXiv:2607.01507.
 - Nikolopoulos, S.D. (2026). Spurious predictability in financial machine
