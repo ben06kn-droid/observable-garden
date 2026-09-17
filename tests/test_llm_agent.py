@@ -208,6 +208,41 @@ def test_no_builtin_tool_is_reachable(tmp_path):
     assert isinstance(opts.system_prompt, str)   # a plain str replaces the preset
 
 
+# -- run directory safety ----------------------------------------------------
+
+def test_run_paths_does_not_create_the_directory_until_first_write(tmp_path):
+    """Eager creation left an empty shell whenever a run died before writing,
+    indistinguishable from a stale one."""
+    target = tmp_path / "s0_T5000_control_007"
+    paths = RunPaths(target)
+    assert not target.exists()
+    paths.write_json("config.json", {"ok": True})
+    assert target.exists() and (target / "config.json").exists()
+
+
+def test_run_paths_refuses_a_non_empty_existing_directory(tmp_path):
+    """transcript.jsonl and usage.jsonl are append-mode, so a second run writing
+    into an existing directory interleaves with the first into a file that still
+    parses. Hard error naming the path; no force flag, because moving or
+    deleting the old run should be a decision rather than a default."""
+    target = tmp_path / "s0_T5000_gate_009"
+    RunPaths(target).write_json("verdict.json", {"status": "FAIL"})
+    with pytest.raises(FileExistsError, match=str(target)):
+        RunPaths(target)
+    with pytest.raises(FileExistsError, match="interleave"):
+        RunPaths(target)
+
+
+def test_run_paths_accepts_an_existing_empty_directory(tmp_path):
+    """pytest hands out tmp_path already created, and an empty shell from a
+    crashed run carries no records to interleave with."""
+    target = tmp_path / "empty"
+    target.mkdir()
+    paths = RunPaths(target)          # must not raise
+    paths.append_jsonl("transcript.jsonl", {"kind": "x"})
+    assert (target / "transcript.jsonl").exists()
+
+
 # -- pre-registration compliance ---------------------------------------------
 
 def test_thinking_is_explicitly_disabled(tmp_path):

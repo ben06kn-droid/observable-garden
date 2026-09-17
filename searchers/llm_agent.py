@@ -120,19 +120,45 @@ def spec_from(features, signs, K: int, name: str = "") -> Specification:
 
 @dataclass
 class RunPaths:
+    """Per-run artifact directory, created on first write rather than eagerly.
+
+    Two failure modes this is shaped around, both observed:
+
+    * Creating the directory in __post_init__ meant a run that died before its
+      first write left an empty shell indistinguishable from a stale one.
+    * transcript.jsonl and usage.jsonl are append-mode, so a second run writing
+      into an existing directory interleaves its records with the first into a
+      file that still parses. That is worse than an overwrite, because nothing
+      about the result looks wrong.
+
+    So a directory that already exists with anything in it is a hard error
+    naming the path. There is deliberately no force flag: the only correct
+    responses are to move the old run or to delete it, and both should be a
+    decision rather than a default."""
     root: Path
 
     def __post_init__(self):
         self.root = Path(self.root)
-        self.root.mkdir(parents=True, exist_ok=True)
+        if self.root.exists() and any(self.root.iterdir()):
+            raise FileExistsError(
+                f"run directory already exists and is not empty: {self.root}\n"
+                f"transcript.jsonl and usage.jsonl are append-mode, so writing a second "
+                f"run here would interleave it with the first rather than replace it. "
+                f"Move or delete that directory and run again."
+            )
 
     def path(self, name: str) -> Path:
         return self.root / name
 
+    def _ensure(self) -> None:
+        self.root.mkdir(parents=True, exist_ok=True)
+
     def write_json(self, name: str, obj) -> None:
+        self._ensure()
         self.path(name).write_text(json.dumps(obj, indent=2, default=_json_safe))
 
     def append_jsonl(self, name: str, obj) -> None:
+        self._ensure()
         with self.path(name).open("a") as f:
             f.write(json.dumps(obj, default=_json_safe) + "\n")
 
