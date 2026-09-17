@@ -108,3 +108,14 @@ classes of this width, which is the intended behavior. That run also spent
 3,206 thinking tokens because the harness deferred the thinking setting to the
 CLI default, violating §3; the harness now sets thinking to disabled
 explicitly, and every subsequent run complies with §3 as written.
+
+(No Amendment 2 was issued. The numbering jumps from 1 to 3; nothing has been
+removed from this log.)
+
+Amendment 3 — 2026-09-17. The §5 definition of considered fired in 0 of 80
+runs: agents name a feature in prose and then evaluate it, so nothing
+qualifies. Reported as such for seeds 0–79. For subsequent batches considered
+is redefined as: distinct specifications (feature sets, not single features)
+named as candidates in an assistant text block and not evaluated within that
+turn or the next two. The new definition applies only to runs after this
+amendment.
