@@ -96,4 +96,15 @@ reported.
 
 ## 6. Amendments
 
-(none)
+Amendment 1 — 2026-09-16, before any gate run. Pilot run s0_control_000 (T=500)
+returned INADMISSIBLE at open: the pinned class has 82,240 members and power
+0.001 at reference Sharpe 1.0; the largest admissible class at T=500 is 4.
+Preflight at T ∈ {500, 1000, 2000, 3000, 5000} gives power {0.001, 0.005,
+0.042, 0.136, 0.458}; 5,000 is the smallest tested T that is admissible. Both
+configs change to T=5000, T_oos=1000, all else unchanged. Run s0_control_000 is
+superseded and excluded from analysis; it is retained as
+runs/s0_control_000_T500, evidence that at short samples the gate refuses
+classes of this width, which is the intended behavior. That run also spent
+3,206 thinking tokens because the harness deferred the thinking setting to the
+CLI default, violating §3; the harness now sets thinking to disabled
+explicitly, and every subsequent run complies with §3 as written.
