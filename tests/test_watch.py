@@ -510,10 +510,13 @@ def test_promote_refuses_past_the_top():
         w.promote()
 
 
-def test_off_ladder_attempt_drops_the_verdict_to_undecidable():
-    """The specification is refused and never logged, so the numbers are intact.
-    The verdict degrades anyway: reaching outside the declared class shows the
-    class does not contain everything the search could produce."""
+def test_refused_attempt_is_counted_not_fatal():
+    """A refused attempt is not a trial. The sandbox rejects it, so it produces
+    no return stream, enters no column of R, moves no null and changes no
+    statistic; its refusal message depends on the declared class alone, not on
+    the data. P3 requires that everything the search can *evaluate* lies in
+    Theta, and enforcement is what delivers that -- enforcement working is not
+    evidence against it. So the verdict stands, and the count is reported."""
     from garden.spec_class import ClassLadder
     union = SubsetClass(max_size=2)
     ladder = ClassLadder((SubsetClass(max_size=1), union))
@@ -531,10 +534,39 @@ def test_off_ladder_attempt_drops_the_verdict_to_undecidable():
         w.evaluate(Specification(weights=triple, name="triple"))
     assert w.sandbox.returns_matrix().shape[1] == before   # nothing was logged
 
+    assert len(w.refused_attempts) == 1
+    assert w.state.refused_attempts == 1
+    assert w.log[-1].diagnostics["refused_attempts"] == 0   # recorded after this report
+    assert w.evaluate(single(K, 0)).diagnostics["refused_attempts"] == 1
+
     best = int(np.argmax([r.sr_is for r in w.log]))
     verdict = w.submit(single(K, best), Distribution.degenerate(w.log[best].sr_is))
+    assert verdict.status != "UNDECIDABLE"
+    assert verdict.method == "full_class"
+    assert "attempted and refused" in verdict.reasons[0]
+    assert "do not affect the correction" in verdict.reasons[0]
+
+
+def test_evaluating_a_spec_outside_the_class_still_voids_the_verdict():
+    """The one case that genuinely breaks the correction: an out-of-class
+    specification that was actually evaluated, so its column IS in R and the
+    declared class no longer covers the menu. Reachable only with the sandbox
+    not enforcing, which is why enforcement is the point."""
+    cls = SubsetClass(max_size=1)
+    sb = sandbox_with(K=7, spec_class=None, seed=112)      # no enforcement
+    K = sb.num_features
+    w = watch_mod.open(sb, cls, B=B_FAST, seed=113)
+
+    w.evaluate(single(K, 0))
+    pair_spec = np.zeros(K)
+    pair_spec[[0, 1]] = 1.0                                # size 2, outside max_size=1
+    w.evaluate(Specification(weights=pair_spec, name="pair"))   # logged, not refused
+    assert w.sandbox.returns_matrix().shape[1] == 2
+    assert w.refused_attempts == []
+
+    verdict = w.submit(single(K, 0), Distribution.degenerate(w.log[0].sr_is))
     assert verdict.status == "UNDECIDABLE"
-    assert "outside the declared ladder" in verdict.reasons[0]
+    assert "was evaluated and" in verdict.reasons[0]
 
 
 def test_a_ladder_run_that_stays_on_ladder_matches_the_union_verdict():

@@ -75,9 +75,24 @@ watch reproduces the unwatched Greedy's verdict exactly.
 Nested classes Θ₁ ⊂ Θ₂ ⊂ … declared up front, with a pre-registered rule
 for moving up. The bar is priced at the union; standing is reported per
 level. The benefit is computational, not statistical — a searcher can work
-a small class first without changing what it is being held to. Any
-expansion not on the declared ladder drops the run to UNDECIDABLE and says
-so.
+a small class first without changing what it is being held to.
+
+**Attempts outside the ladder are counted, not fatal.** A refused attempt is
+not a trial: the sandbox rejects it, so it produces no return stream, enters
+no column of `R`, moves no null and changes no reported statistic. Its
+refusal message is a function of the declared class alone, not of the data.
+P3 requires that everything the search can *evaluate* lies in Θ, and
+enforcement is what delivers that — the enforcement working is not evidence
+against it. Watch therefore records `refused_attempts` in `WatchState` and in
+the diagnostics, and adds a line to the verdict's reasons ("N specifications
+outside the declared class were attempted and refused; they entered no data
+and do not affect the correction").
+
+The UNDECIDABLE override survives for the one case that genuinely voids the
+correction: a specification outside Θ that was **actually evaluated** and so
+is in the transcript, which means the declared class no longer covers the
+menu the correction was taken over. Sandbox enforcement makes that
+unreachable, which is the point of enforcing.
 
 ## 4. Agent binding (1–2 days)
 

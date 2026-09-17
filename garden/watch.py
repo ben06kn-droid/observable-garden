@@ -126,7 +126,7 @@ DIAGNOSTIC_KEYS = (
     "anchor_sharpe_rank",      # NOT kappa: rank among specs evaluated so far
     "winner_chasing_warning",
     "considered", "evaluated", "considered_ratio",
-    "level", "level_name", "off_ladder",
+    "level", "level_name", "refused_attempts",
 )
 
 # How a ladder may be climbed. Fixed at open and pre-registered, because a rule
@@ -185,6 +185,10 @@ class WatchState:
     # is held to however far up the ladder it has climbed.
     ladder: list[dict] | None = None
     promotion: str | None = None
+    # Specifications the sandbox refused during the search. Not trials: they
+    # produced no return stream, so they affect no null and no statistic. Counted
+    # and reported, never fatal (GARDEN_WATCH_PLAN.md 3).
+    refused_attempts: int = 0
 
     def to_dict(self) -> dict:
         out = {k: v for k, v in asdict(self).items() if k != "bar"}
@@ -223,7 +227,8 @@ class Watch:
     def __init__(self, sandbox: Sandbox, state: WatchState, seed: int | None = 0,
                  agent_view: frozenset[str] = AGENT_VIEWS["standing"],
                  base_sharpe: np.ndarray | None = None,
-                 ladder: ClassLadder | None = None, promotion: str | None = None):
+                 ladder: ClassLadder | None = None, promotion: str | None = None,
+                 declared: SubsetClass | None = None):
         self._sandbox = sandbox
         self.state = state
         self._seed = seed
@@ -242,8 +247,25 @@ class Watch:
         self._considered: set[str] = set()
         self._ladder = ladder
         self._promotion = promotion
+        self._declared = declared
         self._level = 0
-        self._off_ladder = False
+        self._refused: list[dict] = []
+        self._evaluated_outside_class = False
+
+    @property
+    def refused_attempts(self) -> list[dict]:
+        """Specifications the sandbox refused. Not trials: they produced no
+        return stream and do not affect the correction."""
+        return list(self._refused)
+
+    def _in_declared_class(self, spec: Specification) -> bool:
+        """Membership of the declared class itself, independent of the sandbox.
+
+        Checked after a successful evaluate so the one case that voids the
+        correction -- an out-of-class specification that actually got logged --
+        is caught even when the sandbox is not enforcing."""
+        cls = self._ladder.union if self._ladder is not None else self._declared
+        return bool(cls.contains(spec.weights))
 
     # -- ladder --------------------------------------------------------------
 
@@ -439,7 +461,7 @@ class Watch:
             "level": self._level,
             "level_name": (self._ladder.levels[self._level].name if self._ladder
                            else self.state.class_name),
-            "off_ladder": self._off_ladder,
+            "refused_attempts": len(self._refused),
         }
 
     @property
@@ -466,15 +488,24 @@ class Watch:
         self._check_level(spec)
         try:
             result = self._sandbox.evaluate(spec)  # raises if outside the class / union
-        except ValueError:
-            # The specification was refused and nothing entered the transcript, so
-            # this run's numbers are untouched. The verdict degrades anyway: the
-            # attempt is evidence that candidate generation reaches outside the
-            # declared class, which is exactly P3's premise failing. A class that
-            # does not contain everything the search could produce is not a class.
-            self._off_ladder = True
+        except ValueError as e:
+            # Counted, not fatal. A refused attempt is not a trial: it produced no
+            # return stream, so it entered no column of R, moved no null, and
+            # changed no reported statistic. The refusal message is a function of
+            # the declared class alone, not of the data, so it leaks nothing about
+            # the sample either. P3 requires that everything the search can
+            # *evaluate* lies in Theta, and the sandbox enforces exactly that by
+            # refusing -- the enforcement working is not evidence against it.
+            self._refused.append({"spec": spec.name, "reason": str(e)})
+            self.state.refused_attempts = len(self._refused)
             raise
         sr = float(result.sharpe)
+        if not self._in_declared_class(spec):
+            # The branch sandbox enforcement makes unreachable: a specification
+            # outside Theta that was nonetheless evaluated and logged. Its column
+            # IS in R, so the class no longer covers the menu and the full-class
+            # correction is void. This is the case the UNDECIDABLE override is for.
+            self._evaluated_outside_class = True
         support = frozenset(
             np.flatnonzero(np.abs(np.asarray(spec.weights, dtype=float)) > WEIGHT_TOLERANCE).tolist())
 
@@ -549,27 +580,31 @@ class Watch:
             block_length=self.state.block_length,
             seed=self._seed,
         )
-        if not self._off_ladder:
+        if self._evaluated_outside_class:
+            # Watch overriding audit, not audit deciding. This is the only case
+            # that warrants it: a specification outside Theta was *evaluated*, so
+            # its column is in R and the declared class no longer covers the menu
+            # the correction was taken over (THEORY.md P3). Unreachable while the
+            # sandbox enforces the class, which is why enforcement is the point.
+            return replace(
+                verdict,
+                status="UNDECIDABLE",
+                reasons=[
+                    "UNDECIDABLE: a specification outside the declared class was evaluated and "
+                    "entered the transcript, so the class does not cover the menu the correction "
+                    "was taken over. Declare a class that covers the search's whole reach, or "
+                    "re-run with the sandbox enforcing the class.",
+                    *verdict.reasons,
+                ],
+            )
+        if not self._refused:
             return verdict
-        # Watch overriding audit, not audit deciding: the transcript on its own
-        # looks fine, because the offending specification was refused and never
-        # logged. Only watch saw the attempt, and the attempt is the evidence --
-        # a search that reaches outside its declared class has shown the class
-        # does not contain everything it could produce, which is the premise the
-        # whole declared-class tier rests on (THEORY.md P3).
-        return replace(
-            verdict,
-            status="UNDECIDABLE",
-            reasons=[
-                "UNDECIDABLE: the search attempted a specification outside the declared ladder. "
-                "It was refused and never entered the transcript, so the numbers below are "
-                "unaffected -- but the attempt shows candidate generation can reach outside the "
-                "declared class, and a class that does not contain everything the search could "
-                "produce cannot license a correction. Declare a class that covers the search's "
-                "whole reach, or re-run within this one.",
-                *verdict.reasons,
-            ],
-        )
+        # Refusals are reported, never fatal.
+        return replace(verdict, reasons=[
+            f"{len(self._refused)} specification(s) outside the declared class were attempted "
+            f"and refused; they entered no data and do not affect the correction.",
+            *verdict.reasons,
+        ])
 
 
 def largest_admissible_class_size(
@@ -732,4 +767,5 @@ def open(
     # equivalence test in tests/test_watch.py mean something.
     return Watch(sandbox, state, seed=seed, agent_view=agent_view,
                  base_sharpe=sharpe(base, axis=0),
-                 ladder=ladder, promotion=promotion if ladder is not None else None)
+                 ladder=ladder, promotion=promotion if ladder is not None else None,
+                 declared=spec_class)
