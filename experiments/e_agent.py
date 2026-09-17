@@ -78,10 +78,21 @@ def dgp_seeds(n: int = 80) -> np.ndarray:
     return np.random.default_rng(MASTER_SEED).integers(0, 2**31 - 1, size=n)
 
 
+def make_run_id(config_name: str, arm: str, seed_index: int, T: int) -> str:
+    """T is part of the id so a rerun at a different sample length cannot land
+    in the same directory.
+
+    It matters more than an ordinary collision would: transcript.jsonl and
+    usage.jsonl are append-mode, so two runs sharing a directory interleave
+    their records into one file that still parses. Run s0_control_000 (T=500)
+    was nearly lost to exactly that before the config moved to T=5000."""
+    return f"{config_name}_T{T}_{arm}_{seed_index:03d}"
+
+
 def run_one(arm: str, config_name: str, seed_index: int, prompts: dict) -> int:
     cfg = CONFIGS[config_name]
     seed = int(dgp_seeds()[seed_index])
-    run_id = f"{config_name}_{arm}_{seed_index:03d}"
+    run_id = make_run_id(config_name, arm, seed_index, cfg["T"])
     paths = RunPaths(RUNS_ROOT / run_id)
 
     dgp = DGPConfig(M=cfg["M"], T=cfg["T"], T_oos=cfg["T_oos"], K=cfg["K"],

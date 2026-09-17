@@ -208,6 +208,29 @@ def test_no_builtin_tool_is_reachable(tmp_path):
     assert isinstance(opts.system_prompt, str)   # a plain str replaces the preset
 
 
+# -- pre-registration compliance ---------------------------------------------
+
+def test_thinking_is_explicitly_disabled(tmp_path):
+    """AGENT_PROMPTS.md §3 pins extended thinking off. The SDK default of None
+    is not off -- it defers to the CLI, which spent 3,206 thinking tokens on
+    pilot run 0. The option has to be set explicitly."""
+    agent, _, _ = make_agent(tmp_path)
+    opts = agent._options(tmp_path)
+    assert opts.thinking == {"type": "disabled"}
+    assert opts.thinking is not None          # the defaulting bug, guarded directly
+
+
+def test_run_id_includes_T_so_reruns_cannot_interleave():
+    """transcript.jsonl and usage.jsonl are append-mode, so two runs sharing a
+    directory produce one interleaved file that still parses."""
+    from experiments.e_agent import make_run_id
+    short = make_run_id("s0", "control", 0, 500)
+    long = make_run_id("s0", "control", 0, 5000)
+    assert short == "s0_T500_control_000"
+    assert long == "s0_T5000_control_000"
+    assert short != long
+
+
 # -- usage accounting --------------------------------------------------------
 
 def test_usage_row_records_both_paths_and_marks_which_governs(tmp_path):

@@ -290,6 +290,11 @@ class LLMAgent(Searcher):
             system_prompt=self.config.system_prompt,   # plain str => replaces the preset
             tools=[],                                  # removes the built-in set entirely
             setting_sources=[],                        # no ~/.claude or project leakage
+            # Explicitly disabled, not left to default. `thinking=None` is not
+            # off: it defers to the CLI, and pilot run 0 spent 3,206 thinking
+            # tokens against a pre-registration that pins thinking off
+            # (AGENT_PROMPTS.md 3). That run is superseded; see amendment 1.
+            thinking={"type": "disabled"},
             mcp_servers={SERVER_NAME: self._make_server()},
             allowed_tools=tool_names(self.config.arm),
             max_turns=self.config.max_turns,
