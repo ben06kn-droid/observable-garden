@@ -1,0 +1,1 @@
+Runs kept as evidence but excluded from every analysis: `s0_T5000_count_000_smoke` is a seed-0 smoke test of the count arm, run while implementing it and outside amendment 4's allocation (seeds 80-319).
