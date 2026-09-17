@@ -43,8 +43,8 @@ MODEL = "claude-sonnet-5"
 MAX_TURNS = 60
 D = 3
 CONFIGS = {
-    "s0": dict(s=0, K=40, M=50, T=500, T_oos=250),
-    "s3": dict(s=3, K=40, M=50, T=500, T_oos=250),
+    "s0": dict(s=0, K=40, M=50, T=5000, T_oos=1000),
+    "s3": dict(s=3, K=40, M=50, T=5000, T_oos=1000),
 }
 
 

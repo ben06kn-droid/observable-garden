@@ -208,6 +208,70 @@ def test_no_builtin_tool_is_reachable(tmp_path):
     assert isinstance(opts.system_prompt, str)   # a plain str replaces the preset
 
 
+# -- usage accounting --------------------------------------------------------
+
+def test_usage_row_records_both_paths_and_marks_which_governs(tmp_path):
+    """Run 0 showed the two accountings disagreeing in opposite directions on
+    input and output, so the row has to say which field governs what, and keep
+    the raw per-message blocks: the undercount's mechanism is not diagnosable
+    from a sum.
+
+    Driven with a stub rather than a real ResultMessage. _write_usage reaches
+    every field through getattr, so this exercises the logging logic without
+    depending on the SDK's constructor signature."""
+    from types import SimpleNamespace
+    agent, _, _ = make_agent(tmp_path)
+    h = handlers(agent)["evaluate"]
+    call(h, {"features": [0], "signs": [1]})      # produces transcript timestamps
+
+    # Two assistant responses, the second with an output count the sum misses.
+    agent._turn_usage = [
+        {"input_tokens": 10, "cache_creation_input_tokens": 0,
+         "cache_read_input_tokens": 100, "output_tokens": 2},
+        {"input_tokens": 6, "cache_creation_input_tokens": 0,
+         "cache_read_input_tokens": 200, "output_tokens": 3},
+    ]
+    agent._turn_usage_raw = [dict(u) for u in agent._turn_usage]
+
+    msg = SimpleNamespace(
+        usage={"input_tokens": 6, "cache_creation_input_tokens": 0,
+               "cache_read_input_tokens": 200, "output_tokens": 900},
+        model_usage={"claude-sonnet-5": {"outputTokens": 900, "thinkingTokens": 42}},
+        total_cost_usd=0.01, num_turns=2, stop_reason="end_turn",
+        terminal_reason="completed", is_error=False, subtype="success",
+        api_error_status=None)
+    agent._write_usage(msg)
+
+    row = json.loads((tmp_path / "usage.jsonl").read_text().splitlines()[-1])
+
+    # Both paths present, neither silently conflated.
+    assert row["assistant_summed"]["output_tokens"] == 5          # the undercount, kept raw
+    assert row["result_usage"]["output_tokens"] == 900            # authoritative
+    assert row["assistant_summed"]["cache_read_input_tokens"] == 300
+    assert len(row["assistant_usage_raw"]) == 2                   # unsummed, for diagnosis
+
+    # The row says which governs what.
+    a = row["authoritative"]
+    assert a["output_tokens"] == "result_usage"
+    assert a["cumulative_input"] == "assistant_summed"
+    assert "undercounts" in a["note"]
+
+    # Wall clock, first to last transcript timestamp.
+    assert row["wall_seconds"] is not None and row["wall_seconds"] >= 0.0
+    assert row["first_ts"] <= row["last_ts"]
+    assert row["model_usage"]["claude-sonnet-5"]["thinkingTokens"] == 42
+
+
+def test_wall_seconds_is_none_before_any_transcript_entry(tmp_path):
+    from types import SimpleNamespace
+    agent, _, _ = make_agent(tmp_path)
+    agent._write_usage(SimpleNamespace(usage={}, model_usage=None, total_cost_usd=None,
+                                       num_turns=0, stop_reason=None, terminal_reason=None,
+                                       is_error=False, subtype=None, api_error_status=None))
+    row = json.loads((tmp_path / "usage.jsonl").read_text().splitlines()[-1])
+    assert row["wall_seconds"] is None
+
+
 # -- runner ------------------------------------------------------------------
 
 def test_deferred_arms_are_refused_by_the_runner():

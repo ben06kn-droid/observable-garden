@@ -187,13 +187,20 @@ class LLMAgent(Searcher):
         self._watch = None
         self._n_eval = 0
         self._turn_usage: list[dict] = []
+        self._turn_usage_raw: list[dict] = []
         self._models_seen: set[str] = set()
         self._rate_limit: dict | None = None
+        self._first_ts: float | None = None
+        self._last_ts: float | None = None
 
     # -- transcript ----------------------------------------------------------
 
     def _log(self, kind: str, **fields) -> None:
-        self.paths.append_jsonl("transcript.jsonl", {"ts": time.time(), "kind": kind, **fields})
+        ts = time.time()
+        if self._first_ts is None:
+            self._first_ts = ts
+        self._last_ts = ts
+        self.paths.append_jsonl("transcript.jsonl", {"ts": ts, "kind": kind, **fields})
 
     # -- arm sentence --------------------------------------------------------
 
@@ -321,6 +328,11 @@ class LLMAgent(Searcher):
                     self._models_seen.add(msg.model)
                 if getattr(msg, "usage", None):
                     self._turn_usage.append({k: (msg.usage.get(k) or 0) for k in USAGE_KEYS})
+                    # Kept unsummed as well: the summed output_tokens is known to
+                    # undercount (run 0: 500 across 108 messages, against 12,052
+                    # from ResultMessage), and the mechanism cannot be diagnosed
+                    # from a sum. Raw blocks make the next run diagnosable.
+                    self._turn_usage_raw.append(dict(msg.usage))
                 for block in msg.content:
                     if isinstance(block, TextBlock):
                         self._log("assistant_text", text=block.text)
@@ -343,17 +355,39 @@ class LLMAgent(Searcher):
                         raise RateLimited(f"rate limited: {detail}")
 
     def _write_usage(self, msg: ResultMessage) -> None:
-        """Both accountings, side by side.
+        """Both accountings, side by side, with which one governs made explicit.
 
-        The per-assistant-message sum is the authoritative one; ResultMessage's
-        own usage field is logged unsummed beside it because its
-        cumulative-or-last semantics are not documented, and the two must be
-        reconcilable after the fact rather than silently conflated."""
+        Settled on run 0 (see searchers/README_AGENT.md):
+
+        * ResultMessage.usage / model_usage is authoritative for **cost**,
+          **output tokens** and the **model string**. Its output_tokens matched
+          model_usage.outputTokens exactly and is what costUSD was computed
+          from.
+        * The per-assistant-message sum is authoritative only for **cumulative
+          replayed input** -- 804k across 108 messages against ResultMessage's
+          91k, which is the final call's context and does not measure the
+          replay at all. Its output_tokens undercounts badly (500, below the
+          assistant text alone) and must not be used.
+
+        The raw per-message blocks are kept unsummed so the undercount's
+        mechanism can be diagnosed from the next run rather than guessed at."""
         summed = {k: sum(t[k] for t in self._turn_usage) for k in USAGE_KEYS}
         result_usage = {k: ((getattr(msg, "usage", None) or {}).get(k) or 0) for k in USAGE_KEYS}
+        wall = (self._last_ts - self._first_ts) if (self._first_ts and self._last_ts) else None
         self.paths.append_jsonl("usage.jsonl", {
             "ts": time.time(),
+            "wall_seconds": wall,
+            "first_ts": self._first_ts,
+            "last_ts": self._last_ts,
+            "authoritative": {
+                "cost": "result_usage / model_usage",
+                "output_tokens": "result_usage",
+                "model_string": "model_usage keys / models_seen",
+                "cumulative_input": "assistant_summed",
+                "note": "assistant_summed.output_tokens undercounts; do not use",
+            },
             "assistant_summed": summed,
+            "assistant_usage_raw": self._turn_usage_raw,
             "assistant_api_calls": len(self._turn_usage),
             "result_usage": result_usage,
             "model_usage": getattr(msg, "model_usage", None),
