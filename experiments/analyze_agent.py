@@ -1,0 +1,341 @@
+"""Agent-arm analysis, implementing prereg/AGENT_PROMPTS.md §5.
+
+    python -m experiments.analyze_agent [--runs-dir runs] [--out figures/]
+
+Reports numbers only. Interpretation belongs in the write-up, not here.
+
+Two terms in §5 have no literal field in the data, so the reading is fixed
+here and printed with every number that depends on it:
+
+  "class-bar-implied expectation from the Watch verdict" -> `sr_deflated`,
+  which is sr_reported - null_max_mean: what the class-bar correction leaves
+  once the search is priced in. Deflation gap = stated mean - sr_deflated.
+
+  "difference in mean stated confidence at matched evaluation count" -> the
+  two fitted lines evaluated at the pooled median of log(evaluation count),
+  the only matched point both arms span.
+
+`no_submit` is a status, not an exclusion: §3 records such a run and keeps it
+in the run count, so it is reported and retained.
+
+The analysis set is the 80 `s0_T5000_*` runs. `runs/s0_control_000_T500` is
+superseded by amendment 1 and excluded by prefix, not by judgement.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+from pathlib import Path
+
+import numpy as np
+
+PINNED_MODEL = "claude-sonnet-5"
+PREFIX = "s0_T5000_"
+
+
+# ---------------------------------------------------------------- loading
+
+def load_run(d: Path) -> dict:
+    j = lambda n: json.loads((d / n).read_text())          # noqa: E731
+    cfg, verdict = j("config.json"), j("verdict.json")
+    stated, oos, considered = j("stated.json"), j("oos.json"), j("considered.json")
+    usage = json.loads((d / "usage.jsonl").read_text().splitlines()[-1])
+    rows = [json.loads(l) for l in (d / "transcript.jsonl").read_text().splitlines()]
+
+    tool_uses = [r for r in rows if r["kind"] == "tool_use"]
+    evaluates = [r for r in rows if r["kind"] == "tool_result" and r.get("tool") == "evaluate"]
+    submits = [r for r in rows if r["kind"] == "tool_result" and r.get("tool") == "submit"]
+    statuses = [(i, r) for i, r in enumerate(rows)
+                if r["kind"] == "tool_result" and r.get("tool") == "status"]
+    errors = [r for r in rows if r["kind"] == "tool_error"]
+    rejected = [r for r in rows if r["kind"] == "rate_limit" and r.get("status") == "rejected"]
+
+    # Position of each status call as a fraction of the run's tool calls.
+    tool_idx = [i for i, r in enumerate(rows) if r["kind"] == "tool_use"]
+    def frac(i):
+        prior = sum(1 for t in tool_idx if t < i)
+        return prior / len(tool_idx) if tool_idx else float("nan")
+
+    mu = usage.get("model_usage") or {}
+    per_model = list(mu.values())[0] if mu else {}
+
+    return {
+        "run_id": d.name,
+        "arm": cfg["arm"],
+        "seed_index": cfg["seed_index"],
+        "n_evaluated": len(evaluates),
+        "n_tool_use": len(tool_uses),
+        "n_refused": len(errors),
+        "submitted_sr_is": verdict["sr_reported"],
+        "stated_mean": stated["mean"],
+        "stated_sd": stated["sd"],
+        "status": verdict["status"],
+        "sr_deflated": verdict["sr_deflated"],
+        "critical_value": verdict["critical_value"],
+        "p_value": verdict["p_value"],
+        "oos": oos["oos_sharpe"],
+        "considered": considered["n_considered"],
+        "n_status_calls": len(statuses),
+        "status_positions": [frac(i) for i, _ in statuses],
+        "submitted": bool(submits),
+        # exclusion inputs
+        "models_seen": usage.get("models_seen") or [],
+        "non_mcp_tools": sorted({r["tool"] for r in tool_uses
+                                 if not str(r.get("tool", "")).startswith("mcp__")}),
+        "rate_limit_rejected": bool(rejected),
+        # cost
+        "input_tokens": per_model.get("inputTokens", 0),
+        "output_tokens": per_model.get("outputTokens", 0),
+        "cache_read": per_model.get("cacheReadInputTokens", 0),
+        "cache_creation": per_model.get("cacheCreationInputTokens", 0),
+        "thinking_tokens": per_model.get("thinkingTokens", 0),
+        "cost_usd": usage.get("total_cost_usd") or 0.0,
+        "wall_seconds": usage.get("wall_seconds"),
+    }
+
+
+def classify_exclusion(r: dict) -> str | None:
+    """The three categories §5 fixes in advance, in its own order."""
+    if [m for m in r["models_seen"] if m != PINNED_MODEL] or not r["models_seen"]:
+        return "model_string"
+    if r["non_mcp_tools"]:
+        return "non_mcp_tool"
+    if r["rate_limit_rejected"] and not r["submitted"]:
+        return "rate_limit_before_submit"
+    return None
+
+
+# ---------------------------------------------------------------- statistics
+
+def med_iqr(x) -> tuple[float, float, float]:
+    a = np.asarray(x, dtype=float)
+    return float(np.median(a)), float(np.percentile(a, 25)), float(np.percentile(a, 75))
+
+
+def fmt_mi(x) -> str:
+    m, q1, q3 = med_iqr(x)
+    return f"{m:8.3f}  [{q1:.3f}, {q3:.3f}]"
+
+
+def ols(x, y) -> dict:
+    """Slope, intercept, slope SE and 95% CI. Plain OLS, no weighting."""
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    n = len(x)
+    xbar, ybar = x.mean(), y.mean()
+    sxx = ((x - xbar) ** 2).sum()
+    slope = ((x - xbar) * (y - ybar)).sum() / sxx
+    intercept = ybar - slope * xbar
+    resid = y - (intercept + slope * x)
+    dof = n - 2
+    s2 = (resid ** 2).sum() / dof
+    se = math.sqrt(s2 / sxx)
+    from scipy.stats import t as tdist
+    crit = tdist.ppf(0.975, dof)
+    return {"n": n, "slope": slope, "intercept": intercept, "se": se, "dof": dof,
+            "lo": slope - crit * se, "hi": slope + crit * se,
+            "t": slope / se if se else float("nan"),
+            "p": float(2 * tdist.sf(abs(slope / se), dof)) if se else float("nan"),
+            "r2": 1 - (resid ** 2).sum() / ((y - ybar) ** 2).sum()}
+
+
+def crps_gaussian(mu, sigma, y) -> float:
+    """CRPS of N(mu, sigma^2) against observation y, closed form."""
+    from scipy.stats import norm
+    sigma = max(float(sigma), 1e-12)
+    z = (float(y) - float(mu)) / sigma
+    return float(sigma * (z * (2 * norm.cdf(z) - 1) + 2 * norm.pdf(z) - 1 / math.sqrt(math.pi)))
+
+
+# ---------------------------------------------------------------- report
+
+def report(runs: list[dict], out_dir: Path) -> str:
+    L: list[str] = []
+    p = L.append
+
+    p("Agent-arm analysis — prereg/AGENT_PROMPTS.md §5")
+    p("=" * 78)
+    p(f"analysis set: {len(runs)} runs matching {PREFIX}*")
+    p("excluded by prefix: runs/s0_control_000_T500 (superseded, amendment 1)")
+    p("")
+    p("Definitions fixed here (§5 has no literal field for either):")
+    p("  deflation gap   = stated mean - sr_deflated, where")
+    p("                    sr_deflated = sr_reported - null_max_mean")
+    p("  matched count   = pooled median of log(evaluation count)")
+    p("  no_submit       = status, not an exclusion (§3 keeps the run)")
+    p("")
+
+    # -- exclusions
+    p("EXCLUSIONS (pre-registered categories)")
+    p("-" * 78)
+    cats = ("model_string", "non_mcp_tool", "rate_limit_before_submit")
+    kept: dict[str, list[dict]] = {"control": [], "gate": []}
+    excl: dict[str, dict[str, int]] = {"control": {c: 0 for c in cats},
+                                       "gate": {c: 0 for c in cats}}
+    no_submit = {"control": 0, "gate": 0}
+    for r in runs:
+        c = classify_exclusion(r)
+        if c:
+            excl[r["arm"]][c] += 1
+        else:
+            kept[r["arm"]].append(r)
+            if not r["submitted"]:
+                no_submit[r["arm"]] += 1
+    p(f"{'category':<32}{'control':>10}{'gate':>10}")
+    for c in cats:
+        p(f"{c:<32}{excl['control'][c]:>10}{excl['gate'][c]:>10}")
+    p(f"{'-- total excluded':<32}{sum(excl['control'].values()):>10}"
+      f"{sum(excl['gate'].values()):>10}")
+    p(f"{'no_submit (status, retained)':<32}{no_submit['control']:>10}{no_submit['gate']:>10}")
+    p(f"{'n retained':<32}{len(kept['control']):>10}{len(kept['gate']):>10}")
+    p("")
+
+    # -- per-arm descriptives
+    p("PER ARM — median [IQR]")
+    p("-" * 78)
+    for arm in ("control", "gate"):
+        rs = kept[arm]
+        p(f"{arm}  (n = {len(rs)})")
+        p(f"  evaluation count     {fmt_mi([r['n_evaluated'] for r in rs])}")
+        p(f"  stated mean          {fmt_mi([r['stated_mean'] for r in rs])}")
+        p(f"  stated sd            {fmt_mi([r['stated_sd'] for r in rs])}")
+        p(f"  realized OOS Sharpe  {fmt_mi([r['oos'] for r in rs])}")
+        p(f"  submitted SR (in-s)  {fmt_mi([r['submitted_sr_is'] for r in rs])}")
+        p(f"  considered count     {fmt_mi([r['considered'] for r in rs])}")
+        p(f"  refused attempts     {fmt_mi([r['n_refused'] for r in rs])}")
+        from collections import Counter
+        vd = Counter(r["status"] for r in rs)
+        p(f"  verdicts             {dict(sorted(vd.items()))}")
+        p("")
+
+    # -- primary regression
+    p("PRIMARY — stated mean on log(evaluation count), per arm")
+    p("-" * 78)
+    p("H0: slope = 0 (stated confidence deaf to the search performed)")
+    p("")
+    fits = {}
+    for arm in ("control", "gate"):
+        rs = kept[arm]
+        x = np.log([r["n_evaluated"] for r in rs])
+        y = np.array([r["stated_mean"] for r in rs])
+        f = ols(x, y)
+        fits[arm] = (f, x, y)
+        p(f"{arm}:  slope {f['slope']:+.4f}   SE {f['se']:.4f}   "
+          f"95% CI [{f['lo']:+.4f}, {f['hi']:+.4f}]")
+        p(f"{'':<8}t {f['t']:+.2f} on {f['dof']} df,  p {f['p']:.4f},  "
+          f"R² {f['r2']:.4f},  intercept {f['intercept']:+.4f}")
+    p("")
+
+    # -- between-arm
+    p("BETWEEN ARM — control vs gate")
+    p("-" * 78)
+    fc, fg = fits["control"][0], fits["gate"][0]
+    dslope = fg["slope"] - fc["slope"]
+    dse = math.sqrt(fc["se"] ** 2 + fg["se"] ** 2)
+    from scipy.stats import norm
+    p(f"difference in slope (gate - control): {dslope:+.4f}   SE {dse:.4f}   "
+      f"95% CI [{dslope - 1.96*dse:+.4f}, {dslope + 1.96*dse:+.4f}]")
+    p(f"{'':<36}z {dslope/dse:+.2f},  p {2*norm.sf(abs(dslope/dse)):.4f}")
+    allx = np.concatenate([fits["control"][1], fits["gate"][1]])
+    xm = float(np.median(allx))
+    pc = fc["intercept"] + fc["slope"] * xm
+    pg = fg["intercept"] + fg["slope"] * xm
+    p(f"matched log(count) = {xm:.4f}  (count = {math.exp(xm):.1f})")
+    p(f"stated mean at matched count: control {pc:+.4f}, gate {pg:+.4f}, "
+      f"difference {pg - pc:+.4f}")
+    p("")
+
+    # -- secondary
+    p("SECONDARY")
+    p("-" * 78)
+    for arm in ("control", "gate"):
+        rs = kept[arm]
+        c = [crps_gaussian(r["stated_mean"], r["stated_sd"], r["oos"]) for r in rs]
+        g = [r["stated_mean"] - r["sr_deflated"] for r in rs]
+        p(f"{arm}:")
+        p(f"  CRPS vs realized OOS   {fmt_mi(c)}   mean {np.mean(c):.4f}")
+        p(f"  deflation gap          {fmt_mi(g)}   mean {np.mean(g):.4f}")
+    p("")
+
+    # -- gate status usage
+    p("GATE ARM — status tool")
+    p("-" * 78)
+    rs = kept["gate"]
+    calls = [r["n_status_calls"] for r in rs]
+    p(f"  status calls per run   {fmt_mi(calls)}   total {sum(calls)}")
+    p(f"  runs never calling it  {sum(1 for c in calls if c == 0)} of {len(rs)}")
+    pos = [q for r in rs for q in r["status_positions"]]
+    if pos:
+        p(f"  position in run        {fmt_mi(pos)}   (fraction of tool calls elapsed)")
+        p(f"  first / last call      {min(pos):.3f} / {max(pos):.3f}")
+        thirds = [sum(1 for q in pos if lo <= q < hi) for lo, hi in
+                  ((0, 1/3), (1/3, 2/3), (2/3, 1.01))]
+        p(f"  by third of run        first {thirds[0]}, middle {thirds[1]}, last {thirds[2]}")
+    p("")
+
+    # -- cost
+    p("COST — all runs in the analysis set")
+    p("-" * 78)
+    tot = lambda k: sum(r[k] for r in runs)                 # noqa: E731
+    p(f"  input tokens           {tot('input_tokens'):>12,}")
+    p(f"  output tokens          {tot('output_tokens'):>12,}")
+    p(f"  cache read             {tot('cache_read'):>12,}")
+    p(f"  cache creation         {tot('cache_creation'):>12,}")
+    p(f"  thinking tokens        {tot('thinking_tokens'):>12,}")
+    p(f"  total tokens           "
+      f"{tot('input_tokens')+tot('output_tokens')+tot('cache_read')+tot('cache_creation'):>12,}")
+    p(f"  cost (USD)             {tot('cost_usd'):>12.4f}")
+    wall = [r["wall_seconds"] for r in runs if r["wall_seconds"]]
+    p(f"  wall seconds per run   {fmt_mi(wall)}   total {sum(wall)/60:.1f} min")
+    p("")
+
+    figure(fits, out_dir)
+    p(f"figure: {out_dir / 'agent_stated_vs_log_count.png'}")
+    return "\n".join(L)
+
+
+def figure(fits, out_dir: Path) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(7.2, 5.0))
+    colours = {"control": "#1f77b4", "gate": "#d62728"}
+    for arm in ("control", "gate"):
+        f, x, y = fits[arm]
+        ax.scatter(x, y, s=34, alpha=0.75, color=colours[arm], edgecolor="white",
+                   linewidth=0.6, label=f"{arm} (n={f['n']})", zorder=3)
+        xs = np.linspace(x.min(), x.max(), 100)
+        ax.plot(xs, f["intercept"] + f["slope"] * xs, color=colours[arm], linewidth=2,
+                zorder=4, label=f"  slope {f['slope']:+.3f} [{f['lo']:+.3f}, {f['hi']:+.3f}]")
+    ax.set_xlabel("log(evaluation count)")
+    ax.set_ylabel("stated mean predicted OOS Sharpe")
+    ax.set_title("Stated confidence against search performed", loc="left", fontsize=12)
+    ax.grid(alpha=0.25, zorder=0)
+    ax.legend(fontsize=8, framealpha=0.95)
+    fig.tight_layout()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_dir / "agent_stated_vs_log_count.png", dpi=150)
+    plt.close(fig)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--runs-dir", default="runs")
+    ap.add_argument("--out", default="figures")
+    a = ap.parse_args()
+
+    dirs = sorted(d for d in Path(a.runs_dir).iterdir()
+                  if d.is_dir() and d.name.startswith(PREFIX))
+    if not dirs:
+        raise SystemExit(f"no runs matching {PREFIX}* under {a.runs_dir}")
+    runs = [load_run(d) for d in dirs]
+    text = report(runs, Path(a.out))
+    print(text)
+    Path(a.out).mkdir(parents=True, exist_ok=True)
+    (Path(a.out) / "agent_analysis.txt").write_text(text + "\n")
+    print(f"\nwrote {Path(a.out) / 'agent_analysis.txt'}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,88 @@
+Agent-arm analysis — prereg/AGENT_PROMPTS.md §5
+==============================================================================
+analysis set: 80 runs matching s0_T5000_*
+excluded by prefix: runs/s0_control_000_T500 (superseded, amendment 1)
+
+Definitions fixed here (§5 has no literal field for either):
+  deflation gap   = stated mean - sr_deflated, where
+                    sr_deflated = sr_reported - null_max_mean
+  matched count   = pooled median of log(evaluation count)
+  no_submit       = status, not an exclusion (§3 keeps the run)
+
+EXCLUSIONS (pre-registered categories)
+------------------------------------------------------------------------------
+category                           control      gate
+model_string                             0         0
+non_mcp_tool                             0         0
+rate_limit_before_submit                 0         0
+-- total excluded                        0         0
+no_submit (status, retained)             0         0
+n retained                              40        40
+
+PER ARM — median [IQR]
+------------------------------------------------------------------------------
+control  (n = 40)
+  evaluation count       81.000  [74.750, 99.000]
+  stated mean             0.450  [0.438, 0.500]
+  stated sd               0.300  [0.250, 0.350]
+  realized OOS Sharpe    -0.073  [-0.288, 0.329]
+  submitted SR (in-s)     0.817  [0.741, 0.872]
+  considered count        0.000  [0.000, 0.000]
+  refused attempts        1.000  [0.000, 1.000]
+  verdicts             {'FAIL': 39, 'PASS': 1}
+
+gate  (n = 40)
+  evaluation count      137.000  [113.000, 167.500]
+  stated mean             0.350  [0.350, 0.450]
+  stated sd               0.350  [0.300, 0.350]
+  realized OOS Sharpe    -0.231  [-0.523, 0.213]
+  submitted SR (in-s)     0.805  [0.742, 0.905]
+  considered count        0.000  [0.000, 0.000]
+  refused attempts        2.000  [1.000, 3.250]
+  verdicts             {'FAIL': 36, 'PASS': 4}
+
+PRIMARY — stated mean on log(evaluation count), per arm
+------------------------------------------------------------------------------
+H0: slope = 0 (stated confidence deaf to the search performed)
+
+control:  slope -0.0425   SE 0.0426   95% CI [-0.1289, +0.0438]
+        t -1.00 on 38 df,  p 0.3249,  R² 0.0255,  intercept +0.6494
+gate:  slope -0.1354   SE 0.0484   95% CI [-0.2333, -0.0375]
+        t -2.80 on 38 df,  p 0.0080,  R² 0.1710,  intercept +1.0561
+
+BETWEEN ARM — control vs gate
+------------------------------------------------------------------------------
+difference in slope (gate - control): -0.0929   SE 0.0645   95% CI [-0.2192, +0.0335]
+                                    z -1.44,  p 0.1498
+matched log(count) = 4.6681  (count = 106.5)
+stated mean at matched count: control +0.4509, gate +0.4241, difference -0.0268
+
+SECONDARY
+------------------------------------------------------------------------------
+control:
+  CRPS vs realized OOS      0.363  [0.151, 0.604]   mean 0.3996
+  deflation gap             0.453  [0.408, 0.514]   mean 0.4673
+gate:
+  CRPS vs realized OOS      0.481  [0.146, 0.755]   mean 0.5323
+  deflation gap             0.382  [0.321, 0.424]   mean 0.3815
+
+GATE ARM — status tool
+------------------------------------------------------------------------------
+  status calls per run      2.000  [1.000, 2.000]   total 65
+  runs never calling it  0 of 40
+  position in run           0.739  [0.574, 0.937]   (fraction of tool calls elapsed)
+  first / last call      0.311 / 0.995
+  by third of run        first 1, middle 23, last 41
+
+COST — all runs in the analysis set
+------------------------------------------------------------------------------
+  input tokens                  1,944
+  output tokens               983,244
+  cache read               14,081,826
+  cache creation            1,599,679
+  thinking tokens                   0
+  total tokens             16,666,693
+  cost (USD)                  19.0514
+  wall seconds per run    136.358  [110.690, 174.514]   total 222.5 min
+
+figure: figures/agent_stated_vs_log_count.png
