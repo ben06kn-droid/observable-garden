@@ -1739,3 +1739,52 @@ no re-execution, and it is what E22 will measure as a power cost.
 declared grid, one and five assets. Nothing here tests non-additive
 specifications with a real edge, and the searches are scripted rather than an
 agent's tool-calling loop.
+
+## 22. E21: oblivious searchers are calibrated at every menu size and correlation
+
+**Every pre-registered decision held.** No cell's KS test rejects uniformity
+after Holm correction across all 56 cells, and every type-I Wilson interval
+contains 5%. The smallest raw KS p-value is 0.0187 at K=20, ω=0.3,
+GridSearch, which Holm-corrects to 1.000. Honest and Greedy are never liberal,
+so the bootstrap itself is sound. The third reading — that oblivious
+*generation* with adaptive *selection* stays calibrated — held more strongly
+than registered: the pre-registration asked only that LatticeAdaptive not be
+significantly above GridSearch, and in fact there were **zero discordant pairs**
+in all eight paired cells (McNemar p = 1.000 throughout). Selection over a
+fixed menu never once flipped a rejection decision relative to pure
+enumeration of the same menu. Pre-registered in `prereg/E21.md`, run from
+`9cbc4af` (`experiments/e21_oblivious_calibration.py`): n = 1,000 draws per
+cell on seeds 90000–90999 shared across cells, M=50, T=500, B=1500, s=0 so
+every rejection is a type-I error.
+
+This is the control the adaptive results needed. Every finding from §14 onward
+says the realized-menu bootstrap fails when a search builds candidates from its
+own results; E21 is the other arm, and it holds across a 61-fold range of menu
+size and the full correlation range. The effective-breadth column is the
+correlation result in one number: at ω=0.9 the participation ratio collapses to
+1.1 even with 10,700 logged columns, and the test stays calibrated anyway —
+no effective-N correction is applied or needed, because joint resampling has
+already accounted for the duplication (§10). The Sharpe guards never bound
+anywhere: variance floor 0, cap 0, zero-variance 0 across every replicate of
+every cell, so nothing here is degenerate at any breadth. **The cost estimate
+was wrong and the miss is worth recording**: the pre-registration put this at
+33 CPU-hours, "a little over an hour on 32 cores", measured end-to-end from a
+4-draw smoke of the whole grid. It took **7.73 hours** of wall time on the same
+32 cores, 640/640 cells, exit 0. The smoke's per-draw figure was low by roughly
+a factor of five, and the cause was never isolated; sizing a run from a smoke
+that small is not reliable, and later experiments record wall, cumulative CPU
+and worker count together so the unit cannot be ambiguous.
+
+GridSearch, the widest menu at every cell (type-I with 95% Wilson interval,
+KS p-value, and mean effective breadth of the logged columns):
+
+| K | N | ω=0.0 | ω=0.3 | ω=0.6 | ω=0.9 |
+|---|---|---|---|---|---|
+| 10 | 175 | 0.041 (0.030–0.055) · 0.047 · 7.6 | 0.042 (0.031–0.056) · 0.229 · 2.3 | 0.039 (0.029–0.053) · 0.344 · 1.4 | 0.043 (0.032–0.057) · 0.449 · 1.1 |
+| 20 | 1,350 | 0.044 (0.033–0.059) · 0.225 · 16.5 | 0.048 (0.036–0.063) · 0.019 · 2.7 | 0.052 (0.040–0.068) · 0.113 · 1.4 | 0.049 (0.037–0.064) · 0.404 · 1.1 |
+| 30 | 4,525 | 0.043 (0.032–0.057) · 0.082 · 25.4 | 0.058 (0.045–0.074) · 0.059 · 2.8 | 0.047 (0.036–0.062) · 0.353 · 1.5 | 0.053 (0.041–0.069) · 0.128 · 1.1 |
+| 40 | 10,700 | 0.053 (0.041–0.069) · 0.966 · 34.2 | 0.046 (0.035–0.061) · 0.584 · 2.9 | 0.054 (0.042–0.070) · 0.624 · 1.5 | 0.061 (0.048–0.078) · 0.518 · 1.1 |
+
+Secondary: Honest's deflated Sharpe centres at +0.0085 rather than exactly
+zero, small but not rounded away. Block lengths concentrate at 1 (42,922 of
+56,000 draws) with a thin tail to 33.

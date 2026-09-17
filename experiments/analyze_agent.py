@@ -78,6 +78,12 @@ def load_run(d: Path) -> dict:
         "considered": considered["n_considered"],
         "n_status_calls": len(statuses),
         "status_positions": [frac(i) for i, _ in statuses],
+        # Whether the run's FINAL status call reported clearing the bar. Parsed
+        # from that call's own text, which is the only record of it: the tool
+        # returns "Best X vs bar Y; clears." or "...; does not clear.". None
+        # when the run never called status.
+        "last_cleared": (None if not statuses
+                         else "does not clear" not in (statuses[-1][1].get("text") or "")),
         "submitted": bool(submits),
         # exclusion inputs
         "models_seen": usage.get("models_seen") or [],
@@ -289,8 +295,78 @@ def report(runs: list[dict], out_dir: Path) -> str:
     p(f"  wall seconds per run   {fmt_mi(wall)}   total {sum(wall)/60:.1f} min")
     p("")
 
+    p(exploratory(kept, fits))
+
     figure(fits, out_dir)
     p(f"figure: {out_dir / 'agent_stated_vs_log_count.png'}")
+    return "\n".join(L)
+
+
+def exploratory(kept: dict[str, list[dict]], fits) -> str:
+    """Not pre-registered. Decided after seeing §5's results, so these carry no
+    error control and are reported as description, not as tests."""
+    from scipy.stats import mannwhitneyu
+    L: list[str] = []
+    p = L.append
+    p("EXPLORATORY — not pre-registered, no error control")
+    p("-" * 78)
+    p("Decided after the §5 results were seen. Reported as description.")
+    p("")
+
+    # 1. Mann-Whitney, control vs gate
+    p("1. Mann-Whitney U (two-sided), control vs gate")
+    for label, key, fn in (("evaluation count", "n_evaluated", lambda r: r["n_evaluated"]),
+                           ("deflation gap", None,
+                            lambda r: r["stated_mean"] - r["sr_deflated"])):
+        a = [fn(r) for r in kept["control"]]
+        b = [fn(r) for r in kept["gate"]]
+        u, pv = mannwhitneyu(a, b, alternative="two-sided")
+        # rank-biserial correlation as the effect size
+        rb = 1 - 2 * u / (len(a) * len(b))
+        p(f"   {label:<20} U {u:>9.1f}   p {pv:.4g}   rank-biserial {rb:+.3f}")
+        p(f"   {'':<20} medians: control {np.median(a):+.4f}, gate {np.median(b):+.4f}")
+    p("")
+
+    # 2. Regression variants
+    p("2. Primary regression, two variants")
+    p("   (a) raw evaluation count instead of log")
+    for arm in ("control", "gate"):
+        rs = kept[arm]
+        f = ols([r["n_evaluated"] for r in rs], [r["stated_mean"] for r in rs])
+        p(f"       {arm:<8} slope {f['slope']:+.6f}  SE {f['se']:.6f}  "
+          f"95% CI [{f['lo']:+.6f}, {f['hi']:+.6f}]  p {f['p']:.4f}  R² {f['r2']:.4f}")
+    p("   (b) log count, PASS runs excluded")
+    for arm in ("control", "gate"):
+        rs = [r for r in kept[arm] if r["status"] != "PASS"]
+        f = ols(np.log([r["n_evaluated"] for r in rs]), [r["stated_mean"] for r in rs])
+        dropped = len(kept[arm]) - len(rs)
+        p(f"       {arm:<8} n {f['n']:>3} ({dropped} PASS dropped)  slope {f['slope']:+.4f}  "
+          f"SE {f['se']:.4f}  95% CI [{f['lo']:+.4f}, {f['hi']:+.4f}]  p {f['p']:.4f}")
+    p("")
+
+    # 3. Gate arm: status usage against stated mean
+    p("3. Gate arm — stated mean against status usage")
+    rs = kept["gate"]
+    f = ols([r["n_status_calls"] for r in rs], [r["stated_mean"] for r in rs])
+    p(f"   stated mean on status-call count: slope {f['slope']:+.4f}  SE {f['se']:.4f}  "
+      f"95% CI [{f['lo']:+.4f}, {f['hi']:+.4f}]  p {f['p']:.4f}  R² {f['r2']:.4f}")
+    cleared = [r for r in rs if r["last_cleared"] is True]
+    notcl = [r for r in rs if r["last_cleared"] is False]
+    unk = [r for r in rs if r["last_cleared"] is None]
+    p(f"   last-cleared flag: cleared {len(cleared)}, did not clear {len(notcl)}, "
+      f"no status call {len(unk)}")
+    p("     (flag = whether the run's final status call reported clearing the bar,")
+    p("      parsed from that call's own text, the only record of it)")
+    if cleared and notcl:
+        a = [r["stated_mean"] for r in cleared]
+        b = [r["stated_mean"] for r in notcl]
+        u, pv = mannwhitneyu(a, b, alternative="two-sided")
+        p(f"   stated mean by flag: cleared median {np.median(a):+.4f} (n={len(a)}), "
+          f"not cleared {np.median(b):+.4f} (n={len(b)})")
+        p(f"   Mann-Whitney U {u:.1f}, p {pv:.4g}")
+    else:
+        p("   one side empty; no comparison possible")
+    p("")
     return "\n".join(L)
 
 
