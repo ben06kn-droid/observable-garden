@@ -185,6 +185,32 @@ def test_submit_twice_is_refused(tmp_path):
                                        "mean": 2.0, "sd": 0.5})) == "Already submitted."
 
 
+def test_refused_submit_does_not_latch_the_run(tmp_path):
+    """A submit the watch refuses must leave the run open.
+
+    Latching submitted_spec before the watch call inverted this: the refusal
+    left the flag set with no verdict, so every retry hit "Already submitted.",
+    the agent could never recover, and the harness still graded OOS and exited
+    0. That silently voided s0_T5000_sonnet_budget20_089, whose first submit
+    named a specification it had never evaluated."""
+    agent, _, _ = make_agent(tmp_path)
+    hs = handlers(agent)
+    call(hs["evaluate"], {"features": [0], "signs": [1]})
+
+    out = text_of(call(hs["submit"], {"features": [1, 2], "signs": [1, 1],
+                                      "mean": 1.0, "sd": 0.5}))
+    assert out.startswith("Rejected:") and "never evaluated" in out
+    assert agent.submitted_spec is None and agent.verdict is None
+    assert not (tmp_path / "verdict.json").exists()
+    assert not (tmp_path / "stated.json").exists()
+
+    # Still open: the agent can submit something it did evaluate.
+    assert text_of(call(hs["submit"], {"features": [0], "signs": [1],
+                                       "mean": 1.0, "sd": 0.5})) == "Submitted."
+    assert agent.verdict is not None
+    assert (tmp_path / "verdict.json").exists()
+
+
 def test_oos_is_not_written_before_submit(tmp_path):
     agent, _, _ = make_agent(tmp_path)
     call(handlers(agent)["evaluate"], {"features": [0], "signs": [1]})
@@ -274,12 +300,33 @@ def test_budget_result_text_counts_down_and_the_cap_is_hard(tmp_path):
     assert agent._budget_refusals == 1
 
 
-def test_run_id_carries_the_assigned_dose():
+def test_run_id_carries_the_assigned_dose_and_model():
+    """Batch 3 put the model in the id too, so a cell is readable from `ls`."""
     from experiments.e_agent import make_run_id
-    assert make_run_id("s0", "budget", 81, 5000, 20) == "s0_T5000_budget20_081"
-    assert make_run_id("s0", "budget", 82, 5000, 60) == "s0_T5000_budget60_082"
-    assert make_run_id("s0", "count", 80, 5000) == "s0_T5000_count_080"
-    assert make_run_id("s3", "gate", 85, 5000) == "s3_T5000_gate_085"
+    assert make_run_id("s0", "budget", 81, 5000, 20) == "s0_T5000_sonnet_budget20_081"
+    assert make_run_id("s0", "budget", 82, 5000, 60) == "s0_T5000_sonnet_budget60_082"
+    assert make_run_id("s0", "count", 80, 5000) == "s0_T5000_sonnet_count_080"
+    assert make_run_id("s3", "gate", 85, 5000) == "s3_T5000_sonnet_gate_085"
+    assert (make_run_id("s0", "gate", 320, 5000, None, "claude-fable-5-1")
+            == "s0_T5000_fable_gate_320")
+
+
+# -- batch 3: the model dimension --------------------------------------------
+
+def test_agent_config_rejects_an_unknown_model():
+    from searchers.llm_agent import MODELS
+    with pytest.raises(ValueError, match="model must be one of"):
+        AgentConfig(model="claude-not-a-model")
+    for m in MODELS:
+        AgentConfig(model=m)               # both must construct
+
+
+def test_seed_extension_to_500_preserves_the_earlier_draws():
+    from experiments.e_agent import MASTER_SEED, dgp_seeds
+    for n in (80, 320):
+        earlier = np.random.default_rng(MASTER_SEED).integers(0, 2**31 - 1, size=n)
+        np.testing.assert_array_equal(dgp_seeds(500)[:n], earlier)
+    assert len(set(dgp_seeds(500).tolist())) == 500
 
 
 def test_seed_stream_extension_preserves_the_first_eighty():
@@ -388,8 +435,10 @@ def test_run_id_includes_T_so_reruns_cannot_interleave():
     from experiments.e_agent import make_run_id
     short = make_run_id("s0", "control", 0, 500)
     long = make_run_id("s0", "control", 0, 5000)
-    assert short == "s0_T500_control_000"
-    assert long == "s0_T5000_control_000"
+    # The model tag joined the id in batch 3; what this guards is unchanged --
+    # two sample lengths must not share a directory.
+    assert short == "s0_T500_sonnet_control_000"
+    assert long == "s0_T5000_sonnet_control_000"
     assert short != long
 
 

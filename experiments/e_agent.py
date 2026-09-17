@@ -30,8 +30,10 @@ from environments.dgp import DGPConfig, generate
 from environments.sandbox import Sandbox
 from garden import watch as watch_mod
 from garden.spec_class import SubsetClass
+from experiments.code_state import code_state
 from searchers.llm_agent import (
-    ARMS, LIVE_ARMS, AgentConfig, AuthFailed, LLMAgent, RateLimited, RunPaths, build_prompt,
+    ARMS, LIVE_ARMS, MODEL_TAGS, MODELS, AgentConfig, AuthFailed, LLMAgent, RateLimited,
+    RunPaths, build_prompt,
 )
 
 PREREG = Path(__file__).resolve().parent.parent / "prereg" / "AGENT_PROMPTS.md"
@@ -39,7 +41,7 @@ RUNS_ROOT = Path(__file__).resolve().parent.parent / "runs"
 
 # prereg/AGENT_PROMPTS.md 3, pinned.
 MASTER_SEED = 20260916
-MODEL = "claude-sonnet-5"
+MODEL = "claude-sonnet-5"          # default; batch 3 crosses this with fable
 MAX_TURNS = 60
 D = 3
 CONFIGS = {
@@ -73,6 +75,7 @@ def read_prompts(path: Path = PREREG) -> dict:
                              f"found {len(hits)}: {hits}")
         return hits[0].strip()
 
+
     return {
         "control": blocks[0].strip(),
         "gate_suffix": blocks[1].strip(),
@@ -100,17 +103,17 @@ def system_prompt_for(arm: str, M: int, K: int, d: int, prompts: dict | None = N
     return base
 
 
-def dgp_seeds(n: int = 320) -> np.ndarray:
+def dgp_seeds(n: int = 500) -> np.ndarray:
     """AGENT_PROMPTS.md 4: the first n draws from default_rng(MASTER_SEED).
 
-    Extended from 80 to 320 for amendment 4's second batch. Drawing more from
-    the same generator leaves the first 80 byte-identical, so seeds 0-79 keep
-    the meaning they had in the first batch; verified in tests."""
+    Extended from 80 to 320 (amendment 4) and to 500 for batch 3. Drawing
+    more from the same generator leaves the earlier draws byte-identical, so
+    seeds already run keep their meaning; verified in tests."""
     return np.random.default_rng(MASTER_SEED).integers(0, 2**31 - 1, size=n)
 
 
 def make_run_id(config_name: str, arm: str, seed_index: int, T: int,
-                budget: int | None = None) -> str:
+                budget: int | None = None, model: str = MODEL) -> str:
     """T is part of the id so a rerun at a different sample length cannot land
     in the same directory.
 
@@ -124,14 +127,15 @@ def make_run_id(config_name: str, arm: str, seed_index: int, T: int,
     so the assigned dose is recoverable from the directory name alone, and so
     `ls runs/` shows the design."""
     tag = arm if budget is None else f"{arm}{budget}"
-    return f"{config_name}_T{T}_{tag}_{seed_index:03d}"
+    mtag = MODEL_TAGS.get(model, model.replace("claude-", "").replace("-", ""))
+    return f"{config_name}_T{T}_{mtag}_{tag}_{seed_index:03d}"
 
 
 def run_one(arm: str, config_name: str, seed_index: int, prompts: dict,
-            budget: int | None = None) -> int:
+            budget: int | None = None, model: str = MODEL) -> int:
     cfg = CONFIGS[config_name]
     seed = int(dgp_seeds()[seed_index])
-    run_id = make_run_id(config_name, arm, seed_index, cfg["T"], budget)
+    run_id = make_run_id(config_name, arm, seed_index, cfg["T"], budget, model)
     paths = RunPaths(RUNS_ROOT / run_id)
 
     dgp = DGPConfig(M=cfg["M"], T=cfg["T"], T_oos=cfg["T_oos"], K=cfg["K"],
@@ -145,7 +149,7 @@ def run_one(arm: str, config_name: str, seed_index: int, prompts: dict,
                        B=10_000, seed=seed, agent_view="standing")
 
     agent_cfg = AgentConfig(
-        arm=arm, model=MODEL, max_turns=MAX_TURNS, budget=budget,
+        arm=arm, model=model, max_turns=MAX_TURNS, budget=budget,
         system_prompt=system_prompt_for(arm, cfg["M"], cfg["K"], D, prompts, budget),
         # Verbatim from prereg §2, not from literals in the agent.
         count_result=prompts["count_result"], budget_result=prompts["budget_result"],
@@ -153,13 +157,16 @@ def run_one(arm: str, config_name: str, seed_index: int, prompts: dict,
     )
     paths.write_json("config.json", {
         "run_id": run_id, "arm": arm, "config": config_name, "seed_index": seed_index,
-        "budget": budget, "dgp_seed": seed, "master_seed": MASTER_SEED, "model": MODEL,
+        "budget": budget, "dgp_seed": seed, "master_seed": MASTER_SEED, "model": model,
         "max_turns": MAX_TURNS, "spec_class": spec_class.name, "d": D,
         "dgp": {k: v for k, v in vars(dgp).items() if not k.startswith("_")},
         "watch_open": {"status": w.state.status, "class_size": w.state.class_size,
                        "critical_value": w.state.critical_value,
                        "power_at_reference": w.state.power_at_reference},
         "prompt_sha_note": "verbatim text read from prereg/AGENT_PROMPTS.md at runtime",
+        # Which code produced this run. runs/ is outside the fingerprint, so the
+        # batch's own per-run commits do not move it; see experiments/code_state.py.
+        "code": code_state(),
         "started": time.time(),
     })
 
@@ -174,11 +181,23 @@ def run_one(arm: str, config_name: str, seed_index: int, prompts: dict,
 
     # OOS is computed here, by the harness, after submit -- never by the agent,
     # and never reachable through any tool it can call.
-    if agent.submitted_spec is not None:
+    if agent.submitted_spec is not None and agent.verdict is not None:
         paths.write_json("oos.json", {
             "oos_sharpe": sandbox.oos_sharpe_for_grading(agent.submitted_spec),
             "computed_by": "harness, after submit",
         })
+    elif agent.submitted_spec is not None:
+        # Latched as submitted but carrying no verdict. The run is void: it must
+        # not be graded, and it must not exit 0 -- the runner commits whatever
+        # exits 0 and moves on, which is how a voided run reached the batch
+        # once already. Unreachable now that submit latches only after the watch
+        # call returns; kept so the next way in fails loudly instead.
+        paths.write_json("void.json", {
+            "reason": "submission latched without a verdict; run is not gradeable",
+            "n_evaluated": agent._n_eval,
+        })
+        print(f"VOID: {run_id} submitted without a verdict; not graded", file=sys.stderr)
+        return 4
     else:
         paths.write_json("no_submit.json", {
             "reason": "run ended without calling submit",
@@ -195,6 +214,8 @@ def main(argv=None) -> int:
     p.add_argument("--seed-index", type=int, default=0)
     p.add_argument("--budget", type=int, default=None,
                    help="evaluate cap for the budget arm (amendment 4: 20, 60 or 180)")
+    p.add_argument("--model", choices=MODELS, default=MODEL,
+                   help="batch 3 crosses arms with the model; thinking stays disabled for both")
     a = p.parse_args(argv)
 
     if a.arm not in LIVE_ARMS:
@@ -211,9 +232,9 @@ def main(argv=None) -> int:
     prompts = read_prompts()
     for i in range(a.runs):
         idx = a.seed_index + i
-        print(f"[{i + 1}/{a.runs}] arm={a.arm} config={a.config} seed_index={idx}"
-              + (f" budget={a.budget}" if a.budget else ""), flush=True)
-        code = run_one(a.arm, a.config, idx, prompts, a.budget)
+        print(f"[{i + 1}/{a.runs}] arm={a.arm} config={a.config} model={a.model} "
+              f"seed_index={idx}" + (f" budget={a.budget}" if a.budget else ""), flush=True)
+        code = run_one(a.arm, a.config, idx, prompts, a.budget, a.model)
         if code:
             return code
     return 0

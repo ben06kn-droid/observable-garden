@@ -63,6 +63,7 @@ def load_run(d: Path) -> dict:
     return {
         "run_id": d.name,
         "arm": cfg["arm"],
+        "model": cfg.get("model", PINNED_MODEL),
         "config": cfg.get("config", "s0"),
         "budget": cfg.get("budget"),
         "power_at_open": (cfg.get("watch_open") or {}).get("power_at_reference"),
@@ -105,8 +106,17 @@ def load_run(d: Path) -> dict:
 
 
 def classify_exclusion(r: dict) -> str | None:
-    """The three categories §5 fixes in advance, in its own order."""
-    if [m for m in r["models_seen"] if m != PINNED_MODEL] or not r["models_seen"]:
+    """The three categories §5 fixes in advance, in its own order.
+
+    The model check is against the run's OWN assigned model, not a global pin:
+    batch 3 crosses arms with two models, and comparing every run to one string
+    would exclude the whole fable half as a mismatch."""
+    assigned = r.get("model", PINNED_MODEL)
+    # Only strings naming a model count. The SDK also reports sentinels such as
+    # "<synthetic>" for messages it generates itself; treating those as models
+    # voided a real run (s0_T5000_sonnet_gate_087) on its first appearance.
+    reported = [m for m in r["models_seen"] if str(m).startswith("claude-")]
+    if not reported or [m for m in reported if m != assigned]:
         return "model_string"
     if r["non_mcp_tools"]:
         return "non_mcp_tool"
@@ -315,6 +325,7 @@ def report(runs: list[dict], out_dir: Path) -> str:
     p(f"  wall seconds per run   {fmt_mi(wall)}   total {sum(wall)/60:.1f} min")
     p("")
 
+    p(model_block(runs))
     p(budget_block(runs))
     p(s3_block(runs))
     p(exploratory(kept, fits))
@@ -322,6 +333,38 @@ def report(runs: list[dict], out_dir: Path) -> str:
     figure(fits, out_dir)
     p(f"figure: {out_dir / 'agent_stated_vs_log_count.png'}")
     return "\n".join(L)
+
+
+def model_block(runs: list[dict]) -> str:
+    """Batch 3 crosses the arms with the model, so every headline splits."""
+    rs = [r for r in runs if classify_exclusion(r) is None]
+    models = sorted({r["model"] for r in rs})
+    L = ["BY MODEL — batch 3 crosses arm x model", "-" * 78]
+    if len(models) < 2:
+        L.append(f"only one model in this set ({models[0] if models else 'none'}); "
+                 f"no split to report")
+        return "\n".join(L) + "\n"
+    L.append(f"{'model':<20}{'arm':<10}{'n':>4} {'stated mean med':>17} "
+             f"{'evals med':>11} {'OOS med':>9} {'PASS':>6}")
+    for m in models:
+        for arm in sorted({r["arm"] for r in rs if r["model"] == m}):
+            cell = [r for r in rs if r["model"] == m and r["arm"] == arm]
+            n_pass = sum(1 for r in cell if r["status"] == "PASS")
+            L.append(f"{m:<20}{arm:<10}{len(cell):>4} "
+                     f"{np.median([r['stated_mean'] for r in cell]):>17.3f} "
+                     f"{np.median([r['n_evaluated'] for r in cell]):>11.1f} "
+                     f"{np.median([r['oos'] for r in cell]):>9.3f} "
+                     f"{n_pass:>3}/{len(cell)}")
+    L.append("")
+    for arm in sorted({r["arm"] for r in rs}):
+        cells = {m: [r for r in rs if r["model"] == m and r["arm"] == arm] for m in models}
+        if all(len(c) >= 3 for c in cells.values()):
+            fits = {m: ols(np.log([r["n_evaluated"] for r in c]),
+                           [r["stated_mean"] for r in c]) for m, c in cells.items()}
+            line = "  ".join(f"{m.split('-')[1]} {f['slope']:+.4f} (SE {f['se']:.4f})"
+                             for m, f in fits.items())
+            L.append(f"  slope on log(count), {arm}: {line}")
+    return "\n".join(L) + "\n"
 
 
 def budget_block(runs: list[dict]) -> str:
@@ -498,8 +541,16 @@ def main() -> None:
                   if d.is_dir() and d.name.startswith(PREFIX))
     if not dirs:
         raise SystemExit(f"no runs matching {PREFIX}* under {a.runs_dir}")
-    runs = [load_run(d) for d in dirs]
+    # A run still in flight has a config and a transcript but no verdict. That is
+    # a normal mid-batch state, not an error: skip it and say how many.
+    complete = [d for d in dirs if (d / "verdict.json").exists()]
+    incomplete = [d.name for d in dirs if d not in complete]
+    runs = [load_run(d) for d in complete]
     text = report(runs, Path(a.out))
+    if incomplete:
+        note = (f"\nINCOMPLETE: {len(incomplete)} run(s) without verdict.json, skipped\n"
+                + "".join(f"  {n}\n" for n in incomplete))
+        text += note
     print(text)
     Path(a.out).mkdir(parents=True, exist_ok=True)
     (Path(a.out) / "agent_analysis.txt").write_text(text + "\n")

@@ -25,11 +25,13 @@ cd "$(dirname "$0")/.." || exit 1
 
 SCHEDULE=""
 START=""
+ALLOW_CODE_CHANGE=0
 POSITIONAL=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --schedule) SCHEDULE="${2:-}"; shift 2 ;;
     --start)    START="${2:-}";    shift 2 ;;
+    --allow-code-change) ALLOW_CODE_CHANGE=1; shift ;;
     -h|--help)  sed -n '2,20p' "$0"; exit 0 ;;
     *)          POSITIONAL+=("$1"); shift ;;
   esac
@@ -74,20 +76,58 @@ if [ -n "$SCHEDULE" ]; then
   fi
   echo "schedule: $SCHEDULE, $TOTAL runs, starting at line index $START"
 
+  # The code state this batch runs under. Deliberately not HEAD: this script
+  # commits after every run, so HEAD moves constantly while the code does not,
+  # and a guard on HEAD would fire on the second run of every batch and mean
+  # nothing. experiments/code_state.py fingerprints the paths that determine how
+  # a run behaves (prereg included) and ignores runs/.
+  FP() { .venv/bin/python -m experiments.code_state --field "$1"; }
+  BATCH_FP=$(FP fingerprint) || { echo "could not read the code fingerprint" >&2; exit 70; }
+  BATCH_HEAD=$(FP head)
+  echo "code: fingerprint $BATCH_FP at HEAD $BATCH_HEAD"
+
   for ((n = START; n < TOTAL; n++)); do
-    read -r SEED CONFIG ARM BUDGET <<<"${LINES[$n]}"
+    read -r SEED CONFIG ARM BUDGET MODEL <<<"${LINES[$n]}"
+
+    NOW_FP=$(FP fingerprint)
+    if [ "$NOW_FP" != "$BATCH_FP" ]; then
+      NOW_HEAD=$(FP head)
+      if [ "$ALLOW_CODE_CHANGE" -eq 1 ]; then
+        echo "code changed mid-batch; continuing because --allow-code-change was passed:"
+        echo "  batch started: fingerprint $BATCH_FP at HEAD $BATCH_HEAD"
+        echo "  now:           fingerprint $NOW_FP at HEAD $NOW_HEAD"
+        BATCH_FP="$NOW_FP"; BATCH_HEAD="$NOW_HEAD"
+      else
+        echo >&2
+        echo "REFUSING to start seed $SEED at schedule line $n: the code changed mid-batch." >&2
+        echo "  batch started: fingerprint $BATCH_FP at HEAD $BATCH_HEAD" >&2
+        echo "  now:           fingerprint $NOW_FP at HEAD $NOW_HEAD" >&2
+        echo "Runs produced before and after a code change are not comparable." >&2
+        echo "To continue deliberately:" >&2
+        echo "  $0 --schedule $SCHEDULE --start $n --allow-code-change" >&2
+        exit 65
+      fi
+    fi
+
     T=$(t_for "$CONFIG") || { echo "could not read T for $CONFIG" >&2; exit 70; }
+    # Batch 3 added a model column. Schedules written before it default to sonnet.
+    MODEL=${MODEL:-claude-sonnet-5}
+    case "$MODEL" in
+      claude-sonnet-5) MTAG=sonnet ;;
+      claude-fable-5-1) MTAG=fable ;;
+      *) echo "unknown model on schedule line $n: $MODEL" >&2; exit 64 ;;
+    esac
 
     # No array for the optional flag: bash 3.2 under `set -u` treats an empty
     # array as unset, so "${BUDGET_ARG[@]}" aborts on every non-budget line --
     # which is the first scheduled run. bash -n cannot see it; only running the
     # loop body does.
     if [ "$BUDGET" = "-" ] || [ -z "$BUDGET" ]; then
-      RUN_ID="${CONFIG}_T${T}_${ARM}_$(printf '%03d' "$SEED")"
-      LABEL="arm $ARM, config $CONFIG"
+      RUN_ID="${CONFIG}_T${T}_${MTAG}_${ARM}_$(printf '%03d' "$SEED")"
+      LABEL="arm $ARM, config $CONFIG, model $MODEL"
     else
-      RUN_ID="${CONFIG}_T${T}_${ARM}${BUDGET}_$(printf '%03d' "$SEED")"
-      LABEL="arm $ARM (B=$BUDGET), config $CONFIG"
+      RUN_ID="${CONFIG}_T${T}_${MTAG}_${ARM}${BUDGET}_$(printf '%03d' "$SEED")"
+      LABEL="arm $ARM (B=$BUDGET), config $CONFIG, model $MODEL"
     fi
 
     echo
@@ -95,10 +135,11 @@ if [ -n "$SCHEDULE" ]; then
 
     if [ "$BUDGET" = "-" ] || [ -z "$BUDGET" ]; then
       .venv/bin/python -m experiments.e_agent \
-          --arm "$ARM" --config "$CONFIG" --runs 1 --seed-index "$SEED"
+          --arm "$ARM" --config "$CONFIG" --runs 1 --seed-index "$SEED" --model "$MODEL"
     else
       .venv/bin/python -m experiments.e_agent \
-          --arm "$ARM" --config "$CONFIG" --runs 1 --seed-index "$SEED" --budget "$BUDGET"
+          --arm "$ARM" --config "$CONFIG" --runs 1 --seed-index "$SEED" \
+          --budget "$BUDGET" --model "$MODEL"
     fi
     CODE=$?
 

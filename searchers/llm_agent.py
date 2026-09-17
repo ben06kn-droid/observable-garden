@@ -9,8 +9,12 @@ Arms are defined in prereg/AGENT_PROMPTS.md, fixed before any run:
 
     control   evaluate, submit
     gate      evaluate, status, submit          status -> `standing` view only
-    count     evaluate, submit                  (deferred) result carries a running count
-    budget    evaluate, submit                  (deferred) hard cap on evaluate calls
+    count     evaluate, submit                  result carries a running count
+    budget    evaluate, submit                  hard cap on evaluate calls
+
+Batch 3 crosses the arms with the model (MODELS). Thinking is pinned disabled
+for both, and each run's model string is logged and checked per call against
+that run's own assignment.
 
 The declared class is fixed by run config and opened by the harness. It is
 deliberately NOT an agent tool: the class must be fixed before anything is
@@ -58,8 +62,13 @@ from environments.sandbox import Distribution, Specification
 from searchers.base import Searcher
 
 ARMS = ("control", "count", "gate", "budget")
-# Amendment 4 opened count and budget for the second batch (seeds 80-319).
-LIVE_ARMS = ("control", "gate", "count", "budget")
+# Amendment 4 opened count and budget (seeds 80-319).
+# The `pushed` arm lives on the batch3 branch until prereg Amendment 5.
+LIVE_ARMS = ARMS
+
+# Batch 3's model dimension. Thinking is pinned disabled for both (§3).
+MODELS = ("claude-sonnet-5", "claude-fable-5-1")
+MODEL_TAGS = {"claude-sonnet-5": "sonnet", "claude-fable-5-1": "fable"}
 SERVER_NAME = "garden"
 USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens",
               "cache_read_input_tokens", "output_tokens")
@@ -198,6 +207,8 @@ class AgentConfig:
             raise ValueError(f"arm must be one of {ARMS}, got {self.arm!r}")
         if self.arm == "budget" and self.budget is None:
             raise ValueError("the budget arm needs an explicit evaluate cap")
+        if self.model not in MODELS:
+            raise ValueError(f"model must be one of {MODELS}, got {self.model!r}")
 
 
 class LLMAgent(Searcher):
@@ -236,12 +247,14 @@ class LLMAgent(Searcher):
 
     # -- arm sentence --------------------------------------------------------
 
-    def _arm_sentence(self) -> str:
+    def _arm_sentence(self, report=None) -> str:
         """Appended verbatim to every evaluate result, per AGENT_PROMPTS.md 2.
 
-        The templates come from the pre-registration via AgentConfig, not from
-        literals here: 2 requires byte identity with the registered text, which
-        is only enforceable if there is one copy of it."""
+        The count and budget templates come from the pre-registration via
+        AgentConfig, not from literals here: 2 requires byte identity with the
+        registered text, which is only enforceable if there is one copy of it.
+
+        """
         if self.config.arm == "count":
             return " " + self.config.count_result.replace("{N}", str(self._n_eval))
         if self.config.arm == "budget":
@@ -289,7 +302,7 @@ class LLMAgent(Searcher):
             # Under 40 tokens excluding the arm sentence: results are the only
             # remaining lever on per-turn cost.
             text = f"Sharpe {report.sr_is:.3f}, n={agent._watch.state.n_periods}."
-            text += agent._arm_sentence()
+            text += agent._arm_sentence(report)
             agent._log("tool_result", tool="evaluate", args=args, text=text,
                        sr_is=report.sr_is, n_evaluated=agent._n_eval)
             return {"content": [{"type": "text", "text": text}]}
@@ -305,9 +318,25 @@ class LLMAgent(Searcher):
                 return {"content": [{"type": "text", "text": f"Rejected: {e}"}]}
             if agent.submitted_spec is not None:
                 return {"content": [{"type": "text", "text": "Already submitted."}]}
+            # The watch call goes first and the run is latched only once it has
+            # returned. Latching before it inverts the failure: a refused submit
+            # left submitted_spec set with no verdict, so every retry hit
+            # "Already submitted." above, the agent could never recover, and the
+            # harness still graded OOS and exited 0. That silently voided
+            # s0_T5000_sonnet_budget20_089, whose first submit named a
+            # specification it had never evaluated.
+            #
+            # A refusal is not a trial -- Watch counts it in refused_attempts and
+            # its message is data-independent -- so it is returned to the agent
+            # the way `evaluate` returns one, and the agent may submit again.
+            try:
+                verdict = agent._watch.submit(spec, Distribution(mean=mean, std=sd))
+            except ValueError as e:
+                agent._log("tool_error", tool="submit", args=args, error=str(e))
+                return {"content": [{"type": "text", "text": f"Rejected: {e}"}]}
             agent.submitted_spec = spec
             agent.stated = {"mean": mean, "sd": sd}
-            agent.verdict = agent._watch.submit(spec, Distribution(mean=mean, std=sd))
+            agent.verdict = verdict
             agent.paths.write_json("stated.json", agent.stated)
             agent.paths.write_json("verdict.json", agent.verdict.to_dict())
             agent._log("tool_result", tool="submit", args=args, status=agent.verdict.status)
