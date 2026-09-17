@@ -145,12 +145,14 @@ def test_evaluate_rejects_out_of_class_without_crashing(tmp_path):
 
 
 def test_budget_arm_stops_evaluating_at_the_cap(tmp_path):
+    """Superseded in part by the hard-cap test below: the (B+1)th call now
+    answers with an explicit refusal rather than a bare countdown."""
     agent, _, sb = make_agent(tmp_path, arm="budget", budget=2)
     h = handlers(agent)["evaluate"]
     for k in range(2):
         assert text_of(call(h, {"features": [k], "signs": [1]})).startswith("Sharpe ")
     out = text_of(call(h, {"features": [3], "signs": [1]}))
-    assert "remaining: 0" in out
+    assert out.startswith("Refused:")
     assert sb.returns_matrix().shape[1] == 2
 
 
@@ -206,6 +208,131 @@ def test_no_builtin_tool_is_reachable(tmp_path):
                     "WebSearch", "Task", "TodoWrite", "NotebookEdit"):
         assert builtin not in opts.allowed_tools
     assert isinstance(opts.system_prompt, str)   # a plain str replaces the preset
+
+
+# -- arm prompts and result text (amendment 4) -------------------------------
+
+def test_prereg_yields_all_three_treatment_strings():
+    """§2 states count and budget inline rather than in fences, so they are
+    picked out by placeholder. Retyping them into code would defeat reading the
+    file at all."""
+    from experiments.e_agent import read_prompts
+    p = read_prompts()
+    assert p["count_result"] == "Specifications evaluated so far: {N}."
+    assert p["budget_prompt"] == "You may call evaluate at most {B} times."
+    assert p["budget_result"] == "Evaluations remaining: {R}."
+
+
+def test_count_prompt_is_byte_identical_to_control():
+    """§2 gives count 'tools as control'; the whole treatment is result text."""
+    from experiments.e_agent import read_prompts, system_prompt_for
+    p = read_prompts()
+    assert system_prompt_for("count", 50, 40, 3, p) == system_prompt_for("control", 50, 40, 3, p)
+
+
+def test_budget_prompt_is_control_plus_the_substituted_line():
+    from experiments.e_agent import read_prompts, system_prompt_for
+    p = read_prompts()
+    base = system_prompt_for("control", 50, 40, 3, p)
+    for B in (20, 60, 180):
+        got = system_prompt_for("budget", 50, 40, 3, p, budget=B)
+        assert got.startswith(base)
+        assert got[len(base):].strip() == f"You may call evaluate at most {B} times."
+        assert "{B}" not in got
+
+
+def test_budget_prompt_without_a_cap_raises():
+    from experiments.e_agent import read_prompts, system_prompt_for
+    with pytest.raises(ValueError, match="explicit cap"):
+        system_prompt_for("budget", 50, 40, 3, read_prompts())
+
+
+def test_count_result_text_carries_the_running_count(tmp_path):
+    agent, _, _ = make_agent(tmp_path, arm="count")
+    h = handlers(agent)["evaluate"]
+    first = text_of(call(h, {"features": [0], "signs": [1]}))
+    second = text_of(call(h, {"features": [1], "signs": [1]}))
+    assert first.endswith("Specifications evaluated so far: 1.")
+    assert second.endswith("Specifications evaluated so far: 2.")
+
+
+def test_budget_result_text_counts_down_and_the_cap_is_hard(tmp_path):
+    """The (B+1)th call is refused by the harness with a message. It is a cap,
+    not a class violation, so it never reaches Watch and is not counted among
+    refused_attempts."""
+    agent, w, sb = make_agent(tmp_path, arm="budget", budget=2)
+    h = handlers(agent)["evaluate"]
+    assert text_of(call(h, {"features": [0], "signs": [1]})).endswith("Evaluations remaining: 1.")
+    assert text_of(call(h, {"features": [1], "signs": [1]})).endswith("Evaluations remaining: 0.")
+
+    refused = text_of(call(h, {"features": [2], "signs": [1]}))
+    assert refused.startswith("Refused:")
+    assert "budget of 2 is spent" in refused
+    assert "submit" in refused
+    assert sb.returns_matrix().shape[1] == 2          # nothing further was evaluated
+    assert w.refused_attempts == []                   # not a Theta breach
+    assert agent._budget_refusals == 1
+
+
+def test_run_id_carries_the_assigned_dose():
+    from experiments.e_agent import make_run_id
+    assert make_run_id("s0", "budget", 81, 5000, 20) == "s0_T5000_budget20_081"
+    assert make_run_id("s0", "budget", 82, 5000, 60) == "s0_T5000_budget60_082"
+    assert make_run_id("s0", "count", 80, 5000) == "s0_T5000_count_080"
+    assert make_run_id("s3", "gate", 85, 5000) == "s3_T5000_gate_085"
+
+
+def test_seed_stream_extension_preserves_the_first_eighty():
+    """Amendment 4 extends the seed draw from 80 to 320. Seeds 0-79 must keep
+    the meaning they had in the first batch."""
+    from experiments.e_agent import MASTER_SEED, dgp_seeds
+    first80 = np.random.default_rng(MASTER_SEED).integers(0, 2**31 - 1, size=80)
+    np.testing.assert_array_equal(dgp_seeds(320)[:80], first80)
+    assert len(set(dgp_seeds(320).tolist())) == 320
+
+
+def test_all_four_arms_are_live():
+    from searchers.llm_agent import ARMS, LIVE_ARMS
+    assert set(LIVE_ARMS) == set(ARMS)
+
+
+# -- considered, both rules --------------------------------------------------
+
+def write_transcript(tmp_path, rows):
+    import json as _json
+    (tmp_path / "transcript.jsonl").write_text(
+        "\n".join(_json.dumps(r) for r in rows) + "\n")
+
+
+def test_amendment_3_counts_unevaluated_feature_sets(tmp_path):
+    """Sets named in prose and not evaluated within that turn or the next two."""
+    agent, _, _ = make_agent(tmp_path, arm="control")
+    agent.config.seed_index = 80                       # amendment 3 applies
+    write_transcript(tmp_path, [
+        {"ts": 1, "kind": "assistant_text", "text": "Trying [0,1] and also [2,3] later."},
+        {"ts": 2, "kind": "tool_result", "tool": "evaluate", "args": {"features": [0, 1]}},
+        {"ts": 3, "kind": "assistant_text", "text": "Now [4,5]."},
+        {"ts": 4, "kind": "tool_result", "tool": "evaluate", "args": {"features": [4, 5]}},
+    ])
+    agent._finalize()
+    out = json.loads((tmp_path / "considered.json").read_text())
+    assert out["rule"] == "amendment_3"
+    assert [2, 3] in out["considered"]                 # named, never evaluated
+    assert [0, 1] not in out["considered"]             # evaluated in the same turn
+    assert [4, 5] not in out["considered"]
+
+
+def test_section_5_rule_still_applies_below_seed_eighty(tmp_path):
+    agent, _, _ = make_agent(tmp_path, arm="control")
+    agent.config.seed_index = 79
+    write_transcript(tmp_path, [
+        {"ts": 1, "kind": "assistant_text", "text": "Trying [0,1] and also [2,3]."},
+        {"ts": 2, "kind": "tool_result", "tool": "evaluate", "args": {"features": [0, 1]}},
+    ])
+    agent._finalize()
+    out = json.loads((tmp_path / "considered.json").read_text())
+    assert out["rule"] == "section_5"
+    assert out["n_considered"] == 0                    # the rule that fired 0 of 80 times
 
 
 # -- run directory safety ----------------------------------------------------
@@ -332,19 +459,21 @@ def test_wall_seconds_is_none_before_any_transcript_entry(tmp_path):
 
 # -- runner ------------------------------------------------------------------
 
-def test_deferred_arms_are_refused_by_the_runner():
+def test_runner_guards_the_budget_cap():
+    """Amendment 4 made count and budget live, so the deferral guard no longer
+    fires for them. What replaces it: budget needs a cap, and a cap is
+    meaningless for the other arms."""
     from experiments.e_agent import main
-    assert main(["--arm", "count", "--runs", "1"]) == 3
-    assert main(["--arm", "budget", "--runs", "1"]) == 3
+    assert main(["--arm", "budget", "--runs", "1"]) == 64           # missing --budget
+    assert main(["--arm", "control", "--budget", "20", "--runs", "1"]) == 64
 
 
 def test_seed_sequence_is_the_pre_registered_one():
     from experiments.e_agent import MASTER_SEED, dgp_seeds
     expected = np.random.default_rng(MASTER_SEED).integers(0, 2**31 - 1, size=80)
-    np.testing.assert_array_equal(dgp_seeds(), expected)
-    assert len(set(dgp_seeds().tolist())) == 80
+    np.testing.assert_array_equal(dgp_seeds(80), expected)
+    assert len(set(dgp_seeds(80).tolist())) == 80
 
 
-def test_live_arms_are_control_and_gate():
-    assert LIVE_ARMS == ("control", "gate")
-    assert set(LIVE_ARMS) <= set(ARMS)
+def test_live_arms_cover_every_arm_after_amendment_4():
+    assert set(LIVE_ARMS) == set(ARMS)

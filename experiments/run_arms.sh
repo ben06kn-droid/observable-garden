@@ -1,35 +1,123 @@
 #!/usr/bin/env bash
-# Pilot runner for the agent arms: seeds 2-79, arms alternating by parity.
+# Batch runner for the agent arms.
 #
-#   experiments/run_arms.sh          # start at seed index 2
-#   experiments/run_arms.sh 34       # resume at seed index 34
+#   experiments/run_arms.sh                                  # legacy: seeds 2-79 by parity
+#   experiments/run_arms.sh 34                               # resume that at index 34
+#   experiments/run_arms.sh --schedule experiments/schedule_240.txt
+#   experiments/run_arms.sh --schedule experiments/schedule_240.txt --start 112
 #
-# Seed indices 0 and 1 are spent: 0 on the superseded T=500 pilot and on the
-# T=5000 control run that replaced it. prereg/AGENT_PROMPTS.md section 4 fixes
-# the seed sequence and requires arms to alternate within every session, so
-# parity assigns them: even index -> control, odd -> gate. Nothing here chooses
-# a seed or an arm; both follow from the index.
+# Schedule format: one run per line, `#` comments ignored.
 #
-# Commits after every run, so an interrupted session leaves the completed runs
-# in history rather than in a dirty tree. Stops on the first non-zero exit and
-# prints the failing index, because a seat that is rate limited stays rate
-# limited and a retry loop would burn the window.
+#   seed  config  arm      budget      e.g.  81  s0  budget  20
+#                                            84  s3  control  -
+#
+# Nothing here chooses a seed, an arm or a dose; all three come from the file,
+# which experiments/make_schedule.py generates from amendment 4's quotas and
+# verifies against them. Regenerate rather than edit by hand.
+#
+# Commits after every run, so an interrupted session leaves completed runs in
+# history rather than a dirty tree. Stops on the first non-zero exit and prints
+# the failing seed: a seat that is rate limited stays rate limited, and a retry
+# loop would burn the window.
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
 
-START=${1:-2}
+SCHEDULE=""
+START=""
+POSITIONAL=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --schedule) SCHEDULE="${2:-}"; shift 2 ;;
+    --start)    START="${2:-}";    shift 2 ;;
+    -h|--help)  sed -n '2,20p' "$0"; exit 0 ;;
+    *)          POSITIONAL+=("$1"); shift ;;
+  esac
+done
+
+t_for() {  # T for a config name, read rather than hardcoded
+  .venv/bin/python -c "from experiments.e_agent import CONFIGS; print(CONFIGS['$1']['T'])"
+}
+
+commit_run() {  # $1 run_id, $2 description
+  if [ -d "runs/$1" ]; then
+    git add "runs/$1"
+    git commit -q -m "run $1
+
+$2 per prereg/AGENT_PROMPTS.md §§3-4 as amended."
+    echo "committed runs/$1"
+  else
+    echo "WARNING: runs/$1 missing after a zero exit; nothing committed" >&2
+  fi
+}
+
+# ---------------------------------------------------------------- schedule mode
+if [ -n "$SCHEDULE" ]; then
+  [ -f "$SCHEDULE" ] || { echo "no such schedule: $SCHEDULE" >&2; exit 66; }
+  START=${START:-0}
+  if ! [[ "$START" =~ ^[0-9]+$ ]]; then
+    echo "--start must be a non-negative integer" >&2; exit 64
+  fi
+
+  # Not mapfile: it is a bash 4+ builtin and /usr/bin/env bash is 3.2 on macOS,
+  # so the schedule loop would die on its first line. This is 3.2-compatible.
+  LINES=()
+  while IFS= read -r line; do
+    LINES+=("$line")
+  done < <(grep -vE '^[[:space:]]*(#|$)' "$SCHEDULE")
+  TOTAL=${#LINES[@]}
+  if [ "$TOTAL" -eq 0 ]; then
+    echo "schedule $SCHEDULE has no runnable lines" >&2; exit 66
+  fi
+  if [ "$START" -ge "$TOTAL" ]; then
+    echo "--start $START is past the end of the schedule ($TOTAL runs)" >&2; exit 64
+  fi
+  echo "schedule: $SCHEDULE, $TOTAL runs, starting at line index $START"
+
+  for ((n = START; n < TOTAL; n++)); do
+    read -r SEED CONFIG ARM BUDGET <<<"${LINES[$n]}"
+    T=$(t_for "$CONFIG") || { echo "could not read T for $CONFIG" >&2; exit 70; }
+
+    if [ "$BUDGET" = "-" ] || [ -z "$BUDGET" ]; then
+      RUN_ID="${CONFIG}_T${T}_${ARM}_$(printf '%03d' "$SEED")"
+      BUDGET_ARG=()
+      LABEL="arm $ARM, config $CONFIG"
+    else
+      RUN_ID="${CONFIG}_T${T}_${ARM}${BUDGET}_$(printf '%03d' "$SEED")"
+      BUDGET_ARG=(--budget "$BUDGET")
+      LABEL="arm $ARM (B=$BUDGET), config $CONFIG"
+    fi
+
+    echo
+    echo "=== [$((n + 1))/$TOTAL] seed $SEED  $LABEL  run_id=$RUN_ID ==="
+
+    .venv/bin/python -m experiments.e_agent \
+        --arm "$ARM" --config "$CONFIG" --runs 1 --seed-index "$SEED" "${BUDGET_ARG[@]}"
+    CODE=$?
+
+    if [ "$CODE" -ne 0 ]; then
+      echo
+      echo "STOPPED at schedule line $n (seed $SEED, $LABEL, run_id $RUN_ID): exit $CODE" >&2
+      echo "Resume with: $0 --schedule $SCHEDULE --start $n" >&2
+      exit "$CODE"
+    fi
+    commit_run "$RUN_ID" "Seed index $SEED, $LABEL"
+  done
+
+  echo
+  echo "done: schedule $SCHEDULE complete from line $START"
+  exit 0
+fi
+
+# ---------------------------------------------------------------- legacy mode
+START=${POSITIONAL[0]:-2}
 LAST=79
 CONFIG=s0
-
-# Read T from the config rather than hardcoding it: run_id embeds T, the config
-# has already moved once (500 -> 5000, amendment 1), and a stale literal here
-# would commit the wrong path or warn that a run it just made is missing.
-T=$(.venv/bin/python -c "from experiments.e_agent import CONFIGS; print(CONFIGS['$CONFIG']['T'])") || {
-  echo "could not read T from CONFIGS['$CONFIG']" >&2; exit 70; }
+T=$(t_for "$CONFIG") || { echo "could not read T from CONFIGS['$CONFIG']" >&2; exit 70; }
 
 if ! [[ "$START" =~ ^[0-9]+$ ]] || [ "$START" -lt 0 ] || [ "$START" -gt "$LAST" ]; then
   echo "usage: $0 [start-index]   (0..$LAST, default 2)" >&2
+  echo "   or: $0 --schedule FILE [--start N]" >&2
   exit 64
 fi
 
@@ -52,17 +140,7 @@ for ((i = START; i <= LAST; i++)); do
     echo "Resume with: $0 $i" >&2
     exit "$CODE"
   fi
-
-  if [ -d "runs/$RUN_ID" ]; then
-    git add "runs/$RUN_ID"
-    git commit -q -m "pilot run $RUN_ID
-
-Seed index $i, arm $ARM, config $CONFIG (T=5000, T_oos=1000) per
-prereg/AGENT_PROMPTS.md sections 3 and 4 as amended by amendment 1."
-    echo "committed runs/$RUN_ID"
-  else
-    echo "WARNING: runs/$RUN_ID missing after a zero exit; nothing committed" >&2
-  fi
+  commit_run "$RUN_ID" "Seed index $i, arm $ARM, config $CONFIG"
 done
 
 echo

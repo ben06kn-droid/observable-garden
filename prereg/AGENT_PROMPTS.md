@@ -119,3 +119,10 @@ is redefined as: distinct specifications (feature sets, not single features)
 named as candidates in an assistant text block and not evaluated within that
 turn or the next two. The new definition applies only to runs after this
 amendment.
+
+Amendment 4 — 2026-09-17. Second batch of 240 runs, seeds 80–319: s0 count 40;
+s0 budget 60 at B ∈ {20, 60, 180}, 20 each; s3 control 40 and gate 40; s0
+control 30 and gate 30 as replication. Budget arm's primary analysis: stated
+mean regressed on assigned log(B), which is the pre-registered deafness test
+with the exposure randomized. s3 analysis: as §5, plus PASS rate against the
+preflight power at reference. Rotation across all blocks within every session.

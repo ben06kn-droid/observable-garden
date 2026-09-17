@@ -49,50 +49,89 @@ CONFIGS = {
 
 
 def read_prompts(path: Path = PREREG) -> dict:
-    """Extract the verbatim prompt blocks from the pre-registered file.
+    """Extract the verbatim prompt and result text from the pre-registered file.
 
     Read rather than duplicated: 2 requires byte identity of the shared text
-    across arms, which can only be guaranteed if there is one copy."""
+    across arms, which can only be guaranteed if there is one copy.
+
+    The control prompt and the gate suffix are fenced. The count and budget
+    treatments are stated inline in 2 as backticked prose, so they are picked
+    out by their placeholders rather than by position -- retyping them here
+    would defeat the point of reading the file at all."""
     text = path.read_text()
     blocks = re.findall(r"```\n(.*?)\n```", text, re.S)
     if len(blocks) < 2:
         raise ValueError(f"expected at least two fenced blocks in {path}, found {len(blocks)}")
-    return {"control": blocks[0].strip(), "gate_suffix": blocks[1].strip()}
+
+    sec2 = text.split("## 2. Arms")[1].split("## 3.")[0]
+    inline = re.findall(r"`([^`\n]{20,})`", sec2)
+
+    def one(marker: str) -> str:
+        hits = [s for s in inline if marker in s]
+        if len(hits) != 1:
+            raise ValueError(f"expected exactly one §2 string containing {marker!r}, "
+                             f"found {len(hits)}: {hits}")
+        return hits[0].strip()
+
+    return {
+        "control": blocks[0].strip(),
+        "gate_suffix": blocks[1].strip(),
+        "count_result": one("{N}"),        # Specifications evaluated so far: {N}.
+        "budget_prompt": one("{B}"),       # You may call evaluate at most {B} times.
+        "budget_result": one("{R}"),       # Evaluations remaining: {R}.
+    }
 
 
-def system_prompt_for(arm: str, M: int, K: int, d: int, prompts: dict | None = None) -> str:
-    """Control prompt plus exactly what the arm adds (AGENT_PROMPTS.md 2)."""
+def system_prompt_for(arm: str, M: int, K: int, d: int, prompts: dict | None = None,
+                      budget: int | None = None) -> str:
+    """Control prompt plus exactly what the arm adds (AGENT_PROMPTS.md 2).
+
+    `count` adds nothing to the prompt: 2 gives it "tools as control" and puts
+    the whole treatment in the result text, so its prompt must be byte-identical
+    to control's."""
     prompts = prompts or read_prompts()
     base = build_prompt(prompts["control"], M=M, K=K, d=d)
     if arm == "gate":
         return base + "\n\n" + prompts["gate_suffix"]
     if arm == "budget":
-        raise NotImplementedError(
-            "the budget arm's appended sentence carries {B}; it is deferred in "
-            "AGENT_PROMPTS.md 2 and needs a dated 6 amendment before it can run")
+        if budget is None:
+            raise ValueError("the budget arm needs an explicit cap B")
+        return base + "\n\n" + prompts["budget_prompt"].replace("{B}", str(budget))
     return base
 
 
-def dgp_seeds(n: int = 80) -> np.ndarray:
-    """AGENT_PROMPTS.md 4: the first n draws from default_rng(MASTER_SEED)."""
+def dgp_seeds(n: int = 320) -> np.ndarray:
+    """AGENT_PROMPTS.md 4: the first n draws from default_rng(MASTER_SEED).
+
+    Extended from 80 to 320 for amendment 4's second batch. Drawing more from
+    the same generator leaves the first 80 byte-identical, so seeds 0-79 keep
+    the meaning they had in the first batch; verified in tests."""
     return np.random.default_rng(MASTER_SEED).integers(0, 2**31 - 1, size=n)
 
 
-def make_run_id(config_name: str, arm: str, seed_index: int, T: int) -> str:
+def make_run_id(config_name: str, arm: str, seed_index: int, T: int,
+                budget: int | None = None) -> str:
     """T is part of the id so a rerun at a different sample length cannot land
     in the same directory.
 
     It matters more than an ordinary collision would: transcript.jsonl and
     usage.jsonl are append-mode, so two runs sharing a directory interleave
     their records into one file that still parses. Run s0_control_000 (T=500)
-    was nearly lost to exactly that before the config moved to T=5000."""
-    return f"{config_name}_T{T}_{arm}_{seed_index:03d}"
+    was nearly lost to exactly that before the config moved to T=5000.
+
+    The budget arm's cap is in the id too (budget20, budget60, budget180). Not
+    to prevent collisions -- RunPaths hard-errors on a reused directory -- but
+    so the assigned dose is recoverable from the directory name alone, and so
+    `ls runs/` shows the design."""
+    tag = arm if budget is None else f"{arm}{budget}"
+    return f"{config_name}_T{T}_{tag}_{seed_index:03d}"
 
 
-def run_one(arm: str, config_name: str, seed_index: int, prompts: dict) -> int:
+def run_one(arm: str, config_name: str, seed_index: int, prompts: dict,
+            budget: int | None = None) -> int:
     cfg = CONFIGS[config_name]
     seed = int(dgp_seeds()[seed_index])
-    run_id = make_run_id(config_name, arm, seed_index, cfg["T"])
+    run_id = make_run_id(config_name, arm, seed_index, cfg["T"], budget)
     paths = RunPaths(RUNS_ROOT / run_id)
 
     dgp = DGPConfig(M=cfg["M"], T=cfg["T"], T_oos=cfg["T_oos"], K=cfg["K"],
@@ -106,13 +145,15 @@ def run_one(arm: str, config_name: str, seed_index: int, prompts: dict) -> int:
                        B=10_000, seed=seed, agent_view="standing")
 
     agent_cfg = AgentConfig(
-        arm=arm, model=MODEL, max_turns=MAX_TURNS,
-        system_prompt=system_prompt_for(arm, cfg["M"], cfg["K"], D, prompts),
-        M=cfg["M"], K=cfg["K"], d=D, run_id=run_id,
+        arm=arm, model=MODEL, max_turns=MAX_TURNS, budget=budget,
+        system_prompt=system_prompt_for(arm, cfg["M"], cfg["K"], D, prompts, budget),
+        # Verbatim from prereg §2, not from literals in the agent.
+        count_result=prompts["count_result"], budget_result=prompts["budget_result"],
+        M=cfg["M"], K=cfg["K"], d=D, run_id=run_id, seed_index=seed_index,
     )
     paths.write_json("config.json", {
         "run_id": run_id, "arm": arm, "config": config_name, "seed_index": seed_index,
-        "dgp_seed": seed, "master_seed": MASTER_SEED, "model": MODEL,
+        "budget": budget, "dgp_seed": seed, "master_seed": MASTER_SEED, "model": MODEL,
         "max_turns": MAX_TURNS, "spec_class": spec_class.name, "d": D,
         "dgp": {k: v for k, v in vars(dgp).items() if not k.startswith("_")},
         "watch_open": {"status": w.state.status, "class_size": w.state.class_size,
@@ -152,19 +193,27 @@ def main(argv=None) -> int:
     p.add_argument("--config", choices=sorted(CONFIGS), default="s0")
     p.add_argument("--runs", type=int, default=1)
     p.add_argument("--seed-index", type=int, default=0)
+    p.add_argument("--budget", type=int, default=None,
+                   help="evaluate cap for the budget arm (amendment 4: 20, 60 or 180)")
     a = p.parse_args(argv)
 
     if a.arm not in LIVE_ARMS:
-        print(f"arm {a.arm!r} is deferred in prereg/AGENT_PROMPTS.md 2. The cut design is "
-              f"{LIVE_ARMS}; running it needs a dated 6 amendment stating its run count.",
-              file=sys.stderr)
+        print(f"arm {a.arm!r} is not live. Live arms: {LIVE_ARMS}; running another "
+              f"needs a dated §6 amendment stating its run count.", file=sys.stderr)
         return 3
+    if a.arm == "budget" and a.budget is None:
+        print("the budget arm needs --budget", file=sys.stderr)
+        return 64
+    if a.arm != "budget" and a.budget is not None:
+        print(f"--budget is meaningless for arm {a.arm!r}", file=sys.stderr)
+        return 64
 
     prompts = read_prompts()
     for i in range(a.runs):
         idx = a.seed_index + i
-        print(f"[{i + 1}/{a.runs}] arm={a.arm} config={a.config} seed_index={idx}", flush=True)
-        code = run_one(a.arm, a.config, idx, prompts)
+        print(f"[{i + 1}/{a.runs}] arm={a.arm} config={a.config} seed_index={idx}"
+              + (f" budget={a.budget}" if a.budget else ""), flush=True)
+        code = run_one(a.arm, a.config, idx, prompts, a.budget)
         if code:
             return code
     return 0

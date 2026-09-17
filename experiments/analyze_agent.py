@@ -63,6 +63,9 @@ def load_run(d: Path) -> dict:
     return {
         "run_id": d.name,
         "arm": cfg["arm"],
+        "config": cfg.get("config", "s0"),
+        "budget": cfg.get("budget"),
+        "power_at_open": (cfg.get("watch_open") or {}).get("power_at_reference"),
         "seed_index": cfg["seed_index"],
         "n_evaluated": len(evaluates),
         "n_tool_use": len(tool_uses),
@@ -175,11 +178,16 @@ def report(runs: list[dict], out_dir: Path) -> str:
     p("EXCLUSIONS (pre-registered categories)")
     p("-" * 78)
     cats = ("model_string", "non_mcp_tool", "rate_limit_before_submit")
-    kept: dict[str, list[dict]] = {"control": [], "gate": []}
-    excl: dict[str, dict[str, int]] = {"control": {c: 0 for c in cats},
-                                       "gate": {c: 0 for c in cats}}
-    no_submit = {"control": 0, "gate": 0}
+    # §5's primary analysis is config s0, per arm. The budget arm has its own
+    # primary (amendment 4, assigned log B) and s3 its own block, so both are
+    # reported separately; this table covers the s0 arms.
+    arms = sorted({r["arm"] for r in runs if r["config"] == "s0"})
+    kept: dict[str, list[dict]] = {a: [] for a in arms}
+    excl: dict[str, dict[str, int]] = {a: {c: 0 for c in cats} for a in arms}
+    no_submit = {a: 0 for a in arms}
     for r in runs:
+        if r["config"] != "s0":
+            continue
         c = classify_exclusion(r)
         if c:
             excl[r["arm"]][c] += 1
@@ -187,20 +195,22 @@ def report(runs: list[dict], out_dir: Path) -> str:
             kept[r["arm"]].append(r)
             if not r["submitted"]:
                 no_submit[r["arm"]] += 1
-    p(f"{'category':<32}{'control':>10}{'gate':>10}")
+    hdr = "".join(f"{a:>12}" for a in arms)
+    p(f"{'category':<32}{hdr}")
     for c in cats:
-        p(f"{c:<32}{excl['control'][c]:>10}{excl['gate'][c]:>10}")
-    p(f"{'-- total excluded':<32}{sum(excl['control'].values()):>10}"
-      f"{sum(excl['gate'].values()):>10}")
-    p(f"{'no_submit (status, retained)':<32}{no_submit['control']:>10}{no_submit['gate']:>10}")
-    p(f"{'n retained':<32}{len(kept['control']):>10}{len(kept['gate']):>10}")
+        p(f"{c:<32}" + "".join(f"{excl[a][c]:>12}" for a in arms))
+    p(f"{'-- total excluded':<32}" + "".join(f"{sum(excl[a].values()):>12}" for a in arms))
+    p(f"{'no_submit (status, retained)':<32}" + "".join(f"{no_submit[a]:>12}" for a in arms))
+    p(f"{'n retained':<32}" + "".join(f"{len(kept[a]):>12}" for a in arms))
     p("")
 
     # -- per-arm descriptives
     p("PER ARM — median [IQR]")
     p("-" * 78)
-    for arm in ("control", "gate"):
+    for arm in arms:
         rs = kept[arm]
+        if not rs:
+            continue
         p(f"{arm}  (n = {len(rs)})")
         p(f"  evaluation count     {fmt_mi([r['n_evaluated'] for r in rs])}")
         p(f"  stated mean          {fmt_mi([r['stated_mean'] for r in rs])}")
@@ -220,8 +230,10 @@ def report(runs: list[dict], out_dir: Path) -> str:
     p("H0: slope = 0 (stated confidence deaf to the search performed)")
     p("")
     fits = {}
-    for arm in ("control", "gate"):
+    for arm in arms:
         rs = kept[arm]
+        if len(rs) < 3:
+            continue
         x = np.log([r["n_evaluated"] for r in rs])
         y = np.array([r["stated_mean"] for r in rs])
         f = ols(x, y)
@@ -235,27 +247,35 @@ def report(runs: list[dict], out_dir: Path) -> str:
     # -- between-arm
     p("BETWEEN ARM — control vs gate")
     p("-" * 78)
-    fc, fg = fits["control"][0], fits["gate"][0]
-    dslope = fg["slope"] - fc["slope"]
-    dse = math.sqrt(fc["se"] ** 2 + fg["se"] ** 2)
-    from scipy.stats import norm
-    p(f"difference in slope (gate - control): {dslope:+.4f}   SE {dse:.4f}   "
-      f"95% CI [{dslope - 1.96*dse:+.4f}, {dslope + 1.96*dse:+.4f}]")
-    p(f"{'':<36}z {dslope/dse:+.2f},  p {2*norm.sf(abs(dslope/dse)):.4f}")
-    allx = np.concatenate([fits["control"][1], fits["gate"][1]])
-    xm = float(np.median(allx))
-    pc = fc["intercept"] + fc["slope"] * xm
-    pg = fg["intercept"] + fg["slope"] * xm
-    p(f"matched log(count) = {xm:.4f}  (count = {math.exp(xm):.1f})")
-    p(f"stated mean at matched count: control {pc:+.4f}, gate {pg:+.4f}, "
-      f"difference {pg - pc:+.4f}")
-    p("")
+    have_both = "control" in fits and "gate" in fits
+    if not have_both:
+        p("control and gate not both present in this set; skipped")
+        p("")
+    fc = fits["control"][0] if have_both else None
+    fg = fits["gate"][0] if have_both else None
+    if have_both:
+        dslope = fg["slope"] - fc["slope"]
+        dse = math.sqrt(fc["se"] ** 2 + fg["se"] ** 2)
+        from scipy.stats import norm
+        p(f"difference in slope (gate - control): {dslope:+.4f}   SE {dse:.4f}   "
+          f"95% CI [{dslope - 1.96*dse:+.4f}, {dslope + 1.96*dse:+.4f}]")
+        p(f"{'':<36}z {dslope/dse:+.2f},  p {2*norm.sf(abs(dslope/dse)):.4f}")
+        allx = np.concatenate([fits["control"][1], fits["gate"][1]])
+        xm = float(np.median(allx))
+        pc = fc["intercept"] + fc["slope"] * xm
+        pg = fg["intercept"] + fg["slope"] * xm
+        p(f"matched log(count) = {xm:.4f}  (count = {math.exp(xm):.1f})")
+        p(f"stated mean at matched count: control {pc:+.4f}, gate {pg:+.4f}, "
+          f"difference {pg - pc:+.4f}")
+        p("")
 
     # -- secondary
     p("SECONDARY")
     p("-" * 78)
-    for arm in ("control", "gate"):
+    for arm in arms:
         rs = kept[arm]
+        if not rs:
+            continue
         c = [crps_gaussian(r["stated_mean"], r["stated_sd"], r["oos"]) for r in rs]
         g = [r["stated_mean"] - r["sr_deflated"] for r in rs]
         p(f"{arm}:")
@@ -266,8 +286,8 @@ def report(runs: list[dict], out_dir: Path) -> str:
     # -- gate status usage
     p("GATE ARM — status tool")
     p("-" * 78)
-    rs = kept["gate"]
-    calls = [r["n_status_calls"] for r in rs]
+    rs = kept.get("gate", [])
+    calls = [r["n_status_calls"] for r in rs] or [0]
     p(f"  status calls per run   {fmt_mi(calls)}   total {sum(calls)}")
     p(f"  runs never calling it  {sum(1 for c in calls if c == 0)} of {len(rs)}")
     pos = [q for r in rs for q in r["status_positions"]]
@@ -295,10 +315,73 @@ def report(runs: list[dict], out_dir: Path) -> str:
     p(f"  wall seconds per run   {fmt_mi(wall)}   total {sum(wall)/60:.1f} min")
     p("")
 
+    p(budget_block(runs))
+    p(s3_block(runs))
     p(exploratory(kept, fits))
 
     figure(fits, out_dir)
     p(f"figure: {out_dir / 'agent_stated_vs_log_count.png'}")
+    return "\n".join(L)
+
+
+def budget_block(runs: list[dict]) -> str:
+    """Amendment 4: stated mean on assigned log(B).
+
+    The pre-registered deafness test with the exposure randomized. B is a cap,
+    not a dose: an agent given 180 may stop at 60 of its own accord, so this is
+    an intent-to-treat estimate. Realized evaluation count is reported beside
+    the assigned level so the divergence is visible rather than implied."""
+    rs = [r for r in runs if r["arm"] == "budget" and classify_exclusion(r) is None]
+    L = ["BUDGET ARM — assigned-dose regression (amendment 4)", "-" * 78]
+    if not rs:
+        L.append("no budget runs in the analysis set")
+        return "\n".join(L) + "\n"
+    L.append("B is a cap, not a dose; this is intent-to-treat.")
+    L.append("")
+    L.append(f"{'B':>6} {'n':>4} {'stated mean med [IQR]':>26} {'realized evals med [IQR]':>28}"
+             f" {'hit cap':>8}")
+    for B in sorted({r["budget"] for r in rs}):
+        cell = [r for r in rs if r["budget"] == B]
+        hit = sum(1 for r in cell if r["n_evaluated"] >= B)
+        L.append(f"{B:>6} {len(cell):>4} {fmt_mi([r['stated_mean'] for r in cell]):>26}"
+                 f" {fmt_mi([r['n_evaluated'] for r in cell]):>28} {hit:>4}/{len(cell)}")
+    f = ols(np.log([r["budget"] for r in rs]), [r["stated_mean"] for r in rs])
+    L.append("")
+    L.append(f"stated mean on assigned log(B): slope {f['slope']:+.4f}  SE {f['se']:.4f}  "
+             f"95% CI [{f['lo']:+.4f}, {f['hi']:+.4f}]")
+    L.append(f"{'':<32}t {f['t']:+.2f} on {f['dof']} df,  p {f['p']:.4f},  R² {f['r2']:.4f}")
+    g = ols(np.log([r["n_evaluated"] for r in rs]), [r["stated_mean"] for r in rs])
+    L.append(f"for comparison, on realized log(count): slope {g['slope']:+.4f}  "
+             f"SE {g['se']:.4f}  p {g['p']:.4f}")
+    return "\n".join(L) + "\n"
+
+
+def s3_block(runs: list[dict]) -> str:
+    """Amendment 4: s3 analysed as §5, plus PASS rate against preflight power."""
+    rs = [r for r in runs if r["config"] == "s3" and classify_exclusion(r) is None]
+    L = ["s3 CONFIG — as §5, plus PASS rate against preflight power (amendment 4)", "-" * 78]
+    if not rs:
+        L.append("no s3 runs in the analysis set")
+        return "\n".join(L) + "\n"
+    from collections import Counter
+    for arm in sorted({r["arm"] for r in rs}):
+        cell = [r for r in rs if r["arm"] == arm]
+        x = np.log([r["n_evaluated"] for r in cell])
+        f = ols(x, [r["stated_mean"] for r in cell])
+        n_pass = sum(1 for r in cell if r["status"] == "PASS")
+        lo, hi = wilson_ci(n_pass, len(cell))
+        pwr = [r["power_at_open"] for r in cell if r["power_at_open"] is not None]
+        L.append(f"{arm}  (n = {len(cell)})")
+        L.append(f"  evaluation count     {fmt_mi([r['n_evaluated'] for r in cell])}")
+        L.append(f"  stated mean          {fmt_mi([r['stated_mean'] for r in cell])}")
+        L.append(f"  realized OOS Sharpe  {fmt_mi([r['oos'] for r in cell])}")
+        L.append(f"  verdicts             {dict(sorted(Counter(r['status'] for r in cell).items()))}")
+        L.append(f"  PASS rate            {n_pass/len(cell):.3f} ({lo:.3f}-{hi:.3f})")
+        if pwr:
+            L.append(f"  preflight power      {np.mean(pwr):.3f} (mean at open)   "
+                     f"difference {n_pass/len(cell) - np.mean(pwr):+.3f}")
+        L.append(f"  slope on log(count)  {f['slope']:+.4f}  SE {f['se']:.4f}  p {f['p']:.4f}")
+        L.append("")
     return "\n".join(L)
 
 
@@ -315,6 +398,9 @@ def exploratory(kept: dict[str, list[dict]], fits) -> str:
 
     # 1. Mann-Whitney, control vs gate
     p("1. Mann-Whitney U (two-sided), control vs gate")
+    if "control" not in kept or "gate" not in kept or not kept["control"] or not kept["gate"]:
+        p("   control and gate not both present; skipped")
+        return "\n".join(L) + "\n"
     for label, key, fn in (("evaluation count", "n_evaluated", lambda r: r["n_evaluated"]),
                            ("deflation gap", None,
                             lambda r: r["stated_mean"] - r["sr_deflated"])):
@@ -331,13 +417,17 @@ def exploratory(kept: dict[str, list[dict]], fits) -> str:
     p("2. Primary regression, two variants")
     p("   (a) raw evaluation count instead of log")
     for arm in ("control", "gate"):
-        rs = kept[arm]
+        rs = kept.get(arm, [])
+        if len(rs) < 3:
+            continue
         f = ols([r["n_evaluated"] for r in rs], [r["stated_mean"] for r in rs])
         p(f"       {arm:<8} slope {f['slope']:+.6f}  SE {f['se']:.6f}  "
           f"95% CI [{f['lo']:+.6f}, {f['hi']:+.6f}]  p {f['p']:.4f}  R² {f['r2']:.4f}")
     p("   (b) log count, PASS runs excluded")
     for arm in ("control", "gate"):
-        rs = [r for r in kept[arm] if r["status"] != "PASS"]
+        rs = [r for r in kept.get(arm, []) if r["status"] != "PASS"]
+        if len(rs) < 3:
+            continue
         f = ols(np.log([r["n_evaluated"] for r in rs]), [r["stated_mean"] for r in rs])
         dropped = len(kept[arm]) - len(rs)
         p(f"       {arm:<8} n {f['n']:>3} ({dropped} PASS dropped)  slope {f['slope']:+.4f}  "
@@ -346,7 +436,10 @@ def exploratory(kept: dict[str, list[dict]], fits) -> str:
 
     # 3. Gate arm: status usage against stated mean
     p("3. Gate arm — stated mean against status usage")
-    rs = kept["gate"]
+    rs = kept.get("gate", [])
+    if len(rs) < 3:
+        p("   gate arm absent; skipped")
+        return "\n".join(L) + "\n"
     f = ols([r["n_status_calls"] for r in rs], [r["stated_mean"] for r in rs])
     p(f"   stated mean on status-call count: slope {f['slope']:+.4f}  SE {f['se']:.4f}  "
       f"95% CI [{f['lo']:+.4f}, {f['hi']:+.4f}]  p {f['p']:.4f}  R² {f['r2']:.4f}")

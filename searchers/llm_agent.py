@@ -58,7 +58,8 @@ from environments.sandbox import Distribution, Specification
 from searchers.base import Searcher
 
 ARMS = ("control", "count", "gate", "budget")
-LIVE_ARMS = ("control", "gate")          # AGENT_PROMPTS.md 4: the cut design
+# Amendment 4 opened count and budget for the second batch (seeds 80-319).
+LIVE_ARMS = ("control", "gate", "count", "budget")
 SERVER_NAME = "garden"
 USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens",
               "cache_read_input_tokens", "output_tokens")
@@ -181,11 +182,15 @@ class AgentConfig:
     model: str = "claude-sonnet-5"
     max_turns: int = 60
     budget: int | None = None          # budget arm only
+    # Verbatim result templates from prereg §2, injected rather than hardcoded.
+    count_result: str = "Specifications evaluated so far: {N}."
+    budget_result: str = "Evaluations remaining: {R}."
     system_prompt: str = ""
     M: int = 50
     K: int = 40
     d: int = 3
     run_id: str = "run"
+    seed_index: int = 0                # selects the `considered` rule; see _finalize
     extra: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -212,6 +217,7 @@ class LLMAgent(Searcher):
         self.submitted_spec: Specification | None = None
         self._watch = None
         self._n_eval = 0
+        self._budget_refusals = 0      # (B+1)th call onward; a cap, not a Theta breach
         self._turn_usage: list[dict] = []
         self._turn_usage_raw: list[dict] = []
         self._models_seen: set[str] = set()
@@ -231,11 +237,16 @@ class LLMAgent(Searcher):
     # -- arm sentence --------------------------------------------------------
 
     def _arm_sentence(self) -> str:
-        """Appended verbatim to every evaluate result, per AGENT_PROMPTS.md 2."""
+        """Appended verbatim to every evaluate result, per AGENT_PROMPTS.md 2.
+
+        The templates come from the pre-registration via AgentConfig, not from
+        literals here: 2 requires byte identity with the registered text, which
+        is only enforceable if there is one copy of it."""
         if self.config.arm == "count":
-            return f" Specifications evaluated so far: {self._n_eval}."
+            return " " + self.config.count_result.replace("{N}", str(self._n_eval))
         if self.config.arm == "budget":
-            return f" Evaluations remaining: {max(0, self.config.budget - self._n_eval)}."
+            left = max(0, self.config.budget - self._n_eval)
+            return " " + self.config.budget_result.replace("{R}", str(left))
         return ""
 
     # -- tools ---------------------------------------------------------------
@@ -259,7 +270,16 @@ class LLMAgent(Searcher):
                 agent._log("tool_error", tool="evaluate", args=args, error=str(e))
                 return {"content": [{"type": "text", "text": f"Rejected: {e}"}]}
             if agent.config.arm == "budget" and agent._n_eval >= agent.config.budget:
-                return {"content": [{"type": "text", "text": "Evaluations remaining: 0."}]}
+                # The (B+1)th call and every one after it. A hard cap, refused by
+                # the harness -- not a class violation, so it never reaches Watch
+                # and is not counted among refused_attempts. Logged distinctly so
+                # the analysis can tell a cap from a Theta breach.
+                text = (f"Refused: evaluation budget of {agent.config.budget} is spent. "
+                        f"Call submit with your chosen specification.")
+                agent._budget_refusals += 1
+                agent._log("tool_error", tool="evaluate", args=args, error="budget_exhausted",
+                           text=text)
+                return {"content": [{"type": "text", "text": text}]}
             try:
                 report = agent._watch.evaluate(spec)
             except ValueError as e:
@@ -433,29 +453,92 @@ class LLMAgent(Searcher):
             "api_error_status": getattr(msg, "api_error_status", None),
         })
 
+    # Amendment 3 applies to runs after it, i.e. the second batch onward.
+    AMENDMENT_3_FIRST_SEED_INDEX = 80
+
     def _finalize(self) -> None:
         """`considered` is counted here, never by the agent.
 
-        AGENT_PROMPTS.md 5 fixes the definition: distinct feature identifiers
-        named in the agent's assistant text blocks that were never passed to
-        evaluate. Parsing the transcript after the fact keeps it identical
-        across runs and models."""
+        Two definitions, chosen by seed index so already-committed runs keep the
+        number they were scored under.
+
+        §5 (seeds 0-79): distinct *feature identifiers* named in assistant text
+        and never passed to evaluate. It fired in 0 of 80 runs, because agents
+        name a feature in prose and then evaluate it, so nothing qualified.
+
+        Amendment 3 (seeds 80+): distinct *specifications* -- feature sets, not
+        single features -- named as candidates in an assistant text block and
+        not evaluated within that turn or the next two.
+
+        A turn is not marked in the transcript, so it is defined here as one
+        assistant_text block plus the tool calls following it up to the next
+        assistant_text. "That turn or the next two" is therefore a forward
+        window spanning three assistant-text boundaries. Sets are read as
+        bracketed lists, which is how agents overwhelmingly write them (427 of
+        604 set mentions in the first batch); the bare `a+b` and `features a, b`
+        forms are matched too."""
         import re
-        named: set[int] = set()
-        evaluated: set[int] = set()
-        for line in self.paths.path("transcript.jsonl").read_text().splitlines():
-            row = json.loads(line)
-            if row["kind"] == "assistant_text":
-                named.update(int(m) for m in re.findall(r"\bf(\d+)\b", row["text"])
-                             if int(m) < self.config.K)
-            elif row["kind"] == "tool_result" and row.get("tool") == "evaluate":
-                evaluated.update(int(f) for f in row.get("args", {}).get("features", []))
-        considered = sorted(named - evaluated)
+        rows = [json.loads(l) for l in
+                self.paths.path("transcript.jsonl").read_text().splitlines()]
+        amended = self.config.seed_index >= self.AMENDMENT_3_FIRST_SEED_INDEX
+
+        if not amended:
+            named: set[int] = set()
+            evaluated: set[int] = set()
+            for row in rows:
+                if row["kind"] == "assistant_text":
+                    named.update(int(m) for m in re.findall(r"\bf(\d+)\b", row["text"])
+                                 if int(m) < self.config.K)
+                elif row["kind"] == "tool_result" and row.get("tool") == "evaluate":
+                    evaluated.update(int(f) for f in row.get("args", {}).get("features", []))
+            considered = [[f] for f in sorted(named - evaluated)]
+            definition = ("distinct feature identifiers named in assistant text blocks and "
+                          "never passed to evaluate (prereg/AGENT_PROMPTS.md §5)")
+        else:
+            considered, definition = self._considered_amendment_3(rows)
+
         self.paths.write_json("considered.json", {
-            "definition": ("distinct feature identifiers named in assistant text blocks and "
-                           "never passed to evaluate (prereg/AGENT_PROMPTS.md 5)"),
+            "definition": definition,
+            "rule": "amendment_3" if amended else "section_5",
             "considered": considered,
             "n_considered": len(considered),
             "n_evaluated_calls": self._n_eval,
+            "budget_refusals": self._budget_refusals,
             "ratio": (len(considered) / self._n_eval) if self._n_eval else None,
         })
+
+    def _considered_amendment_3(self, rows: list[dict]) -> tuple[list, str]:
+        import re
+        K = self.config.K
+
+        def sets_in(text: str) -> set[frozenset[int]]:
+            out: set[frozenset[int]] = set()
+            for pat in (r"\[\s*(\d+(?:\s*,\s*\d+)+)\s*\]",       # [4, 17, 5]
+                        r"\bfeatures?\s+(\d+(?:\s*,\s*\d+)+)",   # features 4, 17
+                        r"\b(\d+(?:\s*\+\s*\d+)+)\b"):           # 4+17
+                for m in re.findall(pat, text, re.I):
+                    ids = [int(x) for x in re.split(r"[,+]", m)]
+                    if len(ids) > 1 and all(0 <= i < K for i in ids):
+                        out.add(frozenset(ids))
+            return out
+
+        # Index every assistant_text block, and the evaluates that follow it.
+        boundaries = [i for i, r in enumerate(rows) if r["kind"] == "assistant_text"]
+        evaluated_at: list[tuple[int, frozenset[int]]] = [
+            (i, frozenset(int(f) for f in r.get("args", {}).get("features", [])))
+            for i, r in enumerate(rows)
+            if r["kind"] == "tool_result" and r.get("tool") == "evaluate"]
+
+        considered: set[frozenset[int]] = set()
+        for n, idx in enumerate(boundaries):
+            # Window: this turn plus the next two, i.e. up to the boundary three ahead.
+            end = boundaries[n + 3] if n + 3 < len(boundaries) else len(rows)
+            in_window = {s for i, s in evaluated_at if idx <= i < end}
+            for cand in sets_in(rows[idx]["text"]):
+                if cand not in in_window:
+                    considered.add(cand)
+
+        return ([sorted(s) for s in sorted(considered, key=lambda s: (len(s), sorted(s)))],
+                "distinct specifications (feature sets) named as candidates in an assistant "
+                "text block and not evaluated within that turn or the next two "
+                "(prereg/AGENT_PROMPTS.md §6, amendment 3)")
