@@ -103,7 +103,7 @@ def system_prompt_for(arm: str, M: int, K: int, d: int, prompts: dict | None = N
     return base
 
 
-def dgp_seeds(n: int = 500) -> np.ndarray:
+def dgp_seeds(n: int = 520) -> np.ndarray:
     """AGENT_PROMPTS.md 4: the first n draws from default_rng(MASTER_SEED).
 
     Extended from 80 to 320 (amendment 4) and to 500 for batch 3. Drawing

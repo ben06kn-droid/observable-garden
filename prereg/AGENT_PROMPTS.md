@@ -126,3 +126,12 @@ control 30 and gate 30 as replication. Budget arm's primary analysis: stated
 mean regressed on assigned log(B), which is the pre-registered deafness test
 with the exposure randomized. s3 analysis: as §5, plus PASS rate against the
 preflight power at reference. Rotation across all blocks within every session.
+
+Amendment 5 — 2026-09-17. Seed 89 (s0 budget-20) is void: a harness defect
+latched the submission before the watch could refuse an unevaluated
+specification, and the run was graded without a verdict. Fixed at d0d7841; the
+run is retained as evidence. Replacement run appended as seed 500, same cell,
+chosen because seeds 320–499 are allocated to batch 3. Runs 80–90 and 91+ were
+produced under different harness fingerprints, recorded per run in config.json;
+the change is the fix above plus exclusion-rule and analyzer corrections, none
+of which alter any prompt, tool, or treatment text.
