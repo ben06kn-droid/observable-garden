@@ -78,21 +78,28 @@ if [ -n "$SCHEDULE" ]; then
     read -r SEED CONFIG ARM BUDGET <<<"${LINES[$n]}"
     T=$(t_for "$CONFIG") || { echo "could not read T for $CONFIG" >&2; exit 70; }
 
+    # No array for the optional flag: bash 3.2 under `set -u` treats an empty
+    # array as unset, so "${BUDGET_ARG[@]}" aborts on every non-budget line --
+    # which is the first scheduled run. bash -n cannot see it; only running the
+    # loop body does.
     if [ "$BUDGET" = "-" ] || [ -z "$BUDGET" ]; then
       RUN_ID="${CONFIG}_T${T}_${ARM}_$(printf '%03d' "$SEED")"
-      BUDGET_ARG=()
       LABEL="arm $ARM, config $CONFIG"
     else
       RUN_ID="${CONFIG}_T${T}_${ARM}${BUDGET}_$(printf '%03d' "$SEED")"
-      BUDGET_ARG=(--budget "$BUDGET")
       LABEL="arm $ARM (B=$BUDGET), config $CONFIG"
     fi
 
     echo
     echo "=== [$((n + 1))/$TOTAL] seed $SEED  $LABEL  run_id=$RUN_ID ==="
 
-    .venv/bin/python -m experiments.e_agent \
-        --arm "$ARM" --config "$CONFIG" --runs 1 --seed-index "$SEED" "${BUDGET_ARG[@]}"
+    if [ "$BUDGET" = "-" ] || [ -z "$BUDGET" ]; then
+      .venv/bin/python -m experiments.e_agent \
+          --arm "$ARM" --config "$CONFIG" --runs 1 --seed-index "$SEED"
+    else
+      .venv/bin/python -m experiments.e_agent \
+          --arm "$ARM" --config "$CONFIG" --runs 1 --seed-index "$SEED" --budget "$BUDGET"
+    fi
     CODE=$?
 
     if [ "$CODE" -ne 0 ]; then
