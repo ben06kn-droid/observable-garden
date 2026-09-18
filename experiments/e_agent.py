@@ -62,8 +62,10 @@ def read_prompts(path: Path = PREREG) -> dict:
     would defeat the point of reading the file at all."""
     text = path.read_text()
     blocks = re.findall(r"```\n(.*?)\n```", text, re.S)
-    if len(blocks) < 2:
-        raise ValueError(f"expected at least two fenced blocks in {path}, found {len(blocks)}")
+    if len(blocks) < 3:
+        raise ValueError(f"expected at least three fenced blocks in {path} "
+                         f"(control prompt, gate suffix, pushed sentence), "
+                         f"found {len(blocks)}")
 
     sec2 = text.split("## 2. Arms")[1].split("## 3.")[0]
     inline = re.findall(r"`([^`\n]{20,})`", sec2)
@@ -79,6 +81,9 @@ def read_prompts(path: Path = PREREG) -> dict:
     return {
         "control": blocks[0].strip(),
         "gate_suffix": blocks[1].strip(),
+        # Amendment 7. Registered verbatim as a fenced block, like the gate
+        # suffix, so it is read from the pre-registration and never retyped.
+        "pushed_prompt": blocks[2].strip(),
         "count_result": one("{N}"),        # Specifications evaluated so far: {N}.
         "budget_prompt": one("{B}"),       # You may call evaluate at most {B} times.
         "budget_result": one("{R}"),       # Evaluations remaining: {R}.
@@ -96,6 +101,8 @@ def system_prompt_for(arm: str, M: int, K: int, d: int, prompts: dict | None = N
     base = build_prompt(prompts["control"], M=M, K=K, d=d)
     if arm == "gate":
         return base + "\n\n" + prompts["gate_suffix"]
+    if arm == "pushed":
+        return base + "\n\n" + prompts["pushed_prompt"]
     if arm == "budget":
         if budget is None:
             raise ValueError("the budget arm needs an explicit cap B")

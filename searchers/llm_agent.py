@@ -61,9 +61,9 @@ from claude_agent_sdk import (
 from environments.sandbox import Distribution, Specification
 from searchers.base import Searcher
 
-ARMS = ("control", "count", "gate", "budget")
-# Amendment 4 opened count and budget (seeds 80-319).
-# The `pushed` arm lives on the batch3 branch until prereg Amendment 5.
+ARMS = ("control", "count", "gate", "budget", "pushed")
+# Amendment 4 opened count and budget (seeds 80-319); amendment 7 opened pushed
+# for batch 3 (seeds 320-499), with its prompt sentence registered in prereg §2.
 LIVE_ARMS = ARMS
 
 # Batch 3's model dimension. Thinking is pinned disabled for both (§3).
@@ -260,6 +260,20 @@ class LLMAgent(Searcher):
         if self.config.arm == "budget":
             left = max(0, self.config.budget - self._n_eval)
             return " " + self.config.budget_result.replace("{R}", str(left))
+        if self.config.arm == "pushed":
+            # §2 registers this one as prose rather than as a template with a
+            # placeholder: "the standing: critical value, best in-sample Sharpe
+            # so far, margin, and whether it clears". There is no registered
+            # string to substitute into, so the four quantities are composed
+            # here and pinned by a test. Margin is taken against the best so
+            # far, not the call just made, because the standing is about the
+            # best -- as is "whether it clears".
+            if report is None:
+                return ""
+            margin = report.best_so_far - report.critical_value
+            return (f" Bar {report.critical_value:.3f}; best {report.best_so_far:.3f}; "
+                    f"margin {margin:+.3f}; "
+                    f"{'clears' if report.best_so_far_cleared else 'does not clear'}.")
         return ""
 
     # -- tools ---------------------------------------------------------------
