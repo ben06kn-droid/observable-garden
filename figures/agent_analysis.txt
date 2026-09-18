@@ -238,6 +238,48 @@ s0 pushed sonnet            30    -0.0153   0.0962   [  -0.2124,   +0.1819]   0.
 s3 control sonnet           40   -36.2231   7.0065   [ -50.4070,  -22.0392]   0.0000  0.413      3.89-5.09
 s3 gate sonnet              40   -17.5752   6.0274   [ -29.7770,   -5.3735]   0.0059  0.183      3.85-5.08
 
+HAIRCUT — stated mean on in-sample Sharpe and log(count), jointly
+------------------------------------------------------------------------------------------------
+stated_mean = a + b*sr_is + c*log(evaluation count);  95% CI beside each.
+b is the haircut: stated belief per unit of submitted in-sample Sharpe.
+
+cell                       n         b (in-sample SR)               c (log count)             R2
+s0 budget20 sonnet        20    +0.5537 [ +0.4614, +0.6459]   +0.0611 [ -0.2539, +0.3761]  0.906
+s0 budget60 sonnet        20    +0.4399 [ +0.2256, +0.6543]   +0.5116 [ -0.6185, +1.6417]  0.524
+s0 budget180 sonnet       20    +0.6047 [ +0.3480, +0.8614]   -0.1554 [ -0.2698, -0.0410]  0.760
+s0 control fable          30    +0.9142 [ +0.5243, +1.3042]   +2.2780 [ +0.6978, +3.8583]  0.559
+s0 control sonnet        100    +0.3997 [ +0.3062, +0.4932]   -0.0203 [ -0.0643, +0.0237]  0.435
+s0 count sonnet           39    +0.1908 [ +0.1144, +0.2671]   -0.0773 [ -0.1344, -0.0202]  0.487
+s0 gate fable             30    +0.3493 [ +0.1383, +0.5603]   +0.5928 [ +0.0925, +1.0931]  0.339
+s0 gate sonnet           100    +0.6194 [ +0.5360, +0.7027]   -0.0186 [ -0.0525, +0.0153]  0.700
+s0 pushed fable           30    +0.6381 [ +0.1728, +1.1033]   -0.4588 [ -1.5193, +0.6018]  0.228
+s0 pushed sonnet          30    +0.2728 [ +0.1081, +0.4375]   -0.1321 [ -0.3146, +0.0504]  0.300
+s3 control sonnet         40    +0.3785 [ +0.2498, +0.5072]   -3.6801 [-18.7797,+11.4195]  0.700
+s3 gate sonnet            40    +0.3133 [ +0.1364, +0.4902]   +8.4513 [ -9.7032,+26.6058]  0.394
+
+POOLED — all s0 sonnet cells, arm dummies x in-sample Sharpe
+------------------------------------------------------------------------------------------------
+reference arm: control.  budget doses are pooled into one arm.
+n = 329   arms: budget 60, control 100, count 39, gate 100, pushed 30
+
+full model (intercept shifts and slope shifts, both vs the reference arm)
+  const                 +0.2375  SE 0.0575  [  +0.1243,  +0.3507]  p 4.684e-05
+  sr_is                 +0.3992  SE 0.0515  [  +0.2979,  +0.5004]  p 1.193e-13
+  log_count             -0.0231  SE 0.0086  [  -0.0399,  -0.0063]  p 0.007282
+  arm[budget]           -0.1572  SE 0.0560  [  -0.2673,  -0.0470]  p 0.005315
+  arm[count]            +0.1455  SE 0.0491  [  +0.0489,  +0.2421]  p 0.003282
+  arm[gate]             -0.2435  SE 0.0548  [  -0.3513,  -0.1357]  p 1.221e-05
+  arm[pushed]           +0.0030  SE 0.0596  [  -0.1142,  +0.1203]  p 0.9594
+  arm[budget]:sr_is     +0.1448  SE 0.0694  [  +0.0082,  +0.2815]  p 0.03778
+  arm[count]:sr_is      -0.2060  SE 0.0619  [  -0.3279,  -0.0842]  p 0.0009802
+  arm[gate]:sr_is       +0.2188  SE 0.0670  [  +0.0870,  +0.3505]  p 0.001208
+  arm[pushed]:sr_is     -0.1644  SE 0.0749  [  -0.3117,  -0.0171]  p 0.02879
+  R² 0.6774 on 318 df
+
+do the arms differ in SLOPE?      F(4,318)  20.350   p 6.103e-15   (all arm x sr_is = 0)
+do they differ in INTERCEPT?      F(4,322)  32.925   p 5.055e-23   (all arm dummies = 0, common slope)
+R²: no arm terms 0.4290  ->  intercepts only 0.5948  ->  full 0.6774
+
 COMPARISON 1 — count arm vs control (deflation gap, evaluation count)
 ------------------------------------------------------------------------------
 count arm: n = 39 (all s0, sonnet, batch 2)

@@ -217,6 +217,34 @@ def ols(x, y) -> dict:
             "r2": 1 - (resid ** 2).sum() / ((y - ybar) ** 2).sum()}
 
 
+def mols(X, y, names: list[str]) -> dict:
+    """OLS against an explicit design matrix, with per-coefficient SE, 95% CI
+    and p, plus the residual sum of squares an F-test needs. `ols` above stays
+    the univariate path §5 asks for; this is for the joint fits."""
+    X, y = np.asarray(X, float), np.asarray(y, float)
+    n, k = X.shape
+    beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+    resid = y - X @ beta
+    dof = n - k
+    rss = float((resid ** 2).sum())
+    se = np.sqrt(np.diag((rss / dof) * np.linalg.inv(X.T @ X)))
+    from scipy.stats import t as tdist
+    crit = tdist.ppf(0.975, dof)
+    tss = float(((y - y.mean()) ** 2).sum())
+    return {"names": names, "beta": beta, "se": se, "dof": dof, "n": n,
+            "lo": beta - crit * se, "hi": beta + crit * se,
+            "t": beta / se, "p": 2 * tdist.sf(np.abs(beta / se), dof),
+            "rss": rss, "r2": 1 - rss / tss}
+
+
+def ftest(full: dict, restricted: dict) -> tuple[float, float, int, int]:
+    """F for the coefficients `restricted` drops, against the full fit."""
+    from scipy.stats import f as fdist
+    q = restricted["dof"] - full["dof"]
+    F = ((restricted["rss"] - full["rss"]) / q) / (full["rss"] / full["dof"])
+    return float(F), float(fdist.sf(F, q, full["dof"])), q, full["dof"]
+
+
 def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     """Wilson score interval. The normal approximation is useless at the ends,
     and s3 PASS counts sit near them."""
@@ -300,6 +328,7 @@ def report(runs: list[dict], incomplete: list[str], out_dir: Path) -> str:
     p(per_cell_block(kept))
     p(provenance_block(kept))
     p(primary_block(kept))
+    p(haircut_block(kept))
     p(count_vs_control_block(kept))
     p(budget_block(kept))
     p(s3_block(kept))
@@ -447,6 +476,77 @@ def primary_block(kept) -> str:
         L.append(f"{cell_label(key):<26}{f['n']:>4}{f['slope']:>+11.4f}{f['se']:>9.4f}"
                  f"   [{f['lo']:+9.4f}, {f['hi']:+9.4f}]{f['p']:>9.4f}{f['r2']:>7.3f}"
                  f"      {x.min():.2f}-{x.max():.2f}")
+    return "\n".join(L) + "\n"
+
+
+def haircut_block(kept) -> str:
+    """stated mean on submitted in-sample Sharpe and log(evaluation count),
+    jointly, per cell; then pooled over the s0 sonnet cells with arm dummies
+    interacting with the in-sample Sharpe.
+
+    b, the coefficient on the submitted in-sample Sharpe, is the haircut: how
+    much of the Sharpe it actually submitted a run carries into the belief it
+    states. c is what §5's univariate slope measures once b is held fixed."""
+    L = ["HAIRCUT — stated mean on in-sample Sharpe and log(count), jointly",
+         "-" * 96,
+         "stated_mean = a + b*sr_is + c*log(evaluation count);  95% CI beside each.",
+         "b is the haircut: stated belief per unit of submitted in-sample Sharpe.",
+         ""]
+    L.append(f"{'cell':<24}{'n':>4}   {'b (in-sample SR)':^28}  "
+             f"{'c (log count)':^28}{'R2':>7}")
+    for key, rs in cells_of(kept).items():
+        g = graded(rs)
+        if len(g) < 5:
+            continue
+        X = np.column_stack([np.ones(len(g)),
+                             [r["submitted_sr_is"] for r in g],
+                             np.log([r["n_evaluated"] for r in g])])
+        f = mols(X, [r["stated_mean"] for r in g], ["const", "sr_is", "log_count"])
+        L.append(f"{cell_label(key):<24}{f['n']:>4}   "
+                 f"{f['beta'][1]:+8.4f} [{f['lo'][1]:+8.4f},{f['hi'][1]:+8.4f}]  "
+                 f"{f['beta'][2]:+8.4f} [{f['lo'][2]:+8.4f},{f['hi'][2]:+8.4f}]"
+                 f"{f['r2']:>7.3f}")
+    L.append("")
+
+    rs = graded(pick(kept, config="s0", model=PINNED_MODEL))
+    arms = sorted({r["arm"] for r in rs})
+    ref = "control" if "control" in arms else arms[0]
+    others = [a for a in arms if a != ref]
+    L.append(f"POOLED — all s0 {PINNED_MODEL.split('-')[1]} cells, arm dummies x in-sample Sharpe")
+    L.append("-" * 96)
+    L.append(f"reference arm: {ref}.  budget doses are pooled into one arm.")
+    L.append(f"n = {len(rs)}   arms: " +
+             ", ".join(f"{a} {sum(1 for r in rs if r['arm'] == a)}" for a in arms))
+    L.append("")
+    y = np.array([r["stated_mean"] for r in rs], float)
+    sr = np.array([r["submitted_sr_is"] for r in rs], float)
+    lc = np.log([r["n_evaluated"] for r in rs])
+    dum = {a: np.array([1.0 if r["arm"] == a else 0.0 for r in rs]) for a in others}
+    base_cols, base_names = [np.ones(len(rs)), sr, lc], ["const", "sr_is", "log_count"]
+    d_cols = [dum[a] for a in others]
+    d_names = [f"arm[{a}]" for a in others]
+    x_cols = [dum[a] * sr for a in others]
+    x_names = [f"arm[{a}]:sr_is" for a in others]
+
+    full = mols(np.column_stack(base_cols + d_cols + x_cols), y,
+                base_names + d_names + x_names)
+    no_int = mols(np.column_stack(base_cols + d_cols), y, base_names + d_names)
+    no_arm = mols(np.column_stack(base_cols), y, base_names)
+
+    L.append("full model (intercept shifts and slope shifts, both vs the reference arm)")
+    for nm, b, se, lo, hi, pv in zip(full["names"], full["beta"], full["se"],
+                                     full["lo"], full["hi"], full["p"]):
+        L.append(f"  {nm:<20}{b:+9.4f}  SE {se:.4f}  [{lo:+9.4f},{hi:+9.4f}]  p {pv:.4g}")
+    L.append(f"  R² {full['r2']:.4f} on {full['dof']} df")
+    L.append("")
+    F, p, q, d = ftest(full, no_int)
+    L.append(f"do the arms differ in SLOPE?      F({q},{d}) {F:7.3f}   p {p:.4g}"
+             f"   (all arm x sr_is = 0)")
+    F, p, q, d = ftest(no_int, no_arm)
+    L.append(f"do they differ in INTERCEPT?      F({q},{d}) {F:7.3f}   p {p:.4g}"
+             f"   (all arm dummies = 0, common slope)")
+    L.append(f"R²: no arm terms {no_arm['r2']:.4f}  ->  intercepts only "
+             f"{no_int['r2']:.4f}  ->  full {full['r2']:.4f}")
     return "\n".join(L) + "\n"
 
 
