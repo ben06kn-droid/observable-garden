@@ -114,13 +114,14 @@ def system_prompt_for(arm: str, M: int, K: int, d: int, prompts: dict | None = N
     return base
 
 
-def dgp_seeds(n: int = 581) -> np.ndarray:
+def dgp_seeds(n: int = 661) -> np.ndarray:
     """AGENT_PROMPTS.md 4: the first n draws from default_rng(MASTER_SEED).
 
-    Extended from 80 to 320 (amendment 4), to 500 for batch 3, and to 581 for
-    batch 4's seeds 501-580 (amendment 9). Drawing more from the same generator
-    leaves the earlier draws byte-identical, so seeds already run keep their
-    meaning; verified in tests."""
+    Extended from 80 to 320 (amendment 4), to 500 for batch 3, to 581 for batch
+    4's seeds 501-580 (amendment 9), and to 661 for batch 5's 581-660
+    (amendment 11). Drawing more from the same generator leaves the earlier
+    draws byte-identical, so seeds already run keep their meaning; verified in
+    tests."""
     return np.random.default_rng(MASTER_SEED).integers(0, 2**31 - 1, size=n)
 
 
