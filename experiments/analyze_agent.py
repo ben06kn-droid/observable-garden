@@ -54,7 +54,9 @@ def batch_of(seed: int) -> str:
         return "b1"
     if seed < 320 or seed == 500:
         return "b2"
-    return "b3"
+    if seed < 500:
+        return "b3"
+    return "b4"
 
 
 # ---------------------------------------------------------------- loading
@@ -113,8 +115,14 @@ def load_run(d: Path) -> dict:
         status = verdict["status"]
     elif (d / "no_submit.json").exists():
         status = "no_submit"
-    else:
+    elif (d / "void.json").exists() or oos is not None:
+        # oos.json is written only after a submit, so a run carrying one but no
+        # verdict really did finish and fail to be graded (amendment 5).
         status = "void"
+    else:
+        # Nothing terminal at all: the harness is still working on this row.
+        # Reporting it as void would invent a defect out of a live batch.
+        status = "in_flight"
 
     return {
         "run_id": d.name,
@@ -122,6 +130,9 @@ def load_run(d: Path) -> dict:
         "model": cfg.get("model", PINNED_MODEL),
         "config": cfg.get("config", "s0"),
         "budget": cfg.get("budget"),
+        # Amendment 9 gave s3 a second calibration. sigma is what separates the
+        # two; s0's is pinned at 1 by construction and never varies.
+        "sigma": float((cfg.get("dgp") or {}).get("sigma", 1.0)),
         "seed_index": cfg["seed_index"],
         "batch": batch_of(cfg["seed_index"]),
         "config_recovered": not (d / "config.json").exists(),
@@ -277,18 +288,27 @@ def gap(r: dict) -> float:
 
 
 def cell_label(key) -> str:
-    config, arm, budget, model = key
+    config, arm, budget, model, sigma = key
     tag = arm if budget is None else f"{arm}{budget}"
-    return f"{config} {tag} {model.split('-')[1]}"
+    base = f"{config} {tag} {model.split('-')[1]}"
+    # s0 is pinned at sigma=1 by construction, so naming it there would be noise;
+    # every other config carries its calibration in the label (amendment 9).
+    return base if config == "s0" else f"{base} σ{sigma:g}"
 
 
 def cells_of(runs: list[dict]) -> dict:
-    """Group kept runs by (config, arm, budget, model), in a stable order."""
+    """Group kept runs by (config, arm, budget, model, sigma), in a stable order.
+
+    sigma is in the key because amendment 9 recalibrated s3: runs under the two
+    calibrations are different experiments and must never share a cell. Without
+    it the first four batch-4 runs landed in the s3 control cell alongside the
+    forty produced at sigma=1, moving its PASS rate from 9/40 to 11/44."""
     out: dict = {}
     for r in runs:
-        out.setdefault((r["config"], r["arm"], r["budget"], r["model"]), []).append(r)
+        out.setdefault((r["config"], r["arm"], r["budget"], r["model"],
+                        round(float(r["sigma"]), 6)), []).append(r)
     return dict(sorted(out.items(), key=lambda kv: (kv[0][0], kv[0][1],
-                                                    kv[0][2] or 0, kv[0][3])))
+                                                    kv[0][2] or 0, kv[0][3], kv[0][4])))
 
 
 def pick(runs, **kw) -> list[dict]:
@@ -357,6 +377,9 @@ def integrity_block(runs, incomplete) -> str:
              + (f"   {', '.join(r['run_id'] for r in no_sub)}" if no_sub else ""))
     L.append(f"  void (amendment 5)        {len(void):>4}"
              + (f"   {', '.join(r['run_id'] for r in void)}" if void else ""))
+    flight = [r for r in runs if r["status"] == "in_flight"]
+    L.append(f"  in flight (not yet graded){len(flight):>4}"
+             + (f"   {', '.join(r['run_id'] for r in flight)}" if flight else ""))
     L.append(f"  config.json recovered     {len(recov):>4}"
              + (f"   {', '.join(r['run_id'] for r in recov)}" if recov else ""))
     if recov:
@@ -621,58 +644,74 @@ def budget_block(kept) -> str:
 def s3_block(kept) -> str:
     """Pre-registered comparison 3, amendment 4: s3 as §5, plus PASS rate against
     the preflight power at reference, and s3 control vs gate."""
-    rs = pick(kept, config="s3")
+    rs_all = pick(kept, config="s3")
     L = ["COMPARISON 3 — s3: PASS rate vs preflight power, and control vs gate",
          "-" * 78]
-    if not rs:
+    if not rs_all:
         return "\n".join(L + ["no s3 runs in the analysis set"]) + "\n"
-    from scipy.stats import binomtest
-    for arm in sorted({r["arm"] for r in rs}):
-        cell = [r for r in rs if r["arm"] == arm]
-        g = graded(cell)
-        n_pass = sum(1 for r in cell if r["status"] == "PASS")
-        lo, hi = wilson_ci(n_pass, len(cell))
-        pwr = [r["power_at_open"] for r in cell if r["power_at_open"] is not None]
-        L.append(f"{arm}  (n = {len(cell)})")
-        L.append(f"  evaluation count     {fmt_mi([r['n_evaluated'] for r in cell])}")
-        L.append(f"  stated mean          {fmt_mi([r['stated_mean'] for r in g])}")
-        L.append(f"  realized OOS Sharpe  {fmt_mi([r['oos'] for r in cell if r['oos'] is not None])}")
-        L.append(f"  verdicts             {dict(sorted(Counter(r['status'] for r in cell).items()))}")
-        extra = split_line(g)
-        if extra:
-            L.append(extra)
-        L.append(f"  PASS rate            {n_pass}/{len(cell)} = {n_pass/len(cell):.3f}  "
-                 f"Wilson 95% [{lo:.3f}, {hi:.3f}]")
-        if pwr:
-            ref = float(np.mean(pwr))
-            bt = binomtest(n_pass, len(cell), ref)
-            L.append(f"  preflight power      {ref:.3f} (mean at open)   "
-                     f"difference {n_pass/len(cell) - ref:+.3f}   "
-                     f"binomial p {bt.pvalue:.4g}")
-        if len(g) >= 3:
-            f = ols(np.log([r["n_evaluated"] for r in g]), [r["stated_mean"] for r in g])
-            L.append(f"  slope on log(count)  {f['slope']:+.4f}  SE {f['se']:.4f}  "
-                     f"p {f['p']:.4f}")
+    from scipy.stats import binomtest, fisher_exact
+    sigmas = sorted({round(float(r["sigma"]), 6) for r in rs_all})
+    if len(sigmas) > 1:
+        L.append("Amendment 9 recalibrated s3. The two calibrations are separate")
+        L.append("experiments and are never pooled; each is reported on its own.")
         L.append("")
+    for sg in sigmas:
+        rs = [r for r in rs_all if round(float(r["sigma"]), 6) == sg]
+        if len(sigmas) > 1:
+            L.append(f"===== sigma = {sg:g}   (n = {len(rs)}) =====")
+        for arm in sorted({r["arm"] for r in rs}):
+            cell = [r for r in rs if r["arm"] == arm]
+            g = graded(cell)
+            n_pass = sum(1 for r in cell if r["status"] == "PASS")
+            lo, hi = wilson_ci(n_pass, len(cell))
+            pwr = [r["power_at_open"] for r in cell if r["power_at_open"] is not None]
+            L.append(f"{arm}  (n = {len(cell)})")
+            L.append(f"  evaluation count     {fmt_mi([r['n_evaluated'] for r in cell])}")
+            L.append(f"  stated mean          {fmt_mi([r['stated_mean'] for r in g])}")
+            L.append(f"  realized OOS Sharpe  "
+                     f"{fmt_mi([r['oos'] for r in cell if r['oos'] is not None])}")
+            L.append(f"  verdicts             "
+                     f"{dict(sorted(Counter(r['status'] for r in cell).items()))}")
+            extra = split_line(g)
+            if extra:
+                L.append(extra)
+            L.append(f"  PASS rate            {n_pass}/{len(cell)} = "
+                     f"{n_pass/len(cell):.3f}  Wilson 95% [{lo:.3f}, {hi:.3f}]")
+            if pwr:
+                ref = float(np.mean(pwr))
+                bt = binomtest(n_pass, len(cell), ref)
+                L.append(f"  preflight power      {ref:.3f} (mean at open)   "
+                         f"difference {n_pass/len(cell) - ref:+.3f}   "
+                         f"binomial p {bt.pvalue:.4g}")
+            if len(g) >= 3:
+                f = ols(np.log([r["n_evaluated"] for r in g]),
+                        [r["stated_mean"] for r in g])
+                L.append(f"  slope on log(count)  {f['slope']:+.4f}  SE {f['se']:.4f}  "
+                         f"p {f['p']:.4f}")
+            L.append("")
 
-    c, gt = graded(pick(rs, arm="control")), graded(pick(rs, arm="gate"))
-    if len(c) >= 3 and len(gt) >= 3:
-        L.append("s3 control vs gate:")
-        for metric, fn in (("deflation gap", gap),
-                           ("evaluation count", lambda r: r["n_evaluated"]),
-                           ("stated mean", lambda r: r["stated_mean"])):
-            a, b = [fn(r) for r in c], [fn(r) for r in gt]
-            u, pv, rb = mw(a, b)
-            L.append(f"  {metric:<18} control {np.median(a):+8.4f}   gate {np.median(b):+8.4f}"
-                     f"   difference {np.median(b) - np.median(a):+.4f}"
-                     f"   U {u:.1f}  p {pv:.4g}  rb {rb:+.3f}")
-        pc = sum(1 for r in pick(rs, arm="control") if r["status"] == "PASS")
-        pg = sum(1 for r in pick(rs, arm="gate") if r["status"] == "PASS")
-        nc, ng = len(pick(rs, arm="control")), len(pick(rs, arm="gate"))
-        from scipy.stats import fisher_exact
-        odds, pv = fisher_exact([[pc, nc - pc], [pg, ng - pg]])
-        L.append(f"  {'PASS rate':<18} control {pc}/{nc} = {pc/nc:.3f}   "
-                 f"gate {pg}/{ng} = {pg/ng:.3f}   Fisher p {pv:.4g}")
+        c, gt = graded(pick(rs, arm="control")), graded(pick(rs, arm="gate"))
+        if len(c) >= 3 and len(gt) >= 3:
+            L.append(f"control vs gate (sigma {sg:g}):")
+            for metric, fn in (("deflation gap", gap),
+                               ("evaluation count", lambda r: r["n_evaluated"]),
+                               ("stated mean", lambda r: r["stated_mean"])):
+                a, b = [fn(r) for r in c], [fn(r) for r in gt]
+                u, pv, rb = mw(a, b)
+                L.append(f"  {metric:<18} control {np.median(a):+8.4f}   "
+                         f"gate {np.median(b):+8.4f}"
+                         f"   difference {np.median(b) - np.median(a):+.4f}"
+                         f"   U {u:.1f}  p {pv:.4g}  rb {rb:+.3f}")
+            pc = sum(1 for r in pick(rs, arm="control") if r["status"] == "PASS")
+            pg = sum(1 for r in pick(rs, arm="gate") if r["status"] == "PASS")
+            nc, ng = len(pick(rs, arm="control")), len(pick(rs, arm="gate"))
+            odds, pv = fisher_exact([[pc, nc - pc], [pg, ng - pg]])
+            L.append(f"  {'PASS rate':<18} control {pc}/{nc} = {pc/nc:.3f}   "
+                     f"gate {pg}/{ng} = {pg/ng:.3f}   Fisher p {pv:.4g}")
+        elif len(sigmas) > 1:
+            L.append(f"  control vs gate: not both arms present at sigma {sg:g} yet "
+                     f"(control {len(c)}, gate {len(gt)} graded); skipped")
+        L.append("")
     return "\n".join(L) + "\n"
 
 
@@ -796,6 +835,17 @@ INK, MUTED = "#1a1a19", "#6b6b68"
 # labels back off the first panel instead produced a legend naming only sonnet,
 # because the leftmost arm (budget) has no fable runs to carry a label.
 MODEL_COLOUR = {"claude-fable-5-1": ORANGE, "claude-sonnet-5": BLUE}
+# Five arms need five categorical hues, which is where hand-picked palettes fall
+# over: on a white surface the usual qualitative sets put gold against vermillion
+# and the pair collapses under protanopia. These five were searched in OKLCH
+# (lightness band, chroma floor, >= 3:1 on white) maximizing the worst all-pairs
+# separation under the Machado protan/deutan simulations -- all-pairs because
+# this is a scatter, where any two arms can land next to each other. Worst pair
+# is dE 13.7 against a target of 8, normal-vision floor 16.9 against 15. Assigned
+# in fixed alphabetical order and never cycled. Tritan separation is 4.0, which
+# the checks report for information and do not gate on.
+ARM_COLOUR = {"budget": "#1D9999", "control": "#AC2F3B", "count": "#654DB6",
+              "gate": "#C8800D", "pushed": "#6D8AF3"}
 
 
 def _style(ax):
@@ -865,15 +915,23 @@ def figures(kept, out_dir: Path) -> list[str]:
     # 2. s3 PASS rate against the preflight power at open.
     s3 = pick(kept, config="s3")
     if s3:
-        arms3 = sorted({r["arm"] for r in s3})
-        fig, ax = plt.subplots(figsize=(5.2, 3.8))
+        # One bar per (calibration, arm): amendment 9's two sigmas are separate
+        # experiments, and a bar pooling them would average across the change
+        # the batch exists to measure.
+        sigmas3 = sorted({round(float(r["sigma"]), 6) for r in s3})
+        groups = [(sg, a) for sg in sigmas3
+                  for a in sorted({r["arm"] for r in s3
+                                   if round(float(r["sigma"]), 6) == sg})]
+        arms3 = [f"{a}\nσ{sg:g}" if len(sigmas3) > 1 else a for sg, a in groups]
+        fig, ax = plt.subplots(figsize=(1.9 * len(groups) + 1.6, 3.9))
         rates, los, his = [], [], []
-        for a in arms3:
-            cell = [r for r in s3 if r["arm"] == a]
+        for sg, a in groups:
+            cell = [r for r in s3 if r["arm"] == a
+                    and round(float(r["sigma"]), 6) == sg]
             k = sum(1 for r in cell if r["status"] == "PASS")
             lo, hi = wilson_ci(k, len(cell))
             rates.append(k / len(cell)); los.append(lo); his.append(hi)
-        xs = np.arange(len(arms3))
+        xs = np.arange(len(groups))
         err = np.vstack([np.array(rates) - np.array(los),
                          np.array(his) - np.array(rates)])
         ax.bar(xs, rates, width=0.5, color=BLUE, zorder=3, linewidth=0)
@@ -936,6 +994,66 @@ def figures(kept, out_dir: Path) -> list[str]:
                     facecolor="white")
         plt.close(fig)
         names.append("agent_sonnet_vs_fable_gap.png")
+
+    # 4. The paper figure: stated mean against the in-sample Sharpe actually
+    # submitted, s0 sonnet, one point per run, arms in colour, with the two
+    # lines that bound the claim -- y = x (stating the in-sample number back)
+    # and y = x - null_max_mean (stating the search-corrected number).
+    rs = graded(pick(kept, config="s0", model=PINNED_MODEL))
+    if rs:
+        x_all = np.array([r["submitted_sr_is"] for r in rs], float)
+        y_all = np.array([r["stated_mean"] for r in rs], float)
+        # null_max_mean is not stored on its own; it is exactly the distance the
+        # verdict already records between the reported and the deflated Sharpe.
+        nmm = x_all - np.array([r["sr_deflated"] for r in rs], float)
+        nmm_med = float(np.median(nmm))
+
+        fig, ax = plt.subplots(figsize=(7.0, 7.0))
+        lo = min(x_all.min(), y_all.min()) - 0.10
+        hi = max(x_all.max(), y_all.max()) + 0.10
+        ends = np.array([lo, hi])
+        ax.plot(ends, ends, color=MUTED, linestyle="--", linewidth=1.5, zorder=2)
+        ax.plot(ends, ends - nmm_med, color=MUTED, linestyle="-.", linewidth=1.5,
+                zorder=2)
+        # Right-anchored, like the corrected line's label: left-anchored it ran
+        # off the top-right corner of the frame.
+        ax.text(hi - 0.06, hi - 0.06 + 0.035, "y = x   (stated = in-sample)",
+                color=MUTED, fontsize=9, rotation=45, rotation_mode="anchor",
+                transform_rotates_text=True, ha="right")
+        ax.text(hi - 0.06, hi - 0.06 - nmm_med + 0.035,
+                f"y = x − null-max-mean ({nmm_med:.3f})   (corrected)",
+                color=MUTED, fontsize=9, rotation=45, rotation_mode="anchor",
+                transform_rotates_text=True, ha="right")
+
+        for arm in sorted({r["arm"] for r in rs}):
+            cell = [r for r in rs if r["arm"] == arm]
+            x = np.array([r["submitted_sr_is"] for r in cell], float)
+            y = np.array([r["stated_mean"] for r in cell], float)
+            colour = ARM_COLOUR.get(arm, INK)
+            f = ols(x, y) if len(cell) >= 3 else None
+            ax.scatter(x, y, s=26, alpha=0.70, color=colour, edgecolor="white",
+                       linewidth=0.5, zorder=3,
+                       label=f"{arm}  (n={len(cell)}"
+                             + (f", b={f['slope']:+.2f})" if f else ")"))
+            if f is not None:
+                xs = np.linspace(x.min(), x.max(), 100)
+                ax.plot(xs, f["intercept"] + f["slope"] * xs, color=colour,
+                        linewidth=2, zorder=4)
+        ax.set_xlim(lo, hi)
+        ax.set_ylim(lo, hi)
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlabel("submitted in-sample Sharpe", fontsize=10, color=INK)
+        ax.set_ylabel("stated mean predicted OOS Sharpe", fontsize=10, color=INK)
+        ax.set_title("Stated belief against the in-sample Sharpe submitted\n"
+                     f"config s0, {PINNED_MODEL}, n = {len(rs)}",
+                     loc="left", fontsize=12, color=INK)
+        ax.legend(fontsize=9, framealpha=0.95, loc="upper left")
+        _style(ax)
+        fig.tight_layout()
+        fig.savefig(out_dir / "agent_stated_vs_insample.png", dpi=200,
+                    facecolor="white")
+        plt.close(fig)
+        names.append("agent_stated_vs_insample.png")
 
     return names
 
