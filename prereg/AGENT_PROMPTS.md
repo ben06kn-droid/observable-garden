@@ -156,3 +156,6 @@ claude-fable-5-1} on s0, 30 runs per cell, 180 runs, seeds 320–499. Primary
 analysis per §5 within each cell; between-model comparison of deflation gap and
 evaluation count is exploratory. Thinking disabled for both models; model string
 checked per call.
+
+Amendment 8 — 2026-09-18. The final rows of batch 2 ran under the batch-3
+merge (fingerprint change, §1–§5 md5 unchanged); recorded per run.
