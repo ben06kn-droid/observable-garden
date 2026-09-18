@@ -132,7 +132,8 @@ def make_run_id(config_name: str, arm: str, seed_index: int, T: int,
 
 
 def run_one(arm: str, config_name: str, seed_index: int, prompts: dict,
-            budget: int | None = None, model: str = MODEL) -> int:
+            budget: int | None = None, model: str = MODEL,
+            worker: int | None = None) -> int:
     cfg = CONFIGS[config_name]
     seed = int(dgp_seeds()[seed_index])
     run_id = make_run_id(config_name, arm, seed_index, cfg["T"], budget, model)
@@ -167,6 +168,9 @@ def run_one(arm: str, config_name: str, seed_index: int, prompts: dict,
         # Which code produced this run. runs/ is outside the fingerprint, so the
         # batch's own per-run commits do not move it; see experiments/code_state.py.
         "code": code_state(),
+        # Amendment 6 records the worker index alongside the fingerprint, so a
+        # run is attributable to its worker. None when run sequentially.
+        "worker": worker,
         "started": time.time(),
     })
 
@@ -216,6 +220,9 @@ def main(argv=None) -> int:
                    help="evaluate cap for the budget arm (amendment 4: 20, 60 or 180)")
     p.add_argument("--model", choices=MODELS, default=MODEL,
                    help="batch 3 crosses arms with the model; thinking stays disabled for both")
+    p.add_argument("--worker", type=int, default=None,
+                   help="index of the parallel worker running this row (amendment 6); "
+                        "recorded in config.json, and None when run sequentially")
     a = p.parse_args(argv)
 
     if a.arm not in LIVE_ARMS:
@@ -234,7 +241,7 @@ def main(argv=None) -> int:
         idx = a.seed_index + i
         print(f"[{i + 1}/{a.runs}] arm={a.arm} config={a.config} model={a.model} "
               f"seed_index={idx}" + (f" budget={a.budget}" if a.budget else ""), flush=True)
-        code = run_one(a.arm, a.config, idx, prompts, a.budget, a.model)
+        code = run_one(a.arm, a.config, idx, prompts, a.budget, a.model, a.worker)
         if code:
             return code
     return 0

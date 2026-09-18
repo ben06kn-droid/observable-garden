@@ -329,6 +329,26 @@ def test_seed_extension_to_500_preserves_the_earlier_draws():
     assert len(set(dgp_seeds(500).tolist())) == 500
 
 
+def test_worker_index_is_forwarded_to_the_run(monkeypatch):
+    """Amendment 6 records the worker index per run, so the CLI has to carry it
+    all the way into run_one. It is None when the runner is sequential."""
+    import experiments.e_agent as ea
+    seen = {}
+
+    def fake_run_one(*args):
+        seen["worker"] = args[6]
+        return 0
+
+    monkeypatch.setattr(ea, "read_prompts", lambda *a, **k: {})
+    monkeypatch.setattr(ea, "run_one", fake_run_one)
+    base = ["--arm", "control", "--config", "s0", "--runs", "1", "--seed-index", "5"]
+
+    assert ea.main(base + ["--worker", "3"]) == 0
+    assert seen["worker"] == 3
+    assert ea.main(base) == 0
+    assert seen["worker"] is None
+
+
 def test_seed_stream_extension_preserves_the_first_eighty():
     """Amendment 4 extends the seed draw from 80 to 320. Seeds 0-79 must keep
     the meaning they had in the first batch."""

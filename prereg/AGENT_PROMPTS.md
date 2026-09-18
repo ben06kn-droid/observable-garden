@@ -135,3 +135,9 @@ chosen because seeds 320–499 are allocated to batch 3. Runs 80–90 and 91+ we
 produced under different harness fingerprints, recorded per run in config.json;
 the change is the fix above plus exclusion-rule and analyzer corrections, none
 of which alter any prompt, tool, or treatment text.
+
+Amendment 6 — 2026-09-17. Runs may execute in parallel workers within a usage
+window; 'session' in Amendment 4 means the window, and rows are assigned
+round-robin within block so each worker also rotates across all cells. No
+prompt, tool, or treatment text changes. Recorded per run: worker index and
+harness fingerprint.
