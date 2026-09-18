@@ -22,11 +22,12 @@ import json
 import re
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
-from environments.dgp import DGPConfig, generate
+from environments.dgp import DGPConfig, calibrate_sigma, generate
 from environments.sandbox import Sandbox
 from garden import watch as watch_mod
 from garden.spec_class import SubsetClass
@@ -44,9 +45,12 @@ MASTER_SEED = 20260916
 MODEL = "claude-sonnet-5"          # default; batch 3 crosses this with fable
 MAX_TURNS = 60
 D = 3
+# oracle_sharpe is build spec §2.2's difficulty knob: the annualized Sharpe the
+# oracle is calibrated to reach, from which sigma is solved (amendment 9). s0
+# has s=0, so it has no oracle to calibrate against and keeps sigma=1.
 CONFIGS = {
-    "s0": dict(s=0, K=40, M=50, T=5000, T_oos=1000),
-    "s3": dict(s=3, K=40, M=50, T=5000, T_oos=1000),
+    "s0": dict(s=0, K=40, M=50, T=5000, T_oos=1000, oracle_sharpe=None),
+    "s3": dict(s=3, K=40, M=50, T=5000, T_oos=1000, oracle_sharpe=1.0),
 }
 
 
@@ -110,12 +114,13 @@ def system_prompt_for(arm: str, M: int, K: int, d: int, prompts: dict | None = N
     return base
 
 
-def dgp_seeds(n: int = 520) -> np.ndarray:
+def dgp_seeds(n: int = 581) -> np.ndarray:
     """AGENT_PROMPTS.md 4: the first n draws from default_rng(MASTER_SEED).
 
-    Extended from 80 to 320 (amendment 4) and to 500 for batch 3. Drawing
-    more from the same generator leaves the earlier draws byte-identical, so
-    seeds already run keep their meaning; verified in tests."""
+    Extended from 80 to 320 (amendment 4), to 500 for batch 3, and to 581 for
+    batch 4's seeds 501-580 (amendment 9). Drawing more from the same generator
+    leaves the earlier draws byte-identical, so seeds already run keep their
+    meaning; verified in tests."""
     return np.random.default_rng(MASTER_SEED).integers(0, 2**31 - 1, size=n)
 
 
@@ -146,8 +151,13 @@ def run_one(arm: str, config_name: str, seed_index: int, prompts: dict,
     run_id = make_run_id(config_name, arm, seed_index, cfg["T"], budget, model)
     paths = RunPaths(RUNS_ROOT / run_id)
 
+    # Amendment 9: sigma is solved for rather than written down, so the config
+    # states the difficulty it wants and the noise scale follows. s0 carries no
+    # oracle target, so its DGPConfig is exactly what it was before.
     dgp = DGPConfig(M=cfg["M"], T=cfg["T"], T_oos=cfg["T_oos"], K=cfg["K"],
                     s=cfg["s"], rho=0.0, sigma=1.0, seed=seed)
+    if cfg["oracle_sharpe"] is not None:
+        dgp = replace(dgp, sigma=calibrate_sigma(cfg["oracle_sharpe"], dgp))
     data = generate(dgp)
     spec_class = SubsetClass(max_size=D, signed=True)
     sandbox = Sandbox(data, periods_per_year=dgp.periods_per_year, spec_class=spec_class)

@@ -159,3 +159,20 @@ checked per call.
 
 Amendment 8 — 2026-09-18. The final rows of batch 2 ran under the batch-3
 merge (fingerprint change, §1–§5 md5 unchanged); recorded per run.
+
+Amendment 9 — 2026-09-18. Config s3's noise scale σ is recalibrated from 1.0
+to 194.406790, setting the oracle's annualized Sharpe to 1.0 at M=50, K=40,
+s=3, ρ=0, per estimator_build_spec.md §2.2. At σ=1 the s3 oracle is 73.4847:
+28 of the 80 runs at seeds 84–319 submitted the true feature set and reported
+an in-sample Sharpe at that ceiling against a class bar of 1.02, so s3 as run
+measured a condition in which the signal exceeds the search correction by
+about seventy times. Those 80 runs are retained and analysed under σ=1, never
+pooled with runs under the new value; the two are separable by seed and by the
+σ recorded in each run's config.json. The correction itself is unaffected, the
+class bar being a ratio: at the two σ the watch opens with the same class size
+and, to bootstrap noise, the same critical value (1.0241 vs 1.0231) and power
+at reference (0.4574 vs 0.4590). Batch 4 re-runs s3 under the new σ: {control,
+gate} on claude-sonnet-5, 40 per arm, 80 runs, seeds 501–580, arms strictly
+alternating. The per-run seed draw is extended from 520 to 581 values; §4's
+construction is unchanged and every earlier draw is byte-identical. §1–§5 are
+unchanged; the fingerprint changes and is recorded per run.
