@@ -234,7 +234,7 @@ reset_epoch_for() {  # $1 run_id -> unix time the limit resets, or empty
 import json, re
 try: d = str(json.load(open('runs/$1/error.json')).get('detail',''))
 except Exception: raise SystemExit
-m = re.search(r'resets_at.{0,4}(\d{9,})', d)
+m = re.search(r'resets_at\D{0,4}(\d{9,})', d)
 print(m.group(1) if m else '')" 2>/dev/null
 }
 

@@ -150,6 +150,47 @@ def test_without_the_flag_a_rate_limit_still_stops_the_worker(sandbox):
     assert p.returncode == 1
 
 
+def test_the_reset_time_is_parsed_from_a_real_payload(sandbox):
+    """Exercises the shipped bash function, not a Python lookalike: the regex
+    lives inside a double-quoted `python -c` string, which is where escaping
+    goes wrong unnoticed.
+
+    `resets_at.{0,4}(\\d{9,})` greedily consumed the "': 1" before the digits and
+    captured 789717800 instead of 1789717800 -- a reset in January 1995. That is
+    silent: it fails the "is it in the future" test, so the wait degrades to
+    blind 15-minute retries through an outage instead of one sleep to the reset."""
+    rid = "s3_T5000_sonnet_gate_313"
+    d = sandbox / "runs" / rid
+    d.mkdir(parents=True)
+    (d / "error.json").write_text(json.dumps({
+        "kind": "RateLimited",
+        "detail": "rate limit rejected: {'status': 'rejected', "
+                  "'resets_at': 1789717800, 'type': 'five_hour'}"}))
+
+    text = (sandbox / "experiments" / "run_arms.sh").read_text()
+    start = text.index("reset_epoch_for()")
+    end = text.index("\n}", start) + 2
+    (sandbox / "fn.sh").write_text(text[start:end] + '\nreset_epoch_for "$1"\n')
+
+    r = subprocess.run(["bash", "fn.sh", rid], cwd=sandbox, capture_output=True, text=True)
+    assert r.stdout.strip() == "1789717800", (r.stdout, r.stderr)
+
+
+def test_a_missing_reset_time_yields_empty_not_garbage(sandbox):
+    """No resets_at in the payload means fall back to the fixed wait, which the
+    caller signals by an empty string rather than a zero."""
+    rid = "s0_T5000_sonnet_control_300"
+    d = sandbox / "runs" / rid
+    d.mkdir(parents=True)
+    (d / "error.json").write_text(json.dumps({"kind": "RateLimited", "detail": "no time given"}))
+    text = (sandbox / "experiments" / "run_arms.sh").read_text()
+    start = text.index("reset_epoch_for()")
+    end = text.index("\n}", start) + 2
+    (sandbox / "fn.sh").write_text(text[start:end] + '\nreset_epoch_for "$1"\n')
+    r = subprocess.run(["bash", "fn.sh", rid], cwd=sandbox, capture_output=True, text=True)
+    assert r.stdout.strip() == "", (r.stdout, r.stderr)
+
+
 def test_a_clean_row_needs_no_retry_machinery(sandbox):
     p, log = drive(sandbox, fail_kind="", fail_times=0, extra=("--auto-resume",))
     assert attempts(sandbox) == 1
