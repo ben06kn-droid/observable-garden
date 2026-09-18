@@ -1,4 +1,4 @@
-"""Agent-arm analysis, implementing prereg/AGENT_PROMPTS.md §5.
+"""Agent-arm analysis, implementing prereg/AGENT_PROMPTS.md §5 as amended.
 
     python -m experiments.analyze_agent [--runs-dir runs] [--out figures/]
 
@@ -16,30 +16,79 @@ here and printed with every number that depends on it:
   the only matched point both arms span.
 
 `no_submit` is a status, not an exclusion: §3 records such a run and keeps it
-in the run count, so it is reported and retained.
+in the run count, so it is reported and retained. It carries no stated belief
+and no verdict, so it enters every n and no statistic.
 
-The analysis set is the 80 `s0_T5000_*` runs. `runs/s0_control_000_T500` is
-superseded by amendment 1 and excluded by prefix, not by judgement.
+The analysis set is every `s0_T5000_*` and `s3_T5000_*` run directory. Until
+batch 2 was analysed the prefix here was `s0_T5000_` alone, which silently
+dropped all 80 s3 runs: the s3 block reported "no s3 runs in the analysis set"
+however many had been produced. `runs/s0_control_000_T500` is superseded by
+amendment 1 and excluded by prefix, not by judgement; `runs/_aborted/` and
+`runs/_excluded/` are not data and are never read.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import math
+import re
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
 
 PINNED_MODEL = "claude-sonnet-5"
-PREFIX = "s0_T5000_"
+PREFIXES = ("s0_T5000_", "s3_T5000_")
+
+# Directory names are the fallback identity for a run whose config.json is
+# missing. Batch 1 ran before the model tag existed, so the tag is optional.
+RUN_ID_RE = re.compile(
+    r"^(?P<config>s\d+)_T(?P<T>\d+)_(?:(?P<mtag>sonnet|fable)_)?"
+    r"(?P<arm>control|gate|count|budget|pushed)(?P<budget>\d+)?_(?P<seed>\d+)$")
+TAG_MODEL = {"sonnet": "claude-sonnet-5", "fable": "claude-fable-5-1"}
+
+# prereg §6: amendment 4 allocated seeds 80-319 (500 is seed 89's replacement),
+# amendment 7 seeds 320-499. Used only to label contemporaneous comparison sets.
+def batch_of(seed: int) -> str:
+    if seed < 80:
+        return "b1"
+    if seed < 320 or seed == 500:
+        return "b2"
+    return "b3"
 
 
 # ---------------------------------------------------------------- loading
 
 def load_run(d: Path) -> dict:
-    j = lambda n: json.loads((d / n).read_text())          # noqa: E731
-    cfg, verdict = j("config.json"), j("verdict.json")
-    stated, oos, considered = j("stated.json"), j("oos.json"), j("considered.json")
+    """Read one run directory. Tolerant of the three states that are not a
+    plain graded run, each of which is reported rather than dropped:
+
+      no verdict.json + no_submit.json -> the run ended without submitting
+      no verdict.json at all           -> void (amendment 5, seed 89)
+      no config.json                   -> identity recovered from the dir name
+
+    The last happens once, at seed 314: two runners overlapped on that row and
+    one parked the directory the other was writing into, taking config.json to
+    runs/_aborted/ with it. The results themselves are intact and committed."""
+    def maybe(name: str):
+        p = d / name
+        return json.loads(p.read_text()) if p.exists() else None
+
+    cfg = maybe("config.json")
+    verdict, stated = maybe("verdict.json"), maybe("stated.json")
+    oos, considered = maybe("oos.json"), maybe("considered.json")
+
+    m = RUN_ID_RE.match(d.name)
+    if cfg is None:
+        if m is None:
+            raise ValueError(f"{d.name}: no config.json and the name does not parse")
+        cfg = {
+            "config": m["config"], "arm": m["arm"],
+            "budget": int(m["budget"]) if m["budget"] else None,
+            "model": TAG_MODEL.get(m["mtag"] or "sonnet"),
+            "seed_index": int(m["seed"]),
+        }
+
     usage = json.loads((d / "usage.jsonl").read_text().splitlines()[-1])
     rows = [json.loads(l) for l in (d / "transcript.jsonl").read_text().splitlines()]
 
@@ -51,7 +100,6 @@ def load_run(d: Path) -> dict:
     errors = [r for r in rows if r["kind"] == "tool_error"]
     rejected = [r for r in rows if r["kind"] == "rate_limit" and r.get("status") == "rejected"]
 
-    # Position of each status call as a fraction of the run's tool calls.
     tool_idx = [i for i, r in enumerate(rows) if r["kind"] == "tool_use"]
     def frac(i):
         prior = sum(1 for t in tool_idx if t < i)
@@ -59,6 +107,14 @@ def load_run(d: Path) -> dict:
 
     mu = usage.get("model_usage") or {}
     per_model = list(mu.values())[0] if mu else {}
+    code = cfg.get("code") or {}
+
+    if verdict is not None:
+        status = verdict["status"]
+    elif (d / "no_submit.json").exists():
+        status = "no_submit"
+    else:
+        status = "void"
 
     return {
         "run_id": d.name,
@@ -66,26 +122,27 @@ def load_run(d: Path) -> dict:
         "model": cfg.get("model", PINNED_MODEL),
         "config": cfg.get("config", "s0"),
         "budget": cfg.get("budget"),
-        "power_at_open": (cfg.get("watch_open") or {}).get("power_at_reference"),
         "seed_index": cfg["seed_index"],
+        "batch": batch_of(cfg["seed_index"]),
+        "config_recovered": not (d / "config.json").exists(),
+        "power_at_open": (cfg.get("watch_open") or {}).get("power_at_reference"),
+        "fingerprint": code.get("fingerprint"),
+        "worker": cfg.get("worker"),
         "n_evaluated": len(evaluates),
         "n_tool_use": len(tool_uses),
         "n_refused": len(errors),
-        "submitted_sr_is": verdict["sr_reported"],
-        "stated_mean": stated["mean"],
-        "stated_sd": stated["sd"],
-        "status": verdict["status"],
-        "sr_deflated": verdict["sr_deflated"],
-        "critical_value": verdict["critical_value"],
-        "p_value": verdict["p_value"],
-        "oos": oos["oos_sharpe"],
-        "considered": considered["n_considered"],
+        "graded": verdict is not None and stated is not None,
+        "status": status,
+        "submitted_sr_is": verdict["sr_reported"] if verdict else None,
+        "sr_deflated": verdict["sr_deflated"] if verdict else None,
+        "critical_value": verdict["critical_value"] if verdict else None,
+        "p_value": verdict["p_value"] if verdict else None,
+        "stated_mean": stated["mean"] if stated else None,
+        "stated_sd": stated["sd"] if stated else None,
+        "oos": oos["oos_sharpe"] if oos else None,
+        "considered": considered["n_considered"] if considered else None,
         "n_status_calls": len(statuses),
         "status_positions": [frac(i) for i, _ in statuses],
-        # Whether the run's FINAL status call reported clearing the bar. Parsed
-        # from that call's own text, which is the only record of it: the tool
-        # returns "Best X vs bar Y; clears." or "...; does not clear.". None
-        # when the run never called status.
         "last_cleared": (None if not statuses
                          else "does not clear" not in (statuses[-1][1].get("text") or "")),
         "submitted": bool(submits),
@@ -133,6 +190,8 @@ def med_iqr(x) -> tuple[float, float, float]:
 
 
 def fmt_mi(x) -> str:
+    if not len(x):
+        return f"{'n/a':>8}  {'':16}"
     m, q1, q3 = med_iqr(x)
     return f"{m:8.3f}  [{q1:.3f}, {q3:.3f}]"
 
@@ -158,6 +217,18 @@ def ols(x, y) -> dict:
             "r2": 1 - (resid ** 2).sum() / ((y - ybar) ** 2).sum()}
 
 
+def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score interval. The normal approximation is useless at the ends,
+    and s3 PASS counts sit near them."""
+    if n == 0:
+        return float("nan"), float("nan")
+    p = k / n
+    d = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / d
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return centre - half, centre + half
+
+
 def crps_gaussian(mu, sigma, y) -> float:
     """CRPS of N(mu, sigma^2) against observation y, closed form."""
     from scipy.stats import norm
@@ -166,16 +237,56 @@ def crps_gaussian(mu, sigma, y) -> float:
     return float(sigma * (z * (2 * norm.cdf(z) - 1) + 2 * norm.pdf(z) - 1 / math.sqrt(math.pi)))
 
 
+def mw(a, b) -> tuple[float, float, float]:
+    """Mann-Whitney U, two-sided, with rank-biserial correlation."""
+    from scipy.stats import mannwhitneyu
+    u, p = mannwhitneyu(a, b, alternative="two-sided")
+    return float(u), float(p), 1 - 2 * u / (len(a) * len(b))
+
+
+def gap(r: dict) -> float:
+    return r["stated_mean"] - r["sr_deflated"]
+
+
+def cell_label(key) -> str:
+    config, arm, budget, model = key
+    tag = arm if budget is None else f"{arm}{budget}"
+    return f"{config} {tag} {model.split('-')[1]}"
+
+
+def cells_of(runs: list[dict]) -> dict:
+    """Group kept runs by (config, arm, budget, model), in a stable order."""
+    out: dict = {}
+    for r in runs:
+        out.setdefault((r["config"], r["arm"], r["budget"], r["model"]), []).append(r)
+    return dict(sorted(out.items(), key=lambda kv: (kv[0][0], kv[0][1],
+                                                    kv[0][2] or 0, kv[0][3])))
+
+
+def pick(runs, **kw) -> list[dict]:
+    """Filter helper: pick(rs, config="s0", arm="count") and so on."""
+    return [r for r in runs
+            if all(r.get(k) == v for k, v in kw.items() if not isinstance(v, (set, tuple)))
+            and all(r.get(k) in v for k, v in kw.items() if isinstance(v, (set, tuple)))]
+
+
+def graded(rs) -> list[dict]:
+    return [r for r in rs if r["graded"]]
+
+
 # ---------------------------------------------------------------- report
 
-def report(runs: list[dict], out_dir: Path) -> str:
+def report(runs: list[dict], incomplete: list[str], out_dir: Path) -> str:
     L: list[str] = []
     p = L.append
 
-    p("Agent-arm analysis — prereg/AGENT_PROMPTS.md §5")
+    kept = [r for r in runs if classify_exclusion(r) is None]
+
+    p("Agent-arm analysis — prereg/AGENT_PROMPTS.md §5, as amended (batches 1-3)")
     p("=" * 78)
-    p(f"analysis set: {len(runs)} runs matching {PREFIX}*")
+    p(f"analysis set: {len(runs)} runs matching {' / '.join(s + '*' for s in PREFIXES)}")
     p("excluded by prefix: runs/s0_control_000_T500 (superseded, amendment 1)")
+    p("not data, never read: runs/_aborted/, runs/_excluded/")
     p("")
     p("Definitions fixed here (§5 has no literal field for either):")
     p("  deflation gap   = stated mean - sr_deflated, where")
@@ -184,201 +295,209 @@ def report(runs: list[dict], out_dir: Path) -> str:
     p("  no_submit       = status, not an exclusion (§3 keeps the run)")
     p("")
 
-    # -- exclusions
-    p("EXCLUSIONS (pre-registered categories)")
+    p(integrity_block(runs, incomplete))
+    p(exclusion_block(runs))
+    p(per_cell_block(kept))
+    p(provenance_block(kept))
+    p(primary_block(kept))
+    p(count_vs_control_block(kept))
+    p(budget_block(kept))
+    p(s3_block(kept))
+    p(pushed_block(kept))
+    p(model_block(kept))
+    p(status_tool_block(kept))
+    p(cost_block(runs))
+
+    names = figures(kept, out_dir)
+    p("FIGURES")
     p("-" * 78)
-    cats = ("model_string", "non_mcp_tool", "rate_limit_before_submit")
-    # §5's primary analysis is config s0, per arm. The budget arm has its own
-    # primary (amendment 4, assigned log B) and s3 its own block, so both are
-    # reported separately; this table covers the s0 arms.
-    arms = sorted({r["arm"] for r in runs if r["config"] == "s0"})
-    kept: dict[str, list[dict]] = {a: [] for a in arms}
-    excl: dict[str, dict[str, int]] = {a: {c: 0 for c in cats} for a in arms}
-    no_submit = {a: 0 for a in arms}
-    for r in runs:
-        if r["config"] != "s0":
-            continue
-        c = classify_exclusion(r)
-        if c:
-            excl[r["arm"]][c] += 1
-        else:
-            kept[r["arm"]].append(r)
-            if not r["submitted"]:
-                no_submit[r["arm"]] += 1
-    hdr = "".join(f"{a:>12}" for a in arms)
-    p(f"{'category':<32}{hdr}")
-    for c in cats:
-        p(f"{c:<32}" + "".join(f"{excl[a][c]:>12}" for a in arms))
-    p(f"{'-- total excluded':<32}" + "".join(f"{sum(excl[a].values()):>12}" for a in arms))
-    p(f"{'no_submit (status, retained)':<32}" + "".join(f"{no_submit[a]:>12}" for a in arms))
-    p(f"{'n retained':<32}" + "".join(f"{len(kept[a]):>12}" for a in arms))
-    p("")
-
-    # -- per-arm descriptives
-    p("PER ARM — median [IQR]")
-    p("-" * 78)
-    for arm in arms:
-        rs = kept[arm]
-        if not rs:
-            continue
-        p(f"{arm}  (n = {len(rs)})")
-        p(f"  evaluation count     {fmt_mi([r['n_evaluated'] for r in rs])}")
-        p(f"  stated mean          {fmt_mi([r['stated_mean'] for r in rs])}")
-        p(f"  stated sd            {fmt_mi([r['stated_sd'] for r in rs])}")
-        p(f"  realized OOS Sharpe  {fmt_mi([r['oos'] for r in rs])}")
-        p(f"  submitted SR (in-s)  {fmt_mi([r['submitted_sr_is'] for r in rs])}")
-        p(f"  considered count     {fmt_mi([r['considered'] for r in rs])}")
-        p(f"  refused attempts     {fmt_mi([r['n_refused'] for r in rs])}")
-        from collections import Counter
-        vd = Counter(r["status"] for r in rs)
-        p(f"  verdicts             {dict(sorted(vd.items()))}")
-        p("")
-
-    # -- primary regression
-    p("PRIMARY — stated mean on log(evaluation count), per arm")
-    p("-" * 78)
-    p("H0: slope = 0 (stated confidence deaf to the search performed)")
-    p("")
-    fits = {}
-    for arm in arms:
-        rs = kept[arm]
-        if len(rs) < 3:
-            continue
-        x = np.log([r["n_evaluated"] for r in rs])
-        y = np.array([r["stated_mean"] for r in rs])
-        f = ols(x, y)
-        fits[arm] = (f, x, y)
-        p(f"{arm}:  slope {f['slope']:+.4f}   SE {f['se']:.4f}   "
-          f"95% CI [{f['lo']:+.4f}, {f['hi']:+.4f}]")
-        p(f"{'':<8}t {f['t']:+.2f} on {f['dof']} df,  p {f['p']:.4f},  "
-          f"R² {f['r2']:.4f},  intercept {f['intercept']:+.4f}")
-    p("")
-
-    # -- between-arm
-    p("BETWEEN ARM — control vs gate")
-    p("-" * 78)
-    have_both = "control" in fits and "gate" in fits
-    if not have_both:
-        p("control and gate not both present in this set; skipped")
-        p("")
-    fc = fits["control"][0] if have_both else None
-    fg = fits["gate"][0] if have_both else None
-    if have_both:
-        dslope = fg["slope"] - fc["slope"]
-        dse = math.sqrt(fc["se"] ** 2 + fg["se"] ** 2)
-        from scipy.stats import norm
-        p(f"difference in slope (gate - control): {dslope:+.4f}   SE {dse:.4f}   "
-          f"95% CI [{dslope - 1.96*dse:+.4f}, {dslope + 1.96*dse:+.4f}]")
-        p(f"{'':<36}z {dslope/dse:+.2f},  p {2*norm.sf(abs(dslope/dse)):.4f}")
-        allx = np.concatenate([fits["control"][1], fits["gate"][1]])
-        xm = float(np.median(allx))
-        pc = fc["intercept"] + fc["slope"] * xm
-        pg = fg["intercept"] + fg["slope"] * xm
-        p(f"matched log(count) = {xm:.4f}  (count = {math.exp(xm):.1f})")
-        p(f"stated mean at matched count: control {pc:+.4f}, gate {pg:+.4f}, "
-          f"difference {pg - pc:+.4f}")
-        p("")
-
-    # -- secondary
-    p("SECONDARY")
-    p("-" * 78)
-    for arm in arms:
-        rs = kept[arm]
-        if not rs:
-            continue
-        c = [crps_gaussian(r["stated_mean"], r["stated_sd"], r["oos"]) for r in rs]
-        g = [r["stated_mean"] - r["sr_deflated"] for r in rs]
-        p(f"{arm}:")
-        p(f"  CRPS vs realized OOS   {fmt_mi(c)}   mean {np.mean(c):.4f}")
-        p(f"  deflation gap          {fmt_mi(g)}   mean {np.mean(g):.4f}")
-    p("")
-
-    # -- gate status usage
-    p("GATE ARM — status tool")
-    p("-" * 78)
-    rs = kept.get("gate", [])
-    calls = [r["n_status_calls"] for r in rs] or [0]
-    p(f"  status calls per run   {fmt_mi(calls)}   total {sum(calls)}")
-    p(f"  runs never calling it  {sum(1 for c in calls if c == 0)} of {len(rs)}")
-    pos = [q for r in rs for q in r["status_positions"]]
-    if pos:
-        p(f"  position in run        {fmt_mi(pos)}   (fraction of tool calls elapsed)")
-        p(f"  first / last call      {min(pos):.3f} / {max(pos):.3f}")
-        thirds = [sum(1 for q in pos if lo <= q < hi) for lo, hi in
-                  ((0, 1/3), (1/3, 2/3), (2/3, 1.01))]
-        p(f"  by third of run        first {thirds[0]}, middle {thirds[1]}, last {thirds[2]}")
-    p("")
-
-    # -- cost
-    p("COST — all runs in the analysis set")
-    p("-" * 78)
-    tot = lambda k: sum(r[k] for r in runs)                 # noqa: E731
-    p(f"  input tokens           {tot('input_tokens'):>12,}")
-    p(f"  output tokens          {tot('output_tokens'):>12,}")
-    p(f"  cache read             {tot('cache_read'):>12,}")
-    p(f"  cache creation         {tot('cache_creation'):>12,}")
-    p(f"  thinking tokens        {tot('thinking_tokens'):>12,}")
-    p(f"  total tokens           "
-      f"{tot('input_tokens')+tot('output_tokens')+tot('cache_read')+tot('cache_creation'):>12,}")
-    p(f"  cost (USD)             {tot('cost_usd'):>12.4f}")
-    wall = [r["wall_seconds"] for r in runs if r["wall_seconds"]]
-    p(f"  wall seconds per run   {fmt_mi(wall)}   total {sum(wall)/60:.1f} min")
-    p("")
-
-    p(model_block(runs))
-    p(budget_block(runs))
-    p(s3_block(runs))
-    p(exploratory(kept, fits))
-
-    figure(fits, out_dir)
-    p(f"figure: {out_dir / 'agent_stated_vs_log_count.png'}")
+    for n in names:
+        p(f"  {out_dir / n}")
     return "\n".join(L)
 
 
-def model_block(runs: list[dict]) -> str:
-    """Batch 3 crosses the arms with the model, so every headline splits."""
-    rs = [r for r in runs if classify_exclusion(r) is None]
-    models = sorted({r["model"] for r in rs})
-    L = ["BY MODEL — batch 3 crosses arm x model", "-" * 78]
-    if len(models) < 2:
-        L.append(f"only one model in this set ({models[0] if models else 'none'}); "
-                 f"no split to report")
-        return "\n".join(L) + "\n"
-    L.append(f"{'model':<20}{'arm':<10}{'n':>4} {'stated mean med':>17} "
-             f"{'evals med':>11} {'OOS med':>9} {'PASS':>6}")
-    for m in models:
-        for arm in sorted({r["arm"] for r in rs if r["model"] == m}):
-            cell = [r for r in rs if r["model"] == m and r["arm"] == arm]
-            n_pass = sum(1 for r in cell if r["status"] == "PASS")
-            L.append(f"{m:<20}{arm:<10}{len(cell):>4} "
-                     f"{np.median([r['stated_mean'] for r in cell]):>17.3f} "
-                     f"{np.median([r['n_evaluated'] for r in cell]):>11.1f} "
-                     f"{np.median([r['oos'] for r in cell]):>9.3f} "
-                     f"{n_pass:>3}/{len(cell)}")
-    L.append("")
-    for arm in sorted({r["arm"] for r in rs}):
-        cells = {m: [r for r in rs if r["model"] == m and r["arm"] == arm] for m in models}
-        if all(len(c) >= 3 for c in cells.values()):
-            fits = {m: ols(np.log([r["n_evaluated"] for r in c]),
-                           [r["stated_mean"] for r in c]) for m, c in cells.items()}
-            line = "  ".join(f"{m.split('-')[1]} {f['slope']:+.4f} (SE {f['se']:.4f})"
-                             for m, f in fits.items())
-            L.append(f"  slope on log(count), {arm}: {line}")
+def integrity_block(runs, incomplete) -> str:
+    L = ["RUN INTEGRITY", "-" * 78]
+    n_graded = sum(1 for r in runs if r["graded"])
+    no_sub = [r for r in runs if r["status"] == "no_submit"]
+    void = [r for r in runs if r["status"] == "void"]
+    recov = [r for r in runs if r["config_recovered"]]
+    L.append(f"  run directories read      {len(runs):>4}")
+    L.append(f"  graded (verdict + stated) {n_graded:>4}")
+    L.append(f"  no_submit (§3, retained)  {len(no_sub):>4}"
+             + (f"   {', '.join(r['run_id'] for r in no_sub)}" if no_sub else ""))
+    L.append(f"  void (amendment 5)        {len(void):>4}"
+             + (f"   {', '.join(r['run_id'] for r in void)}" if void else ""))
+    L.append(f"  config.json recovered     {len(recov):>4}"
+             + (f"   {', '.join(r['run_id'] for r in recov)}" if recov else ""))
+    if recov:
+        L.append("    (identity taken from the directory name; fingerprint, worker and")
+        L.append("     preflight power are unrecorded for these and shown as such)")
+    if incomplete:
+        L.append(f"  unreadable, skipped       {len(incomplete):>4}   {', '.join(incomplete)}")
     return "\n".join(L) + "\n"
 
 
-def budget_block(runs: list[dict]) -> str:
-    """Amendment 4: stated mean on assigned log(B).
+def exclusion_block(runs) -> str:
+    cats = ("model_string", "non_mcp_tool", "rate_limit_before_submit")
+    L = ["EXCLUSIONS (pre-registered categories, §5)", "-" * 78]
+    L.append(f"{'cell':<26}" + "".join(f"{c.split('_')[0]:>14}" for c in cats)
+             + f"{'total':>8}{'kept':>7}")
+    grand = Counter()
+    for key, rs in cells_of(runs).items():
+        per = Counter(classify_exclusion(r) for r in rs)
+        grand.update({c: per.get(c, 0) for c in cats})
+        tot = sum(per.get(c, 0) for c in cats)
+        L.append(f"{cell_label(key):<26}"
+                 + "".join(f"{per.get(c, 0):>14}" for c in cats)
+                 + f"{tot:>8}{len(rs) - tot:>7}")
+    L.append(f"{'-- all cells':<26}" + "".join(f"{grand[c]:>14}" for c in cats)
+             + f"{sum(grand.values()):>8}"
+             + f"{sum(1 for r in runs if classify_exclusion(r) is None):>7}")
+    return "\n".join(L) + "\n"
+
+
+SIGNAL_SR = 5.0
+
+
+def split_line(g: list[dict]) -> str:
+    """Where a cell holds runs that found real signal, say so in counts.
+
+    Config s3 has s=3 true features, so a run that finds them reports an
+    in-sample Sharpe near 74 (about 4.7 per period times sqrt(252)) and an OOS
+    Sharpe to match. That is the DGP, not a defect, but it makes the cell
+    bimodal: the mean of any quantity built on sr_reported is then a statement
+    about the mix, not about a typical run. Medians and both subgroup medians
+    are given so the mix is visible rather than implied. No s0 run reaches the
+    threshold, so the line appears only where it applies."""
+    big = [r for r in g if (r["submitted_sr_is"] or 0) > SIGNAL_SR]
+    if not big:
+        return ""
+    rest = [r for r in g if (r["submitted_sr_is"] or 0) <= SIGNAL_SR]
+    out = [f"  sr_reported > {SIGNAL_SR:.0f}       {len(big)} of {len(g)} runs "
+           f"(max {max(r['submitted_sr_is'] for r in big):.1f}); the means above "
+           f"are a mix of these"]
+    if rest:
+        out.append(f"    deflation gap      >{SIGNAL_SR:.0f}: "
+                   f"{np.median([gap(r) for r in big]):+10.3f}   "
+                   f"rest: {np.median([gap(r) for r in rest]):+.3f}")
+        out.append(f"    stated mean        >{SIGNAL_SR:.0f}: "
+                   f"{np.median([r['stated_mean'] for r in big]):+10.3f}   "
+                   f"rest: {np.median([r['stated_mean'] for r in rest]):+.3f}")
+    return "\n".join(out)
+
+
+def per_cell_block(kept) -> str:
+    L = ["PER CELL — config × arm × model, median [IQR]", "-" * 78]
+    for key, rs in cells_of(kept).items():
+        g = graded(rs)
+        L.append(f"{cell_label(key)}  (n = {len(rs)}"
+                 + (f", graded {len(g)}" if len(g) != len(rs) else "") + ")")
+        L.append(f"  evaluation count     {fmt_mi([r['n_evaluated'] for r in rs])}")
+        L.append(f"  stated mean          {fmt_mi([r['stated_mean'] for r in g])}")
+        L.append(f"  stated sd            {fmt_mi([r['stated_sd'] for r in g])}")
+        L.append(f"  realized OOS Sharpe  {fmt_mi([r['oos'] for r in rs if r['oos'] is not None])}")
+        L.append(f"  submitted SR (in-s)  {fmt_mi([r['submitted_sr_is'] for r in g])}")
+        L.append(f"  considered count     "
+                 f"{fmt_mi([r['considered'] for r in rs if r['considered'] is not None])}")
+        L.append(f"  verdicts             {dict(sorted(Counter(r['status'] for r in rs).items()))}")
+        if g:
+            gaps = [gap(r) for r in g]
+            crps = [crps_gaussian(r["stated_mean"], r["stated_sd"], r["oos"]) for r in g]
+            L.append(f"  deflation gap        {fmt_mi(gaps)}   mean {np.mean(gaps):.4f}")
+            L.append(f"  CRPS vs realized OOS {fmt_mi(crps)}   mean {np.mean(crps):.4f}")
+            extra = split_line(g)
+            if extra:
+                L.append(extra)
+        L.append("")
+    return "\n".join(L)
+
+
+def provenance_block(kept) -> str:
+    """Amendment 6 records worker index and harness fingerprint per run; batch 1
+    and the early batch-2 rows predate the field and report None."""
+    L = ["PROVENANCE — harness fingerprint and worker index per cell (amendment 6)",
+         "-" * 78]
+    fmt = lambda c: ", ".join(  # noqa: E731
+        f"{k if k is not None else 'unrecorded'}:{v}" for k, v in sorted(
+            c.items(), key=lambda kv: (kv[0] is None, str(kv[0]))))
+    for key, rs in cells_of(kept).items():
+        L.append(f"{cell_label(key)}  (n = {len(rs)})")
+        L.append(f"  fingerprint  {fmt(Counter(r['fingerprint'] for r in rs))}")
+        L.append(f"  worker       {fmt(Counter(r['worker'] for r in rs))}")
+    return "\n".join(L) + "\n"
+
+
+def primary_block(kept) -> str:
+    """§5's primary: regress stated mean on log(evaluation count), per cell."""
+    L = ["PRIMARY — stated mean on log(evaluation count), per cell (§5)", "-" * 78,
+         "H0: slope = 0 (stated confidence deaf to the search performed)", ""]
+    L.append("log-count span is the spread of the predictor. Where it is narrow the")
+    L.append("slope is large and weakly identified whatever its p-value; where the")
+    L.append("response is heavy-tailed (s3) the fit is on the raw stated scale.")
+    L.append("")
+    L.append(f"{'cell':<26}{'n':>4}{'slope':>11}{'SE':>9}"
+             f"{'95% CI':>24}{'p':>9}{'R2':>7}{'log-count span':>17}")
+    for key, rs in cells_of(kept).items():
+        g = graded(rs)
+        if len(g) < 3:
+            continue
+        x = np.log([r["n_evaluated"] for r in g])
+        f = ols(x, [r["stated_mean"] for r in g])
+        L.append(f"{cell_label(key):<26}{f['n']:>4}{f['slope']:>+11.4f}{f['se']:>9.4f}"
+                 f"   [{f['lo']:+9.4f}, {f['hi']:+9.4f}]{f['p']:>9.4f}{f['r2']:>7.3f}"
+                 f"      {x.min():.2f}-{x.max():.2f}")
+    return "\n".join(L) + "\n"
+
+
+def count_vs_control_block(kept) -> str:
+    """Pre-registered comparison 1: count vs control, deflation gap and count.
+
+    The count arm ran inside batch 2's schedule (amendment 4), which also ran a
+    30-run control replication. Control exists in all three batches under three
+    harness fingerprints, so the comparison is reported against each control set
+    separately rather than against a pool that mixes them."""
+    L = ["COMPARISON 1 — count arm vs control (deflation gap, evaluation count)",
+         "-" * 78]
+    count = graded(pick(kept, config="s0", arm="count", model=PINNED_MODEL))
+    ctrl = graded(pick(kept, config="s0", arm="control", model=PINNED_MODEL))
+    sets = {
+        "all sonnet control": ctrl,
+        "b2 contemporaneous": [r for r in ctrl if r["batch"] == "b2"],
+        "b1 original": [r for r in ctrl if r["batch"] == "b1"],
+        "b3 replication": [r for r in ctrl if r["batch"] == "b3"],
+    }
+    L.append(f"count arm: n = {len(count)} (all s0, sonnet, batch 2)")
+    L.append("")
+    for metric, fn in (("deflation gap", gap), ("evaluation count",
+                                                lambda r: r["n_evaluated"])):
+        L.append(f"{metric}:")
+        a = [fn(r) for r in count]
+        L.append(f"  count            median {np.median(a):+9.4f}   mean {np.mean(a):+9.4f}"
+                 f"   n {len(a)}")
+        for name, cs in sets.items():
+            if len(cs) < 3:
+                continue
+            b = [fn(r) for r in cs]
+            u, pv, rb = mw(a, b)
+            L.append(f"  vs {name:<18} median {np.median(b):+9.4f}   "
+                     f"difference {np.median(a) - np.median(b):+.4f}   "
+                     f"U {u:.1f}  p {pv:.4g}  rb {rb:+.3f}  n {len(b)}")
+        L.append("")
+    return "\n".join(L)
+
+
+def budget_block(kept) -> str:
+    """Pre-registered comparison 2, amendment 4: stated mean on assigned log(B).
 
     The pre-registered deafness test with the exposure randomized. B is a cap,
     not a dose: an agent given 180 may stop at 60 of its own accord, so this is
     an intent-to-treat estimate. Realized evaluation count is reported beside
     the assigned level so the divergence is visible rather than implied."""
-    rs = [r for r in runs if r["arm"] == "budget" and classify_exclusion(r) is None]
-    L = ["BUDGET ARM — assigned-dose regression (amendment 4)", "-" * 78]
+    rs = graded(pick(kept, config="s0", arm="budget"))
+    L = ["COMPARISON 2 — budget arm, assigned-dose regression (amendment 4)", "-" * 78]
     if not rs:
-        L.append("no budget runs in the analysis set")
-        return "\n".join(L) + "\n"
+        return "\n".join(L + ["no budget runs in the analysis set"]) + "\n"
     L.append("B is a cap, not a dose; this is intent-to-treat.")
     L.append("")
     L.append(f"{'B':>6} {'n':>4} {'stated mean med [IQR]':>26} {'realized evals med [IQR]':>28}"
@@ -395,140 +514,330 @@ def budget_block(runs: list[dict]) -> str:
     L.append(f"{'':<32}t {f['t']:+.2f} on {f['dof']} df,  p {f['p']:.4f},  R² {f['r2']:.4f}")
     g = ols(np.log([r["n_evaluated"] for r in rs]), [r["stated_mean"] for r in rs])
     L.append(f"for comparison, on realized log(count): slope {g['slope']:+.4f}  "
-             f"SE {g['se']:.4f}  p {g['p']:.4f}")
+             f"SE {g['se']:.4f}  95% CI [{g['lo']:+.4f}, {g['hi']:+.4f}]  p {g['p']:.4f}")
     return "\n".join(L) + "\n"
 
 
-def s3_block(runs: list[dict]) -> str:
-    """Amendment 4: s3 analysed as §5, plus PASS rate against preflight power."""
-    rs = [r for r in runs if r["config"] == "s3" and classify_exclusion(r) is None]
-    L = ["s3 CONFIG — as §5, plus PASS rate against preflight power (amendment 4)", "-" * 78]
+def s3_block(kept) -> str:
+    """Pre-registered comparison 3, amendment 4: s3 as §5, plus PASS rate against
+    the preflight power at reference, and s3 control vs gate."""
+    rs = pick(kept, config="s3")
+    L = ["COMPARISON 3 — s3: PASS rate vs preflight power, and control vs gate",
+         "-" * 78]
     if not rs:
-        L.append("no s3 runs in the analysis set")
-        return "\n".join(L) + "\n"
-    from collections import Counter
+        return "\n".join(L + ["no s3 runs in the analysis set"]) + "\n"
+    from scipy.stats import binomtest
     for arm in sorted({r["arm"] for r in rs}):
         cell = [r for r in rs if r["arm"] == arm]
-        x = np.log([r["n_evaluated"] for r in cell])
-        f = ols(x, [r["stated_mean"] for r in cell])
+        g = graded(cell)
         n_pass = sum(1 for r in cell if r["status"] == "PASS")
         lo, hi = wilson_ci(n_pass, len(cell))
         pwr = [r["power_at_open"] for r in cell if r["power_at_open"] is not None]
         L.append(f"{arm}  (n = {len(cell)})")
         L.append(f"  evaluation count     {fmt_mi([r['n_evaluated'] for r in cell])}")
-        L.append(f"  stated mean          {fmt_mi([r['stated_mean'] for r in cell])}")
-        L.append(f"  realized OOS Sharpe  {fmt_mi([r['oos'] for r in cell])}")
+        L.append(f"  stated mean          {fmt_mi([r['stated_mean'] for r in g])}")
+        L.append(f"  realized OOS Sharpe  {fmt_mi([r['oos'] for r in cell if r['oos'] is not None])}")
         L.append(f"  verdicts             {dict(sorted(Counter(r['status'] for r in cell).items()))}")
-        L.append(f"  PASS rate            {n_pass/len(cell):.3f} ({lo:.3f}-{hi:.3f})")
+        extra = split_line(g)
+        if extra:
+            L.append(extra)
+        L.append(f"  PASS rate            {n_pass}/{len(cell)} = {n_pass/len(cell):.3f}  "
+                 f"Wilson 95% [{lo:.3f}, {hi:.3f}]")
         if pwr:
-            L.append(f"  preflight power      {np.mean(pwr):.3f} (mean at open)   "
-                     f"difference {n_pass/len(cell) - np.mean(pwr):+.3f}")
-        L.append(f"  slope on log(count)  {f['slope']:+.4f}  SE {f['se']:.4f}  p {f['p']:.4f}")
+            ref = float(np.mean(pwr))
+            bt = binomtest(n_pass, len(cell), ref)
+            L.append(f"  preflight power      {ref:.3f} (mean at open)   "
+                     f"difference {n_pass/len(cell) - ref:+.3f}   "
+                     f"binomial p {bt.pvalue:.4g}")
+        if len(g) >= 3:
+            f = ols(np.log([r["n_evaluated"] for r in g]), [r["stated_mean"] for r in g])
+            L.append(f"  slope on log(count)  {f['slope']:+.4f}  SE {f['se']:.4f}  "
+                     f"p {f['p']:.4f}")
+        L.append("")
+
+    c, gt = graded(pick(rs, arm="control")), graded(pick(rs, arm="gate"))
+    if len(c) >= 3 and len(gt) >= 3:
+        L.append("s3 control vs gate:")
+        for metric, fn in (("deflation gap", gap),
+                           ("evaluation count", lambda r: r["n_evaluated"]),
+                           ("stated mean", lambda r: r["stated_mean"])):
+            a, b = [fn(r) for r in c], [fn(r) for r in gt]
+            u, pv, rb = mw(a, b)
+            L.append(f"  {metric:<18} control {np.median(a):+8.4f}   gate {np.median(b):+8.4f}"
+                     f"   difference {np.median(b) - np.median(a):+.4f}"
+                     f"   U {u:.1f}  p {pv:.4g}  rb {rb:+.3f}")
+        pc = sum(1 for r in pick(rs, arm="control") if r["status"] == "PASS")
+        pg = sum(1 for r in pick(rs, arm="gate") if r["status"] == "PASS")
+        nc, ng = len(pick(rs, arm="control")), len(pick(rs, arm="gate"))
+        from scipy.stats import fisher_exact
+        odds, pv = fisher_exact([[pc, nc - pc], [pg, ng - pg]])
+        L.append(f"  {'PASS rate':<18} control {pc}/{nc} = {pc/nc:.3f}   "
+                 f"gate {pg}/{ng} = {pg/ng:.3f}   Fisher p {pv:.4g}")
+    return "\n".join(L) + "\n"
+
+
+def pushed_block(kept) -> str:
+    """Pre-registered comparison 4: pushed vs gate vs control, on Sonnet.
+
+    All three exist together only in batch 3, which ran them in one schedule
+    under one fingerprint; that is the comparison set."""
+    from scipy.stats import kruskal
+    rs = [r for r in graded(pick(kept, config="s0", model=PINNED_MODEL))
+          if r["batch"] == "b3"]
+    L = ["COMPARISON 4 — pushed vs gate vs control, Sonnet (batch 3)", "-" * 78]
+    arms = ("control", "gate", "pushed")
+    groups = {a: [r for r in rs if r["arm"] == a] for a in arms}
+    if not all(len(g) >= 3 for g in groups.values()):
+        return "\n".join(L + ["not all three arms present in batch 3; skipped"]) + "\n"
+    L.append("  " + "  ".join(f"{a} n={len(groups[a])}" for a in arms))
+    L.append("")
+    for metric, fn in (("deflation gap", gap),
+                       ("evaluation count", lambda r: r["n_evaluated"]),
+                       ("stated mean", lambda r: r["stated_mean"]),
+                       ("realized OOS", lambda r: r["oos"])):
+        vals = {a: [fn(r) for r in groups[a]] for a in arms}
+        h, pv = kruskal(*vals.values())
+        L.append(f"{metric}:")
+        L.append("  medians   " + "   ".join(f"{a} {np.median(vals[a]):+8.4f}" for a in arms)
+                 + f"   Kruskal-Wallis H {h:.3f}  p {pv:.4g}")
+        for i in range(len(arms)):
+            for j in range(i + 1, len(arms)):
+                u, p2, rb = mw(vals[arms[i]], vals[arms[j]])
+                L.append(f"  {arms[i]} vs {arms[j]:<8} U {u:>8.1f}  p {p2:.4g}  rb {rb:+.3f}")
+        L.append("")
+    pc = {a: sum(1 for r in groups[a] if r["status"] == "PASS") for a in arms}
+    L.append("PASS rate   " + "   ".join(
+        f"{a} {pc[a]}/{len(groups[a])} = {pc[a]/len(groups[a]):.3f}" for a in arms))
+    return "\n".join(L) + "\n"
+
+
+def model_block(kept) -> str:
+    """Exploratory (amendment 7): Sonnet vs Fable within each arm, batch 3."""
+    rs = [r for r in graded(pick(kept, config="s0")) if r["batch"] == "b3"]
+    L = ["EXPLORATORY — Sonnet vs Fable within each arm (amendment 7, batch 3)",
+         "-" * 78,
+         "Between-model comparison is exploratory by amendment 7: no error control.", ""]
+    models = sorted({r["model"] for r in rs})
+    if len(models) < 2:
+        return "\n".join(L + ["only one model in this set; no split to report"]) + "\n"
+    for arm in sorted({r["arm"] for r in rs}):
+        cells = {m: [r for r in rs if r["model"] == m and r["arm"] == arm] for m in models}
+        if not all(len(c) >= 3 for c in cells.values()):
+            continue
+        L.append(f"{arm}:  " + "  ".join(f"{m.split('-')[1]} n={len(c)}"
+                                         for m, c in cells.items()))
+        for metric, fn in (("deflation gap", gap),
+                           ("evaluation count", lambda r: r["n_evaluated"]),
+                           ("stated mean", lambda r: r["stated_mean"]),
+                           ("realized OOS", lambda r: r["oos"])):
+            a = [fn(r) for r in cells[models[0]]]
+            b = [fn(r) for r in cells[models[1]]]
+            u, pv, rb = mw(a, b)
+            L.append(f"  {metric:<18} {models[0].split('-')[1]} {np.median(a):+8.4f}   "
+                     f"{models[1].split('-')[1]} {np.median(b):+8.4f}   "
+                     f"difference {np.median(b) - np.median(a):+.4f}   "
+                     f"U {u:.1f}  p {pv:.4g}  rb {rb:+.3f}")
+        fits = {m: ols(np.log([r["n_evaluated"] for r in c]),
+                       [r["stated_mean"] for r in c]) for m, c in cells.items()}
+        L.append("  slope on log(count)  " + "  ".join(
+            f"{m.split('-')[1]} {f['slope']:+.4f} (SE {f['se']:.4f})"
+            for m, f in fits.items()))
         L.append("")
     return "\n".join(L)
 
 
-def exploratory(kept: dict[str, list[dict]], fits) -> str:
-    """Not pre-registered. Decided after seeing §5's results, so these carry no
-    error control and are reported as description, not as tests."""
-    from scipy.stats import mannwhitneyu
-    L: list[str] = []
-    p = L.append
-    p("EXPLORATORY — not pre-registered, no error control")
-    p("-" * 78)
-    p("Decided after the §5 results were seen. Reported as description.")
-    p("")
-
-    # 1. Mann-Whitney, control vs gate
-    p("1. Mann-Whitney U (two-sided), control vs gate")
-    if "control" not in kept or "gate" not in kept or not kept["control"] or not kept["gate"]:
-        p("   control and gate not both present; skipped")
-        return "\n".join(L) + "\n"
-    for label, key, fn in (("evaluation count", "n_evaluated", lambda r: r["n_evaluated"]),
-                           ("deflation gap", None,
-                            lambda r: r["stated_mean"] - r["sr_deflated"])):
-        a = [fn(r) for r in kept["control"]]
-        b = [fn(r) for r in kept["gate"]]
-        u, pv = mannwhitneyu(a, b, alternative="two-sided")
-        # rank-biserial correlation as the effect size
-        rb = 1 - 2 * u / (len(a) * len(b))
-        p(f"   {label:<20} U {u:>9.1f}   p {pv:.4g}   rank-biserial {rb:+.3f}")
-        p(f"   {'':<20} medians: control {np.median(a):+.4f}, gate {np.median(b):+.4f}")
-    p("")
-
-    # 2. Regression variants
-    p("2. Primary regression, two variants")
-    p("   (a) raw evaluation count instead of log")
-    for arm in ("control", "gate"):
-        rs = kept.get(arm, [])
-        if len(rs) < 3:
-            continue
-        f = ols([r["n_evaluated"] for r in rs], [r["stated_mean"] for r in rs])
-        p(f"       {arm:<8} slope {f['slope']:+.6f}  SE {f['se']:.6f}  "
-          f"95% CI [{f['lo']:+.6f}, {f['hi']:+.6f}]  p {f['p']:.4f}  R² {f['r2']:.4f}")
-    p("   (b) log count, PASS runs excluded")
-    for arm in ("control", "gate"):
-        rs = [r for r in kept.get(arm, []) if r["status"] != "PASS"]
-        if len(rs) < 3:
-            continue
-        f = ols(np.log([r["n_evaluated"] for r in rs]), [r["stated_mean"] for r in rs])
-        dropped = len(kept[arm]) - len(rs)
-        p(f"       {arm:<8} n {f['n']:>3} ({dropped} PASS dropped)  slope {f['slope']:+.4f}  "
-          f"SE {f['se']:.4f}  95% CI [{f['lo']:+.4f}, {f['hi']:+.4f}]  p {f['p']:.4f}")
-    p("")
-
-    # 3. Gate arm: status usage against stated mean
-    p("3. Gate arm — stated mean against status usage")
-    rs = kept.get("gate", [])
-    if len(rs) < 3:
-        p("   gate arm absent; skipped")
-        return "\n".join(L) + "\n"
-    f = ols([r["n_status_calls"] for r in rs], [r["stated_mean"] for r in rs])
-    p(f"   stated mean on status-call count: slope {f['slope']:+.4f}  SE {f['se']:.4f}  "
-      f"95% CI [{f['lo']:+.4f}, {f['hi']:+.4f}]  p {f['p']:.4f}  R² {f['r2']:.4f}")
-    cleared = [r for r in rs if r["last_cleared"] is True]
-    notcl = [r for r in rs if r["last_cleared"] is False]
-    unk = [r for r in rs if r["last_cleared"] is None]
-    p(f"   last-cleared flag: cleared {len(cleared)}, did not clear {len(notcl)}, "
-      f"no status call {len(unk)}")
-    p("     (flag = whether the run's final status call reported clearing the bar,")
-    p("      parsed from that call's own text, the only record of it)")
-    if cleared and notcl:
-        a = [r["stated_mean"] for r in cleared]
-        b = [r["stated_mean"] for r in notcl]
-        u, pv = mannwhitneyu(a, b, alternative="two-sided")
-        p(f"   stated mean by flag: cleared median {np.median(a):+.4f} (n={len(a)}), "
-          f"not cleared {np.median(b):+.4f} (n={len(b)})")
-        p(f"   Mann-Whitney U {u:.1f}, p {pv:.4g}")
-    else:
-        p("   one side empty; no comparison possible")
-    p("")
-    return "\n".join(L)
+def status_tool_block(kept) -> str:
+    """The gate arm's `status` tool. The pushed arm has no such tool: its
+    standing is appended to every evaluate result, so it logs no status calls."""
+    L = ["GATE ARM — status tool", "-" * 78]
+    rs = pick(kept, arm="gate")
+    calls = [r["n_status_calls"] for r in rs] or [0]
+    L.append(f"  status calls per run   {fmt_mi(calls)}   total {sum(calls)}")
+    L.append(f"  runs never calling it  {sum(1 for c in calls if c == 0)} of {len(rs)}")
+    pos = [q for r in rs for q in r["status_positions"]]
+    if pos:
+        L.append(f"  position in run        {fmt_mi(pos)}   (fraction of tool calls elapsed)")
+        thirds = [sum(1 for q in pos if lo <= q < hi) for lo, hi in
+                  ((0, 1/3), (1/3, 2/3), (2/3, 1.01))]
+        L.append(f"  by third of run        first {thirds[0]}, middle {thirds[1]}, "
+                 f"last {thirds[2]}")
+    pushed_calls = sum(r["n_status_calls"] for r in pick(kept, arm="pushed"))
+    L.append(f"  pushed-arm status calls {pushed_calls} (the arm defines no status tool)")
+    return "\n".join(L) + "\n"
 
 
-def figure(fits, out_dir: Path) -> None:
+def cost_block(runs) -> str:
+    L = ["COST — all runs in the analysis set", "-" * 78]
+    tot = lambda k: sum(r[k] for r in runs)                 # noqa: E731
+    L.append(f"  input tokens           {tot('input_tokens'):>12,}")
+    L.append(f"  output tokens          {tot('output_tokens'):>12,}")
+    L.append(f"  cache read             {tot('cache_read'):>12,}")
+    L.append(f"  cache creation         {tot('cache_creation'):>12,}")
+    L.append(f"  thinking tokens        {tot('thinking_tokens'):>12,}")
+    L.append(f"  total tokens           "
+             f"{tot('input_tokens')+tot('output_tokens')+tot('cache_read')+tot('cache_creation'):>12,}")
+    L.append(f"  cost (USD)             {tot('cost_usd'):>12.4f}")
+    wall = [r["wall_seconds"] for r in runs if r["wall_seconds"]]
+    L.append(f"  wall seconds per run   {fmt_mi(wall)}   total {sum(wall)/3600:.1f} h")
+    return "\n".join(L) + "\n"
+
+
+# ---------------------------------------------------------------- figures
+# Colours are the two-slot categorical set validated against the skill's six
+# checks on a white surface (all PASS: worst all-pairs CVD ΔE 21.9 protan,
+# normal-vision ΔE 31.2, contrast >= 3:1). A five-arm categorical set was tried
+# first and could not clear the CVD floor -- gold against vermillion collapses
+# under protanopia -- so the per-arm figure uses small multiples in one hue
+# instead of five competing hues.
+BLUE, ORANGE = "#0072B2", "#D55E00"
+INK, MUTED = "#1a1a19", "#6b6b68"
+# One colour per model across every figure: colour follows the entity, so a
+# model must not change hue between panels or between figures. Reading the
+# labels back off the first panel instead produced a legend naming only sonnet,
+# because the leftmost arm (budget) has no fable runs to carry a label.
+MODEL_COLOUR = {"claude-fable-5-1": ORANGE, "claude-sonnet-5": BLUE}
+
+
+def _style(ax):
+    ax.grid(alpha=0.25, zorder=0, linewidth=0.8)
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(False)
+    for s in ("left", "bottom"):
+        ax.spines[s].set_color(MUTED)
+    ax.tick_params(colors=MUTED, labelsize=9)
+    for lbl in list(ax.get_xticklabels()) + list(ax.get_yticklabels()):
+        lbl.set_color(INK)
+
+
+def figures(kept, out_dir: Path) -> list[str]:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(7.2, 5.0))
-    colours = {"control": "#1f77b4", "gate": "#d62728"}
-    for arm in ("control", "gate"):
-        f, x, y = fits[arm]
-        ax.scatter(x, y, s=34, alpha=0.75, color=colours[arm], edgecolor="white",
-                   linewidth=0.6, label=f"{arm} (n={f['n']})", zorder=3)
-        xs = np.linspace(x.min(), x.max(), 100)
-        ax.plot(xs, f["intercept"] + f["slope"] * xs, color=colours[arm], linewidth=2,
-                zorder=4, label=f"  slope {f['slope']:+.3f} [{f['lo']:+.3f}, {f['hi']:+.3f}]")
-    ax.set_xlabel("log(evaluation count)")
-    ax.set_ylabel("stated mean predicted OOS Sharpe")
-    ax.set_title("Stated confidence against search performed", loc="left", fontsize=12)
-    ax.grid(alpha=0.25, zorder=0)
-    ax.legend(fontsize=8, framealpha=0.95)
-    fig.tight_layout()
     out_dir.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_dir / "agent_stated_vs_log_count.png", dpi=150)
+    names = []
+
+    # 1. stated mean vs log(count), per arm -- small multiples, s0, one fit per
+    # model. Pooling the two models in a single per-arm fit inverts the slope:
+    # fable evaluates ~45 times and states ~0.11, sonnet evaluates ~79 and
+    # states ~0.45, so one line through both reads that between-model offset as
+    # a within-arm trend (pooled control +0.236, against -0.037 for sonnet and
+    # +2.56 for fable). The cells are what §5 regresses; the figure shows them.
+    rs = graded(pick(kept, config="s0"))
+    arms = sorted({r["arm"] for r in rs})
+    models = sorted({r["model"] for r in rs})
+    fig, axes = plt.subplots(1, len(arms), figsize=(3.1 * len(arms), 4.0),
+                             sharex=True, sharey=True)
+    axes = np.atleast_1d(axes)
+    for ax, arm in zip(axes, arms):
+        bits = []
+        for m in models:
+            cell = [r for r in rs if r["arm"] == arm and r["model"] == m]
+            if not cell:
+                continue
+            x = np.log([r["n_evaluated"] for r in cell])
+            y = np.array([r["stated_mean"] for r in cell], float)
+            ax.scatter(x, y, s=20, alpha=0.7, color=MODEL_COLOUR[m],
+                       edgecolor="white", linewidth=0.5, zorder=3)
+            if len(cell) >= 3:
+                f = ols(x, y)
+                xs = np.linspace(x.min(), x.max(), 100)
+                ax.plot(xs, f["intercept"] + f["slope"] * xs,
+                        color=MODEL_COLOUR[m], linewidth=2, zorder=4)
+                bits.append(f"{m.split('-')[1]} {f['slope']:+.3f} (n={len(cell)})")
+        ax.set_title(f"{arm}\n" + "\n".join(bits), loc="left", fontsize=9, color=INK)
+        ax.set_xlabel("log(evaluation count)", fontsize=9, color=INK)
+        _style(ax)
+    axes[0].set_ylabel("stated mean predicted OOS Sharpe", fontsize=9, color=INK)
+    from matplotlib.lines import Line2D
+    handles = [Line2D([], [], marker="o", linestyle="", markersize=7,
+                      color=MODEL_COLOUR[m], label=m.split("-")[1]) for m in models]
+    fig.legend(handles=handles, fontsize=9, loc="lower center", ncol=len(handles),
+               frameon=False, bbox_to_anchor=(0.5, 0.005))
+    fig.suptitle("Stated confidence against search performed, config s0",
+                 x=0.005, ha="left", fontsize=12, color=INK)
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    fig.savefig(out_dir / "agent_stated_vs_log_count.png", dpi=150,
+                facecolor="white")
     plt.close(fig)
+    names.append("agent_stated_vs_log_count.png")
+
+    # 2. s3 PASS rate against the preflight power at open.
+    s3 = pick(kept, config="s3")
+    if s3:
+        arms3 = sorted({r["arm"] for r in s3})
+        fig, ax = plt.subplots(figsize=(5.2, 3.8))
+        rates, los, his = [], [], []
+        for a in arms3:
+            cell = [r for r in s3 if r["arm"] == a]
+            k = sum(1 for r in cell if r["status"] == "PASS")
+            lo, hi = wilson_ci(k, len(cell))
+            rates.append(k / len(cell)); los.append(lo); his.append(hi)
+        xs = np.arange(len(arms3))
+        err = np.vstack([np.array(rates) - np.array(los),
+                         np.array(his) - np.array(rates)])
+        ax.bar(xs, rates, width=0.5, color=BLUE, zorder=3, linewidth=0)
+        ax.errorbar(xs, rates, yerr=err, fmt="none", ecolor=INK, elinewidth=1.4,
+                    capsize=5, zorder=4)
+        # Headroom first, then the annotations: at the default limits the
+        # reference-line label landed on the gate bar's own value label.
+        pwr = [r["power_at_open"] for r in s3 if r["power_at_open"] is not None]
+        ref = float(np.mean(pwr)) if pwr else None
+        top = max(his + ([ref] if ref is not None else []))
+        ax.set_ylim(0, top + 0.16)
+        if ref is not None:
+            ax.axhline(ref, color=ORANGE, linestyle="--", linewidth=2, zorder=5)
+            ax.text(-0.45, top + 0.10, f"preflight power at open {ref:.3f}",
+                    color=ORANGE, fontsize=9, ha="left", va="center")
+        for x, r, h in zip(xs, rates, his):
+            ax.text(x, h + 0.022, f"{r:.3f}", ha="center", fontsize=9, color=INK)
+        ax.set_xticks(xs); ax.set_xticklabels(arms3)
+        ax.set_ylabel("PASS rate (Wilson 95%)", fontsize=9, color=INK)
+        ax.set_title("s3 PASS rate against preflight power at open",
+                     loc="left", fontsize=12, color=INK)
+        _style(ax)
+        fig.tight_layout()
+        fig.savefig(out_dir / "agent_s3_pass_rate.png", dpi=150, facecolor="white")
+        plt.close(fig)
+        names.append("agent_s3_pass_rate.png")
+
+    # 3. Sonnet vs Fable deflation gap, per arm (batch 3).
+    b3 = [r for r in graded(pick(kept, config="s0")) if r["batch"] == "b3"]
+    models = sorted({r["model"] for r in b3})
+    if len(models) == 2:
+        arms3 = sorted({r["arm"] for r in b3})
+        fig, ax = plt.subplots(figsize=(6.4, 3.9))
+        w = 0.34
+        for i, m in enumerate(models):
+            colour = MODEL_COLOUR[m]
+            meds, err = [], [[], []]
+            for a in arms3:
+                v = [gap(r) for r in b3 if r["arm"] == a and r["model"] == m]
+                md, q1, q3 = med_iqr(v)
+                meds.append(md); err[0].append(md - q1); err[1].append(q3 - md)
+            xs = np.arange(len(arms3)) + (i - 0.5) * (w + 0.02)
+            ax.bar(xs, meds, width=w, color=colour, zorder=3, linewidth=0,
+                   label=f"{m.split('-')[1]} (n={sum(1 for r in b3 if r['model'] == m) // len(arms3)})")
+            ax.errorbar(xs, meds, yerr=np.array(err), fmt="none", ecolor=INK,
+                        elinewidth=1.2, capsize=4, zorder=4)
+            for x, v in zip(xs, meds):
+                ax.text(x, v + 0.008, f"{v:.3f}", ha="center", fontsize=8, color=INK)
+        ax.set_xticks(np.arange(len(arms3))); ax.set_xticklabels(arms3)
+        ax.set_ylabel("deflation gap (median, IQR)", fontsize=9, color=INK)
+        ax.set_title("Deflation gap by model within arm, config s0, batch 3",
+                     loc="left", fontsize=12, color=INK)
+        # Headroom before the legend: at the default limits the box sat on the
+        # tallest bar and hid its value label.
+        ax.set_ylim(0, ax.get_ylim()[1] * 1.30)
+        ax.legend(fontsize=9, frameon=False, loc="upper right", ncol=2)
+        _style(ax)
+        fig.tight_layout()
+        fig.savefig(out_dir / "agent_sonnet_vs_fable_gap.png", dpi=150,
+                    facecolor="white")
+        plt.close(fig)
+        names.append("agent_sonnet_vs_fable_gap.png")
+
+    return names
 
 
 def main() -> None:
@@ -538,19 +847,18 @@ def main() -> None:
     a = ap.parse_args()
 
     dirs = sorted(d for d in Path(a.runs_dir).iterdir()
-                  if d.is_dir() and d.name.startswith(PREFIX))
+                  if d.is_dir() and d.name.startswith(PREFIXES))
     if not dirs:
-        raise SystemExit(f"no runs matching {PREFIX}* under {a.runs_dir}")
-    # A run still in flight has a config and a transcript but no verdict. That is
-    # a normal mid-batch state, not an error: skip it and say how many.
-    complete = [d for d in dirs if (d / "verdict.json").exists()]
-    incomplete = [d.name for d in dirs if d not in complete]
-    runs = [load_run(d) for d in complete]
-    text = report(runs, Path(a.out))
-    if incomplete:
-        note = (f"\nINCOMPLETE: {len(incomplete)} run(s) without verdict.json, skipped\n"
-                + "".join(f"  {n}\n" for n in incomplete))
-        text += note
+        raise SystemExit(f"no runs matching {PREFIXES} under {a.runs_dir}")
+
+    runs, incomplete = [], []
+    for d in dirs:
+        try:
+            runs.append(load_run(d))
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as e:
+            incomplete.append(f"{d.name} ({type(e).__name__})")
+
+    text = report(runs, incomplete, Path(a.out))
     print(text)
     Path(a.out).mkdir(parents=True, exist_ok=True)
     (Path(a.out) / "agent_analysis.txt").write_text(text + "\n")
