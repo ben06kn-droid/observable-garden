@@ -9,6 +9,10 @@ second run of every batch and never mean anything. The fingerprint therefore
 covers only what determines how a run behaves, and excludes runs/, which is
 where the batch's own commits land.
 
+"What determines how a run behaves" is a list of files, not a directory: see
+CODE_PATHS. Analysis and figure code sits outside it, so reading a batch's early
+results with the analyzer cannot stop that batch producing the rest.
+
 The pre-registration contributes the md5 of its sections 1-5 rather than the
 file, because section 6 is the amendment log: it records decisions but changes
 no prompt, tool, or pinned value, so appending an amendment must not invalidate
@@ -24,10 +28,32 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Excludes runs/ and figures/ (outputs), note/ and the top-level .md files
-# (prose). prereg/ is handled separately, by section, just below.
-CODE_PATHS = ("environments", "estimator", "garden", "searchers", "experiments",
-              "pyproject.toml")
+# The paths a run actually reads, and nothing else.
+#
+# This was once the whole of experiments/, which put the analysis scripts inside
+# the guard alongside the harness. Editing analyze_agent.py while batch 4 was
+# running moved the fingerprint and stopped all four workers, for a file no run
+# imports. The entries below are the import closure of e_agent (environments,
+# estimator, garden, searchers, and three files here) plus the two the runner
+# invokes itself: worker_rows and run_arms.sh.
+#
+# Deliberately outside: analyze_agent.py and the other analysis and figure
+# scripts, make_schedule.py, and the generated schedule_*.txt. A schedule does
+# decide which seed and arm a row runs, but it is named on the command line
+# rather than read by the harness, and folding every batch's schedule in would
+# mean that adding the next batch's file stops the batch already running.
+#
+# Still excluded: runs/ and figures/ (outputs), note/ and the top-level .md
+# files (prose). prereg/ is handled separately, by section, just below.
+CODE_PATHS = (
+    "environments", "estimator", "garden", "searchers",
+    "experiments/__init__.py",
+    "experiments/e_agent.py",
+    "experiments/code_state.py",
+    "experiments/worker_rows.py",
+    "experiments/run_arms.sh",
+    "pyproject.toml",
+)
 
 PREREG_FILE = ROOT / "prereg" / "AGENT_PROMPTS.md"
 AMENDMENTS_HEADING = "## 6. Amendments"
