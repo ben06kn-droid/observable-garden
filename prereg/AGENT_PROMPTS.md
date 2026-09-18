@@ -39,6 +39,15 @@ You may call `status` to see how your current best compares with a search-adjust
 with `Evaluations remaining: {R}.` This is a hard cap, not a
 Thresholdout-style holdout.
 
+**pushed** — tools as control. Appended to the prompt:
+
+```
+Each evaluate result also reports how your current best compares with a search-adjusted bar for the class of specifications you can produce.
+```
+
+Every `evaluate` result ends with the standing: critical value, best in-sample
+Sharpe so far, margin, and whether it clears.
+
 ## 3. Pinned values
 
 - Model string: `claude-sonnet-5`. A run whose usage log reports any other
@@ -141,3 +150,9 @@ window; 'session' in Amendment 4 means the window, and rows are assigned
 round-robin within block so each worker also rotates across all cells. No
 prompt, tool, or treatment text changes. Recorded per run: worker index and
 harness fingerprint.
+
+Amendment 7 — 2026-09-17. Batch 3: {control, gate, pushed} × {claude-sonnet-5,
+claude-fable-5-1} on s0, 30 runs per cell, 180 runs, seeds 320–499. Primary
+analysis per §5 within each cell; between-model comparison of deflation gap and
+evaluation count is exploratory. Thinking disabled for both models; model string
+checked per call.
