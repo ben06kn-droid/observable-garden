@@ -176,3 +176,8 @@ gate} on claude-sonnet-5, 40 per arm, 80 runs, seeds 501–580, arms strictly
 alternating. The per-run seed draw is extended from 520 to 581 values; §4's
 construction is unchanged and every earlier draw is byte-identical. §1–§5 are
 unchanged; the fingerprint changes and is recorded per run.
+
+Amendment 10 — 2026-09-18. Batch 4's first four completed rows (seeds 501,
+503, 505 and 507 — the first row of each of four workers, all control) ran
+under fingerprint 3e3af01a; the remainder under 62ea4bfa. The only difference
+is analyze_agent.py, which no run reads. Same cell, pooled.
