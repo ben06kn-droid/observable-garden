@@ -1,0 +1,1 @@
+`SPY_daily.csv`: SPY daily adjusted close (Date, Adj Close; split- and dividend-adjusted), full history from Yahoo Finance (the chart endpoint behind finance.yahoo.com/quote/SPY/history, period max, interval 1d), downloaded 2026-09-18, covering 1993-01-29 to 2026-09-18 (8,467 bars).
