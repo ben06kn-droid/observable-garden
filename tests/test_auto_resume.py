@@ -86,6 +86,18 @@ def sandbox(tmp_path):
     return root
 
 
+def logdir(root) -> Path:
+    """The per-invocation log directory this run created.
+
+    run_arms.sh namespaces worker logs and stop files under
+    runs/_logs/<stamp>-<pid>/, so that two runners overlapping in one window
+    cannot clear or misread each other's. The tests therefore discover the
+    directory rather than naming it; one invocation must leave exactly one."""
+    dirs = [d for d in (root / "runs/_logs").glob("*-*") if d.is_dir()]
+    assert len(dirs) <= 1, f"one invocation should leave one log directory: {dirs}"
+    return dirs[0] if dirs else root / "runs/_logs/__none__"
+
+
 def drive(root, *, fail_kind, fail_times, extra=()):
     env = dict(os.environ, STUB_FAIL_KIND=fail_kind, STUB_FAIL_TIMES=str(fail_times),
                GARDEN_AUTO_RESUME_SLEEP="1")
@@ -93,7 +105,7 @@ def drive(root, *, fail_kind, fail_times, extra=()):
         ["bash", "experiments/run_arms.sh", "--schedule", "experiments/sched.txt",
          "--workers", "1", "--only-worker", "0", *extra],
         cwd=root, env=env, capture_output=True, text=True, timeout=300)
-    log_path = root / "runs/_logs/worker_0.log"
+    log_path = logdir(root) / "worker_0.log"
     log = log_path.read_text() if log_path.exists() else "(no worker log)"
     # Fold the script's own output into what a failure prints. Without it an
     # assertion just says "0 != 1" and says nothing about why the row never ran.
@@ -113,7 +125,7 @@ def test_rate_limit_twice_then_success_completes_the_row_with_retry_2(sandbox):
     assert log.count("rate limited; sleeping") == 2, log
     assert log.count("awake; retrying") == 2, log
     # The stop recorded while retrying must not survive a row that finished.
-    assert not (sandbox / "runs/_logs/stopped_0").exists()
+    assert not (logdir(sandbox) / "stopped_0").exists()
     assert p.returncode == 0, p.stderr
     # Each failed attempt's directory was parked, not left to block the retry.
     parked = list((sandbox / "runs/_aborted").glob("s0_T5000_sonnet_control_300*"))
@@ -124,7 +136,7 @@ def test_exit_4_stops_the_worker_immediately(sandbox):
     """A void run is a defect; retrying it would only reproduce it."""
     p, log = drive(sandbox, fail_kind="void", fail_times=1, extra=("--auto-resume",))
     assert attempts(sandbox) == 1
-    stopped = sandbox / "runs/_logs/stopped_0"
+    stopped = logdir(sandbox) / "stopped_0"
     assert stopped.exists()
     first = stopped.read_text().splitlines()[0]
     assert "exit 4" in first and "retries 0" in first, first
@@ -137,7 +149,7 @@ def test_auth_failure_is_never_retried_despite_sharing_exit_2(sandbox):
     alone cannot decide. error.json's kind is what gates the retry."""
     p, log = drive(sandbox, fail_kind="AuthFailed", fail_times=1, extra=("--auto-resume",))
     assert attempts(sandbox) == 1, log
-    assert (sandbox / "runs/_logs/stopped_0").exists()
+    assert (logdir(sandbox) / "stopped_0").exists()
     assert "sleeping" not in log
     assert p.returncode == 1
 
@@ -145,7 +157,7 @@ def test_auth_failure_is_never_retried_despite_sharing_exit_2(sandbox):
 def test_without_the_flag_a_rate_limit_still_stops_the_worker(sandbox):
     p, log = drive(sandbox, fail_kind="RateLimited", fail_times=1)
     assert attempts(sandbox) == 1
-    assert (sandbox / "runs/_logs/stopped_0").exists()
+    assert (logdir(sandbox) / "stopped_0").exists()
     assert "sleeping" not in log
     assert p.returncode == 1
 
@@ -194,6 +206,6 @@ def test_a_missing_reset_time_yields_empty_not_garbage(sandbox):
 def test_a_clean_row_needs_no_retry_machinery(sandbox):
     p, log = drive(sandbox, fail_kind="", fail_times=0, extra=("--auto-resume",))
     assert attempts(sandbox) == 1
-    assert not (sandbox / "runs/_logs/stopped_0").exists()
+    assert not (logdir(sandbox) / "stopped_0").exists()
     assert (sandbox / "runs/s0_T5000_sonnet_control_300/verdict.json").exists()
     assert p.returncode == 0

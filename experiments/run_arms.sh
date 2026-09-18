@@ -23,8 +23,8 @@
 # so every worker rotates across all eight cells; striding the flat row order
 # would have left workers at N=4 with a single budget dose. Workers never touch
 # git: one commit loop commits completed runs every two minutes under an
-# mkdir-based lock (macOS has no flock). A worker that hits a non-zero exit
-# stops itself, writes runs/_logs/stopped_k, and leaves the others running.
+# mkdir-based lock (macOS has no flock). A worker that hits a non-zero exit stops
+# itself, writes stopped_k under runs/_logs/<stamp>-<pid>/, and leaves the rest.
 #
 # --workers 1, the default, is the original path unchanged: sequential, with a
 # commit after every run, stopping the batch on the first non-zero exit.
@@ -62,7 +62,16 @@ while [ $# -gt 0 ]; do
 done
 
 LOGS=runs/_logs
+# Shared across concurrent runners on purpose: this lock is what serializes their
+# commits into the one git repository, so it must not be namespaced below.
 LOCK="$LOGS/.commit.lock"
+# Per-invocation log directory, set by the parallel branch. Worker logs and stop
+# files live here rather than directly in $LOGS so two runners overlapping in one
+# window cannot read or clear each other's. At the batch 2->3 handoff they could:
+# the second runner's startup wipe cleared the first's stopped_k, so the first
+# reported workers that had in fact given up, and the resume line it printed
+# pointed at rows the other runner had already taken.
+RUNDIR=""
 
 t_for() {  # T for a config name, read rather than hardcoded
   .venv/bin/python -c "from experiments.e_agent import CONFIGS; print(CONFIGS['$1']['T'])"
@@ -189,7 +198,7 @@ MSG
 
 commit_loop() {
   local waited=0
-  while [ ! -f "$LOGS/.stop" ]; do
+  while [ ! -f "$RUNDIR/.stop" ]; do
     sleep 5
     waited=$((waited + 5))
     if [ "$waited" -ge 120 ]; then
@@ -208,7 +217,7 @@ record_stop() {  # $1 worker, $2 line index, $3 label, $4 exit code, $5 retries
   {
     echo "worker $1 stopped at schedule line $2 (seed $SEED, $3): exit $4, retries $retries"
     echo "$0 --schedule $SCHEDULE --start $START --workers $WORKERS --only-worker $1 --allow-code-change"
-  } >"$LOGS/stopped_$1"
+  } >"$RUNDIR/stopped_$1"
   echo "worker $1 STOPPED at schedule line $2 (seed $SEED): exit $4 (retries $retries)" >&2
 }
 
@@ -270,7 +279,7 @@ run_worker() {
   # hid it because the caller's loop variable is also named k; --only-worker,
   # which has no such caller, died on it. tests/test_run_arms_sh.py guards this.
   local k="$1"
-  local log="$LOGS/worker_$k.log"
+  local log="$RUNDIR/worker_$k.log"
   local n idxs CODE RETRIES RESET
   idxs=$(.venv/bin/python -m experiments.worker_rows \
            --schedule "$SCHEDULE" --start "$START" --workers "$WORKERS" --worker "$k") \
@@ -318,7 +327,7 @@ run_worker() {
     if [ "$RETRIES" -gt 0 ]; then
       # The row finished, so the stop recorded while retrying it is stale. Left
       # in place it would make the driver report a worker that completed.
-      rm -f "$LOGS/stopped_$k"
+      rm -f "$RUNDIR/stopped_$k"
       echo "    line $n completed after $RETRIES retr$([ "$RETRIES" -eq 1 ] && echo y || echo ies)" >>"$log"
     fi
   done
@@ -362,10 +371,16 @@ if [ -n "$SCHEDULE" ]; then
 
   # -- parallel ---------------------------------------------------------------
   if [ "$WORKERS" -gt 1 ] || [ -n "$ONLY_WORKER" ]; then
-    mkdir -p "$LOGS"
-    rm -f "$LOGS"/stopped_* "$LOGS/.stop"
-    rm -rf "$LOCK"
-    echo "workers: $WORKERS${ONLY_WORKER:+ (running only worker $ONLY_WORKER)}, logs in $LOGS/"
+    # One directory per invocation, never reused and so never cleared. This used
+    # to be `rm -f "$LOGS"/stopped_* "$LOGS/.stop"; rm -rf "$LOCK"`, which a
+    # second runner starting inside the first's window executed against the
+    # first's files: it stopped that commit loop, dropped its stop records, and
+    # broke the lock it was holding. Nothing needs clearing in a directory that
+    # did not exist a moment ago, and the lock is left to lock_acquire, which
+    # reclaims it only from a dead pid.
+    RUNDIR="$LOGS/$(date +%Y%m%dT%H%M%S)-$$"
+    mkdir -p "$RUNDIR" || { echo "could not create $RUNDIR" >&2; exit 70; }
+    echo "workers: $WORKERS${ONLY_WORKER:+ (running only worker $ONLY_WORKER)}, logs in $RUNDIR/"
 
     commit_loop & CL_PID=$!
     WPIDS=()
@@ -381,11 +396,11 @@ if [ -n "$SCHEDULE" ]; then
     FAILED=0
     for p in "${WPIDS[@]}"; do wait "$p" || FAILED=$((FAILED + 1)); done
 
-    touch "$LOGS/.stop"; wait "$CL_PID"; rm -f "$LOGS/.stop"
+    touch "$RUNDIR/.stop"; wait "$CL_PID"; rm -f "$RUNDIR/.stop"
 
     echo
     STOPPED=0
-    for f in "$LOGS"/stopped_*; do
+    for f in "$RUNDIR"/stopped_*; do
       [ -e "$f" ] || continue
       STOPPED=$((STOPPED + 1))
       sed -n '1p' "$f"
@@ -397,10 +412,10 @@ if [ -n "$SCHEDULE" ]; then
     fi
     if [ "$FAILED" -gt 0 ]; then
       echo "$FAILED worker(s) exited abnormally without recording a stop." >&2
-      echo "Their rows did not run. Logs: $LOGS/worker_*.log" >&2
+      echo "Their rows did not run. Logs: $RUNDIR/worker_*.log" >&2
     fi
     if [ "$STOPPED" -gt 0 ]; then
-      echo "$STOPPED worker(s) stopped; the rest ran to completion. Logs: $LOGS/worker_*.log"
+      echo "$STOPPED worker(s) stopped; the rest ran to completion. Logs: $RUNDIR/worker_*.log"
     fi
     exit 1
   fi

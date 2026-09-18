@@ -44,6 +44,26 @@ def test_unset_safety_is_on():
     assert any(re.match(r"set -[a-z]*u", ln) for ln in LINES), "set -u must stay on"
 
 
+def test_worker_logs_and_stop_files_are_namespaced_per_invocation():
+    """Two runners sharing runs/_logs/ clear and misread each other's state.
+
+    At the batch 2->3 handoff the second runner's startup wipe removed the
+    first's stopped_k and .stop: that stopped the first's commit loop and erased
+    the record of which rows it had abandoned, so the driver reported workers
+    that had in fact given up. Worker logs, stop files and the stop sentinel
+    therefore live under a per-invocation $RUNDIR. The commit lock is the
+    deliberate exception -- it serializes both runners' commits into the one
+    repository, so it must stay shared under $LOGS."""
+    src = SCRIPT.read_text()
+    # Comments are stripped: the startup block quotes the old shared paths to
+    # say why they went away, and a lint that reads prose finds its own example.
+    code = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+    assert re.search(r'^\s*RUNDIR="\$LOGS/', code, re.M), "no per-invocation log directory"
+    for pat in (r'"\$LOGS"/stopped_', r'\$LOGS/stopped_', r'\$LOGS/worker_', r'\$LOGS/\.stop'):
+        assert not re.search(pat, code), f"{pat} must live under $RUNDIR, not $LOGS"
+    assert 'LOCK="$LOGS/.commit.lock"' in code, "the commit lock must stay shared"
+
+
 # --workers 1 leaving runs/_logs/ untouched is checked by running the script,
 # not by linting it: a source-level version of that test was fragile enough that
 # it would have failed on refactors rather than on defects.
