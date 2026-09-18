@@ -98,6 +98,7 @@ prepare_row() {
   case "$MODEL" in
     claude-sonnet-5)  MTAG=sonnet ;;
     claude-fable-5-1) MTAG=fable ;;
+    claude-opus-5)    MTAG=opus ;;
     *) echo "unknown model: $MODEL" >&2; return 64 ;;
   esac
   # No array for the optional flag: bash 3.2 under `set -u` treats an empty

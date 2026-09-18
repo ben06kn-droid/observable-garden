@@ -55,6 +55,49 @@ def test_batch3_seeds_do_not_collide_with_batch_2_or_its_replacement():
     assert not (taken & {r[0] for r in ms.build_batch3()})
 
 
+def test_batch4_is_sonnet_on_its_own_seeds():
+    """Amendment 9's s3 re-run under the recalibrated sigma, seeds 501-580."""
+    rows = ms.build_batch4()
+    ms.verify_batch4(rows)
+    assert len(rows) == 80
+    assert rows[0][0] == 501 and rows[-1][0] == 580
+    assert {m for _, _, _, _, m in rows} == {"claude-sonnet-5"}
+    assert {c for _, c, _, _, _ in rows} == {"s3"}
+
+
+def test_batch5_emits_one_model_and_both_draw_the_same_seeds():
+    """Amendment 12 defers the Fable arm to the allowance reset and runs Opus on
+    the same seeds, so the two are paired by DGP draw. That pairing is the reason
+    the deferral is harmless, so it is pinned here rather than left to the caller.
+    The run id carries the model tag, so the pair never shares a directory."""
+    opus, fable = ms.build_batch5("claude-opus-5"), ms.build_batch5("claude-fable-5-1")
+    ms.verify_batch5(opus, "claude-opus-5")
+    ms.verify_batch5(fable, "claude-fable-5-1")
+    assert {m for _, _, _, _, m in opus} == {"claude-opus-5"}
+    assert {m for _, _, _, _, m in fable} == {"claude-fable-5-1"}
+    assert [r[0] for r in opus] == [r[0] for r in fable] == list(range(581, 661))
+    assert [r[2] for r in opus] == [r[2] for r in fable]      # same arm on each seed
+
+
+def test_batch5_refuses_a_model_it_does_not_own():
+    with pytest.raises(SystemExit, match="batch 5 model must be one of"):
+        ms.build_batch5("claude-sonnet-5")
+
+
+def test_batch5_seeds_do_not_collide_with_any_earlier_batch():
+    taken = ({r[0] for r in ms.build()} | {r[0] for r in ms.replacement_rows()}
+             | {r[0] for r in ms.build_batch3()} | {r[0] for r in ms.build_batch4()})
+    assert not (taken & {r[0] for r in ms.build_batch5()})
+
+
+def test_batch5_seeds_are_drawable():
+    """Amendment 11 extended the draw to 661 values so seed 660 exists at all."""
+    from experiments.e_agent import dgp_seeds
+    seeds = dgp_seeds()
+    assert len(seeds) > 660
+    assert len(set(seeds.tolist())) == len(seeds)
+
+
 def _reps(**over):
     spec = {"void_seed": 89, "seed": 500, "config": "s0", "arm": "budget",
             "budget": 20, "why": "test"}

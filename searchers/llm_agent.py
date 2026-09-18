@@ -67,8 +67,11 @@ ARMS = ("control", "count", "gate", "budget", "pushed")
 LIVE_ARMS = ARMS
 
 # Batch 3's model dimension. Thinking is pinned disabled for both (§3).
-MODELS = ("claude-sonnet-5", "claude-fable-5-1")
-MODEL_TAGS = {"claude-sonnet-5": "sonnet", "claude-fable-5-1": "fable"}
+# claude-opus-5 joins for batch 5 (amendment 12): the seat's Fable allowance was
+# spent by batch 3, so the Fable arm is deferred and Opus runs the same seeds.
+MODELS = ("claude-sonnet-5", "claude-fable-5-1", "claude-opus-5")
+MODEL_TAGS = {"claude-sonnet-5": "sonnet", "claude-fable-5-1": "fable",
+              "claude-opus-5": "opus"}
 SERVER_NAME = "garden"
 USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens",
               "cache_read_input_tokens", "output_tokens")

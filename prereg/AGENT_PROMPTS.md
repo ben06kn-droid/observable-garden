@@ -195,3 +195,10 @@ rather than written by hand. Comparison with batch 4's Sonnet cells at the same
 evaluation count, and the haircut — the coefficient on submitted in-sample
 Sharpe in the joint regression of stated mean on that and log(evaluation
 count). §1–§5 are unchanged; the fingerprint changes and is recorded per run.
+
+Amendment 12 — 2026-09-18. Batch 5 as specified in Amendment 11 was rejected at
+its first row on every worker: the seat's Fable allowance was exhausted by batch 3
+and resets 2026-09-30. Batch 5 runs instead on claude-opus-5, same design, same
+seeds 581–660, thinking disabled; the Fable version is deferred to the reset date
+unchanged, on the same seeds, so the two are paired by DGP draw. Four parked
+directories in runs/_aborted/ hold no model output.
