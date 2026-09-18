@@ -27,8 +27,16 @@
 # stops itself, writes runs/_logs/stopped_k, and leaves the others running.
 #
 # --workers 1, the default, is the original path unchanged: sequential, with a
-# commit after every run, stopping the batch on the first non-zero exit. A seat
-# that is rate limited stays rate limited, and a retry loop would burn the window.
+# commit after every run, stopping the batch on the first non-zero exit.
+#
+# --auto-resume changes what a rate limit means to a worker. Without it a rate
+# limit stops the worker, because retrying immediately only burns the window.
+# With it the worker treats the limit as a wait: it parks the unfinished run in
+# runs/_aborted/, records the stop with a retry count, sleeps until the reset
+# time the error reports (15 minutes if it reports none), and runs the same row
+# again. Rate limits retry without bound; nothing else retries at all. The
+# commit loop keeps committing throughout, and the driver still exits only once
+# every worker has run out of rows or stopped on something other than a limit.
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
@@ -38,6 +46,7 @@ START=""
 ALLOW_CODE_CHANGE=0
 WORKERS=1
 ONLY_WORKER=""
+AUTO_RESUME=0
 POSITIONAL=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -46,6 +55,7 @@ while [ $# -gt 0 ]; do
     --workers)           WORKERS="${2:-}";     shift 2 ;;
     --only-worker)       ONLY_WORKER="${2:-}"; shift 2 ;;
     --allow-code-change) ALLOW_CODE_CHANGE=1;  shift ;;
+    --auto-resume)       AUTO_RESUME=1;        shift ;;
     -h|--help)           sed -n '2,31p' "$0";  exit 0 ;;
     *)                   POSITIONAL+=("$1");   shift ;;
   esac
@@ -193,12 +203,64 @@ commit_loop() {
 }
 
 # -- a worker ----------------------------------------------------------------
-record_stop() {  # $1 worker, $2 line index, $3 label, $4 exit code
+record_stop() {  # $1 worker, $2 line index, $3 label, $4 exit code, $5 retries
+  local retries="${5:-0}"
   {
-    echo "worker $1 stopped at schedule line $2 (seed $SEED, $3): exit $4"
+    echo "worker $1 stopped at schedule line $2 (seed $SEED, $3): exit $4, retries $retries"
     echo "$0 --schedule $SCHEDULE --start $START --workers $WORKERS --only-worker $1 --allow-code-change"
   } >"$LOGS/stopped_$1"
-  echo "worker $1 STOPPED at schedule line $2 (seed $SEED): exit $4" >&2
+  echo "worker $1 STOPPED at schedule line $2 (seed $SEED): exit $4 (retries $retries)" >&2
+}
+
+# -- auto-resume -------------------------------------------------------------
+# A rate limit is a wait, not a defect: the seat returns at a known time and the
+# row is still runnable. Everything else -- auth, a harness error, a void run
+# (exit 4) -- is a defect that retrying would only reproduce.
+#
+# e_agent returns 2 for BOTH RateLimited and AuthFailed, so the exit code alone
+# cannot separate them. The run's error.json names the kind, and that is what
+# decides: auto-resume never retries an auth failure.
+error_kind_for() {  # $1 run_id -> the exception class recorded, or empty
+  [ -f "runs/$1/error.json" ] || return 0
+  .venv/bin/python -c "
+import json
+try: print(json.load(open('runs/$1/error.json')).get('kind',''))
+except Exception: pass" 2>/dev/null
+}
+
+reset_epoch_for() {  # $1 run_id -> unix time the limit resets, or empty
+  [ -f "runs/$1/error.json" ] || return 0
+  .venv/bin/python -c "
+import json, re
+try: d = str(json.load(open('runs/$1/error.json')).get('detail',''))
+except Exception: raise SystemExit
+m = re.search(r'resets_at.{0,4}(\d{9,})', d)
+print(m.group(1) if m else '')" 2>/dev/null
+}
+
+abort_run_dir() {  # $1 run_id -- park a run that produced no verdict
+  [ -d "runs/$1" ] || return 0
+  [ -f "runs/$1/verdict.json" ] && return 0
+  mkdir -p runs/_aborted
+  local dest="runs/_aborted/$1"
+  [ -e "$dest" ] && dest="runs/_aborted/$1.$(date +%s)"
+  mv "runs/$1" "$dest" && echo "    parked runs/$1 -> $dest"
+}
+
+auto_resume_sleep() {  # $1 reset epoch, possibly empty -- takes it as an
+  local reset="${1:-}" now secs   # argument because the caller parks the run
+  now=$(date +%s)                 # directory, taking error.json with it
+  if [ -n "$reset" ] && [ "$reset" -gt "$now" ]; then
+    secs=$((reset - now + 5))
+  else
+    secs=900
+  fi
+  # Test-only: exercising the retry path must not take fifteen minutes. Never
+  # set this in a real batch.
+  [ -n "${GARDEN_AUTO_RESUME_SLEEP:-}" ] && secs="$GARDEN_AUTO_RESUME_SLEEP"
+  echo "    $(date '+%H:%M:%S') rate limited; sleeping ${secs}s, waking $(date -r $(($(date +%s) + secs)) '+%H:%M:%S')"
+  sleep "$secs"
+  echo "    $(date '+%H:%M:%S') awake; retrying the same row"
 }
 
 run_worker() {
@@ -209,7 +271,7 @@ run_worker() {
   # which has no such caller, died on it. tests/test_run_arms_sh.py guards this.
   local k="$1"
   local log="$LOGS/worker_$k.log"
-  local n idxs CODE
+  local n idxs CODE RETRIES RESET
   idxs=$(.venv/bin/python -m experiments.worker_rows \
            --schedule "$SCHEDULE" --start "$START" --workers "$WORKERS" --worker "$k") \
     || { echo "worker $k: could not compute its rows" >&2; return 1; }
@@ -235,11 +297,29 @@ run_worker() {
 
     echo >>"$log"
     echo "=== [worker $k, line $n] seed $SEED  $LABEL  run_id=$RUN_ID ===" >>"$log"
-    run_row "$k" >>"$log" 2>&1
-    CODE=$?
-    if [ "$CODE" -ne 0 ]; then
-      record_stop "$k" "$n" "$LABEL" "$CODE"
+    RETRIES=0
+    while : ; do
+      run_row "$k" >>"$log" 2>&1
+      CODE=$?
+      [ "$CODE" -eq 0 ] && break
+      if [ "$AUTO_RESUME" -eq 1 ] && [ "$CODE" -eq 2 ] \
+         && [ "$(error_kind_for "$RUN_ID")" = "RateLimited" ]; then
+        # Read the reset time before parking the directory: the park takes
+        # error.json with it.
+        RESET=$(reset_epoch_for "$RUN_ID")
+        RETRIES=$((RETRIES + 1))
+        record_stop "$k" "$n" "$LABEL (rate limited, retrying)" "$CODE" "$RETRIES"
+        { abort_run_dir "$RUN_ID"; auto_resume_sleep "$RESET"; } >>"$log" 2>&1
+        continue
+      fi
+      record_stop "$k" "$n" "$LABEL" "$CODE" "$RETRIES"
       return 0
+    done
+    if [ "$RETRIES" -gt 0 ]; then
+      # The row finished, so the stop recorded while retrying it is stale. Left
+      # in place it would make the driver report a worker that completed.
+      rm -f "$LOGS/stopped_$k"
+      echo "    line $n completed after $RETRIES retr$([ "$RETRIES" -eq 1 ] && echo y || echo ies)" >>"$log"
     fi
   done
   echo "worker $k: done" >>"$log"

@@ -33,6 +33,28 @@ def test_the_void_row_is_kept_so_line_indices_do_not_shift():
     assert seeds[11] == 91                            # the resume line after seed 90
 
 
+def test_batch3_crosses_the_arms_with_the_models():
+    """Amendment 7: {control, gate, pushed} × {sonnet, fable}, 30 per cell,
+    180 rows, seeds 320-499, opening cycle covering every cell."""
+    rows = ms.build_batch3()
+    ms.verify_batch3(rows)              # raises on any quota, count or seed defect
+    assert len(rows) == 180
+    assert rows[0][0] == 320 and rows[-1][0] == 499
+    assert len({(a, m) for _, _, a, _, m in rows[:len(ms.B3_CELLS)]}) == 6
+
+
+def test_batch3_includes_the_pushed_arm_on_both_models():
+    cells = {(a, m) for _, _, a, _, m in ms.build_batch3()}
+    assert ("pushed", "claude-sonnet-5") in cells
+    assert ("pushed", "claude-fable-5-1") in cells
+
+
+def test_batch3_seeds_do_not_collide_with_batch_2_or_its_replacement():
+    """Seed 500 replaced void seed 89 precisely because 320-499 were spoken for."""
+    taken = {r[0] for r in ms.build()} | {r[0] for r in ms.replacement_rows()}
+    assert not (taken & {r[0] for r in ms.build_batch3()})
+
+
 def _reps(**over):
     spec = {"void_seed": 89, "seed": 500, "config": "s0", "arm": "budget",
             "budget": 20, "why": "test"}
