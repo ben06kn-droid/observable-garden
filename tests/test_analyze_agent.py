@@ -10,7 +10,7 @@ from experiments.analyze_agent import classify_exclusion
 
 def run(**over) -> dict:
     r = {"model": "claude-sonnet-5", "models_seen": ["claude-sonnet-5"],
-         "non_mcp_tools": [], "rate_limit_rejected": False, "submitted": True}
+         "non_mcp_tools": [], "rate_limit_rejected": False, "has_submission": True}
     r.update(over)
     return r
 
@@ -54,5 +54,5 @@ def test_non_mcp_tool_excludes():
 
 def test_rate_limit_excludes_only_when_it_preceded_a_submit():
     assert classify_exclusion(
-        run(rate_limit_rejected=True, submitted=False)) == "rate_limit_before_submit"
-    assert classify_exclusion(run(rate_limit_rejected=True, submitted=True)) is None
+        run(rate_limit_rejected=True, has_submission=False)) == "rate_limit_before_submit"
+    assert classify_exclusion(run(rate_limit_rejected=True, has_submission=True)) is None

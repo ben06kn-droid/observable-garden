@@ -162,7 +162,18 @@ def load_run(d: Path) -> dict:
         "status_positions": [frac(i) for i, _ in statuses],
         "last_cleared": (None if not statuses
                          else "does not clear" not in (statuses[-1][1].get("text") or "")),
-        "submitted": bool(submits),
+        "has_submission": bool(submits),
+        # The submitted specification itself. verdict.json carries the id
+        # ("53:f12+f9+f30"); the submit record carries the structured form, which
+        # rebuilds the weight vector without parsing a name. Both are kept because
+        # re-grading a run offline -- net of costs, or under a shifted OOS panel --
+        # needs the weights, and weights plus the run's DGP seed regenerate its
+        # position path exactly. tests/test_oos_regrade.py pins that.
+        "submitted_spec": verdict["submitted"] if verdict else None,
+        "submitted_features": ((submits[-1].get("args") or {}).get("features")
+                               if submits else None),
+        "submitted_signs": ((submits[-1].get("args") or {}).get("signs")
+                            if submits else None),
         # exclusion inputs
         "usage_missing": usage_missing,
         "models_seen": usage.get("models_seen") or [],
@@ -199,7 +210,7 @@ def classify_exclusion(r: dict) -> str | None:
         return "model_string"
     if r["non_mcp_tools"]:
         return "non_mcp_tool"
-    if r["rate_limit_rejected"] and not r["submitted"]:
+    if r["rate_limit_rejected"] and not r["has_submission"]:
         return "rate_limit_before_submit"
     return None
 
