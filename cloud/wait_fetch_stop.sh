@@ -2,7 +2,10 @@
 # Wait for a detached run to finish, fetch its results, then stop the instance.
 # Run this from the repository root ON YOUR MAC, not on the instance.
 #
-#   cloud/wait_fetch_stop.sh KEY.pem 18.217.175.127 armB
+#   cloud/wait_fetch_stop.sh ~/path/to/key.pem 18.217.175.127 armB
+#
+# Quote the key path if it contains spaces; it is passed to rsync's -e, which
+# word-splits, so it is re-quoted with printf %q below rather than interpolated.
 #
 # NAME is the tmux session name given to cloud/run.sh. That script appends
 # "[exit N]" to logs/NAME.log when the command returns, which is the completion
@@ -44,9 +47,11 @@ while true; do
 done
 
 echo "fetching figures/ and logs/"
-rsync -avz -e "ssh -i $KEY" "ubuntu@$IP:observable-garden/figures/" figures/ || {
+# %q so a key path containing spaces survives rsync splitting -e on whitespace.
+printf -v RSH 'ssh -i %q -o StrictHostKeyChecking=accept-new' "$KEY"
+rsync -avz -e "$RSH" "ubuntu@$IP:observable-garden/figures/" figures/ || {
   echo "rsync failed; NOT stopping the instance" >&2; exit 1; }
-rsync -avz -e "ssh -i $KEY" "ubuntu@$IP:observable-garden/logs/" logs/ || true
+rsync -avz -e "$RSH" "ubuntu@$IP:observable-garden/logs/" logs/ || true
 
 code="${line#*[exit }"; code="${code%]*}"
 if [ "$code" != "0" ]; then
