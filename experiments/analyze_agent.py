@@ -1124,19 +1124,35 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-dir", default="runs")
     ap.add_argument("--out", default="figures")
+    ap.add_argument("--from-dirs", action="store_true",
+                    help="walk the raw run directories instead of reading the "
+                         "per-batch manifest; needs runs/ unpacked from raw.tar.gz")
     a = ap.parse_args()
 
-    dirs = sorted(d for d in Path(a.runs_dir).iterdir()
-                  if d.is_dir() and d.name.startswith(PREFIXES))
-    if not dirs:
-        raise SystemExit(f"no runs matching {PREFIXES} under {a.runs_dir}")
-
     runs, incomplete = [], []
-    for d in dirs:
-        try:
-            runs.append(load_run(d))
-        except (OSError, ValueError, KeyError, json.JSONDecodeError) as e:
-            incomplete.append(f"{d.name} ({type(e).__name__})")
+    if a.from_dirs:
+        dirs = sorted(d for d in Path(a.runs_dir).iterdir()
+                      if d.is_dir() and d.name.startswith(PREFIXES))
+        if not dirs:
+            raise SystemExit(f"no runs matching {PREFIXES} under {a.runs_dir}")
+        for d in dirs:
+            try:
+                runs.append(load_run(d))
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as e:
+                incomplete.append(f"{d.name} ({type(e).__name__})")
+    else:
+        # The default source is the manifest: the run directories are archived,
+        # not unpacked. Imported here because build_manifest imports this module.
+        from experiments.build_manifest import BATCHES, read_rows
+        for name, _, _ in BATCHES:
+            p = Path(a.runs_dir) / name / "runs.csv"
+            if p.exists():
+                runs.extend(read_rows(p))
+        if not runs:
+            raise SystemExit(f"no runs.csv under {a.runs_dir}/<batch>/; "
+                             f"run build_manifest, or pass --from-dirs")
+        # Directory-name order, which is what walking runs/ produced.
+        runs.sort(key=lambda r: r["run_id"])
 
     text = report(runs, incomplete, Path(a.out))
     print(text)
