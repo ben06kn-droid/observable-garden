@@ -16,7 +16,7 @@ from garden.examples import EXAMPLES, load as load_example, path as example_path
 from garden.explain import TOPICS, explain
 from garden.preflight import preflight
 from garden.report import render_preflight, render_verdict
-from garden.transcript import MENU_KINDS, TranscriptError, load_csv, load_npz
+from garden.transcript import MENU_KINDS, TranscriptError, load_benchmark, load_csv, load_npz
 
 EXIT_USAGE = 64  # sysexits EX_USAGE, clear of every verdict code
 
@@ -40,6 +40,10 @@ def _parser() -> argparse.ArgumentParser:
     a.add_argument("--submitted", help="spec id that was chosen (required for .csv, overrides .npz)")
     a.add_argument("--menu-kind", choices=MENU_KINDS, help="override menu_kind (.csv default: unknown)")
     a.add_argument("--periods-per-year", type=int, help="override periods per year (.csv default: 252)")
+    a.add_argument("--benchmark", metavar="CSV",
+                   help="benchmark return series (first column labels periods, one return column), "
+                        "subtracted from every specification before demeaning. The null becomes zero "
+                        "excess return over it instead of zero return")
     a.add_argument("--alpha", type=float, default=0.05)
     a.add_argument("--reference-sharpe", type=float, default=1.0,
                    help="true Sharpe to compute power against (default 1.0)")
@@ -56,6 +60,9 @@ def _parser() -> argparse.ArgumentParser:
                    help="plausible true Sharpe; no default, since it depends on asset class and frequency")
     f.add_argument("--rho", type=float, help="expected correlation between specifications, reported alongside "
                                              "the independent-trials worst case")
+    f.add_argument("--benchmark", metavar="CSV",
+                   help="benchmark return series you intend to measure against; its length is checked "
+                        "against --periods and the null is reported as zero excess return over it")
     f.add_argument("--periods-per-year", type=int, default=252)
     f.add_argument("--alpha", type=float, default=0.05)
     f.add_argument("--power-floor", type=float, default=0.20)
@@ -92,13 +99,23 @@ def main(argv: list[str] | None = None) -> int:
         return exc.code if isinstance(exc.code, int) else EXIT_USAGE
     try:
         if args.command == "audit":
-            verdict = audit(_load(args), alpha=args.alpha, B=args.B, reference_sharpe=args.reference_sharpe,
-                            power_floor=args.power_floor, block_length=args.block_length, seed=args.seed)
+            transcript = _load(args)
+            bench = bench_name = None
+            if args.benchmark:
+                bench = load_benchmark(args.benchmark, transcript.n_periods)
+                bench_name = Path(args.benchmark).name
+            verdict = audit(transcript, alpha=args.alpha, B=args.B, reference_sharpe=args.reference_sharpe,
+                            power_floor=args.power_floor, block_length=args.block_length, seed=args.seed,
+                            benchmark=bench, benchmark_name=bench_name)
             print(json.dumps(verdict.to_dict(), indent=2) if args.json else render_verdict(verdict))
             return verdict.exit_code
         if args.command == "preflight":
+            bench_name = None
+            if args.benchmark:
+                load_benchmark(args.benchmark, args.periods)      # validates length against --periods
+                bench_name = Path(args.benchmark).name
             result = preflight(args.specs, args.periods, args.reference_sharpe, args.periods_per_year,
-                               args.alpha, args.power_floor, args.rho)
+                               args.alpha, args.power_floor, args.rho, bench_name)
             print(json.dumps(result.to_dict(), indent=2) if args.json else render_preflight(result))
             return 0
         if args.command == "explain":

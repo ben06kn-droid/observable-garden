@@ -132,6 +132,19 @@ every logged column, resamples one time index across all of them jointly so
 their correlation is preserved, and reads off the distribution of the best
 result such a search would produce with nothing to find.
 
+**What the null says.** By default it is *zero return*: the verdict asks
+whether the result beats not trading, once the search is priced in. It does
+not ask whether the result beats owning the asset. On a long-only grid over a
+rising market that distinction decides the verdict — a rule can clear a
+breadth-corrected bar on the benchmark's own return, with no timing edge at
+all. Pass `--benchmark series.csv` to `garden audit` and the series is
+subtracted from every logged column before demeaning, making the null *zero
+excess return over a declared benchmark*. `garden preflight --benchmark` sizes
+a search against the same question and checks the series length against
+`--periods`. A benchmark cannot be combined with a class enumerated from
+`base_returns`, where a specification is a weighted sum of features: the gate
+refuses rather than deduct the benchmark once per feature.
+
 The correction is valid whenever the candidate list was fixed before any
 results were seen. When it was not, the log alone cannot say what the search
 *would* have tried on other data — hence UNDECIDABLE, and the two repairs

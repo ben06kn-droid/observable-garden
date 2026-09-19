@@ -297,6 +297,32 @@ def load_csv(path, submitted: str, menu_kind: str = "unknown", periods_per_year:
     return Transcript(R, df.columns.astype(str).to_numpy(), submitted, menu_kind, periods_per_year)
 
 
+def load_benchmark(path, n_periods: int | None = None) -> np.ndarray:
+    """A benchmark return series: first column labels periods, one column of returns.
+
+    One value per period, on the same index as the transcript. It is subtracted from
+    every specification's stream before the bootstrap demeans anything, so the null
+    becomes zero excess return over this series rather than zero return."""
+    df = pd.read_csv(path, index_col=0)
+    if df.shape[1] != 1:
+        raise TranscriptError(
+            f"{path}: a benchmark needs exactly one return column after the period labels, "
+            f"got {df.shape[1]}"
+        )
+    try:
+        b = df.iloc[:, 0].apply(pd.to_numeric, errors="raise").to_numpy(dtype=float)
+    except (ValueError, TypeError) as exc:
+        raise TranscriptError(f"{path}: non-numeric benchmark values ({exc})") from exc
+    if not np.isfinite(b).all():
+        raise TranscriptError(f"{path}: benchmark contains NaN or inf")
+    if n_periods is not None and b.shape[0] != n_periods:
+        raise TranscriptError(
+            f"{path}: benchmark has {b.shape[0]:,} periods but the transcript has {n_periods:,}. "
+            "Both must be on the same time index; the bootstrap resamples one shared index."
+        )
+    return b
+
+
 def from_sandbox(sandbox: Sandbox, menu_kind: str = "unknown", spec_class: str | None = None) -> Transcript:
     """A version-2 transcript from a sandbox log. base_returns holds all of the sandbox's features. If the
     sandbox enforced a class during the search, that class is recorded with source "sandbox"; otherwise a

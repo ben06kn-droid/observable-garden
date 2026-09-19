@@ -85,6 +85,7 @@ class Verdict:
     power_at_reference: float              # single pre-specified strategy, not search power (SCOPE.md §13)
     power_floor: float
     menu_kind: str
+    benchmark: str | None                  # declared benchmark subtracted before demeaning; None = absolute
     spec_class: str                        # declared class, "none" if not declared
     spec_class_source: str | None          # "sandbox" (enforced during the search) or "attested"
     class_size: int | None                 # number of specifications in the declared class
@@ -147,6 +148,8 @@ def audit(
     support_min: int = SUPPORT_MIN,
     q_min: float = Q_MIN,
     tail_share_max: float = TAIL_SHARE_MAX,
+    benchmark: np.ndarray | None = None,
+    benchmark_name: str | None = None,
 ) -> Verdict:
     """Verdict on whether the submitted specification survives correction for the search that produced it.
 
@@ -164,6 +167,19 @@ def audit(
     """
     R = transcript.returns
     T, N = R.shape
+    class_returns = transcript.class_returns
+    if benchmark is not None:
+        b = np.asarray(benchmark, dtype=float).reshape(-1)
+        if b.shape != (T,):
+            raise ValueError(f"benchmark must hold one return per period (T={T:,}), got shape {b.shape}")
+        if not np.isfinite(b).all():
+            raise ValueError("benchmark contains NaN or inf")
+        # Subtracted before anything reads R -- the Sharpe below, and the bootstrap,
+        # which imposes the null by demeaning each column. Every statistic downstream
+        # is then about excess return over the benchmark rather than over zero.
+        R = R - b[:, None]
+        if class_returns is not None:
+            class_returns = class_returns - b[:, None]
     ann = math.sqrt(transcript.periods_per_year)
     j = transcript.submitted_index
     trial_sr = sharpe(R, axis=0, annualization=ann)
@@ -173,8 +189,20 @@ def audit(
     declared = transcript.declared_class
     use_full_class = not oblivious and rerun is None and declared is not None
     explicit_class = isinstance(declared, ExplicitClass)
+    if benchmark is not None and use_full_class and not explicit_class:
+        # base_returns holds features, not specification returns. A specification is a
+        # weighted sum of them, so subtracting the benchmark from each column would
+        # deduct it once per feature instead of once per specification. Refuse rather
+        # than silently correct by the wrong multiple.
+        raise ValueError(
+            "a benchmark cannot be applied to a class enumerated from base_returns: a "
+            "specification is a weighted sum of features, so subtracting the benchmark from "
+            "each feature would deduct it once per feature rather than once per "
+            "specification. Supply the class as explicit return streams (class_returns), or "
+            "audit without a benchmark."
+        )
     if use_full_class and block_length is None:
-        base = transcript.class_returns if explicit_class else transcript.base_returns
+        base = class_returns if explicit_class else transcript.base_returns
         block_length = select_block_length(base - base.mean(axis=0))
     boot = null_max_bootstrap(R, B=B, block_length=block_length, annualization=ann, seed=seed, track_index=j,
                               support_min=support_min, q_min=q_min)
@@ -182,7 +210,7 @@ def audit(
     if declared is None:
         class_size = None
     elif explicit_class:
-        class_size = int(transcript.class_returns.shape[1])
+        class_size = int(class_returns.shape[1])
     else:
         class_size = declared.size(transcript.base_returns.shape[1])
     floor_binds, cap_binds = boot.floor_binds, boot.cap_binds
@@ -193,7 +221,7 @@ def audit(
     elif use_full_class and explicit_class:
         # The class is supplied as return streams, so the Reality Check runs on it directly: no weights to
         # reconstruct and nothing to enumerate (prereg/E20.md).
-        class_boot = null_max_bootstrap(transcript.class_returns, B=B, block_length=boot.block_length,
+        class_boot = null_max_bootstrap(class_returns, B=B, block_length=boot.block_length,
                                         annualization=ann, seed=seed)
         null = class_boot.M_b
         floor_binds, cap_binds = floor_binds + class_boot.floor_binds, cap_binds + class_boot.cap_binds
@@ -342,6 +370,11 @@ def audit(
                    f"is reported for information and not used in the correction: the bootstrap already "
                    f"resamples trials jointly, and shrinking N as well would count their correlation twice "
                    f"(SCOPE.md §10).")
+    if benchmark_name is not None:
+        reasons.append(f"Null: zero excess return over {benchmark_name}. That series was subtracted "
+                       f"from every column before the bootstrap demeaned it, so this verdict is about "
+                       f"beating the benchmark, not about beating zero. Without it the same search can "
+                       f"clear the bar on the benchmark's own return alone.")
     reasons.append(SCOPE_NOTE)
 
     return Verdict(
@@ -352,6 +385,7 @@ def audit(
         submitted=transcript.submitted, submitted_rank=rank, method=method, B=len(null),
         block_length=int(boot.block_length), effective_breadth=breadth, reference_sharpe=reference_sharpe,
         power_at_reference=power, power_floor=power_floor, menu_kind=transcript.menu_kind,
+        benchmark=benchmark_name,
         spec_class=transcript.spec_class, spec_class_source=transcript.spec_class_source, class_size=class_size,
         degenerate_share=share, degenerate_replicates=degenerate_k, tail_replicates=tail_n,
         degenerate_replicates_total=degenerate_total,

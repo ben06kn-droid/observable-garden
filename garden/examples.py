@@ -7,7 +7,7 @@ transcripts in garden/data (data seed 0), so the quickstart is deterministic;
 Rules are long-short or long-only crossovers with no band filter. Band
 filters on close windows produce rules that are almost never in the market,
 whose bootstrap Sharpes are heavy-tailed enough to dominate the null
-maximum (OPEN_QUESTIONS.md); that pathology would drive the verdicts instead
+maximum (SCOPE.md §11); that pathology would drive the verdicts instead
 of search breadth."""
 from __future__ import annotations
 

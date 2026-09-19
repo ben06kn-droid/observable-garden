@@ -28,6 +28,7 @@ class PreflightResult:
     reference_sharpe: float
     alpha: float
     power_floor: float
+    benchmark: str | None          # declared benchmark; the null is zero excess over it
     scenarios: list[Scenario]
     reasons: list[str]
 
@@ -50,7 +51,8 @@ def _scenario(label, rho, n_specs, n_periods, ppy, reference_sharpe, alpha) -> S
 
 
 def preflight(n_specs: int, n_periods: int, reference_sharpe: float, periods_per_year: int = 252,
-              alpha: float = 0.05, power_floor: float = 0.20, rho: float | None = None) -> PreflightResult:
+              alpha: float = 0.05, power_floor: float = 0.20, rho: float | None = None,
+              benchmark: str | None = None) -> PreflightResult:
     if n_specs < 1 or n_periods < 3 or periods_per_year < 1:
         raise ValueError("need n_specs >= 1, n_periods >= 3, periods_per_year >= 1")
     if not 0 < alpha < 1:
@@ -81,7 +83,12 @@ def preflight(n_specs: int, n_periods: int, reference_sharpe: float, periods_per
     else:
         floor_line = f"Above the {pct(power_floor)} floor."
 
+    null_line = (f"Null: zero excess return over {benchmark}. Size the search against the edge you "
+                 f"expect over that benchmark, not over zero." if benchmark else
+                 "Null: zero return. A strategy that merely earns what a benchmark earns can clear "
+                 "this bar; audit with --benchmark to ask the market-relative question instead.")
     reasons = [
+        null_line,
         f"{power_line} {floor_line}",
         "These are single-strategy figures, not search power. A search broad enough to reach strategies carrying "
         "an edge can detect more often; one too narrow to reach them detects less often (SCOPE.md §13).",
@@ -94,5 +101,5 @@ def preflight(n_specs: int, n_periods: int, reference_sharpe: float, periods_per
     return PreflightResult(
         n_specs=n_specs, n_periods=n_periods, periods_per_year=periods_per_year,
         reference_sharpe=reference_sharpe, alpha=alpha, power_floor=power_floor,
-        scenarios=scenarios, reasons=reasons,
+        benchmark=benchmark, scenarios=scenarios, reasons=reasons,
     )

@@ -55,6 +55,7 @@ def render_verdict(v: Verdict) -> str:
         "",
         _row("Specifications evaluated", f"{v.n_trials:,}"),
         _row("Periods", f"{v.n_periods:,} ({v.periods_per_year}/yr)"),
+        *([_row("Benchmark (null: zero excess over)", v.benchmark)] if v.benchmark else []),
         f"  Submitted: {v.submitted} (rank {v.submitted_rank:,} of {v.n_trials:,} by in-sample Sharpe)",
         *([f"  Declared class: {v.spec_class} ({v.class_size:,} specifications, source: {v.spec_class_source})"]
           if v.class_size is not None else []),
@@ -91,6 +92,7 @@ def render_preflight(r: PreflightResult) -> str:
         f"α={r.alpha:g}",
         "",
         cols("Reference Sharpe (your choice)", [f"{r.reference_sharpe:.2f}"]),
+        *([cols("Benchmark (null: zero excess over)", [r.benchmark])] if r.benchmark else []),
         "",
         cols("", labels),
         cols("Critical value (null max at 1−α)", [f"{s.critical_value:.2f}" for s in r.scenarios]),
