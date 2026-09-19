@@ -1,8 +1,9 @@
 # Roadmap
 
 **Phase 6** tests the gate where it has not been tested. **Phase 7** builds the
-ledger gate and an intraday testbed for it. The last section decides what runs
-on this laptop and what needs EC2.
+replay gate — a process null over an agent's typed, harness-executed moves —
+with a holdout tier beneath it, and an intraday testbed for both. The last
+section decides what runs on this laptop and what needs EC2.
 
 Every cell gets its own `prereg/<name>.md`, committed before it runs and removed
 once it has reported, with the commit recorded in `EXPERIMENTS.md`. What the gate
@@ -387,110 +388,248 @@ carefully.
 
 ---
 
-# Phase 7 — the ledger gate, and an EU-tech ADR testbed
+# Phase 7 — the replay gate, and an EU-tech ADR testbed
 
 Built after Phase 6's free items (6.1–6.3) and before 6.5, so that 6.5
-runs on the new gate as well as the old. Nothing here claims novelty until
-Chen et al. (2025, constrained agents for crypto factor discovery) and
-POPPER (2025, agentic sequential falsification with Type-I control) have
-been read in full; both are adjacent and the difference must be stated
-precisely or not at all.
+runs on the new gate as well as the old.
 
-## 7.1 fixed-sequence-replay — does replaying a typed move sequence calibrate? (local, first)
+**Design principle.** An agent's decisions are captured as rules the
+harness can re-execute, and every ambiguity resolves in the conservative
+direction: a decision the gate cannot replay is priced by the maximum over
+its alternatives, never ignored. Residual ambiguity in how an agent decides
+then costs power, not validity — and whatever still leaks is measured on
+s0 (7.3) rather than assumed away.
 
-The grammar tier replays an agent's typed moves on each bootstrap
-resample. Content choices (which feature gets extended) are replayed
-exactly; meta-choices (how deep, when to restart, when to stop) are fixed
-at the realized sequence, and those were made after seeing results. By P4
-the error's sign depends on how they anchor. Measure it before building on
-it.
+**Prior art, to be read in full before any novelty claim.**
+- POPPER (Huang et al., ICML 2025): agentic sequential falsification,
+  e-values, Type-I control. Closest on the statistics. Validates a given
+  hypothesis; no search pricing, no replay.
+- Huang, Fan, Hu & Ye (2026, arXiv 2604.26747): constrained agents for
+  crypto factor discovery — restricted DSL, append-only trace, falsifiable
+  hypotheses, fixed splits. Closest on the surface. Gates are fixed
+  training-window IC thresholds; no multiple-testing control. **The
+  earlier attribution to "Chen et al. (2025)" was wrong**: inside that
+  paper Chen (2025) is a different JPM article.
+- Nakkiran & Błasiok (2018, arXiv 1809.05596), "The Generic Holdout":
+  exploration set plus holdout with binary feedback. This *is* the
+  holdout tier's mechanism; cite it, claim nothing.
+- Fithian, Sun & Taylor (2014): holdout-only inference is dominated by
+  carving. The reason the holdout is a fallback, not the certifier.
+- Kinlay (blog, 2026-09-02): pre-registered, trial count as a log file for
+  an agentic pipeline; leg count as an unlogged selection axis. Overlaps
+  the observability thesis, not this gate. Our declared class bounds legs
+  at d; say so where cited.
 
-Scripted meta-adaptive searchers on s0: stop-when-cleared, restart-after-k-
-failures, extend-while-improving, each with its move sequence recorded.
-Three nulls per draw: fixed-sequence replay, full policy replay (exact,
-since the policy is code), declared-class bound. 2,000 draws. Report type-I
-at 5% and 1% for each, and the Kolmogorov distance between fixed-sequence
-and policy nulls per searcher.
+What is grammar, ledger, or falsifiable-hypothesis framing is not new.
+The candidate contribution is the process null over typed moves with its
+size measured, and the fidelity measurement in 7.3.
 
-Gate: if fixed-sequence replay is within a point of nominal for
-stop-when-cleared — the anchoring case — the grammar tier is usable for
-in-the-loop agents with its size stated. If it is liberal by more, the
-policy must be declared, and 7.2's agent writes a policy rather than
-searching in the loop.
+## 7.0 gate-comparison — which test should certify? (EC2, first)
 
-## 7.2 The ledger gate — build
+Unregistered scouting (2026-09-19, scripted greedy, K=40, d=3 signed,
+T=5,000, oracle 1.0, n=120–300, bar priced once per configuration; null
+rates came in at 4–9%, so direction only):
 
-**Two slices.** In-sample data is split, before anything runs, into an
-exploration slice and a validation slice (default 70/30, contiguous in
-time, validation later). The split is part of the pre-registration.
+| design | one fixed strategy | winner-chasing search |
+|---|---|---|
+| declared class, full sample | 0.43 | 0.66–0.73 |
+| holdout 70/30, one test at α | 0.79 | 0.40–0.48 |
+| α-spending over 10 predictions | 0.45 | — |
+| Fisher: class p (exploration) × holdout p | 0.71 | 0.63 |
 
-**Grammar.** A closed set of move operators, each a deterministic function
-of (state, exploration data), each tagged: oblivious (depends only on
-feature names, declared priors, or the agent's stated theory before any
-result), replayable (deterministic in data), judgment (data-informed choice
-the operator cannot reproduce). Initial set: `init(spec)`,
-`extend_best(k, by=metric)`, `swap_worst(by=metric)`, `flip(feature)`,
-`refine(metric)`, `restart()`, `stop()`. A move outside the grammar drops
-the run to the declared-class tier for the rest of that run.
+The ranking reverses at search level: selection inflates the submitted
+Sharpe, the class bar prices that legitimately, and the holdout sees only
+the unbiased Sharpe of a partly right spec on 30% of the sample. Class
+width is cheap (bar ~ √(2 ln N)); splitting is not (SE × 1.8).
 
-**Process ledger.** The typed move sequence, replayed on exploration-slice
-resamples by the recursive bootstrap. Meta-choices are either a declared
-policy (exact) or the realized sequence (approximate, size from 7.1). This
-is the standing signal during search — the bar the agent is chasing,
-priced — and it is advisory.
+Pre-register and run properly: Greedy and Adaptive on s0 and s3, 2,000
+draws, three certifiers — declared class on the full sample, holdout
+70/30 and 50/50, process replay on the full sample. Type-I at 5% and 1%,
+PASS rate on s3, holdout Sharpe of passes. Add one 6.2-style regime-shift
+cell (β halved at the split), the case where the holdout might win.
 
-**Prediction slot.** Every `evaluate` carries an optional falsifiable
-claim — sign, Sharpe above a stated threshold, a ranking among named
-specs — stamped by the harness before the result is returned. Admissible
-predictions must have power against the null at the validation slice's
-length; trivial claims are rejected at entry.
+Gate: decides tier order in 7.2. Expected order — replay, class, holdout.
+If replay does not beat the class gate's PASS rate on s3 at matched
+type-I, Phase 7 reduces to the holdout fallback plus the measurements, and
+says so.
 
-**α-ledger.** Each admissible prediction is one test on the validation
-slice at level α_j drawn from current α-wealth (Foster & Stine 2008;
-Aharoni & Rosset 2014). Rejection earns ω back; failure spends
-α_j/(1−α_j); wealth below zero halts the run. Initial wealth and ω are the
-calibration knobs, pre-registered. Near-duplicate predictions (same
-support, same sign) are charged once and scored once.
+## 7.1 fixed-sequence-replay — what does freezing a decision cost? (EC2)
 
-**Verdict.** CERTIFIED if the submitted specification is a declared
-prediction confirmed on validation with wealth nonnegative. Reported
-beside it, never substituted: the process-ledger p-value on exploration,
-the declared-class verdict, and the wealth path. UNDECIDABLE if the run
-left the grammar; INADMISSIBLE if preflight on either slice fails.
+The replay gate re-executes an agent's typed moves on each bootstrap
+resample. Content choices (which feature gets extended) are rules and are
+replayed exactly. Meta-choices (when to stop, when to restart, which move
+next) were made after seeing results; by P4, freezing them is the
+realized-menu error one level up, and stop-when-cleared is the
+winner-anchored case. Measure it, then measure the fix.
 
-**Surface.** Per run: move sequence, prediction log with timestamps,
-wealth over time, both verdicts. A reviewer reads a ledger, not a
-transcript.
+Scripted meta-adaptive searchers on s0: stop-when-cleared,
+restart-after-k-failures, extend-while-improving, each with its move
+sequence and its triggers recorded. Four nulls per draw:
 
-**Tests.** mFDR at or below nominal on s0 (7.3); the process ledger
-reproduces pointwise-dominance's recursive p-values when the grammar is the two-step
-anchored search; the prediction slot cannot be written after the result
-exists; trivial predictions rejected; the grammar is closed.
+1. fixed-sequence replay — move types frozen at the realized sequence;
+2. **trigger replay** — each meta-move carries its predicate; the
+   predicate is re-evaluated on the replicate. A replicate that stops
+   earlier takes its value there. One that would continue past the
+   realized sequence is filled with greedy extension to the budget;
+3. full policy replay — exact, since the policy is code;
+4. declared-class bound.
 
-## 7.3 Calibrating the ledger on the sandbox (local, then seat)
+2,000 draws. Type-I at 5% and 1% for each; Kolmogorov distance of (1) and
+(2) from (3) per searcher.
 
-Scripted first. On s0, a scripted predictor making N admissible
-predictions per run at three rates of "true belief" (all null, so every
-prediction is false): 2,000 runs, expected false certifications ≤ α per
-run under mFDR; report the observed rate with intervals and the wealth
-exhaustion point. On s3 at σ=194.407, the same predictor told the true
-set: certification rate against validation-slice power.
+Gate: trigger replay must be at or below nominal for all three searchers
+— conservative is acceptable, liberal is not. If it holds, in-the-loop
+agents are certifiable with triggers declared. If only full policy replay
+holds, the agent writes a policy instead of searching in the loop. The
+fixed-sequence number is reported either way as the size of the error
+that declaring triggers removes.
 
-Then one agent cell: control and ledger arms, 40 each, Sonnet, s0 and s3.
-Readouts: certification rate on noise (must be ≤ α); on signal; how many
-predictions the agent makes, how many are admissible, how often it
-predicts before it has looked; and whether stated confidence moves — it
-shouldn't, and it doesn't matter.
+## 7.2 The replay gate — build
+
+**Tiers.** The gate uses the strongest valid test the record supports,
+and reports the others beside it:
+
+| record kept | certifier | validity |
+|---|---|---|
+| typed moves, triggers, fidelity passed | process replay, full sample | asymptotic; size from 7.1 and 7.3 |
+| declared class only | full-class null, full sample (exists) | finite-sample, conservative |
+| neither — free-form search | holdout, binary feedback | exact under slice independence |
+
+**Grammar, harness-executed.** The agent names a move; the harness
+computes it and builds the specification, so the log cannot disagree with
+what ran. Content moves: `init(spec)`, `extend_best(k, by=stat)`,
+`swap_worst(by=stat)`, `flip(feature)`, `refine(stat)`. Two pick moves
+replace free-form judgment:
+- `pick(by=stat, among=set, else=stat2)` — a data-driven reason stated as
+  a rule. `stat` comes from a fixed, committed library (exploration
+  Sharpe, autocorrelation at named lags, volatility, correlation with the
+  current best, IC). Replayed like any content move. `else` is what the
+  rule does when its premise fails on a replicate; without one the harness
+  fills with the best of `among`.
+- `pick_prior(feature, reason)` — a reason from outside this data.
+  Oblivious, free, and admissible only while the harness can show by
+  timestamp that no `evaluate` result touching `feature` or its family
+  has been returned. After that point it is refused; use `pick`.
+
+Meta moves: `restart(trigger)`, `stop(trigger)`. A trigger is a predicate
+over the agent's information set (best so far, moves since improvement,
+bar cleared, budget left), stamped before the move executes.
+
+**Information set.** The harness logs exactly what each `evaluate`
+returned and when. Tags come from timestamps, never from the agent's own
+description.
+
+**Consistency check, free.** For every `pick`, the harness confirms the
+agent's choice is what the declared rule selects on the realized data. A
+pick that contradicts its rule is rejected as declared and priced
+locally.
+
+**Local pricing.** A rejected pick, or any step the agent cannot state as
+a rule, is replaced in each replicate by the best of its admissible
+alternatives at that step; the rest of the sequence replays normally.
+This is P3 applied to one move rather than the whole class. Conjecture
+from P4: anchoring later moves on a local maximum is conservative.
+Verified in 7.3 before it is relied on. A move outside the grammar
+entirely drops the run to the declared-class tier.
+
+**Process null.** The move sequence with triggers, replayed on
+full-sample resamples by the recursive bootstrap. This certifies; it is
+also the standing bar during search. `by=stat` must be computable from
+base columns alone, which the `Replayable` contract already requires.
+
+**Holdout tier.** Only for runs with no replayable record and no
+declarable class. Exploration/validation split fixed in the
+pre-registration (70/30, contiguous, validation later, embargo of max
+lookback plus block length at the boundary). Binary feedback; failures
+are visible; the run halts at the first confirmation (Nakkiran &
+Błasiok). Levels by α-spending, Σα_j ≤ α, valid under arbitrary
+dependence including sign-flipped pairs. No earn-back: Foster–Stine needs
+each test valid given earlier outcomes, which a shared slice breaks. One
+certifying prediction keeps the whole α; ten cost about 34 points of
+power in scouting.
+
+**Prediction slot.** Every `evaluate` may carry a falsifiable claim,
+stamped before the result returns; trivial or underpowered claims are
+rejected at entry. Under the replay and class tiers it is a measurement
+— does the agent commit before it looks — and carries no α. Under the
+holdout tier one prediction is the certificate.
+
+**Verdict.** CERTIFIED (replay) / PASS (class) / CONFIRMED (holdout), each
+labelled with its tier; FAIL; INADMISSIBLE if preflight fails for the
+tier in use; UNDECIDABLE only if no tier applies. Reported beside the
+verdict: the other tiers' p-values, the fraction of moves replayed exactly
+/ priced locally / filled, and the run's fidelity rate if sampled.
+
+**Surface.** Move sequence with triggers, information-set log,
+consistency results, prediction log with timestamps. A reviewer reads a
+ledger of decisions, not a transcript.
+
+**Tests.** The process null reproduces pointwise-dominance's recursive
+p-values when the grammar is the two-step anchored search; harness
+execution makes log and specification identical; `pick_prior` is refused
+after the timestamp; a contradicted `pick` is priced locally; a trigger
+that fires earlier on a replicate truncates there; the grammar is closed;
+the prediction slot cannot be written after the result exists.
+
+## 7.3 Does the gate account for the agent? (EC2, then seat)
+
+**Scripted, on s0 and s3, 2,000 draws.** Faithful searchers using every
+move type, then three unfaithful ones, because the gate's validity
+depends on the rule the searcher used, not the one it declared:
+- declares `pick by=autocorr`, actually picks by best Sharpe seen;
+- declares `pick_prior`, actually peeked;
+- omits the trigger on a stop-when-cleared.
+
+Required: faithful searchers at or below nominal at 5% and 1%; the
+consistency check or the timestamp catches each unfaithful one, and local
+pricing returns it to nominal. Report the liberal size when the checks
+are switched off — that is the cost of trusting a stated reason. The
+local-pricing conjecture is tested here: if it is liberal anywhere,
+rejected picks drop the run to the class tier instead.
+
+**Agent cell.** Sonnet. Control 40, replay arm 80 on s0 and 40 on s3.
+
+1. *Calibration.* Each s0 run's submitted Sharpe is placed within its own
+   replay null. If the gate reproduces what the agent does on noise, those
+   positions are uniform — e1, applied to agent plus gate. KS against
+   U(0,1) and type-I at 5%. At n=80 this detects a true rate near 13% or
+   worse; it rules out gross leakage and no more, and the scripted runs
+   carry the calibration claim. Skew toward small p means a decision kind
+   is leaking; the per-kind fractions say which.
+2. *Fidelity.* For a pre-registered subsample (10 runs per config, every
+   `pick` and meta-move), re-present the single decision to the agent ~20
+   times with resampled numbers in context and record how often the
+   declared rule predicts the choice. Report the rate by move type.
+   Pre-registered tolerance: moves whose type falls below it are priced
+   locally in the certifying null from then on. Search for prior work on
+   this measurement before claiming it; Turpin et al. (2023) and the
+   chain-of-thought faithfulness literature are the neighbours, to be
+   verified before citing.
+3. *Behaviour.* Share of moves by kind; how often `pick_prior` is used and
+   refused; how often triggers are declared versus filled; predictions
+   made before the first look.
+4. *Power.* CERTIFIED rate on s3 against the class gate's PASS rate on the
+   same runs.
+
+Known residue, stated in the write-up: the agent's choice of *which*
+statistic to look at is itself data-informed. The fixed library bounds
+that fork and the local-pricing fallback prices it when the consistency
+check fails; it is not eliminated, and check 1 is what measures it.
+
+Gate: Phase 7 enters the paper as a section if the scripted runs
+calibrate and check 1 shows no skew; otherwise as a measured failure,
+with the leaking decision kind named.
 
 ## 7.4 EU-tech ADR testbed at 5-minute bars
 
 **Why ADRs.** The ADR trades in US hours while its home market is open
 until ~11:30 ET and closed after. Information arrives on a schedule and
 pulls in known directions — home index, sector ETF, FX, the ADR–ordinary
-parity (Gagnon & Karolyi 2010) — so an agent can make theory-driven
-predictions before seeing results, which is what the ledger rewards.
-Whether any of it survives at five minutes net of ADR spreads is the open
-question.
+parity (Gagnon & Karolyi 2010) — so an agent can state theory-driven picks
+before seeing results — `pick_prior` with the home-close mechanism as its
+reason — which the replay gate prices at zero and the timestamp rule can
+verify. Whether any of it survives at five minutes net of ADR spreads is
+the open question.
 
 **Universe — decided before any data is looked at, and recorded.** EU
 technology and semiconductor names with liquid US listings:
@@ -542,8 +681,12 @@ last bars dropped. Home-close at 11:30 ET is a boundary the sandbox knows:
 every feature carries a home-open/home-closed indicator, and the block
 bootstrap treats it as a break. Null: zero return net of a pre-registered
 cost model — half of each name's median quoted spread per trade plus a
-per-share fee — via `--benchmark`. Annualization by the panel's own bars
-per year.
+per-share fee. Costs depend on each specification's turnover, so they are
+not one benchmark series: the sandbox returns net-of-cost streams per
+specification, and the class is priced as an explicit class of net
+streams. This depends on 6.4; `audit` refuses `--benchmark` on classes
+enumerated from base returns, and `watch` has no benchmark path.
+Annualization by the panel's own bars per year.
 
 **Features, fixed and committed first.** Cross-sectional within the panel,
 dollar-neutral: own return at lags 1, 3, 6, 12 bars; return relative to a
@@ -555,21 +698,27 @@ indicator. K ≈ 40, as before.
 **Class.** Signed subsets ≤ 3 by default; preflight on the exploration
 slice at the panel's bar count decides d and signs, recorded.
 
-**Arms.** control, gate (declared class), ledger — 30 runs each, Sonnet,
-on one fixed exploration/validation split; then a rolling-origin pass
-with the ledger arm only, one run per origin, ~20 origins.
+Sharpe's standard error is set by years, not bars: two years gives
+SE ≈ 0.71 annualized on the full sample and ≈ 1.3 on a 30% slice.
+Preflight with a reference Sharpe chosen and recorded before any data is
+seen; the holdout tier is expected to be INADMISSIBLE at Sharpe 1.0 here.
+
+**Arms.** control, class gate, replay gate — 30 runs each, Sonnet; then a
+rolling-origin pass with the replay arm only, ~20 origins. The holdout
+tier is computed for every run as a reported number, not an arm.
 
 **Readouts, pre-registered.**
-1. Verdict distributions per arm; certification rate for the ledger.
+1. Verdict distributions per arm; certification rate for the replay gate.
 2. Holdout Sharpe, gross and net, of CERTIFIED vs PASS vs FAIL
    submissions; the false-negative side (FAIL submissions with positive net
    holdout) is the number nobody has.
 3. The home-close control: prediction confirmation rate on names with a
    home market vs without.
 4. The haircut regression on intraday data.
-5. Prediction behavior: count, admissibility, timing relative to first
-   evaluate, and the fraction of theory-stated predictions that name the
-   home-close mechanism.
+5. Decision behaviour: share of `pick_prior` versus `pick`, fraction of
+   prior picks naming the home-close mechanism, triggers declared versus
+   filled, fraction of moves priced locally.
+6. Fidelity rate by move type on a 10-run subsample, as in 7.3.
 
 **What it cannot show.** That any certified edge is tradeable at size, or
 that it persists — two years of history and twenty monthly holdouts give
@@ -580,15 +729,16 @@ last month as a forward holdout regardless, per 6.9.
 
 | step | work | where |
 |---|---|---|
-| 1 | 6.1–6.3 | local |
-| 2 | 7.1 fixed-sequence-replay | local |
-| 3 | 7.2 build; 7.3 scripted calibration | local |
-| 4 | Polygon download, panel README, features, preflight, pre-registration | local |
-| 5 | 7.3 agent cell | seat, one window |
-| 6 | 7.4 fixed-split arms | seat, one window |
-| 7 | 6.5 daily ETF panel on all three gates | seat, one window |
-| 8 | 7.4 rolling-origin pass | seat |
-| 9 | 6.6, 6.7 | seat |
+| 1 | 6.1–6.3 | local / EC2 |
+| 2 | 7.0 gate-comparison; 7.1 fixed-sequence and trigger replay | EC2, one instance |
+| 3 | 6.4 explicit classes in `watch` (now blocks 7.4's null) | local |
+| 4 | 7.2 build; 7.3 scripted, faithful and unfaithful | local, then EC2 |
+| 5 | Polygon download, panel README, features, preflight, pre-registration | local |
+| 6 | 7.3 agent cell, calibration and fidelity checks | seat, one window |
+| 7 | 7.4 fixed-split arms | seat, one window |
+| 8 | 6.5 daily ETF panel on all three gates | seat, one window |
+| 9 | 7.4 rolling-origin pass | seat |
+| 10 | 6.6, 6.7 | seat |
 
 The note to López de Prado is unaffected. Phase 7 goes in the paper as
 its own section only if 7.3 calibrates; otherwise it goes in as a
@@ -606,7 +756,9 @@ agent run's two bootstraps take seconds.
 
 **Never EC2:** anything that calls the model. Agent runs are latency-bound
 and the seat is logged in on the laptop. All of 7.3's agent cell, 7.4's
-arms, 6.5, 6.6, 6.7 run locally regardless of scale.
+arms, 6.5, 6.6, 6.7 run locally regardless of scale. 7.3's fidelity check
+is short single-decision calls, roughly 20 per sampled decision on 10 runs
+per config — a few thousand calls, inside one window.
 
 **Running an agent batch.** Agent runs go through the enterprise seat on this
 laptop, never EC2. Confirm which seat is active before spending a window: the
@@ -639,7 +791,7 @@ whichever seat is authenticated. `CLAUDE_CONFIG_DIR` decides who pays, not what
 the agent sees.
 
 **Always local:** re-scoring existing verdicts (6.1 free part), OOS
-re-grades (6.2), the notebook, the ledger build and its unit tests,
+re-grades (6.2), the notebook, the replay gate build and its unit tests,
 feature construction on the ADR panel (12 names × 40k bars × 40 features
 is ~150 MB), and any single audit or preflight, including on the intraday
 panel — the moment-based class null is O(K²) per replicate and does not
@@ -648,10 +800,11 @@ hold a B × T index matrix.
 **EC2, because of total work:** any sweep with more than ~500 draws of the
 full-class null, and any sweep that replays a search inside the bootstrap.
 That is: 6.1's scripted 5,000-draw calibration and its B=50,000 tail
-check; 6.3 (8,000 draws across two DGP variants); 7.1 fixed-sequence-replay (2,000 draws ×
-3 nulls, one of which replays the policy per replicate — the most
-expensive thing in the plan); 7.3's scripted ledger calibration (2,000
-runs, each with a recursive process ledger). Each is hours to a day on
+check; 6.3 (8,000 draws across two DGP variants); 7.0 gate-comparison
+(2,000 draws × 3 certifiers); 7.1 fixed-sequence-replay (2,000 draws ×
+four nulls, not three, one of which replays the policy per replicate — the
+most expensive thing in the plan); 7.3's scripted runs (2,000 draws, and
+three unfaithful searchers with the checks on and off). Each is hours to a day on
 16–32 vCPUs and minutes of setup; on the Air each would be days and would
 compete with everything else. Use a compute-optimized spot instance
 (c7g or c6i, 16–32 vCPU), sync the repo, run the experiment script with
@@ -665,8 +818,9 @@ panel's T≈40,000 it's 400 M, or 3.2 GB in int64, which will swap or die on
 8 GB with anything else open. Any bootstrap on the intraday panel must
 chunk B (500 replicates at a time is plenty) or use int32 indices; the
 moment engine already avoids the matrix and is the default for the
-declared-class bar. The same applies to fixed-sequence-replay and the ledger's process
-replay at intraday length — those go to EC2 for memory as much as time.
+declared-class bar. The same applies to fixed-sequence-replay and the replay
+gate's process replay at intraday length — those go to EC2 for memory as
+much as time.
 
 **Practical rule.** If a script's expected runtime is over two hours or
 its B × T exceeds 10⁸, it goes to EC2. Everything else, including every

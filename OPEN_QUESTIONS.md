@@ -194,3 +194,14 @@ pointed at data something can turn into a `DGPData`-shaped panel.
 For real data that is a panel loader, which is the public-data notebook's job.
 Until one exists, watch runs on simulated panels only — a scope limit of the
 entry point, not of the method.
+
+## Deferred for the replay gate
+
+- e-value ledger (e-LOND / e-GAI) for the holdout tier: FDR under
+  arbitrary dependence, but p-to-e calibration needs p ≲ 1e-4 at level
+  0.01, beyond B=10,000's resolution. A native e-value for Sharpe is a
+  new estimator; frozen.
+- Carving: a selective test using leftover exploration information would
+  dominate the holdout tier (Fithian, Sun & Taylor). Not built.
+- The which-statistic fork in `pick`: bounded by the library, priced only
+  when the consistency check fails.
