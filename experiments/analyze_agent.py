@@ -91,7 +91,13 @@ def load_run(d: Path) -> dict:
             "seed_index": int(m["seed"]),
         }
 
-    usage = json.loads((d / "usage.jsonl").read_text().splitlines()[-1])
+    # usage.jsonl is absent when a run ended between its verdict and the harness
+    # finishing with it (seed 599, a rate limit on a trailing turn). Missing is not
+    # the same as empty: a run with no usage record never reported a model string,
+    # which §5's model-string exclusion does not cover.
+    usage_path = d / "usage.jsonl"
+    usage_missing = not usage_path.exists()
+    usage = {} if usage_missing else json.loads(usage_path.read_text().splitlines()[-1])
     rows = [json.loads(l) for l in (d / "transcript.jsonl").read_text().splitlines()]
 
     tool_uses = [r for r in rows if r["kind"] == "tool_use"]
@@ -158,6 +164,7 @@ def load_run(d: Path) -> dict:
                          else "does not clear" not in (statuses[-1][1].get("text") or "")),
         "submitted": bool(submits),
         # exclusion inputs
+        "usage_missing": usage_missing,
         "models_seen": usage.get("models_seen") or [],
         "non_mcp_tools": sorted({r["tool"] for r in tool_uses
                                  if not str(r.get("tool", "")).startswith("mcp__")}),
@@ -183,8 +190,12 @@ def classify_exclusion(r: dict) -> str | None:
     # Only strings naming a model count. The SDK also reports sentinels such as
     # "<synthetic>" for messages it generates itself; treating those as models
     # voided a real run (s0_T5000_sonnet_gate_087) on its first appearance.
+    # A run with no usage record at all reported no model string. §5 excludes a run
+    # whose reported string DIFFERS from the pin; silence is a different condition,
+    # and failing it under this rule would drop a run whose config pins the model and
+    # whose transcript holds the model's own output. Reported in the integrity block.
     reported = [m for m in r["models_seen"] if str(m).startswith("claude-")]
-    if not reported or [m for m in reported if m != assigned]:
+    if not r.get("usage_missing") and (not reported or [m for m in reported if m != assigned]):
         return "model_string"
     if r["non_mcp_tools"]:
         return "non_mcp_tool"
@@ -371,6 +382,7 @@ def integrity_block(runs, incomplete) -> str:
     no_sub = [r for r in runs if r["status"] == "no_submit"]
     void = [r for r in runs if r["status"] == "void"]
     recov = [r for r in runs if r["config_recovered"]]
+    unverified = [r for r in runs if r.get("usage_missing")]
     L.append(f"  run directories read      {len(runs):>4}")
     L.append(f"  graded (verdict + stated) {n_graded:>4}")
     L.append(f"  no_submit (§3, retained)  {len(no_sub):>4}"
@@ -385,6 +397,11 @@ def integrity_block(runs, incomplete) -> str:
     if recov:
         L.append("    (identity taken from the directory name; fingerprint, worker and")
         L.append("     preflight power are unrecorded for these and shown as such)")
+    L.append(f"  model string unverified   {len(unverified):>4}"
+             + (f"   {', '.join(r['run_id'] for r in unverified)}" if unverified else ""))
+    if unverified:
+        L.append("    (no usage.jsonl, so no reported model string to check against §5's")
+        L.append("     pin; the model is the one config.json assigns. Retained, not excluded)")
     if incomplete:
         L.append(f"  unreadable, skipped       {len(incomplete):>4}   {', '.join(incomplete)}")
     return "\n".join(L) + "\n"
