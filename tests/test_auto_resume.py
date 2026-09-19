@@ -40,6 +40,13 @@ def main():
     kind = os.environ.get("STUB_FAIL_KIND", "")
     times = int(os.environ.get("STUB_FAIL_TIMES", "0"))
     if n < times:
+        if kind == "GradedThenRateLimited":
+            # Batch 5, seed 599: submit landed and the run was graded, then a
+            # rate limit hit on a trailing turn, before oos.json was written.
+            (d / "verdict.json").write_text(json.dumps({"status": "PASS"}))
+            (d / "error.json").write_text(json.dumps(
+                {"kind": "RateLimited", "detail": "rate limit rejected: {'resets_at': 1}"}))
+            return 2
         if kind == "RateLimited":
             (d / "error.json").write_text(json.dumps(
                 {"kind": "RateLimited", "detail": "rate limit rejected: {'resets_at': 1}"}))
@@ -130,6 +137,25 @@ def test_rate_limit_twice_then_success_completes_the_row_with_retry_2(sandbox):
     # Each failed attempt's directory was parked, not left to block the retry.
     parked = list((sandbox / "runs/_aborted").glob("s0_T5000_sonnet_control_300*"))
     assert len(parked) == 2, parked
+
+
+def test_a_graded_row_that_then_rate_limits_is_kept_not_retried(sandbox):
+    """Batch 5, seed 599. The run submitted and was graded, then a rate limit
+    hit on a trailing turn before oos.json was written. abort_run_dir refuses to
+    park a graded directory -- correctly, since that would discard a real result
+    -- so the retry re-ran the row into a directory RunPaths must refuse, exit 1,
+    and worker 1 dropped the 15 rows behind it. The row is finished; keep it."""
+    p, log = drive(sandbox, fail_kind="GradedThenRateLimited", fail_times=1,
+                   extra=("--auto-resume",))
+    assert attempts(sandbox) == 1, f"the row must not be re-run\n{log}"
+    assert (sandbox / "runs/s0_T5000_sonnet_control_300/verdict.json").exists()
+    assert "already graded" in log, log
+    assert "sleeping" not in log, log
+    assert not (logdir(sandbox) / "stopped_0").exists(), log
+    parked = list((sandbox / "runs/_aborted").glob("*")) if (
+        sandbox / "runs/_aborted").exists() else []
+    assert not parked, f"a graded row must not be parked: {parked}"
+    assert p.returncode == 0, p.stderr
 
 
 def test_exit_4_stops_the_worker_immediately(sandbox):

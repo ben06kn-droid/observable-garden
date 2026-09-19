@@ -248,6 +248,20 @@ m = re.search(r'resets_at\D{0,4}(\d{9,})', d)
 print(m.group(1) if m else '')" 2>/dev/null
 }
 
+row_is_complete() {  # $1 run_id -- the harness left a terminal artifact here
+  [ -f "runs/$1/verdict.json" ] || [ -f "runs/$1/void.json" ] \
+    || [ -f "runs/$1/no_submit.json" ]
+}
+
+# Deliberately narrower than row_is_complete: a verdict means the row produced a
+# result worth keeping, while void.json and no_submit.json are terminal without
+# being gradeable. Amendment 5 turns on that distinction -- a voided run must not
+# be graded and must not let the worker move on -- so only this predicate may
+# end a retry.
+row_is_graded() {  # $1 run_id
+  [ -f "runs/$1/verdict.json" ]
+}
+
 abort_run_dir() {  # $1 run_id -- park a run that produced no verdict
   [ -d "runs/$1" ] || return 0
   [ -f "runs/$1/verdict.json" ] && return 0
@@ -296,8 +310,7 @@ run_worker() {
 
     # A resumed worker skips what it already finished. RunPaths would refuse the
     # directory anyway; skipping makes the resume line simply re-runnable.
-    if [ -f "runs/$RUN_ID/verdict.json" ] || [ -f "runs/$RUN_ID/void.json" ] || \
-       [ -f "runs/$RUN_ID/no_submit.json" ]; then
+    if row_is_complete "$RUN_ID"; then
       echo "=== [worker $k, line $n] $RUN_ID already complete; skipping ===" >>"$log"
       continue
     fi
@@ -312,6 +325,20 @@ run_worker() {
       run_row "$k" >>"$log" 2>&1
       CODE=$?
       [ "$CODE" -eq 0 ] && break
+      # A row that produced a verdict is finished, whatever the exit code says.
+      # verdict.json is written at submit; oos.json only after the run returns,
+      # so a rate limit on a trailing turn leaves a graded run with no oos.json.
+      # abort_run_dir rightly refuses to park a graded directory, so retrying
+      # could only re-run the row into a directory RunPaths must refuse. That
+      # wedged worker 1 of batch 5 at seed 599 and cost it the 15 rows after it.
+      # Grade it here and move on; the analyzer reports the missing oos.json.
+      # row_is_graded, not row_is_complete: a void or no_submit row is terminal
+      # but not a result, and exit 4 must still stop the worker (amendment 5).
+      if row_is_graded "$RUN_ID"; then
+        echo "    line $n exited $CODE but is already graded; keeping it, not retrying" \
+          >>"$log"
+        break
+      fi
       if [ "$AUTO_RESUME" -eq 1 ] && [ "$CODE" -eq 2 ] \
          && [ "$(error_kind_for "$RUN_ID")" = "RateLimited" ]; then
         # Read the reset time before parking the directory: the park takes
