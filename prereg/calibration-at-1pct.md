@@ -104,3 +104,23 @@ components. `oblivious-calibration` sized itself from a 4-draw smoke, came out
 low by a factor of five, and took 7.7 hours on 32 cores instead of "a little
 over an hour"; the rule since then is an end-to-end measurement at a draw count
 large enough to mean something.
+
+## Amendments
+
+**1 — 2026-09-19, before any arm B or C run.** The sizing smoke above is
+skipped, deliberately. The instance bills $1.64/hour, so a five-fold sizing miss
+of the kind `oblivious-calibration` suffered costs about $10 rather than a lost
+window, and both arms checkpoint every 25 draws, so a run that overruns resumes
+rather than restarts. The cost of the smoke exceeded what it would buy.
+
+The laptop measurement stands in its place and is recorded here: **34.0 s per
+draw** at B = 10,000, measured end to end over 2 draws with `--workers 2`,
+implying 47.2 CPU-hours for arm B's 5,000 draws, about 1.5 hours on 32 cores.
+Arm C is projected at roughly 22 CPU-hours on the same basis.
+
+What this gives up, stated rather than glossed: that measurement used two
+workers, so it does not exercise the memory and core contention of 32 workers
+each holding a (5000, 50, 40) panel — which is the specific failure the smoke
+existed to catch. If the instance's per-draw cost departs materially from 34 s,
+that is the likely reason, and each run's own COST block records the measured
+figure.
