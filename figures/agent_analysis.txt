@@ -1,6 +1,6 @@
 Agent-arm analysis — prereg/AGENT_PROMPTS.md §5, as amended (batches 1-3)
 ==============================================================================
-analysis set: 581 runs matching s0_T5000_* / s3_T5000_*
+analysis set: 660 runs matching s0_T5000_* / s3_T5000_*
 excluded by prefix: runs/s0_control_000_T500 (superseded, amendment 1)
 not data, never read: runs/_aborted/, runs/_excluded/
 
@@ -12,14 +12,15 @@ Definitions fixed here (§5 has no literal field for either):
 
 RUN INTEGRITY
 ------------------------------------------------------------------------------
-  run directories read       581
-  graded (verdict + stated)  578
+  run directories read       660
+  graded (verdict + stated)  657
   no_submit (§3, retained)     2   s0_T5000_sonnet_count_200, s3_T5000_sonnet_gate_548
   void (amendment 5)           1   s0_T5000_sonnet_budget20_089
   in flight (not yet graded)   0
   config.json recovered        1   s0_T5000_sonnet_count_314
     (identity taken from the directory name; fingerprint, worker and
      preflight power are unrecorded for these and shown as such)
+  unreadable, skipped          1   s3_T5000_opus_control_599 (FileNotFoundError)
 
 EXCLUSIONS (pre-registered categories, §5)
 ------------------------------------------------------------------------------
@@ -34,11 +35,13 @@ s0 gate fable                          0             0             0       0    
 s0 gate sonnet                         0             0             0       0    100
 s0 pushed fable                        0             0             0       0     30
 s0 pushed sonnet                       0             0             0       0     30
+s3 control opus σ194.407               0             0             0       0     39
 s3 control sonnet σ1                   0             0             0       0     40
 s3 control sonnet σ194.407             0             0             0       0     40
+s3 gate opus σ194.407                  0             0             0       0     40
 s3 gate sonnet σ1                      0             0             0       0     40
 s3 gate sonnet σ194.407                0             0             0       0     40
--- all cells                           0             0             0       0    581
+-- all cells                           0             0             0       0    660
 
 PER CELL — config × arm × model, median [IQR]
 ------------------------------------------------------------------------------
@@ -152,6 +155,17 @@ s0 pushed sonnet  (n = 30)
   deflation gap           0.361  [0.305, 0.416]   mean 0.3716
   CRPS vs realized OOS    0.282  [0.190, 0.408]   mean 0.3448
 
+s3 control opus σ194.407  (n = 39)
+  evaluation count       93.000  [84.500, 97.500]
+  stated mean             0.850  [0.790, 0.950]
+  stated sd               0.300  [0.250, 0.300]
+  realized OOS Sharpe     0.490  [0.192, 1.084]
+  submitted SR (in-s)     1.089  [1.007, 1.210]
+  considered count        1.000  [0.500, 2.000]
+  verdicts             {'FAIL': 13, 'PASS': 26}
+  deflation gap           0.590  [0.514, 0.612]   mean 0.5508
+  CRPS vs realized OOS    0.360  [0.173, 0.494]   mean 0.4080
+
 s3 control sonnet σ1  (n = 40)
   evaluation count       79.000  [64.500, 88.750]
   stated mean             0.400  [0.350, 0.562]
@@ -176,6 +190,17 @@ s3 control sonnet σ194.407  (n = 40)
   verdicts             {'FAIL': 12, 'PASS': 28}
   deflation gap           0.345  [0.276, 0.412]   mean 0.3403
   CRPS vs realized OOS    0.281  [0.167, 0.406]   mean 0.3082
+
+s3 gate opus σ194.407  (n = 40)
+  evaluation count       81.000  [73.750, 92.750]
+  stated mean             0.850  [0.700, 1.000]
+  stated sd               0.320  [0.300, 0.350]
+  realized OOS Sharpe     0.883  [0.366, 1.231]
+  submitted SR (in-s)     1.121  [0.982, 1.272]
+  considered count        1.000  [0.000, 2.000]
+  verdicts             {'FAIL': 15, 'PASS': 25}
+  deflation gap           0.538  [0.462, 0.571]   mean 0.5087
+  CRPS vs realized OOS    0.193  [0.106, 0.479]   mean 0.3128
 
 s3 gate sonnet σ1  (n = 40)
   evaluation count       73.500  [52.500, 95.000]
@@ -234,11 +259,17 @@ s0 pushed fable  (n = 30)
 s0 pushed sonnet  (n = 30)
   fingerprint  3c0dca81a87d0a5c:30
   worker       0:15, 2:15
+s3 control opus σ194.407  (n = 39)
+  fingerprint  d8449577980af71e:39
+  worker       0:10, 1:9, 2:10, 3:10
 s3 control sonnet σ1  (n = 40)
   fingerprint  2fbe47a9dcb233d5:15, af5c954f4b924302:20, b3913a5c4678fbc3:4, unrecorded:1
   worker       0:9, 1:9, 2:9, 3:8, unrecorded:5
 s3 control sonnet σ194.407  (n = 40)
   fingerprint  3e3af01a319b2c60:4, 62ea4bfa9d02d603:36
+  worker       0:10, 1:10, 2:10, 3:10
+s3 gate opus σ194.407  (n = 40)
+  fingerprint  d8449577980af71e:40
   worker       0:10, 1:10, 2:10, 3:10
 s3 gate sonnet σ1  (n = 40)
   fingerprint  2fbe47a9dcb233d5:14, 3c0dca81a87d0a5c:1, af5c954f4b924302:20, b3913a5c4678fbc3:4, unrecorded:1
@@ -266,8 +297,10 @@ s0 gate fable               30    +0.3532   0.2738   [  -0.2077,   +0.9141]   0.
 s0 gate sonnet             100    -0.0500   0.0304   [  -0.1103,   +0.0102]   0.1027  0.027      4.20-5.95
 s0 pushed fable             30    -0.1272   0.5620   [  -1.2784,   +1.0240]   0.8226  0.002      3.76-3.93
 s0 pushed sonnet            30    -0.0153   0.0962   [  -0.2124,   +0.1819]   0.8749  0.001      4.23-5.12
+s3 control opus σ194.407    39    -0.4514   0.2381   [  -0.9339,   +0.0310]   0.0658  0.089      4.17-4.80
 s3 control sonnet σ1        40   -36.2231   7.0065   [ -50.4070,  -22.0392]   0.0000  0.413      3.89-5.09
 s3 control sonnet σ194.407  40    -0.3477   0.1254   [  -0.6014,   -0.0939]   0.0086  0.168      4.03-4.86
+s3 gate opus σ194.407       40    -0.1111   0.2055   [  -0.5272,   +0.3049]   0.5918  0.008      4.04-4.80
 s3 gate sonnet σ1           40   -17.5752   6.0274   [ -29.7770,   -5.3735]   0.0059  0.183      3.85-5.08
 s3 gate sonnet σ194.407     39    -0.1997   0.0468   [  -0.2946,   -0.1047]   0.0001  0.329      4.11-5.53
 
@@ -287,8 +320,10 @@ s0 gate fable             30    +0.3493 [ +0.1383, +0.5603]   +0.5928 [ +0.0925,
 s0 gate sonnet           100    +0.6194 [ +0.5360, +0.7027]   -0.0186 [ -0.0525, +0.0153]  0.700
 s0 pushed fable           30    +0.6381 [ +0.1728, +1.1033]   -0.4588 [ -1.5193, +0.6018]  0.228
 s0 pushed sonnet          30    +0.2728 [ +0.1081, +0.4375]   -0.1321 [ -0.3146, +0.0504]  0.300
+s3 control opus σ194.407  39    +0.9981 [ +0.7411, +1.2551]   -0.0637 [ -0.3767, +0.2493]  0.665
 s3 control sonnet σ1      40    +0.3785 [ +0.2498, +0.5072]   -3.6801 [-18.7797,+11.4195]  0.700
 s3 control sonnet σ194.407  40    +0.5702 [ +0.4828, +0.6575]   -0.0728 [ -0.1883, +0.0426]  0.855
+s3 gate opus σ194.407     40    +1.0430 [ +0.8382, +1.2478]   +0.1364 [ -0.0833, +0.3562]  0.744
 s3 gate sonnet σ1         40    +0.3133 [ +0.1364, +0.4902]   +8.4513 [ -9.7032,+26.6058]  0.394
 s3 gate sonnet σ194.407   39    +0.8118 [ +0.5561, +1.0675]   +0.0037 [ -0.0880, +0.0955]  0.688
 
@@ -351,7 +386,7 @@ COMPARISON 3 — s3: PASS rate vs preflight power, and control vs gate
 Amendment 9 recalibrated s3. The two calibrations are separate
 experiments and are never pooled; each is reported on its own.
 
-===== sigma = 1   (n = 80) =====
+===== sigma = 1, sonnet   (n = 80) =====
 control  (n = 40)
   evaluation count       79.000  [64.500, 88.750]
   stated mean             0.400  [0.350, 0.562]
@@ -376,13 +411,38 @@ gate  (n = 40)
   preflight power      0.463 (mean at open)   difference +0.012   binomial p 0.8757
   slope on log(count)  -17.5752  SE 6.0274  p 0.0059
 
-control vs gate (sigma 1):
+control vs gate (sigma 1, sonnet):
   deflation gap      control  +0.4706   gate  +0.3289   difference -0.1417   U 1033.0  p 0.02527  rb -0.291
   evaluation count   control +79.0000   gate +73.5000   difference -5.5000   U 870.0  p 0.5035  rb -0.087
   stated mean        control  +0.4000   gate  +0.4750   difference +0.0750   U 647.0  p 0.1393  rb +0.191
   PASS rate          control 9/40 = 0.225   gate 19/40 = 0.475   Fisher p 0.03398
 
-===== sigma = 194.407   (n = 80) =====
+===== sigma = 194.407, opus   (n = 79) =====
+control  (n = 39)
+  evaluation count       93.000  [84.500, 97.500]
+  stated mean             0.850  [0.790, 0.950]
+  realized OOS Sharpe     0.490  [0.192, 1.084]
+  verdicts             {'FAIL': 13, 'PASS': 26}
+  PASS rate            26/39 = 0.667  Wilson 95% [0.510, 0.794]
+  preflight power      0.462 (mean at open)   difference +0.205   binomial p 0.01488
+  slope on log(count)  -0.4514  SE 0.2381  p 0.0658
+
+gate  (n = 40)
+  evaluation count       81.000  [73.750, 92.750]
+  stated mean             0.850  [0.700, 1.000]
+  realized OOS Sharpe     0.883  [0.366, 1.231]
+  verdicts             {'FAIL': 15, 'PASS': 25}
+  PASS rate            25/40 = 0.625  Wilson 95% [0.470, 0.758]
+  preflight power      0.462 (mean at open)   difference +0.163   binomial p 0.04039
+  slope on log(count)  -0.1111  SE 0.2055  p 0.5918
+
+control vs gate (sigma 194.407, opus):
+  deflation gap      control  +0.5902   gate  +0.5378   difference -0.0524   U 1020.0  p 0.01885  rb -0.308
+  evaluation count   control +93.0000   gate +81.0000   difference -12.0000   U 1068.0  p 0.004794  rb -0.369
+  stated mean        control  +0.8500   gate  +0.8500   difference +0.0000   U 768.0  p 0.9099  rb +0.015
+  PASS rate          control 26/39 = 0.667   gate 25/40 = 0.625   Fisher p 0.8149
+
+===== sigma = 194.407, sonnet   (n = 80) =====
 control  (n = 40)
   evaluation count       76.000  [69.000, 82.250]
   stated mean             0.625  [0.550, 0.750]
@@ -401,11 +461,28 @@ gate  (n = 40)
   preflight power      0.461 (mean at open)   difference +0.139   binomial p 0.08262
   slope on log(count)  -0.1997  SE 0.0468  p 0.0001
 
-control vs gate (sigma 194.407):
+control vs gate (sigma 194.407, sonnet):
   deflation gap      control  +0.3452   gate  +0.3664   difference +0.0211   U 679.0  p 0.3244  rb +0.129
   evaluation count   control +76.0000   gate +110.0000   difference +34.0000   U 416.5  p 0.000369  rb +0.466
   stated mean        control  +0.6250   gate  +0.6500   difference +0.0250   U 883.0  p 0.3096  rb -0.132
   PASS rate          control 28/40 = 0.700   gate 24/40 = 0.600   Fisher p 0.4823
+
+BETWEEN MODEL at sigma 194.407 — unpaired (0 shared seeds)
+------------------------------------------------------------------------------
+  opus     n=79   seeds 581-660
+  sonnet   n=80   seeds 501-580
+  control:
+    deflation gap      opus  +0.5902   sonnet  +0.3452   difference -0.2450   U 1429.0  p 2.03e-10  rb -0.832
+    evaluation count   opus +93.0000   sonnet +76.0000   difference -17.0000   U 1247.0  p 4.718e-06  rb -0.599
+    stated mean        opus  +0.8500   sonnet  +0.6250   difference -0.2250   U 1281.5  p 8.315e-07  rb -0.643
+    realized OOS       opus  +0.4895   sonnet  +0.6017   difference +0.1122   U 655.0  p 0.2222  rb +0.160
+    PASS rate          opus 26/39 = 0.667   sonnet 28/40 = 0.700   Fisher p 0.8116
+  gate:
+    deflation gap      opus  +0.5378   sonnet  +0.3664   difference -0.1714   U 1364.0  p 1.055e-08  rb -0.749
+    evaluation count   opus +81.0000   sonnet +110.0000   difference +29.0000   U 510.0  p 0.008202  rb +0.346
+    stated mean        opus  +0.8500   sonnet  +0.6500   difference -0.2000   U 1272.5  p 1.319e-06  rb -0.631
+    realized OOS       opus  +0.8826   sonnet  +0.5085   difference -0.3741   U 1039.0  p 0.01125  rb -0.332
+    PASS rate          opus 25/40 = 0.625   sonnet 24/40 = 0.600   Fisher p 1
 
 
 COMPARISON 4 — pushed vs gate vs control, Sonnet (batch 3)
@@ -465,22 +542,22 @@ pushed:  fable n=30  sonnet n=30
 
 GATE ARM — status tool
 ------------------------------------------------------------------------------
-  status calls per run      1.000  [1.000, 2.000]   total 327
-  runs never calling it  0 of 210
-  position in run           0.825  [0.620, 0.951]   (fraction of tool calls elapsed)
-  by third of run        first 4, middle 96, last 227
+  status calls per run      1.000  [1.000, 2.000]   total 388
+  runs never calling it  0 of 250
+  position in run           0.821  [0.612, 0.946]   (fraction of tool calls elapsed)
+  by third of run        first 4, middle 120, last 264
   pushed-arm status calls 0 (the arm defines no status tool)
 
 COST — all runs in the analysis set
 ------------------------------------------------------------------------------
-  input tokens                 10,996
-  output tokens             5,656,667
-  cache read               73,601,502
-  cache creation            9,478,562
+  input tokens                 12,322
+  output tokens             6,411,208
+  cache read               79,936,651
+  cache creation           10,649,289
   thinking tokens             100,190
-  total tokens             88,747,727
-  cost (USD)                 143.1808
-  wall seconds per run    137.718  [115.823, 163.299]   total 26.7 h
+  total tokens             97,009,470
+  cost (USD)                 176.9258
+  wall seconds per run    136.381  [116.922, 158.509]   total 29.6 h
 
 FIGURES
 ------------------------------------------------------------------------------

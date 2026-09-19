@@ -655,10 +655,13 @@ def s3_block(kept) -> str:
         L.append("Amendment 9 recalibrated s3. The two calibrations are separate")
         L.append("experiments and are never pooled; each is reported on its own.")
         L.append("")
-    for sg in sigmas:
-        rs = [r for r in rs_all if round(float(r["sigma"]), 6) == sg]
-        if len(sigmas) > 1:
-            L.append(f"===== sigma = {sg:g}   (n = {len(rs)}) =====")
+    for sg, model in sorted({(round(float(r["sigma"]), 6), r["model"]) for r in rs_all}):
+        rs = [r for r in rs_all
+              if round(float(r["sigma"]), 6) == sg and r["model"] == model]
+        # Model is in the key, not only sigma. Batch 5 put Opus on s3 at the same
+        # sigma batch 4 ran Sonnet at, and grouping by (sigma, arm) alone silently
+        # pooled the two into one control cell of 79 and one gate cell of 80.
+        L.append(f"===== sigma = {sg:g}, {model.split('-')[1]}   (n = {len(rs)}) =====")
         for arm in sorted({r["arm"] for r in rs}):
             cell = [r for r in rs if r["arm"] == arm]
             g = graded(cell)
@@ -692,7 +695,7 @@ def s3_block(kept) -> str:
 
         c, gt = graded(pick(rs, arm="control")), graded(pick(rs, arm="gate"))
         if len(c) >= 3 and len(gt) >= 3:
-            L.append(f"control vs gate (sigma {sg:g}):")
+            L.append(f"control vs gate (sigma {sg:g}, {model.split('-')[1]}):")
             for metric, fn in (("deflation gap", gap),
                                ("evaluation count", lambda r: r["n_evaluated"]),
                                ("stated mean", lambda r: r["stated_mean"])):
@@ -711,6 +714,50 @@ def s3_block(kept) -> str:
         elif len(sigmas) > 1:
             L.append(f"  control vs gate: not both arms present at sigma {sg:g} yet "
                      f"(control {len(c)}, gate {len(gt)} graded); skipped")
+        L.append("")
+
+    # Between-model, within a calibration. UNPAIRED by construction: batch 4 ran
+    # Sonnet on seeds 501-580 and batch 5 ran Opus on 581-660, so the two share no
+    # DGP draw and cannot be differenced by seed. Amendment 11 reserves the paired
+    # design for Fable, which runs Opus's own seeds once the allowance resets.
+    for sg in sigmas:
+        at_sigma = [r for r in rs_all if round(float(r["sigma"]), 6) == sg]
+        models = sorted({r["model"] for r in at_sigma})
+        if len(models) < 2:
+            continue
+        seeds = {m: {r["seed_index"] for r in at_sigma if r["model"] == m} for m in models}
+        shared = set.intersection(*seeds.values())
+        L.append(f"BETWEEN MODEL at sigma {sg:g} — unpaired ({len(shared)} shared seeds)")
+        L.append("-" * 78)
+        for m in models:
+            s = sorted(seeds[m])
+            L.append(f"  {m.split('-')[1]:<8} n={len(seeds[m]):<4} seeds {s[0]}-{s[-1]}")
+        for arm in sorted({r["arm"] for r in at_sigma}):
+            cells = {m: graded([r for r in at_sigma
+                                if r["model"] == m and r["arm"] == arm]) for m in models}
+            if not all(len(c) >= 3 for c in cells.values()):
+                continue
+            L.append(f"  {arm}:")
+            for metric, fn in (("deflation gap", gap),
+                               ("evaluation count", lambda r: r["n_evaluated"]),
+                               ("stated mean", lambda r: r["stated_mean"]),
+                               ("realized OOS", lambda r: r["oos"])):
+                a = [fn(r) for r in cells[models[0]]]
+                b = [fn(r) for r in cells[models[1]]]
+                u, pv, rb = mw(a, b)
+                L.append(f"    {metric:<18} {models[0].split('-')[1]} {np.median(a):+8.4f}   "
+                         f"{models[1].split('-')[1]} {np.median(b):+8.4f}   "
+                         f"difference {np.median(b) - np.median(a):+.4f}   "
+                         f"U {u:.1f}  p {pv:.4g}  rb {rb:+.3f}")
+            raw = {m: [r for r in at_sigma if r["model"] == m and r["arm"] == arm]
+                   for m in models}
+            pk = {m: sum(1 for r in raw[m] if r["status"] == "PASS") for m in models}
+            odds, pv = fisher_exact([[pk[models[0]], len(raw[models[0]]) - pk[models[0]]],
+                                     [pk[models[1]], len(raw[models[1]]) - pk[models[1]]]])
+            L.append(f"    {'PASS rate':<18} "
+                     + "   ".join(f"{m.split('-')[1]} {pk[m]}/{len(raw[m])} = "
+                                  f"{pk[m]/len(raw[m]):.3f}" for m in models)
+                     + f"   Fisher p {pv:.4g}")
         L.append("")
     return "\n".join(L) + "\n"
 
@@ -919,14 +966,12 @@ def figures(kept, out_dir: Path) -> list[str]:
         # experiments, and a bar pooling them would average across the change
         # the batch exists to measure.
         sigmas3 = sorted({round(float(r["sigma"]), 6) for r in s3})
-        groups = [(sg, a) for sg in sigmas3
-                  for a in sorted({r["arm"] for r in s3
-                                   if round(float(r["sigma"]), 6) == sg})]
-        arms3 = [f"{a}\nσ{sg:g}" if len(sigmas3) > 1 else a for sg, a in groups]
-        fig, ax = plt.subplots(figsize=(1.9 * len(groups) + 1.6, 3.9))
+        groups = sorted({(round(float(r["sigma"]), 6), r["model"], r["arm"]) for r in s3})
+        arms3 = [f"{a}\n{m.split('-')[1]}\nσ{sg:g}" for sg, m, a in groups]
+        fig, ax = plt.subplots(figsize=(1.6 * len(groups) + 1.6, 4.2))
         rates, los, his = [], [], []
-        for sg, a in groups:
-            cell = [r for r in s3 if r["arm"] == a
+        for sg, m, a in groups:
+            cell = [r for r in s3 if r["arm"] == a and r["model"] == m
                     and round(float(r["sigma"]), 6) == sg]
             k = sum(1 for r in cell if r["status"] == "PASS")
             lo, hi = wilson_ci(k, len(cell))
