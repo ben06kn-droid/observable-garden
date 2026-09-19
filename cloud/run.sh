@@ -11,6 +11,12 @@
 #
 # THREADS is the numpy/BLAS thread count per process: 1 by default, right when many worker
 # processes share the cores; raise it for a single process that should use all of them.
+#
+# CAUTION: use `nproc --all`, not `nproc`, to size a worker pool inside a command run here.
+# GNU nproc honours OMP_NUM_THREADS, which this script exports as 1, so a command containing
+# `--workers $(nproc)` silently launches ONE worker. That turned a 1.5-hour run into a
+# projected 47-hour one before it was caught. `nproc --all` reports installed processors
+# regardless of the thread pinning.
 set -euo pipefail
 
 if [ $# -lt 2 ]; then

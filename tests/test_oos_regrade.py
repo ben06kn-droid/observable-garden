@@ -25,8 +25,20 @@ import numpy as np
 import pytest
 
 from environments.dgp import DGPConfig, generate
-from experiments.e_agent import CONFIGS, dgp_seeds
 from searchers.llm_agent import spec_from
+
+# CONFIGS and dgp_seeds are the authoritative run configuration and seed
+# derivation, so they are imported rather than restated -- reimplementing them
+# here would duplicate the thing under test. They live in experiments.e_agent,
+# which imports claude_agent_sdk at module level, so this module cannot be
+# collected on a machine without the SDK (an EC2 box running scripted work, for
+# instance). Moving them would shift the harness fingerprint, since e_agent.py
+# is inside code_state.CODE_PATHS. Skipping is the cheaper honest answer: the
+# re-grades this gates are local work, and run where the SDK is installed.
+pytest.importorskip("claude_agent_sdk",
+                    reason="experiments.e_agent imports the agent SDK; the "
+                           "offline re-grades this test gates run locally")
+from experiments.e_agent import CONFIGS, dgp_seeds  # noqa: E402
 
 RUNS = pathlib.Path(__file__).resolve().parent.parent / "runs"
 # s0 (sigma pinned at 1) and both s3 batches (sigma solved for, amendment 9),
