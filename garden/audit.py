@@ -126,7 +126,14 @@ def effective_breadth(R: np.ndarray) -> float:
     Z = np.zeros_like(R)
     Z[:, live] = (R[:, live] - R[:, live].mean(axis=0)) / sd[live]
     G = Z.T @ Z if N <= T else Z @ Z.T
-    return float(N ** 2 / (np.sum(G * G) / (T - 1) ** 2))
+    denom = float(np.sum(G * G)) / (T - 1) ** 2
+    if denom <= 0:
+        # Every column is constant, so there are no correlations to take a
+        # participation ratio of. That happens when a benchmark is subtracted from
+        # a menu whose columns all equal it. NaN says undefined; the old expression
+        # divided by zero and returned inf, which reads as infinite breadth.
+        return float("nan")
+    return float(N ** 2 / denom)
 
 
 def _classify(p: float, power: float, alpha: float, power_floor: float) -> str:
@@ -366,10 +373,16 @@ def audit(
         reasons.append(f"The submitted spec ranked {rank:,} of {N:,} by in-sample Sharpe. The test compares it "
                        f"against the null distribution of the maximum, so for a non-maximal pick the p-value "
                        f"is conservative.")
-    reasons.append(f"Effective breadth {breadth:,.1f} of {N:,} (participation ratio of the trial correlations) "
-                   f"is reported for information and not used in the correction: the bootstrap already "
-                   f"resamples trials jointly, and shrinking N as well would count their correlation twice "
-                   f"(SCOPE.md §10).")
+    if math.isfinite(breadth):
+        reasons.append(f"Effective breadth {breadth:,.1f} of {N:,} (participation ratio of the trial "
+                       f"correlations) is reported for information and not used in the correction: the "
+                       f"bootstrap already resamples trials jointly, and shrinking N as well would count "
+                       f"their correlation twice (SCOPE.md §10).")
+    else:
+        reasons.append(f"Effective breadth is undefined for this menu: every one of the {N:,} columns is "
+                       f"constant, so there are no trial correlations to take a participation ratio of. "
+                       f"It is reported for information only and never used in the correction "
+                       f"(SCOPE.md §10).")
     if benchmark_name is not None:
         reasons.append(f"Null: zero excess return over {benchmark_name}. That series was subtracted "
                        f"from every column before the bootstrap demeaned it, so this verdict is about "

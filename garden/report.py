@@ -70,7 +70,8 @@ def render_verdict(v: Verdict) -> str:
         "",
         _row("Reference Sharpe (--reference-sharpe)", f"{v.reference_sharpe:.2f}"),
         _row("Power, single pre-specified strategy", f"{pct(v.power_at_reference)} (floor {pct(v.power_floor)})"),
-        _row("Effective breadth (not used)", f"{v.effective_breadth:,.1f}"),
+        _row("Effective breadth (not used)",
+             f"{v.effective_breadth:,.1f}" if math.isfinite(v.effective_breadth) else "undefined"),
         _row("Degenerate tail share",
              f"{v.degenerate_share:.3f} ({v.degenerate_replicates:,} of top {v.tail_replicates:,} replicates)"),
     ]

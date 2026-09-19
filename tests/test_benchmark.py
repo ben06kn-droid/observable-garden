@@ -95,6 +95,20 @@ def test_the_verdict_states_the_null():
     assert "spy.csv" in render_verdict(v)
 
 
+def test_effective_breadth_is_undefined_when_every_column_is_constant():
+    """Subtracting a benchmark from a menu whose columns all equal it leaves no
+    variance anywhere, so there are no trial correlations to take a participation
+    ratio of. The expression divided by zero and returned inf, which reads as
+    infinite breadth. NaN says undefined, and the verdict says why."""
+    b = np.random.default_rng(7).normal(0.0, 0.01, 300)
+    t = from_matrix(np.column_stack([b, b, b]), 0, menu_kind="oblivious")
+    v = audit(t, B=200, seed=0, benchmark=b, benchmark_name="self")
+    assert np.isnan(v.effective_breadth)
+    assert any("Effective breadth is undefined" in r for r in v.reasons), v.reasons
+    assert "undefined" in render_verdict(v)
+    assert v.to_dict()["effective_breadth"] is None       # _json_safe nulls non-finite
+
+
 def test_preflight_carries_the_benchmark():
     plain, withb = preflight(44, 8266, 1.0), preflight(44, 8266, 1.0, benchmark="spy.csv")
     assert plain.benchmark is None and withb.benchmark == "spy.csv"
