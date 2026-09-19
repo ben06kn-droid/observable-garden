@@ -1,68 +1,673 @@
-# Roadmap: testing the gate where it hasn't been tested
+# Roadmap
 
-Order and reasoning only. Every cell gets its own `prereg/<name>.md`, committed
-before it runs, with its gate, and removed once it has reported — as every experiment here has. What the gate does,
-and what it has been shown to do, is in SCOPE.md. Nothing below is expected to
-overturn any of it; each item bounds where it applies. About 160 seat runs, under
-$60. Free and local work first, the seat last.
+**Phase 6** tests the gate where it has not been tested. **Phase 7** builds the
+ledger gate and an intraday testbed for it. The last section decides what runs
+on this laptop and what needs EC2.
 
-| # | test | where | gate |
+Every cell gets its own `prereg/<name>.md`, committed before it runs and removed
+once it has reported, with the commit recorded in `EXPERIMENTS.md`. What the gate
+does, and what it has been shown to do, is in `SCOPE.md`.
+
+---
+
+# Phase 6 — testing the gate where it hasn't been tested
+
+## Context
+
+**What the gate is.** Given a logged search, `garden audit` returns whether
+the submitted result can be believed, given the search that produced it.
+The verdict engine is White's (2000) Reality Check: demean every candidate,
+resample the time index jointly, take the maximum, read off a p-value.
+The project's additions: a characterization of when a transcript licenses
+that correction (only for data-oblivious candidate sets), the sign and size
+of the error when it doesn't (liberal under winner-chasing), a record
+hierarchy that restores validity (the declared-class tier), and two verdicts
+no existing tool returns — INADMISSIBLE (the search is too wide for the
+sample to certify anything) and UNDECIDABLE (the log cannot license a
+correction).
+
+**What has been shown.** Under the declared-class tier the gate is valid
+however adaptively the search chose what to evaluate. On 421 pure-noise
+searches run by LLM agents (419 graded) it passed 15 times, 3.6% against a
+nominal 5% — Sonnet 12/329, Fable 3/90. On a Sharpe-1.0
+edge with 20 years of daily data it passed 60–70% of agent searches, above
+the single-strategy power of 46% because a searcher that can find the edge
+picks the best of its neighborhood. The agents themselves state a belief
+that is a fixed function of the in-sample number they found — roughly a
+model-specific prior plus half the in-sample Sharpe — with no dependence on
+how many things they tried, even when the count is assigned. Telling them
+the count does nothing; showing them the bar changes how much they search,
+in a model-specific direction, and barely what they believe. On real data
+(SPY, 1993–2026, 44 moving-average rules), the verdict depends on the null:
+PASS against zero return, FAIL against buy-and-hold, PASS for the 22
+long-short rules alone.
+
+**What has not been tested.** Everything below. Each item bounds where the
+results apply; none is expected to overturn them. Ordered so that the free
+and local work lands first and the seat is spent last, on the one test
+that matters most to a practitioner.
+
+Rules carried over: every cell pre-registered in `prereg/` before it runs, and
+removed once it has reported, its commit recorded in `EXPERIMENTS.md`;
+fingerprint recorded per run; runners launched only from the seat terminal;
+`experiments/` frozen during any batch. Seat cost for the whole phase is
+roughly 160 runs, under $60 at list.
+
+---
+
+## Repository status, 2026-09-19
+
+The repo was restructured on this date; several items below are cheaper or
+differently addressed as a result.
+
+- **Experiments are named, not numbered.** `EXPERIMENTS.md` is the registry and
+  carries the old `e<n>`/`E<n>` id for every one. Names used here follow it.
+- **`runs/` is five per-batch folders**, not 662 run directories. Each holds
+  `runs.csv` (one row per run, ~40 columns), `cells.csv`, `raw.tar.gz` with the
+  transcripts byte-identical, and `SHA256SUMS`. `runs/cells-pooled.csv` is the
+  only place cells are pooled across batches. This is what makes 6.1's and
+  6.2's free work a table read.
+- **Pre-registrations are removed once their experiment reports.** The nine
+  already-run ones are in git at the commits `EXPERIMENTS.md` lists, each of
+  which precedes its run. `prereg/` now holds only `AGENT_PROMPTS.md` — still
+  live, since its Fable arm is deferred to 2026-09-30 and it pins 6.5–6.7 —
+  and the history-rewrite record.
+- **`GARDEN_WATCH_PLAN.md` and `estimator_build_spec.md` were deleted**, at
+  `1fb464f`. The watch plan also served as the pre-registration for
+  `watch-validation`, so 6.4 extends `watch` against that commit.
+- **`SCOPE.md` is ~3,100 words in named sections**, cited by name rather than
+  number throughout the code and the gate's own verdict strings.
+
+---
+
+## 6.1 Calibration at 1% (free, then local)
+
+**Why.** 5.0% at α=0.05 is one point on the p-value distribution. A gate
+used for allocation decisions will be run at 1%, where the empirical check
+has 5× fewer events and the bootstrap tail matters more.
+
+**Free part — re-score what exists. Counts done 2026-09-19; KS still to run.**
+Every graded s0 run carries its p-value as a column in `runs/<batch>/runs.csv`,
+so this is a table read, not a walk over run directories. Over all 419 graded
+s0 runs (331 Sonnet, 90 Fable):
+
+| α | rejections | rate |
+|---|---|---|
+| 0.10 | 29 | 6.9% |
+| 0.05 | 15 | 3.6% |
+| 0.01 | 3 | 0.72% |
+
+The plan expected about 4 of 380 at 1%; observed 3 of 419. Nothing is liberal
+at any of the three levels. Still to do, and what 6.1 is actually for: Wilson
+intervals per model, and the KS test of the pooled p-values against U(0,1),
+which is the stronger statement and covers every α at once. Note that agents in
+the gate and pushed arms saw a 5% bar, which affects behavior, not the validity
+of the p-value.
+
+**Local part — scripted, high count.** 5,000 draws of s0 with Greedy and
+Adaptive scripted searchers under the full-class null (the declared class
+the agents used), rejections at 1% and 5%, KS on the p-values. At 5,000
+draws the 1% interval is ±0.3 points. Also 500 draws at B=50,000 to check
+the bootstrap tail resolution at 1% against B=10,000.
+
+**Gate.** Rejection at 1% within its interval of nominal, and KS not
+rejecting, for every searcher. If the 1% rate is high while 5% is fine,
+the bootstrap tail is under-resolved and B rises before anything else runs.
+
+## 6.2 Costs and regime change (free, synthetic)
+
+**Why.** The gate corrects for search breadth only. A practitioner's
+question is whether PASS survives the things it ignores.
+
+**Costs — re-grade the s3 runs.** Positions are recoverable from each
+submitted specification and the DGP seed, so turnover is computable
+offline; `submitted`, `seed_index`, `sigma` and `oos` are all columns of
+`runs/<batch>/runs.csv`, and the 240 s3 runs sit in `b2-arms` (σ=1, not to be
+pooled), `b4-s3-recal` and `b5-opus`. Re-grade realized OOS net of a simple linear cost at 5, 10 and 20
+bps per unit turnover for all 160 s3 runs at σ=194.407 (Sonnet and Opus).
+Report: OOS gross vs net by verdict; the fraction of PASS runs whose net OOS
+Sharpe stays above 0 and above 0.5 at each cost; the same for FAIL runs.
+No model calls.
+
+**Regime change — re-grade under a shifted OOS.** For the same 160 runs,
+regenerate the OOS panel with (a) one true β halved, (b) one true β
+sign-flipped, (c) σ doubled. Report OOS by verdict under each. The gate's
+PASS is expected to remain a valid in-sample statement and to lose
+predictive value in proportion to the shift — the point is to put numbers
+on "necessary, not sufficient."
+
+**Output.** One table for the paper's limitations section, replacing the
+sentence "trading costs and regime change are not checked" with what they
+cost.
+
+## 6.3 Heterogeneous correlation and fat tails under the full-class null (local)
+
+**Why.** Null calibration of the full-class tier was established under
+equicorrelated Gaussian features. Real features are neither.
+
+**Design.** Scripted searchers only. Two DGP variants: unequal-correlation's one-factor
+loading structure (correlations λᵢλⱼ, loadings spread 0.2–0.8), and
+Student-t innovations at ν=4 with a GARCH(1,1)-style volatility path
+(stationary block bootstrap already chosen for this). 2,000 draws each of
+s0, Greedy and Adaptive, full-class null, rejection at 5% and 1%, KS.
+
+**Gate.** Both hold at both α. If the t/GARCH cell is liberal at 1%, the
+block-length selector is the first suspect; report the block lengths chosen.
+
+## 6.4 Explicit classes in `watch` (code, no runs)
+
+**Why.** `watch` refuses ExplicitClass. An agent whose tool grammar emits
+rules rather than feature subsets — which is most agents anyone would
+build — can't be watched. The audit already handles explicit classes
+(Reality Check on the supplied streams); watch needs the same path.
+
+**Build.** At open: take the class as a matrix of return streams, price the
+bar with the ordinary Reality Check bootstrap once, membership by spec id.
+Everything else unchanged. Tests: bar equals audit's explicit-class null on
+the same inputs; membership refusal by id; bar does not move. Enables 6.5's
+rule-grammar arm.
+
+## 6.5 An agent on real data (seat, ~80 runs) — the headline
+
+**Why.** Everything the agents have done, they have done on a synthetic
+panel with a known oracle. The claim a practitioner will act on is what
+the gate does when an agent searches data with real structure.
+
+**Panel.** A fixed universe of ~40 liquid US ETFs with 20+ years of daily
+history (sector, factor, size, international, bond, commodity), adjusted
+closes from Yahoo, committed to `data/` with a README. No survivorship
+issue: the universe is defined as "ETFs with continuous history from 2005,"
+chosen before any search, and the choice is recorded.
+
+**Split.** In-sample 2005–2021 (~4,250 days), holdout 2022–2026 (~1,100
+days). The holdout is never on the machine the agent runs on; the harness
+grades from a separate file after submit.
+
+**Features.** K=40 price-based signals per asset, computed with strict
+one-day lag, defined and committed before any run: momentum at 5/21/63/126/
+252 days, short-term reversal, realized volatility at three horizons,
+volatility-scaled momentum, distance from moving averages, drawdown,
+cross-sectional rank versions of each. All dollar-neutral cross-sectional
+constructions, so the zero-excess-return null is the right null and no
+benchmark subtraction is needed; say so in the pre-registration.
+
+**Class and admissibility.** Run `preflight` first. Signed subsets of ≤3
+over K=40 at T≈4,250 is near the 20% power floor (interpolating the T
+table: roughly 0.25–0.30 at reference Sharpe 1.0). If INADMISSIBLE, drop to
+unsigned d=3 or signed d=2 — decided by preflight before any run, recorded.
+
+**Arms.** control and gate, 40 runs each, claude-sonnet-5. Every run sees
+the same in-sample panel; runs differ only in the agent's own search, so
+this is a study of what the agent does with fixed real data, not a
+sampling experiment.
+
+**Readouts, all pre-registered.**
+1. Verdict distribution. With no oracle, the expected PASS rate is unknown;
+   report it with its interval.
+2. The gate's practical test: holdout Sharpe of PASS submissions vs FAIL
+   submissions, gross and net of 10 bps costs. If PASS doesn't predict
+   holdout, that is the result.
+3. The haircut regression: stated mean on submitted in-sample Sharpe and
+   log(count). The equation's coefficients on real data, next to the
+   synthetic ones.
+4. Which features the agents converge on, and whether PASS submissions
+   cluster on a few — a real-data version of "abandoning the truth."
+5. Evaluation counts and status calls by arm, as before.
+
+**Secondary arm (after 6.4).** 20 runs with a rule-grammar tool — the agent
+composes moving-average and breakout rules per asset from a fixed menu —
+watched under an explicit class. The first watched agent whose actions
+aren't feature subsets.
+
+**What this cannot show.** Whether any PASS is a real edge. Twenty runs on
+one holdout is one draw of the future. The output is the gate's behavior
+on real structure and the agent's behavior on real data, not an alpha.
+
+## 6.6 T sweep for agents (seat, ~40 runs)
+
+**Why.** Agents have only ever run at T=5,000, where the pinned class is
+admissible. At realistic sample lengths the gate says INADMISSIBLE at
+open, and no run has shown what an agent does when told that.
+
+**Design.** s0, T ∈ {1,000, 2,500}, control and gate, 10 runs per cell,
+Sonnet. Gate agents receive INADMISSIBLE at open through `status`.
+Readouts: evaluation count, stated mean, and whether any agent's behavior
+changes when the gate has said in advance that nothing can be certified.
+Hypothesis, from everything so far: none of it changes.
+
+## 6.7 Fat tails for agents (seat, ~40 runs, conditional on 6.3)
+
+Only if 6.3 holds. s0 with t(4)+GARCH innovations, control and gate, 20
+each, Sonnet. Readout: PASS rate at 5% and 1% on the agent's own searches,
+and whether the haircut equation holds under fat tails (it should; the
+agent sees Sharpe ratios either way).
+
+---
+
+## Sequence and gates
+
+| step | work | where | gate |
 |---|---|---|---|
-| 6.1 | **Calibration at 1%.** 5.0% at α=0.05 is one point on a distribution; allocation decisions run at 1%, with 5× fewer events and more of the bootstrap tail. Re-score stored s0 p-values at α ∈ {0.10, 0.05, 0.01} (Wilson, KS against U(0,1)); then 5,000 scripted Greedy and Adaptive draws under the full-class null, and 500 at B=50,000 to check tail resolution. | free, then local | 1% inside its interval and KS not rejecting, every searcher. A high 1% with a fine 5% means an under-resolved tail: raise B before anything else runs. |
-| 6.2 | **Costs and regime change**, which the gate ignores by construction. Positions follow from the submitted specification and the DGP seed, so re-grade the 160 s3 runs net of 5/10/20 bps turnover, and under a halved β, a flipped β, and doubled σ. | free | — replaces "not checked" with what they cost |
-| 6.3 | **Heterogeneous correlation and fat tails** under the full-class null, calibrated so far only on equicorrelated Gaussian features. unequal-correlation's one-factor loadings; t(4) innovations with a GARCH path. 2,000 draws each of s0, Greedy and Adaptive. | local | holds at 5% and 1%. If t/GARCH is liberal at 1%, suspect the block-length selector and report the lengths chosen. |
-| 6.4 | **Explicit classes in `watch`**, which refuses them at open today — so an agent whose tool grammar emits rules rather than equal-weight feature subsets cannot be watched. `audit` already prices such a class; give `watch` the same path. | code | bar equals `audit`'s explicit-class null on the same inputs; membership refused by id; bar does not move |
-| **6.5** | **An agent on real data — the headline.** Every agent run so far used a synthetic panel with a known oracle. ~40 liquid US ETFs with continuous history from 2005, the universe recorded before any search; in-sample 2005–2021, holdout 2022–2026 never on the machine the agent runs on. K=40 price signals at strict one-day lag, dollar-neutral cross-sectional, so zero excess return is the right null and no benchmark subtraction is needed. `preflight` fixes the admissible class before any run. control and gate, 40 runs each, Sonnet. | seat, ~80 | — |
-| 6.6 | **T sweep.** Agents have only seen T=5,000, where the pinned class is admissible. At T ∈ {1,000, 2,500} the gate says INADMISSIBLE at open, and nothing has shown what an agent does when told in advance that nothing can be certified. | seat, ~40 | — |
-| 6.7 | **Fat tails for agents**, only if 6.3 holds. | seat, ~40 | — |
+| 1 | 6.1 free re-score; 6.2 re-grades | local, minutes | — |
+| 2 | 6.1 scripted; 6.3 | local, hours | 1% within interval, KS holds, in every cell; else fix B or block length before anything else |
+| 3 | 6.4 explicit-class watch | code | bar equals audit; tests green |
+| 4 | 6.5 panel, features, preflight, pre-registration | local | preflight OK at some class; class recorded |
+| 5 | 6.5 main arms | seat, one window | — |
+| 6 | 6.6, 6.7 | seat, one window | — |
+| 7 | 6.5 rule-grammar arm | seat | — |
 
-**6.5's readouts, pre-registered.** Verdict distribution with its interval (no
-oracle, so no expected rate). Holdout Sharpe of PASS against FAIL submissions,
-gross and net of 10 bps — **if PASS does not predict holdout, that is the
-result.** The haircut regression on real data beside the synthetic one. Which
-features the agents converge on. After 6.4, twenty runs on a rule-grammar tool:
-the first watched agent whose actions are not feature subsets. It cannot show
-whether any PASS is a real edge — one holdout is one draw of the future.
+Steps 1–2 produce the limitations table and the 1% number and cost
+nothing. Step 5 is the one that matters. If time runs short, cut 7, then
+6.7, then 6.6; never 6.5.
 
-Cut order if time runs short: the rule-grammar arm, then 6.7, then 6.6. Never 6.5.
+## What goes where
 
-## 6.9 Does PASS predict out-of-sample performance?
+- **Note to López de Prado:** nothing from this phase. It's finished as
+  scoped.
+- **Paper:** 6.1 (calibration at 1%, KS), 6.2 (the limitations table with
+  numbers), 6.3 (robustness of the full-class null), 6.5 (the real-data
+  section).
+- **README:** the 6.5 verdict table beside the SPY three-null table.
+- **Amendments:** one per cell, before it runs, as before.
 
-**A — sealed forward test.** Seal 6.5's submissions and verdicts at a
-pre-registered cutoff, before any later data exist, so nothing can leak. Same
-runs, two holdouts: 2022–2026 answers weakly now, the seal answers strongly at
-12–18 months. The gate's claim is the FAIL side — nothing it refused should have
-been believed; PASS is the weaker claim and the test should say so.
+---
 
-**B — intraday.** Twenty years of daily data hold four or five independent
-windows: a direction with a wide interval, never a rate. Five-minute bars give
-dozens of month-long rolling holdouts. Decide and record before any search:
-costs are first-order (a spread crossing is comparable to the expected move), so
-the null is zero return net of a pre-registered cost model via `--benchmark`;
-sessions are not one series (gaps removed, session-edge bars flagged, annualize
-by bars-per-year); and the effective sample sits well below the bar count, so
-preflight runs on the bar series rather than on T. Fast decay is the point —
-does PASS decay slower than FAIL? Two to four weeks of data acquisition and a
-session-aware sandbox come first, so this follows the note and the paper. It
-yields the number nobody has: the share of FAIL submissions with positive net
-holdout Sharpe, the gate's false-negative rate on real data.
+## 6.8 Cheap extensions — answerable with what exists
 
-## Where the results go
+Each is local work or one seat window. None changes the results above; each
+closes a question a reader will ask.
 
-Nothing to the note, which is finished as scoped. Paper: 6.1, 6.2, 6.3, 6.5.
-README: 6.5's verdict table beside the SPY three-null table.
+| question | how | cost |
+|---|---|---|
+| Calibration at 1%, fat tails, heterogeneous correlation | 6.1, 6.3 | local |
+| What costs and regime shifts do to PASS's predictive value (synthetic) | 6.2 re-grades | free |
+| Does the haircut equation hold on real data and across models | 6.5, plus one Sonnet/Opus/Fable cell each | one window |
+| What an agent does when told INADMISSIBLE at open | 6.6 | one window |
+| Does the gate's feedback improve outcomes, not just beliefs | two more model cells on s3 (it didn't for Sonnet) | one window |
+| Can an agent deflate if told *how* | one prompt arm that hands it the DSR formula and the count; separates "can't" from "wasn't asked" | 40 runs |
+| Watching rule-grammar agents | 6.4 | code |
+| The effective-N note | two-hour literature check, write-up | a day |
+| The Thresholdout hybrid | explore on a noisy holdout, certify a declared class on fresh data | a week of code, no new theory |
 
-## Logged, not scheduled
+Answerable only weakly from any experiment: whether PASS predicts real
+out-of-sample performance (6.9 below), and whether real edges live inside
+classes narrow enough to certify — a question about the world that only
+live tracking answers.
 
-The haircut equation across models (one window); whether the gate's feedback
-improves outcomes and not only beliefs (it did not for Sonnet); whether an agent
-can deflate when handed the DSR formula and the count, separating "cannot" from
-"was not asked" (40 runs); the effective-N note (a day); a Thresholdout hybrid,
-exploring on a noisy holdout and certifying a declared class on fresh data (a
-week of code, no new theory).
+Not answerable without a large amount of new work, and out of scope:
+interior-rank sign in closed form; bootstrap consistency under partial
+separation; large-K asymptotics for studentized maxima; the recursive tier
+for LLM agents; training agents to be calibrated; the matched human
+baseline; non-Sharpe settings such as prediction markets.
 
-Out of scope without a large amount of new work: interior-rank sign in closed
-form, bootstrap consistency under partial separation, large-K asymptotics for
-studentized maxima, the recursive tier for LLM agents, training agents to be
-calibrated, a matched human baseline, non-Sharpe settings such as prediction
-markets.
+---
+
+## 6.9 Does PASS predict out-of-sample performance? — the forward test
+
+**The problem.** One holdout is one draw of the future. Daily data over
+twenty years gives four or five independent multi-year windows, so a
+rolling-origin design yields a direction with a wide interval, never a
+rate. Two things widen the sample: making the holdout the actual future,
+so no look-ahead of any kind is possible; and going intraday, where a few
+years contain many independent windows.
+
+**Design A — sealed forward test.** Pull data up to a pre-registered cutoff
+(the date the search runs), run the agent search and the gate on it, and
+commit every submission and verdict before any later data exist. The
+holdout is then calendar time. Nothing can leak because nothing exists
+yet. Results arrive on their own schedule — the first reading at six
+months, a defensible one at eighteen — and the readout is the same
+asymmetric test as everywhere else: holdout Sharpe of PASS submissions
+against FAIL submissions, gross and net of costs. The gate's claim is on
+the FAIL side (nothing it refused should have been believed); PASS is a
+weaker claim, and the test should say so.
+
+Run it on the daily ETF panel from 6.5 at the same time as 6.5's own
+holdout analysis: the 2005–2021 / 2022–2026 split gives the weak answer
+now, and sealing 2026-09 as the cutoff gives the strong one later. Same
+runs, same submissions, two holdouts.
+
+**Design B — intraday alpha search on 1–5 minute OHLCV bars.** Five-minute
+bars give ~78 per session, ~20,000 a year; three years of one liquid
+instrument is ~60,000 bars, and a rolling-origin design over it yields
+dozens of holdout windows of a month each rather than four of four years.
+That is the only way to turn "does PASS predict OOS" into a rate within
+months instead of years.
+
+What changes at this frequency, each of which must be decided and
+recorded before any search:
+
+- *The effective sample is smaller than the bar count.* Intraday returns
+  have short-lag autocorrelation, intraday seasonality, overnight gaps, and
+  strong volatility clustering. The stationary block bootstrap handles the
+  dependence; the block-length selector should be run and reported per
+  instrument, and preflight's power must be computed on the bar series
+  itself, not from T alone. Expect the admissible class to be narrower than
+  the bar count suggests.
+- *Costs are first-order, not a footnote.* At a five-minute horizon a
+  spread crossing per trade is comparable to the expected move. The gate's
+  null is zero mean return; on intraday data the only honest null is zero
+  return *net of a stated cost model* — use `--benchmark` with the cost
+  series subtracted, and pre-register the cost assumption (half-spread plus
+  a fixed per-share fee, from the instrument's own quoted spreads).
+- *Sessions are not one series.* Overnight gaps are removed or modeled;
+  the first and last bars of each session are excluded or flagged;
+  annualization uses bars-per-year for the instrument, stated once.
+- *Features and class.* Price/volume constructions at bar lags 1–60:
+  returns, ranges, volume ratios, VWAP distance, order-flow proxies from
+  OHLCV. Fixed and committed before the search. Same declared-class tier;
+  preflight decides d and signs.
+- *Data.* A vendor with several years of clean 1-minute bars for a few
+  liquid instruments (index futures or the largest ETFs). Free sources
+  rarely go back far enough at this frequency; budget for it and record
+  the source, the download date, and the adjustment method.
+- *Decay is fast, which is the point.* Intraday edges that exist tend to
+  disappear within quarters. A rolling-origin readout will show PASS
+  submissions decaying; the question is whether they decay to zero faster
+  or slower than FAIL submissions, and whether the gate's FAIL side holds.
+
+**Readouts for B, pre-registered.**
+1. Per rolling window: verdict, holdout Sharpe gross and net, block length,
+   admissible class at open.
+2. Pooled: holdout Sharpe of PASS vs FAIL submissions, with the between-
+   window dependence acknowledged (windows overlap in features even when
+   holdouts don't).
+3. Calibration in the wild: the fraction of FAIL submissions with positive
+   net holdout Sharpe — the gate's false-negative rate on real data, the
+   number nobody has.
+4. The haircut regression on intraday data, one more row in the table.
+
+**Order.** A costs nothing beyond 6.5 and should be sealed the day 6.5
+runs. B is a separate project — data acquisition, a session-aware
+sandbox, a cost model — of two to four weeks before the first search, and
+it belongs after the note and the paper's first version are out. It is
+also the one experiment on this list that could produce a result a trading
+desk would care about, which is a reason to do it and a reason to do it
+carefully.
+
+---
+
+# Phase 7 — the ledger gate, and an EU-tech ADR testbed
+
+Built after Phase 6's free items (6.1–6.3) and before 6.5, so that 6.5
+runs on the new gate as well as the old. Nothing here claims novelty until
+Chen et al. (2025, constrained agents for crypto factor discovery) and
+POPPER (2025, agentic sequential falsification with Type-I control) have
+been read in full; both are adjacent and the difference must be stated
+precisely or not at all.
+
+## 7.1 fixed-sequence-replay — does replaying a typed move sequence calibrate? (local, first)
+
+The grammar tier replays an agent's typed moves on each bootstrap
+resample. Content choices (which feature gets extended) are replayed
+exactly; meta-choices (how deep, when to restart, when to stop) are fixed
+at the realized sequence, and those were made after seeing results. By P4
+the error's sign depends on how they anchor. Measure it before building on
+it.
+
+Scripted meta-adaptive searchers on s0: stop-when-cleared, restart-after-k-
+failures, extend-while-improving, each with its move sequence recorded.
+Three nulls per draw: fixed-sequence replay, full policy replay (exact,
+since the policy is code), declared-class bound. 2,000 draws. Report type-I
+at 5% and 1% for each, and the Kolmogorov distance between fixed-sequence
+and policy nulls per searcher.
+
+Gate: if fixed-sequence replay is within a point of nominal for
+stop-when-cleared — the anchoring case — the grammar tier is usable for
+in-the-loop agents with its size stated. If it is liberal by more, the
+policy must be declared, and 7.2's agent writes a policy rather than
+searching in the loop.
+
+## 7.2 The ledger gate — build
+
+**Two slices.** In-sample data is split, before anything runs, into an
+exploration slice and a validation slice (default 70/30, contiguous in
+time, validation later). The split is part of the pre-registration.
+
+**Grammar.** A closed set of move operators, each a deterministic function
+of (state, exploration data), each tagged: oblivious (depends only on
+feature names, declared priors, or the agent's stated theory before any
+result), replayable (deterministic in data), judgment (data-informed choice
+the operator cannot reproduce). Initial set: `init(spec)`,
+`extend_best(k, by=metric)`, `swap_worst(by=metric)`, `flip(feature)`,
+`refine(metric)`, `restart()`, `stop()`. A move outside the grammar drops
+the run to the declared-class tier for the rest of that run.
+
+**Process ledger.** The typed move sequence, replayed on exploration-slice
+resamples by the recursive bootstrap. Meta-choices are either a declared
+policy (exact) or the realized sequence (approximate, size from 7.1). This
+is the standing signal during search — the bar the agent is chasing,
+priced — and it is advisory.
+
+**Prediction slot.** Every `evaluate` carries an optional falsifiable
+claim — sign, Sharpe above a stated threshold, a ranking among named
+specs — stamped by the harness before the result is returned. Admissible
+predictions must have power against the null at the validation slice's
+length; trivial claims are rejected at entry.
+
+**α-ledger.** Each admissible prediction is one test on the validation
+slice at level α_j drawn from current α-wealth (Foster & Stine 2008;
+Aharoni & Rosset 2014). Rejection earns ω back; failure spends
+α_j/(1−α_j); wealth below zero halts the run. Initial wealth and ω are the
+calibration knobs, pre-registered. Near-duplicate predictions (same
+support, same sign) are charged once and scored once.
+
+**Verdict.** CERTIFIED if the submitted specification is a declared
+prediction confirmed on validation with wealth nonnegative. Reported
+beside it, never substituted: the process-ledger p-value on exploration,
+the declared-class verdict, and the wealth path. UNDECIDABLE if the run
+left the grammar; INADMISSIBLE if preflight on either slice fails.
+
+**Surface.** Per run: move sequence, prediction log with timestamps,
+wealth over time, both verdicts. A reviewer reads a ledger, not a
+transcript.
+
+**Tests.** mFDR at or below nominal on s0 (7.3); the process ledger
+reproduces pointwise-dominance's recursive p-values when the grammar is the two-step
+anchored search; the prediction slot cannot be written after the result
+exists; trivial predictions rejected; the grammar is closed.
+
+## 7.3 Calibrating the ledger on the sandbox (local, then seat)
+
+Scripted first. On s0, a scripted predictor making N admissible
+predictions per run at three rates of "true belief" (all null, so every
+prediction is false): 2,000 runs, expected false certifications ≤ α per
+run under mFDR; report the observed rate with intervals and the wealth
+exhaustion point. On s3 at σ=194.407, the same predictor told the true
+set: certification rate against validation-slice power.
+
+Then one agent cell: control and ledger arms, 40 each, Sonnet, s0 and s3.
+Readouts: certification rate on noise (must be ≤ α); on signal; how many
+predictions the agent makes, how many are admissible, how often it
+predicts before it has looked; and whether stated confidence moves — it
+shouldn't, and it doesn't matter.
+
+## 7.4 EU-tech ADR testbed at 5-minute bars
+
+**Why ADRs.** The ADR trades in US hours while its home market is open
+until ~11:30 ET and closed after. Information arrives on a schedule and
+pulls in known directions — home index, sector ETF, FX, the ADR–ordinary
+parity (Gagnon & Karolyi 2010) — so an agent can make theory-driven
+predictions before seeing results, which is what the ledger rewards.
+Whether any of it survives at five minutes net of ADR spreads is the open
+question.
+
+**Universe — decided before any data is looked at, and recorded.** EU
+technology and semiconductor names with liquid US listings:
+
+| ticker | company | home | listing | note |
+|---|---|---|---|---|
+| ASML | ASML | Euronext AMS | Nasdaq | most liquid |
+| SAP | SAP | Xetra | NYSE | |
+| STM | STMicroelectronics | Euronext PAR | NYSE | |
+| NOK | Nokia | Helsinki | NYSE | |
+| ERIC | Ericsson | Stockholm | Nasdaq | |
+| ARM | Arm Holdings | none (US-only) | Nasdaq | from 2023-09; no home market |
+| LOGI | Logitech | SIX | Nasdaq | ordinary, dual-listed |
+| NXPI | NXP | none | Nasdaq | EU-domiciled, US-only listing |
+| SPOT | Spotify | none | NYSE | EU-domiciled, US-only listing |
+
+EU tech is thin: five or six names with a real home-market close, and
+three EU-domiciled names without one. Keep the latter in the panel as a
+built-in control — every home-close prediction should fail on them — and
+say so in the pre-registration. If preflight on this panel is INADMISSIBLE
+at any admissible class, widen to EU large-caps across sectors (NVS, AZN,
+SNY, NVO, HSBC, BCS, UL, DEO, TTE, SHEL, BP, RIO) and keep the tech names as
+a sub-panel. Exclude OTC-only listings (IFNNY, CGEMY, DASTY); their
+intraday prints are too sparse.
+
+**Data, and whether it's free.** Two years is free; more is not.
+- Polygon.io free tier: 5 calls a minute, historical window of roughly the
+  last two years; aggregates return up to 50,000 bars per call, so two
+  years of 5-minute bars for a name is one or two calls. The whole panel
+  downloads in an afternoon at no cost. US-listed ADRs are US equities to
+  Polygon, so they're covered.
+- Alpha Vantage's intraday endpoint advertises 25+ years of history, but
+  the free tier is 25 requests a day with compact output; multi-year
+  intraday needs a premium key (~$50/month, cancel after one month).
+- Yahoo: 60 days of 5-minute bars. Not usable.
+- Databento / Kibot: pay-as-you-go, cheap for a 12-name panel, and the
+  cleanest corporate-action handling.
+
+Start free. Two years of 5-minute bars is ~40,000 bars per name; with
+the panel it is enough for preflight to have something to say, and for a
+rolling-origin design with ~20 monthly holdouts. If the first pass shows
+power is the constraint, the extra years are one month of Alpha Vantage
+premium. Record source, download date, session filter, and adjustment
+method in `data/README.md`; ADR ratio changes must be checked by hand
+against each depositary's notices.
+
+**Sessions and null.** US regular session only, 9:35–15:55 ET, first and
+last bars dropped. Home-close at 11:30 ET is a boundary the sandbox knows:
+every feature carries a home-open/home-closed indicator, and the block
+bootstrap treats it as a break. Null: zero return net of a pre-registered
+cost model — half of each name's median quoted spread per trade plus a
+per-share fee — via `--benchmark`. Annualization by the panel's own bars
+per year.
+
+**Features, fixed and committed first.** Cross-sectional within the panel,
+dollar-neutral: own return at lags 1, 3, 6, 12 bars; return relative to a
+US semiconductor/tech ETF over the same lags; overnight gap; distance from
+session VWAP; volume versus 20-day average at that time of day; minutes to
+and from home-close; each of these interacted with the home-open
+indicator. K ≈ 40, as before.
+
+**Class.** Signed subsets ≤ 3 by default; preflight on the exploration
+slice at the panel's bar count decides d and signs, recorded.
+
+**Arms.** control, gate (declared class), ledger — 30 runs each, Sonnet,
+on one fixed exploration/validation split; then a rolling-origin pass
+with the ledger arm only, one run per origin, ~20 origins.
+
+**Readouts, pre-registered.**
+1. Verdict distributions per arm; certification rate for the ledger.
+2. Holdout Sharpe, gross and net, of CERTIFIED vs PASS vs FAIL
+   submissions; the false-negative side (FAIL submissions with positive net
+   holdout) is the number nobody has.
+3. The home-close control: prediction confirmation rate on names with a
+   home market vs without.
+4. The haircut regression on intraday data.
+5. Prediction behavior: count, admissibility, timing relative to first
+   evaluate, and the fraction of theory-stated predictions that name the
+   home-close mechanism.
+
+**What it cannot show.** That any certified edge is tradeable at size, or
+that it persists — two years of history and twenty monthly holdouts give
+a direction and a bounded false-negative rate, not an alpha. Seal the
+last month as a forward holdout regardless, per 6.9.
+
+## Sequence
+
+| step | work | where |
+|---|---|---|
+| 1 | 6.1–6.3 | local |
+| 2 | 7.1 fixed-sequence-replay | local |
+| 3 | 7.2 build; 7.3 scripted calibration | local |
+| 4 | Polygon download, panel README, features, preflight, pre-registration | local |
+| 5 | 7.3 agent cell | seat, one window |
+| 6 | 7.4 fixed-split arms | seat, one window |
+| 7 | 6.5 daily ETF panel on all three gates | seat, one window |
+| 8 | 7.4 rolling-origin pass | seat |
+| 9 | 6.6, 6.7 | seat |
+
+The note to López de Prado is unaffected. Phase 7 goes in the paper as
+its own section only if 7.3 calibrates; otherwise it goes in as a
+measured failure, which is also a section.
+
+---
+
+# Compute — what runs on the laptop and what needs EC2
+
+The machine is a MacBook Air, M3, 8 GB. Two things decide placement: total
+bootstrap work, and peak memory. Rules of thumb from what has already run
+here — oblivious-calibration (640 cells × 1,500 replicates) took 7.7 hours on a
+32-core instance; the T=2000 validation (96 cells) took 1.5–3 hours; a single
+agent run's two bootstraps take seconds.
+
+**Never EC2:** anything that calls the model. Agent runs are latency-bound
+and the seat is logged in on the laptop. All of 7.3's agent cell, 7.4's
+arms, 6.5, 6.6, 6.7 run locally regardless of scale.
+
+**Running an agent batch.** Agent runs go through the enterprise seat on this
+laptop, never EC2. Confirm which seat is active before spending a window: the
+harness pins the model and records it per run, but nothing records which seat
+paid for it.
+
+    echo $CLAUDE_CONFIG_DIR
+    .venv/bin/python -m experiments.check_model --model claude-sonnet-5
+
+`check_model` costs a few thousand tokens rather than a run, and settles the two
+things that void an entire cell if they are wrong: whether the seat serves the
+model at all, and whether it reports back the exact string the run config pins.
+`prereg/AGENT_PROMPTS.md` §3 excludes any run whose reported string differs.
+
+Then launch under `caffeinate`, so the machine cannot sleep mid-window:
+
+    caffeinate -i bash experiments/run_arms.sh \
+        --schedule experiments/<schedule>.txt --start 0 --workers 4 --auto-resume
+
+`--only-worker K` runs one worker's rows and is what a stopped worker's resume
+line prints. `--allow-code-change` is only for deliberately continuing a batch
+across a fingerprint change; without it the runner refuses, which is the
+intended default. `--auto-resume` treats a rate limit as a wait rather than a
+failure, and retries the same row after the reset.
+
+The seat's configuration cannot reach the agent: `searchers/llm_agent.py` passes
+`setting_sources=[]`, so neither `~/.claude` nor project settings are read, and
+the byte-identical-prompt guarantee of `prereg/AGENT_PROMPTS.md` §2 holds
+whichever seat is authenticated. `CLAUDE_CONFIG_DIR` decides who pays, not what
+the agent sees.
+
+**Always local:** re-scoring existing verdicts (6.1 free part), OOS
+re-grades (6.2), the notebook, the ledger build and its unit tests,
+feature construction on the ADR panel (12 names × 40k bars × 40 features
+is ~150 MB), and any single audit or preflight, including on the intraday
+panel — the moment-based class null is O(K²) per replicate and does not
+hold a B × T index matrix.
+
+**EC2, because of total work:** any sweep with more than ~500 draws of the
+full-class null, and any sweep that replays a search inside the bootstrap.
+That is: 6.1's scripted 5,000-draw calibration and its B=50,000 tail
+check; 6.3 (8,000 draws across two DGP variants); 7.1 fixed-sequence-replay (2,000 draws ×
+3 nulls, one of which replays the policy per replicate — the most
+expensive thing in the plan); 7.3's scripted ledger calibration (2,000
+runs, each with a recursive process ledger). Each is hours to a day on
+16–32 vCPUs and minutes of setup; on the Air each would be days and would
+compete with everything else. Use a compute-optimized spot instance
+(c7g or c6i, 16–32 vCPU), sync the repo, run the experiment script with
+its own `--workers`, pull back the `.pkl` and figures, commit. A few
+dollars per sweep.
+
+**Memory hazards on the Air, and how to avoid them.** The recursive and
+explicit-class bootstraps materialize resampled index arrays of size
+B × T. At B=10,000 and T=5,000 that's 50 M entries — fine. At the intraday
+panel's T≈40,000 it's 400 M, or 3.2 GB in int64, which will swap or die on
+8 GB with anything else open. Any bootstrap on the intraday panel must
+chunk B (500 replicates at a time is plenty) or use int32 indices; the
+moment engine already avoids the matrix and is the default for the
+declared-class bar. The same applies to fixed-sequence-replay and the ledger's process
+replay at intraday length — those go to EC2 for memory as much as time.
+
+**Practical rule.** If a script's expected runtime is over two hours or
+its B × T exceeds 10⁸, it goes to EC2. Everything else, including every
+run that talks to the seat, stays on the laptop.
