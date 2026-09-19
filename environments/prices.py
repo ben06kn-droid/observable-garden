@@ -1,8 +1,8 @@
-"""Price paths and moving-average crossover rules: the non-additive world of E20 (prereg/E20.md).
+"""Price paths and moving-average crossover rules: the non-additive world of non-additive-scoring (non-additive-scoring's prereg, f298103).
 
 A rule's position is the sign of a difference of two moving averages of the log price, so its return
 stream is not a linear combination of other rules' streams. That breaks the recursive bootstrap's
-reconstruction and `estimator.full_class.full_class_matrix`, which is why E20 needs the procedure-level
+reconstruction and `estimator.full_class.full_class_matrix`, which is why non-additive-scoring needs the procedure-level
 null and a declared explicit class instead.
 
 Positions depend only on the price path. Nullification shifts the *returns* a rule earns relative to the
@@ -61,15 +61,15 @@ def shifted_surrogate(P: np.ndarray, fwd: np.ndarray, shift: int) -> np.ndarray:
 
 def shift_pool(T: int, exclude: int) -> np.ndarray:
     """Shifts far enough from zero and from T that they do not nearly preserve the real alignment.
-    `exclude` should be at least the slowest moving average (prereg/E20.md)."""
+    `exclude` should be at least the slowest moving average (non-additive-scoring's prereg, f298103)."""
     if 2 * exclude >= T:
         raise ValueError(f"exclusion window {exclude} leaves no shifts for T={T}")
     return np.arange(exclude, T - exclude + 1)
 
 
 def draw_shifts(T: int, exclude: int, n_shifts: int, rng: np.random.Generator) -> np.ndarray:
-    """Uniformly without replacement from the pool. Evenly spaced shifts were tested before E20 ran and
-    give a less stable critical value than random draws (prereg/E20.md)."""
+    """Uniformly without replacement from the pool. Evenly spaced shifts were tested before non-additive-scoring ran and
+    give a less stable critical value than random draws (non-additive-scoring's prereg, f298103)."""
     pool = shift_pool(T, exclude)
     if n_shifts > len(pool):
         raise ValueError(f"asked for {n_shifts} shifts but the pool holds {len(pool)}")

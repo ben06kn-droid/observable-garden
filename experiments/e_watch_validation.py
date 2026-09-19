@@ -1,7 +1,8 @@
-"""Step 5 bullets 1 and 2 of GARDEN_WATCH_PLAN.md: scripted searchers under Watch.
+"""Scripted searchers under Watch: the two validation readings.
 
-Pre-registered by the plan itself, committed at 499d66e before this ran. Its §5
-fixes both readings:
+Pre-registered by the watch build plan's §5, committed at 499d66e before this
+ran. The plan was removed once the build it described was finished; git holds
+it at that commit. It fixes both readings:
 
   1. s = 0: submit-verdict type-I at or below nominal for every class size run.
   2. s = 3: realized power equals the preflight number at open, within Monte
@@ -19,7 +20,7 @@ nothing look perfectly calibrated, so the INADMISSIBLE share is reported beside
 the rate rather than folded into it.
 
 **Bullet 2 pins the submission.** `power_at_reference` is power for a single
-pre-specified strategy (SCOPE.md §13), not search power. Letting a searcher
+pre-specified strategy (SCOPE.md, The cost of breadth), not search power. Letting a searcher
 choose its own winner folds search success into the comparison and measures
 something else. PinnedSelector submits the true signal triple regardless of what
 its menu found, so realized power isolates the estimator's response. The
@@ -45,7 +46,7 @@ from environments.dgp import (
 from environments.sandbox import Sandbox
 from estimator.metrics import wilson_ci
 from experiments._parallel import run_cells
-from experiments.e18_depth import git_state
+from experiments.search_depth import git_state
 from garden import watch as watch_mod
 from garden.spec_class import SubsetClass
 from searchers.diagnostic import LatticeAdaptive, PinnedSelector
@@ -240,7 +241,7 @@ def report(data: dict) -> None:
               f"{rate:>10.3f} ({lo:.3f}-{hi:.3f}) {rate - predicted:>+7.3f} "
               f"{'yes' if agrees else 'NO':>8}")
 
-    print("\nPre-registered decisions (GARDEN_WATCH_PLAN.md §5)")
+    print("\nPre-registered decisions (the watch build plan §5, at 499d66e)")
     print(f"  1. s=0 type-I at or below nominal in every cell: {null_ok}")
     print(f"  2. s=3 realized power contains the preflight number in every cell: {power_ok}")
     print(f"\nAt n={n} the Wilson half-width at 5% is about "

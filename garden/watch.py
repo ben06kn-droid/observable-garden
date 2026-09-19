@@ -120,7 +120,7 @@ DIAGNOSTIC_KEYS = (
     "class_p_value",           # best-so-far against the class bar fixed at open
     "chased",                  # did this candidate build on the best-so-far?
     "chase_rate",              # fraction of the trailing window that did
-    "kappa",                   # E17 anchor rank, defined only at depth 2 (see _kappa_for)
+    "kappa",                   # graded-coupling anchor rank, defined only at depth 2 (see _kappa_for)
     "kappa_mean",              # running mean over steps where kappa is defined
     "kappa_undefined_reason",
     "anchor_sharpe_rank",      # NOT kappa: rank among specs evaluated so far
@@ -163,7 +163,7 @@ class WatchState:
     # P(a true-edge spec's estimated Sharpe clears `critical_value`), with the
     # Sharpe sampling law at T. Measured against the PRICED bar above, not an
     # analytic independent-max one, so it agrees with realized power at every
-    # correlation. Single pre-specified strategy, not search power (SCOPE.md 13).
+    # correlation. Single pre-specified strategy, not search power (SCOPE.md, The cost of breadth).
     power_at_reference: float
     class_name: str
     class_size: int
@@ -187,7 +187,7 @@ class WatchState:
     promotion: str | None = None
     # Specifications the sandbox refused during the search. Not trials: they
     # produced no return stream, so they affect no null and no statistic. Counted
-    # and reported, never fatal (GARDEN_WATCH_PLAN.md 3).
+    # and reported, never fatal.
     refused_attempts: int = 0
 
     def to_dict(self) -> dict:
@@ -318,7 +318,7 @@ class Watch:
         Irrelevant to validity under the declared tier -- the bar already covers
         every member of the class, evaluated or not. The number is the point:
         it is the only direct measurement of how far the logged trial count sits
-        below the true one (estimator_build_spec.md 8, "latent forking").
+        below the true one -- "latent forking".
 
         "Considered" needs a definition that survives across runs and models.
         For an agent it is a trace-parsing rule, and the pre-registration fixes
@@ -342,15 +342,15 @@ class Watch:
         return float(np.sum(sr < sr[k]) / (len(sr) - 1))
 
     def _kappa_for(self, support: frozenset[int]) -> tuple[float | None, str | None]:
-        """E17's coupling kappa for this step, or None with a reason.
+        """graded-coupling's coupling kappa for this step, or None with a reason.
 
         kappa is the normalized Sharpe rank of the feature a candidate was built
-        around (SCOPE.md 18: 1 best, 0 worst). It is defined on a *feature*, not
+        around (SCOPE.md, Winner-chasing: 1 best, 0 worst). It is defined on a *feature*, not
         on a specification, so it exists here only where the step reproduces
-        E17's setting: extending a single-feature best-so-far by exactly one
+        graded-coupling's setting: extending a single-feature best-so-far by exactly one
         feature. Anywhere else it is undefined and reported as None rather than
         approximated, because a lookalike under the same name would silently
-        break every cross-reference to E17's rank curve.
+        break every cross-reference to graded-coupling's rank curve.
 
         Its job is comparability to that rank curve, and it holds only while the
         best-so-far is a single feature -- in practice, until the first step that
@@ -362,7 +362,7 @@ class Watch:
             return None, "first evaluation: there is no anchor yet"
         if len(self._best_support) != 1:
             return None, (f"anchor spans {len(self._best_support)} features; kappa is defined on a "
-                          f"single anchor feature (E17)")
+                          f"single anchor feature (graded-coupling)")
         if not (support > self._best_support and len(support) == 2):
             return None, "candidate does not extend the best-so-far by exactly one feature"
         (anchor,) = self._best_support
@@ -383,7 +383,7 @@ class Watch:
         Known limitation, measured: containment can also arise from *enumeration
         order* with no data dependence at all. A searcher that walks a lattice in
         itertools.combinations order emits every subset before its supersets, so
-        LatticeAdaptive -- whose generation is provably oblivious, and which E21
+        LatticeAdaptive -- whose generation is provably oblivious, and which oblivious-calibration
         uses as the control for exactly that -- still scores 0.4-0.6 here and can
         trip the warning. The statistic cannot separate "grew around the realized
         best" from "enumerated in a nested order". See OPEN_QUESTIONS.md."""
@@ -746,7 +746,7 @@ def open(
             "power will come in higher than this estimate."
         )
     reasons.append(
-        f"Power is for a single pre-specified strategy, not for the search (SCOPE.md §13). It is "
+        f"Power is for a single pre-specified strategy, not for the search (SCOPE.md, The cost of breadth). It is "
         f"measured against the bootstrap critical value priced over this class ({c:.3f}), the same "
         f"one `cleared` uses, so it already reflects however correlated the class turned out to be."
     )

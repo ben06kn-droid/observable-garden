@@ -1,4 +1,4 @@
-"""Checks that the Sharpe guards added for SCOPE.md §11 (variance floor, Sharpe
+"""Checks that the Sharpe guards added for SCOPE.md, Sparse strategies (variance floor, Sharpe
 cap) never changed an output in the experiments behind this project's
 published numbers.
 
@@ -11,7 +11,7 @@ applies where a full-sample variance is known (the naive bootstrap); the cap
 applies everywhere, including recursive-bootstrap replays. Where saved results
 exist on disk, p-values are also compared exactly.
 
-Usage: python -m experiments.verify_sharpe_guards {e1,e1_recursive,e4,e9,e11}
+Usage: python -m experiments.verify_sharpe_guards {null-calibration,recursive-calibration,adaptive-powered,predictive-power,power-vs-breadth-pinned}
 """
 from __future__ import annotations
 
@@ -25,31 +25,33 @@ from estimator import bootstrap
 
 
 def _e1():
-    from experiments.e1_null_calibration import run
+    from experiments.null_calibration import run
     return run(n_draws=200, verbose=False), None
 
 
 def _e1_recursive():
-    from experiments.e1_recursive_calibration import run
+    from experiments.recursive_calibration import run
     return run(n_draws=200, verbose=False), None
 
 
 def _e4():
-    from experiments.e4_adaptive_n500 import run
+    from experiments.adaptive_powered import run
     return run(verbose=False), None
 
 
 def _e9():
-    from experiments.e9_predictive_power_v2 import run
-    return run(verbose=False), "figures/e9_predictive_power_v2_data.pkl"
+    from experiments.predictive_power import run
+    return run(verbose=False), "figures/predictive_power_data.pkl"
 
 
 def _e11():
-    from experiments.e11_power_vs_N_pinned import run
-    return run(verbose=False), "figures/e11_power_pinned_data.pkl"
+    from experiments.power_vs_breadth_pinned import run
+    return run(verbose=False), "figures/power_vs_breadth_pinned_data.pkl"
 
 
-EXPERIMENTS = {"e1": _e1, "e1_recursive": _e1_recursive, "e4": _e4, "e9": _e9, "e11": _e11}
+EXPERIMENTS = {"null-calibration": _e1, "recursive-calibration": _e1_recursive,
+               "adaptive-powered": _e4, "predictive-power": _e9,
+               "power-vs-breadth-pinned": _e11}
 
 
 def main(name: str) -> int:

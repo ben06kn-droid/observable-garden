@@ -3,7 +3,7 @@ import pytest
 
 from environments.dgp import DGPConfig, generate
 from environments.sandbox import Sandbox
-from experiments.e19c_feature_count import first_features
+from experiments.feature_count import first_features
 from searchers.dose_response import WinnerAnchor
 
 

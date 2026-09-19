@@ -95,7 +95,7 @@ class PinnedSelector(Searcher):
     of what any of those trials found.
 
     Exists to isolate the pure multiple-testing cost of a larger transcript
-    from a confound found in experiments/e10_power_vs_signal_strength.py:
+    from a confound found in experiments/power_vs_signal.py:
     letting a real searcher (GridSearch) pick its own best spec means
     `sr_sel` improves as `N` grows (a bigger search finds a better
     specification), which pushed power UP with N there -- the opposite of
@@ -106,7 +106,7 @@ class PinnedSelector(Searcher):
     depend on N at all (it's the same evaluate() call on the same data
     regardless of how many other trials are also logged), so any change in
     power as N sweeps is now purely the bootstrap's response to a bigger
-    transcript -- experiments/e11_power_vs_N_pinned.py."""
+    transcript -- experiments/power_vs_breadth_pinned.py."""
     name = "pinned_selector"
 
     def __init__(self, pinned_weights: np.ndarray, subset_sizes=(1, 2, 3), max_trials: int | None = None, seed: int = 0):

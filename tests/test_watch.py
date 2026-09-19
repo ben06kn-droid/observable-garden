@@ -316,7 +316,7 @@ def test_enumerating_singles_never_chases(seed):
 
 def test_kappa_and_chase_rate_are_separate_fields():
     """Different quantities, deliberately sharing neither a name nor a warning:
-    kappa is E17-exact and stops being defined once the best-so-far is more than
+    kappa is graded-coupling-exact and stops being defined once the best-so-far is more than
     one feature; the chase rate is defined at every step and at any depth."""
     cls = SubsetClass(max_size=3)
     sb = sandbox_with(K=8, spec_class=cls, seed=90)

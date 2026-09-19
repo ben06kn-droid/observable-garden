@@ -145,7 +145,7 @@ class NeighborAdaptive(Searcher):
     def _anchor(self, K: int, base_columns: np.ndarray, best_k: int) -> int:
         corr = np.abs(np.nan_to_num(np.corrcoef(base_columns, rowvar=False)[best_k], nan=0.0))
         # Exclude the winner after taking |corr|: excluding first made |-inf| the maximum, so the
-        # anchor was always the winner itself (SCOPE.md §5's NeighborAdaptive result was that bug).
+        # anchor was always the winner itself (SCOPE.md, Winner-chasing's NeighborAdaptive result was that bug).
         corr[best_k] = -np.inf
         return int(np.argmax(corr))
 

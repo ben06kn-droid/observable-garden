@@ -222,7 +222,7 @@ def test_verdict_json_is_serializable():
 
 def sparse_dominated_case(submitted_sharpe):
     """30 noise columns plus 200 rules that trade on 3 days each: a resample catching one of a rule's
-    active days can give it an exploding Sharpe (SCOPE.md §11)."""
+    active days can give it an exploding Sharpe (SCOPE.md, Sparse strategies)."""
     rng = np.random.default_rng(17)
     T = 1000
     sparse = np.zeros((T, 200))

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from experiments.e8_dgp_criterion_check import measurement_noise_floor, target_sd
+from experiments.dgp_criterion_check import measurement_noise_floor, target_sd
 
 
 def test_measurement_noise_floor_matches_known_value():

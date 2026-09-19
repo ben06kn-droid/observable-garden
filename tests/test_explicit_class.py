@@ -1,5 +1,5 @@
 """Transcript format v3: a class supplied as return streams, for specifications that are not sums of base
-columns (prereg/E20.md). Membership is by id, then column by column."""
+columns (non-additive-scoring's prereg, f298103). Membership is by id, then column by column."""
 import numpy as np
 import pytest
 

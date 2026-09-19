@@ -1,6 +1,6 @@
 """Hansen's (2005) test for superior predictive ability: the higher-power
 successor to the Reality Check, and the structural answer to the degeneracy
-refusal of SCOPE.md §11.
+refusal of SCOPE.md, Sparse strategies.
 
 Two things separate SPA from `estimator/bootstrap.py`'s realized-menu null.
 
@@ -9,7 +9,7 @@ deviation estimated once from the full sample and held constant across every
 replicate. The Reality Check implementation here re-estimates the Sharpe
 denominator inside each resample, which is why a menu holding rules that
 rarely trade can drive it to zero and make the critical value measure
-near-empty resamples (SCOPE.md §11, verdict DEGENERATE). A denominator that
+near-empty resamples (SCOPE.md, Sparse strategies, verdict DEGENERATE). A denominator that
 never moves cannot collapse. This is the statistic `garden/audit.py`'s
 DEGENERATE_ROUTES and `garden/explain.py` both describe as "Sharpe
 studentized by the full-sample standard deviation", and which the gate has
@@ -27,8 +27,9 @@ recentering changes. Nor is `sqrt(2 log log n)` the only admissible rate —
 Hansen notes others (e.g. `n^(1/4)/4`) work equally well. Wording that says
 SPA "excludes" candidates is the error to avoid.
 
-This is the check SCOPE.md §6 asks for: whether the power collapse of §10 is
-a property of the problem or of the Reality Check's conservatism.
+This is the check SCOPE.md, Prior art asks for: whether the power collapse
+reported under Effective breadth is a property of the problem or of the
+Reality Check's conservatism.
 
 Specification, from the published text (JBES 23(4), §2.2-§3.1):
 
@@ -277,7 +278,7 @@ def spa_test(
     # Three float64 arrays of length B (240 KB at B=10,000).
     nulls = {key: np.empty(B) for key in RECENTERINGS}
     # R[idx, :] materializes (chunk, n, N), so the cap has to count columns too:
-    # a wide menu (N ~ 10,000 at E21's K=40) would otherwise ask for hundreds of GB.
+    # a wide menu (N ~ 10,000 at oblivious-calibration's K=40) would otherwise ask for hundreds of GB.
     chunk = max(1, min(B, int(2e7 // max(n * N, 1))))
     drawn = 0
     while drawn < B:

@@ -11,7 +11,7 @@ base returns:
 searchers (a mean would be a different class, although Sharpe ratios are identical under both).
 
 A second kind covers classes that cannot be built from base returns at all, such as the crossover rules
-of prereg/E20.md, whose positions are signs of moving-average differences rather than weight vectors:
+of non-additive-scoring's prereg, f298103, whose positions are signs of moving-average differences rather than weight vectors:
 
     explicit                        the supplier hands over every member's return stream directly
     explicit:members=M              the same, asserting the class holds exactly M members

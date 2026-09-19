@@ -24,7 +24,7 @@ adaptive candidate generation included.
 The cost: B full re-executions of run() -- every evaluate() call the real
 search makes, repeated B times -- instead of B cheap calls to replay(). Use
 this to validate the cheap column-level reconstruction agrees where the
-reconstruction is available (experiments/e3_procedure_level_validation.py),
+reconstruction is available (experiments/procedure_level_validation.py),
 and as the fallback where it isn't.
 """
 from __future__ import annotations

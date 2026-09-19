@@ -52,7 +52,7 @@ def test_upper_rule_is_the_reality_check_least_favourable_configuration():
     inside every replicate; SPA-upper maximises a mean studentized by a single
     fixed long-run sigma. They coincide in role, not in arithmetic. Agreement on
     the verdict at 5% over a well-behaved dense menu is the honest version, and
-    that difference in denominators is the entire point of SPA for SCOPE.md §11."""
+    that difference in denominators is the entire point of SPA for SCOPE.md, Sparse strategies."""
     rng = np.random.default_rng(4)
     R = rng.standard_normal((400, 30)) * 0.01
     out = spa_test(R, B=2000, block_length=1, seed=5)
@@ -63,7 +63,7 @@ def test_upper_rule_is_the_reality_check_least_favourable_configuration():
 
 
 def test_hopeless_candidates_cost_the_reality_check_power_but_not_spa():
-    """SCOPE.md §6's question. Padding a menu with candidates far below the
+    """SCOPE.md, Prior art's question. Padding a menu with candidates far below the
     benchmark inflates White's null maximum; Hansen's recentering excludes
     them, so the SPA p-value should move much less."""
     rng = np.random.default_rng(6)
@@ -86,7 +86,7 @@ def test_hopeless_candidates_cost_the_reality_check_power_but_not_spa():
 
 
 def test_fixed_studentization_survives_a_sparse_menu():
-    """SCOPE.md §11. A rule that rarely trades can drive the Reality Check's
+    """SCOPE.md, Sparse strategies. A rule that rarely trades can drive the Reality Check's
     re-estimated Sharpe denominator toward zero inside a resample. SPA's
     denominator is computed once from the full sample, so no replicate can
     collapse it: every bootstrap statistic stays finite."""
@@ -218,7 +218,7 @@ def test_submitted_index_out_of_range_raises():
 
 
 def test_duplicate_invariance():
-    """estimator_build_spec.md §6 test 4, carried over to SPA: duplicating every
+    """The build spec's duplicate-invariance test, carried over to SPA: duplicating every
     column adds no information, and joint row resampling means both copies take
     identical values in every replicate. Under g_c the duplicate also inherits
     the same omega_k and so the same recentering decision, so the property holds

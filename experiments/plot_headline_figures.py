@@ -4,11 +4,11 @@ Run after the experiments have written their data files:
 
     python -m experiments.plot_headline_figures
 
-  figures/headline_breadth.png       E19(c): the naive correction degrades as the candidate set widens,
+  figures/headline_breadth.png       feature-count: the naive correction degrades as the candidate set widens,
                                      while both repairs stay at nominal.
-  figures/headline_anchor_rank.png   E17b: inflation grades with how strongly the anchor tracks
+  figures/headline_anchor_rank.png   anchor-rank: inflation grades with how strongly the anchor tracks
                                      performance, along the curve the order statistics predicted first.
-  figures/headline_dose_response.png E18: the same effect as a search's menu becomes more data-dependent.
+  figures/headline_dose_response.png search-depth: the same effect as a search's menu becomes more data-dependent.
 
 Every point is a pre-registered measurement with a Wilson 95% interval; the dashed line is the 5% a
 correct test should hit. Where the two repairs agree almost exactly, replay is drawn dashed on top of the
@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from estimator.metrics import type1_rate
-from experiments.e17b_anchor_rank import LIMIT as RANK_LIMIT
+from experiments.anchor_rank import LIMIT as RANK_LIMIT
 
 BLUE = "#2a78d6"      # naive: the Reality Check applied to the log
 ORANGE = "#eb6834"    # recursive: replay inside each resample
@@ -74,7 +74,7 @@ def ordinal(rank: int, last: int) -> str:
 
 
 def breadth(path="figures/headline_breadth.png"):
-    d = pickle.load(open("figures/e19c_feature_count_data.pkl", "rb"))
+    d = pickle.load(open("figures/feature_count_data.pkl", "rb"))
     Ks, rhos = list(d["Ks"]), list(d["rhos"])
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), sharey=True)
     for ax, (r, rho) in zip(axes, enumerate(rhos)):
@@ -96,7 +96,7 @@ def breadth(path="figures/headline_breadth.png"):
 
 
 def anchor_rank(path="figures/headline_anchor_rank.png"):
-    d = pickle.load(open("figures/e17b_anchor_rank_data.pkl", "rb"))
+    d = pickle.load(open("figures/anchor_rank_data.pkl", "rb"))
     ranks = list(d["ranks"])
     x = np.arange(len(ranks))
     fig, ax = plt.subplots(figsize=(7.6, 4.8))
@@ -116,7 +116,7 @@ def anchor_rank(path="figures/headline_anchor_rank.png"):
 
 
 def dose_response(path="figures/headline_dose_response.png"):
-    d = pickle.load(open("figures/e18_depth_data.pkl", "rb"))
+    d = pickle.load(open("figures/search_depth_data.pkl", "rb"))
     order = [("lattice", "whole grid\n(fixed in advance)"), ("beam16", "keep 16"), ("beam4", "keep 4"),
              ("beam2", "keep 2"), ("adaptive", "keep 1\n(greedy)")]
     keys = [k for k, _ in order]

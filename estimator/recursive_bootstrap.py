@@ -21,7 +21,7 @@ float precision). A searcher whose decision rule can't be re-expressed this
 way -- an LLM agent, in general -- would need the fully general version:
 literally re-running the whole search against a resampled Sandbox each
 replicate. That's intractable at the B~1000s-per-null-draw scale a
-calibration check needs (SCOPE.md §5); this is the tractable version for
+calibration check needs (SCOPE.md, Winner-chasing); this is the tractable version for
 anything built out of linear combinations of a fixed base set.
 """
 from __future__ import annotations

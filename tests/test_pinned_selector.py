@@ -1,5 +1,5 @@
 """PinnedSelector exists to remove a confound found in
-experiments/e10_power_vs_signal_strength.py: a real searcher's submitted
+experiments/power_vs_signal.py: a real searcher's submitted
 value improves with N, so a power-vs-N sweep with a real searcher measures
 search benefit and multiple-testing cost tangled together. These tests
 lock in the property that makes PinnedSelector a valid fix: for a FIXED

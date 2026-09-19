@@ -62,7 +62,7 @@ The mechanism is unavoidable: holding the reported result fixed, every
 added specification makes the null maximum larger, so power falls as
 breadth grows. In this project's pinned-selection experiment, power against
 a true Sharpe near 1.0 fell from 15% to 6% to 2% as the search grew from 10
-to 100 to 1,000 specifications (SCOPE.md §10). The fix is a narrower
+to 100 to 1,000 specifications (SCOPE.md, Effective breadth). The fix is a narrower
 search, sized in advance with `garden preflight`. Low power does not weaken
 a PASS, because alpha fixes the false-positive rate, but it inflates the
 size of passing effects (type-M error), which the gate flags as a warning.
@@ -77,7 +77,7 @@ single-strategy power is 7-11%, yet 6 of 20 data seeds pass, with true
 Sharpes of 0.13-0.58 reported as deflated Sharpes of 0.65-1.07. A search too
 narrow to reach the edge passes less often: at 10 specifications, search
 power ran 0.53 below single-strategy power in this project's matched
-comparison (SCOPE.md §13).
+comparison (SCOPE.md, The cost of breadth).
 
   Gelman, A. & Carlin, J. (2014). Beyond Power Calculations: Assessing
     Type S (Sign) and Type M (Magnitude) Errors. Perspectives on
@@ -91,7 +91,7 @@ keeps re-testing the one path the search took on the real data, not the
 paths it would have taken on other data. It underestimates the null maximum
 and returns p-values that are too small. In this project's experiments a
 nominal 5% test rejected 12.7-13.6% of true nulls for adaptive searchers,
-rising steadily with how data-dependent the menu was (SCOPE.md §2-5). This
+rising steadily with how data-dependent the menu was (SCOPE.md, Winner-chasing). This
 is the post-selection inference problem.
 
 The gate still shows the Reality Check p-value, labeled as a lower bound,
@@ -144,7 +144,7 @@ deflated Sharpe ratio (Bailey & López de Prado 2014; López de Prado & Porcu
 variance of trial Sharpes,
 already shrinks as trials correlate, so shrinking N as well under-deflates:
 in this project's grid it left up to 0.94 Sharpe of overfitting standing at
-ρ=0.3 (SCOPE.md §10). The bootstrap accounts for correlation once, directly,
+ρ=0.3 (SCOPE.md, Effective breadth). The bootstrap accounts for correlation once, directly,
 by resampling trials jointly."""
 
 DEGENERATE = """\
@@ -155,7 +155,7 @@ periods; its standard deviation can then shrink faster than its mean, and
 its Sharpe explodes. When those resamples set the null maximum, the critical
 value measures near-empty resamples, not the breadth of the search. On one
 10,000-rule menu with band filters the critical value ranged from 2.03 to
-155 across 20 simulated price paths (SCOPE.md §11).
+155 across 20 simulated price paths (SCOPE.md, Sparse strategies).
 
 The gate flags a replicate's maximum as degenerate when that column's
 resample holds too few distinct active periods, or its standard deviation
@@ -171,7 +171,7 @@ The thresholds are fewer than 50 active periods, and more than half of the
 top 10% of replicates, the ones that set the critical value. They come from
 a pre-registered calibration on fresh seeds: no refusals across 9,000
 transcripts of dense rules, 90% of sparse menus with a broken critical
-value refused, and 4% of those with a sound one (SCOPE.md §11).
+value refused, and 4% of those with a sound one (SCOPE.md, Sparse strategies).
 
   White, H. (2000). A Reality Check for Data Snooping. Econometrica 68(5).
   Hansen, P.R. (2005). A Test for Superior Predictive Ability. JBES 23(4)."""

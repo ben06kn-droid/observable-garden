@@ -21,13 +21,13 @@ single-specification gate once per candidate is not that procedure.
 
 ## Which statistic for menus containing sparse strategies
 
-SCOPE.md §11: Sharpe re-estimated in every replicate is fragile when a menu
+SCOPE.md, Sparse strategies: Sharpe re-estimated in every replicate is fragile when a menu
 contains rules that rarely trade. Detection and refusal belong in v1. Whether
 the gate should also offer a statistic whose denominator cannot collapse,
 White's mean return or Hansen's studentization by a full-sample standard
 deviation, is a v2 question; Phase 2's SPA will answer part of it.
 
-The detection thresholds are not finished either. e14 chose a support
+The detection thresholds are not finished either. degeneracy-recalibration chose a support
 threshold of 50, the largest value in its pre-registered grid, so a larger
 one might separate broken from sound critical values slightly better.
 Testing that needs a new run on fresh seeds, and it is deliberately not
@@ -37,7 +37,7 @@ being pursued before SPA.
 
 The gate prints power for a single pre-specified strategy. That is neither
 an upper nor a lower bound on the power of the search that produced the
-transcript (SCOPE.md §13): a search too narrow to reach the edge detects
+transcript (SCOPE.md, The cost of breadth): a search too narrow to reach the edge detects
 less often, one broad enough to reach specifications carrying it detects
 more often. Which applies depends on where the edge sits in the menu, which
 a transcript does not reveal. Open: whether any transcript-only estimate of
@@ -45,19 +45,19 @@ search-level power exists.
 
 ## How should the winner-chasing audit combine anchors across rounds?
 
-E17b (SCOPE.md §18) settled the single-anchor question. Naive inflation
+anchor-rank (SCOPE.md, Winner-chasing) settled the single-anchor question. Naive inflation
 follows the anchor's rank along the Gaussian-limit curve: flat across the
 top two ranks, falling through rank 5, and slightly conservative below. Mean
 κ is a poor summary of that curve. What is untested is a search with several
 data-dependent rounds, some anchored high and some low: whether their
 effects on the naive test add, or whether one inflating round dominates. The
 curve itself is measured only at K=20, ρ=0.3 and depth 2, with exchangeable
-features. E19(c) found the winner rule's inflation growing with K at both
-correlations tested (SCOPE.md §19); other ranks across K are untested. The
-correlation-based
-neighbor rule was tested under heterogeneous correlation in E19(b) (SCOPE.md
-§20): the recursive bootstrap stayed calibrated as the correlations
-separated, but separation was partial (anchor stability 0.192 against 0.088),
+features. feature-count found the winner rule's inflation growing with K at both
+correlations tested (SCOPE.md, Winner-chasing); other ranks across K are
+untested. The correlation-based neighbor rule was tested under heterogeneous
+correlation in unequal-correlation arm (b) (SCOPE.md, Winner-chasing): the recursive bootstrap
+stayed calibrated as the correlations separated, but separation was partial
+(anchor stability 0.192 against 0.088),
 which turns out to be the harder case rather than the easier one. Under exact
 ties the recursive bootstrap now has a sketch (THEORY.md P6): the anchor is
 asymptotically independent of the Sharpe vector, and non-winners are
@@ -70,7 +70,7 @@ an argument for the separated case, are the two open tasks.
 ## Does re-anchoring at depth inflate a little?
 
 At depth 3, a search that picks its round-2 anchor at random still builds
-round 3 on its round-2 winner. E18 (SCOPE.md §17) registered this as not
+round 3 on its round-2 winner. search-depth (SCOPE.md, Winner-chasing) registered this as not
 detectably inflated: 5.3% naive type-I at n=1,000, below the 6.9% that test
 could detect. An independent draw of the same rule gave 6.4%. Within both,
 the naive p-value was at most the recursive one on 99.9% of draws. A
@@ -79,12 +79,12 @@ rule for 80% power against 6%. It affects how the note words depth, not the
 gate, which treats any adaptive search without a declared class as
 UNDECIDABLE.
 
-## Is the gap between e4 and E18 for Adaptive real?
+## Is the gap between adaptive-powered and search-depth for Adaptive real?
 
-e4 measured Adaptive's naive type-I at 13.6% (K=25, M=60, T=600, block length
-chosen on the transcript). E18 measured 9.2% (K=20, M=50, T=500, block length
-chosen on the base columns). Both runs had n=500. E18b ruled out the scoring
-rule (SCOPE.md §17).
+adaptive-powered measured Adaptive's naive type-I at 13.6% (K=25, M=60, T=600, block length
+chosen on the transcript). search-depth measured 9.2% (K=20, M=50, T=500, block length
+chosen on the base columns). Both runs had n=500. scoring-rule ruled out the scoring
+rule (SCOPE.md, Winner-chasing).
 
 A rough calculation, not a test, suggests most of the rest may not be real:
 
@@ -99,13 +99,13 @@ A rough calculation, not a test, suggests most of the rest may not be real:
 
 The economical reading is a small K effect plus noise, with M, T or the
 block-length rule contributing at most something modest. If it is worth
-closing, the single most informative run is E18's configuration with e4's
-block-length rule. The note avoids the question: it reports only E21's
-configuration, and e4 stays in SCOPE.md with its labels.
+closing, the single most informative run is search-depth's configuration with adaptive-powered's
+block-length rule. The note avoids the question: it reports only oblivious-calibration's
+configuration, and adaptive-powered stays in SCOPE.md with its labels.
 
 ## Why do the two class nulls disagree on about 1.5% of draws?
 
-E20 (SCOPE.md §21) ran the declared-class test two ways on identical draws:
+non-additive-scoring (SCOPE.md, Winner-chasing) ran the declared-class test two ways on identical draws:
 the stationary bootstrap the gate actually uses, and the class maximum on the
 same circular shifts as the procedure-level null. Their rejection decisions
 agreed on 98.2% and 98.9% of draws, against a pre-registered threshold of
@@ -125,7 +125,7 @@ a class supplied this way.
 
 Transcript format v2 registers one class, equal-weight feature subsets up to
 size d, because it is the only one whose members can be built from base
-returns. Threshold and lookback grids, like E20's, are not sums of base
+returns. Threshold and lookback grids, like non-additive-scoring's, are not sums of base
 columns. A v3 `spec_class="explicit"`, where the supplier provides returns for
 the whole class directly, would give such searches a valid full-class verdict
 (the Sullivan–Timmermann–White setup). Everything else stays "none", which is
@@ -133,7 +133,7 @@ UNDECIDABLE unless a rerun is provided.
 
 ## The degeneracy check on the full-class path
 
-On the full-class path, the degeneracy check (SCOPE.md §11) still runs on the
+On the full-class path, the degeneracy check (SCOPE.md, Sparse strategies) still runs on the
 logged specifications, not on the whole class. A class containing sums of
 rarely-trading base columns could have degenerate members the search never
 logged. Extending the support screen to class members needs each member's
@@ -152,22 +152,13 @@ columns. Neither has been validated.
 
 ## garden watch and explicit classes
 
-`garden/watch.py` prices its bar with `_full_class_engine.full_class_null_max`,
-which is moment-based and takes a `SubsetClass`, and refuses out-of-class
-specifications with `SubsetClass.contains(weights)`. `ExplicitClass` offers
-neither, so watch rejects it at open.
-
-That is a deferred path, not a property of the declared-class tier. `garden.audit`
-already prices an explicit class by running the Reality Check on the supplied
-`class_returns`, and `garden.transcript` already checks membership by spec id.
-Watch could draw the bar once at open from the class streams and refuse by id in
-`evaluate`; the tier argument — the bar is fixed before any evaluation, and
-nothing inside the class moves it — does not depend on which kind of class it is.
-
-It matters for the agent arm. An LLM's natural class is closer to `ExplicitClass`
-than to `SubsetClass`: a tool grammar emits rules, most of which are not
-equal-weight feature subsets. Whoever builds that arm should start here rather
-than rediscover it.
+**Scheduled as ROADMAP.md 6.4; no longer open.** `watch` prices its bar from a
+`SubsetClass` and rejects `ExplicitClass` at open, so an agent whose tool grammar
+emits rules rather than equal-weight feature subsets cannot be watched. `audit`
+already prices such a class from the supplied `class_returns` and `transcript`
+already checks membership by spec id, and the tier argument — the bar is fixed
+before any evaluation, and nothing inside the class moves it — does not depend on
+which kind of class it is.
 
 ## watch's chase rate cannot separate winner-chasing from enumeration order
 
@@ -180,7 +171,7 @@ It also fires on searches that are not chasing at all. Containment follows from
 enumeration order alone: a lattice walked in `itertools.combinations` order emits
 every subset before its supersets. Measured across four seeds at K=8,
 `LatticeAdaptive` scores 0.4–0.6 and tripped the warning on two of them, despite
-generation that is oblivious by construction — it is E21's control for precisely
+generation that is oblivious by construction — it is oblivious-calibration's control for precisely
 that property, and `round1_beam` returns the whole feature set with no reference
 to realized data.
 

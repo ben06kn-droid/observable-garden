@@ -91,7 +91,7 @@ def preflight(n_specs: int, n_periods: int, reference_sharpe: float, periods_per
         null_line,
         f"{power_line} {floor_line}",
         "These are single-strategy figures, not search power. A search broad enough to reach strategies carrying "
-        "an edge can detect more often; one too narrow to reach them detects less often (SCOPE.md §13).",
+        "an edge can detect more often; one too narrow to reach them detects less often (SCOPE.md, The cost of breadth).",
         "Independent trials are the worst case, since correlated trials act like fewer trials. Returns are "
         "assumed serially uncorrelated; autocorrelation widens the Sharpe's standard error and lowers power, "
         "which is not modeled here.",

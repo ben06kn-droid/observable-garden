@@ -196,7 +196,7 @@ class Transcript:
 
     def _validate_class_positions(self, T: int, M: int, tolerance: float) -> None:
         """Positions and their assets' returns are optional, and let the gate rebuild returns itself (for
-        shift nulls, prereg/E20.md). Supplied together or not at all."""
+        shift nulls, non-additive-scoring's prereg, f298103). Supplied together or not at all."""
         if self.class_positions is None and self.asset_returns is None:
             return
         if self.class_positions is None or self.asset_returns is None:

@@ -89,13 +89,13 @@ def heterogeneous_correlation(K: int, rho: float, seed: int) -> np.ndarray:
 
     Replaces equicorrelation's feature-exchangeability. That symmetry is
     harmless under s=0 (every null-calibration experiment in this project
-    ran at rho=0.3 under equicorrelation and it cost nothing -- SCOPE.md
-    §1). Under s>0 it isn't: every noise feature is equally (un)correlated
-    with the true signal, so which wrong features a search lands on has no
-    consequence, and the spread of achievable Sharpe across candidate
-    specifications collapses -- exactly what made the first version of
-    Experiment 2's target hard to predict for reasons having nothing to do
-    with the estimator (SCOPE.md §8/§9).
+    ran at rho=0.3 under equicorrelation and it cost nothing -- SCOPE.md,
+    The obliviousness condition). Under s>0 it isn't: every noise feature is
+    equally (un)correlated with the true signal, so which wrong features a
+    search lands on has no consequence, and the spread of achievable Sharpe
+    across candidate specifications collapses -- exactly what made the first
+    version of Experiment 2's target hard to predict for reasons having
+    nothing to do with the estimator (SCOPE.md, The headline cell).
 
     Loadings are centered near sqrt(rho) so the average pairwise
     correlation is still ~rho, keeping the existing knob's interpretation

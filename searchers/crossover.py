@@ -2,7 +2,7 @@
 
 Unlike searchers/scripted.py, a rule here is not a weight vector over base columns: its position is the
 sign of a difference of two moving averages, so its return stream cannot be written as a linear
-combination of other rules' streams. That is the point of E20 (prereg/E20.md) -- the recursive bootstrap
+combination of other rules' streams. That is the point of non-additive-scoring (non-additive-scoring's prereg, f298103) -- the recursive bootstrap
 cannot reconstruct candidates in this world, so only the procedure-level null and a declared explicit
 class apply.
 
@@ -153,7 +153,7 @@ class AdaptiveCrossover:
     def run_from_sharpes(self, sharpes: np.ndarray) -> SearchResult:
         """The same search, reading a Sharpe that has already been computed for every class column.
 
-        E20's shift loop needs that vector anyway, for the class maximum. Reusing it removes a redundant
+        non-additive-scoring's shift loop needs that vector anyway, for the class maximum. Reusing it removes a redundant
         recomputation per shift and guarantees both sides of the P3 inequality -- the search's selected
         value and the class maximum -- come from one vector, so a tie cannot register as a violation."""
         sharpes = np.asarray(sharpes, dtype=float)

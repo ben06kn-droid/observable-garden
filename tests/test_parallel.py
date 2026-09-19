@@ -28,7 +28,7 @@ def test_finished_cells_are_loaded_not_recomputed(tmp_path):
 def test_e11_parallel_run_reproduces_its_serial_run(tmp_path):
     import numpy as np
 
-    from experiments.e11_power_vs_N_pinned import run
+    from experiments.power_vs_breadth_pinned import run
 
     serial = run(n_draws=2, B=50, verbose=False)
     parallel = run(n_draws=2, B=50, verbose=False, workers=2, checkpoint_dir=tmp_path)

@@ -1,11 +1,11 @@
-"""Primary figure for the dose-response sweep (experiments/e5_dose_response.py)
-and the secondary divergence-rate diagnostic. Run after e5_dose_response.py
-has written figures/e5_dose_response_data.pkl.
+"""Primary figure for the dose-response sweep (experiments/dose_response_beam.py)
+and the secondary divergence-rate diagnostic. Run after dose_response_beam.py
+has written figures/dose_response_beam_data.pkl.
 
 Only two of the three requested lines are real full sweeps: naive and
 recursive, both n=150 across all 7 variants. Procedure-level bootstrap was
 spot-checked for agreement with recursive on 3 variants at n=15
-(experiments/e5b_procedure_level_spotcheck.py) -- that's a bias check, not
+(experiments/procedure_spotcheck.py) -- that's a bias check, not
 an independent type-I-rate measurement, and is annotated as such rather
 than plotted as a fabricated third line.
 
@@ -36,7 +36,7 @@ STRUCTURAL = ["depth_adaptive", "neighbor_adaptive"]
 
 
 def load():
-    with open("figures/e5_dose_response_data.pkl", "rb") as f:
+    with open("figures/dose_response_beam_data.pkl", "rb") as f:
         return pickle.load(f)
 
 
@@ -87,8 +87,8 @@ def plot_primary(data):
     ax.set_ylim(0, 0.22)
     ax.margins(x=0.08)
     fig.tight_layout()
-    fig.savefig("figures/e5_dose_response_primary.png", dpi=150)
-    print("Saved figures/e5_dose_response_primary.png")
+    fig.savefig("figures/dose_response_beam_primary.png", dpi=150)
+    print("Saved figures/dose_response_beam_primary.png")
 
 
 def plot_diagnostics(data, entropy_data):
@@ -148,13 +148,13 @@ def plot_diagnostics(data, entropy_data):
 
     fig.suptitle("Neither diagnostic is a clean linear predictor of inflation magnitude", fontsize=11)
     fig.tight_layout()
-    fig.savefig("figures/e5_divergence_diagnostic.png", dpi=150)
-    print("Saved figures/e5_divergence_diagnostic.png")
+    fig.savefig("figures/dose_response_beam_divergence.png", dpi=150)
+    print("Saved figures/dose_response_beam_divergence.png")
 
 
 if __name__ == "__main__":
     data = load()
-    with open("figures/e5_entropy_data.pkl", "rb") as f:
+    with open("figures/entropy_diagnostic_data.pkl", "rb") as f:
         entropy_data = pickle.load(f)
     plot_primary(data)
     plot_diagnostics(data, entropy_data)

@@ -98,7 +98,7 @@ as the search narrows around its own results). Regenerate them with
 
 Every number, caveat and diagnostic behind these is in **`SCOPE.md`**; the
 propositions and proofs are in **`THEORY.md`**; each experiment was
-pre-registered in **`prereg/`** before it ran.
+pre-registered before it ran; EXPERIMENTS.md gives the commit.
 
 ## Relationship to prior work
 
@@ -121,7 +121,7 @@ this project adds sits inside that framework:
   searchers whose trial count is observable for the first time: an agent's
   every evaluation, kept or discarded, is in a log.
 
-`SCOPE.md` §6 places this against Sullivan–Timmermann–White (1999), Hansen
+`SCOPE.md`, Prior art, places this against Sullivan–Timmermann–White (1999), Hansen
 (2005), Romano & Wolf (2005) and the deflated Sharpe ratio literature.
 
 ## How it works
@@ -165,8 +165,8 @@ garden/         the gate: transcript format, audit, preflight, explain, CLI
 environments/   simulated data, the sandbox contract, price worlds
 searchers/      scripted, dose-response, crossover and diagnostic searchers
 estimator/      naive, recursive and procedure-level bootstraps; closed-form baseline
-experiments/    e1-e20 in the order they ran, with a parallel runner
-prereg/         a pre-registration per experiment, committed before it ran
+experiments/    one module per experiment, named in EXPERIMENTS.md; parallel runner
+prereg/         the agent-arm design, and any experiment not yet reported
 cloud/          EC2 setup and detached-run scripts
 tests/, figures/
 ```

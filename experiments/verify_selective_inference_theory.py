@@ -1,4 +1,4 @@
-"""Mechanistic confirmation of why Adaptive fails e1 (see README, "Days 7-9",
+"""Mechanistic confirmation of why Adaptive fails null-calibration (see README, "Days 7-9",
 and diagnose_adaptive_calibration.py for the PseudoAdaptive control that
 first isolated adaptivity as the driver).
 
@@ -22,7 +22,7 @@ without needing to re-run the sandbox. Two things to check:
   1. Does the oracle (re-derive-the-winner-each-replicate) bootstrap give a
      LARGER mean_null_max than the naive (fixed-transcript) bootstrap, as
      the theory predicts (naive underestimates the true adaptive null max)?
-  2. Does substituting it into e1's null-calibration check restore
+  2. Does substituting it into null-calibration's null-calibration check restore
      uniformity for Adaptive?
 
 Usage: python -m experiments.verify_selective_inference_theory

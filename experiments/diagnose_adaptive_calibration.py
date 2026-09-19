@@ -1,4 +1,4 @@
-"""e1 found that Adaptive fails null calibration while Honest/Greedy/
+"""null-calibration found that Adaptive fails null calibration while Honest/Greedy/
 GridSearch pass (see README, "Days 7-9"). This isolates why.
 
 Hypothesis: it is specifically the OUTCOME-CONDITIONAL construction of

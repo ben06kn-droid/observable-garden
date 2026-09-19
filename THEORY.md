@@ -47,7 +47,7 @@ López de Prado & Porcu uses theirs. The mapping, so the two agree:
 | `p = P*(M ≥ sr_sel)` | `p^ex_K = 1 − F_{M_K}(ŜR_c)`, reject when DSR ≥ 1−α | eqs. (13)–(14) |
 
 `K` is always the logged menu size with correlated trials, never an effective
-count: see the effective-N result in SCOPE.md §10 for why shrinking `K` for
+count: see the effective-N result in SCOPE.md, Effective breadth for why shrinking `K` for
 correlation double-counts it.
 
 ## P1. Fixed menus are valid (known)
@@ -67,7 +67,7 @@ menus are comparable in size to `T`. Maximum-type bootstrap results in high
 dimensions (Chernozhukov, Chetverikov & Kato 2013 for independent data; Zhang &
 Wu 2017 for time series) are the theoretical cover. They concern maxima of
 sums, so applying them to studentized Sharpe maxima needs its own argument.
-Until that exists, the large-menu case is supported by simulation: SCOPE.md §1,
+Until that exists, the large-menu case is supported by simulation: SCOPE.md, The obliviousness condition,
 where menus of thousands of correlated candidates were calibrated.
 
 ## P2. Sub-maximal selection is conservative (known)
@@ -113,17 +113,17 @@ most `d`, 210 columns at K=20, d=2; 1,350 at d=3. Where it cannot — crossover
 rules, whose positions are signs of moving-average differences rather than
 weight vectors — transcript format v3 takes the class as supplied return
 streams (`spec_class="explicit"`), checked by specification id and then column
-by column, and the gate runs the Reality Check directly on them (prereg/E20.md).
+by column, and the gate runs the Reality Check directly on them (non-additive-scoring's prereg, f298103).
 
 **Caveat.** Declaring `Θ` after seeing results is itself snooping. For agents,
 a tool grammar fixes `Θ` in advance, which is the practical point.
 
-**Evidence.** E17 (SCOPE.md §16), K=20, d=2, eight anchor rules, n=500 each:
+**Evidence.** graded-coupling (SCOPE.md, Winner-chasing), K=20, d=2, eight anchor rules, n=500 each:
 full-class type-I 2.0–3.8%, never significantly above 5%. It is conservative
 where the search does not chase winners (2.0–2.8% for rules from loser to
 τ = 1) and matches the recursive null under winner anchoring.
 
-E20 (SCOPE.md §21) tested the route itself, on a class that cannot be
+non-additive-scoring (SCOPE.md, Winner-chasing) tested the route itself, on a class that cannot be
 enumerated from base returns: crossover rules, supplied as return streams.
 Comparing the class maximum against the search's own pick on the *same*
 nullified surrogates, `sr_sel ≤ max_Θ` held on every one of 4 million shift
@@ -172,10 +172,10 @@ evaluates every pair containing the anchor.
   small because `Z_(1)` usually dominates both.
 
 **Status and evidence.** Exact in the Gaussian limit under exchangeability,
-which is e15's design. At finite `T` the pair's Sharpe also depends on the
+which is anchor-coupling's design. At finite `T` the pair's Sharpe also depends on the
 realized correlation of the two columns, so the reduction to `g(z_a, z_j)` is
-an approximation. E16 measured it with both nulls on common resampled indices,
-n = 500 draws (SCOPE.md §15):
+an approximation. pointwise-dominance measured it with both nulls on common resampled indices,
+n = 500 draws (SCOPE.md, Winner-chasing):
 
 | anchor | draws in the predicted direction | replicates violating the inequality |
 |---|---|---|
@@ -184,8 +184,8 @@ n = 500 draws (SCOPE.md §15):
 
 Outside exchangeability the lemma's hypothesis fails: with unequal
 correlations the pair statistic's denominator depends on which pair is
-formed, so the search can prefer a weaker but less correlated partner. E19
-(SCOPE.md §20) measured how far the conclusion survives that, under a
+formed, so the search can prefer a weaker but less correlated partner. unequal-correlation
+(SCOPE.md, Winner-chasing) measured how far the conclusion survives that, under a
 single-factor correlation with loadings on √ρ ± 0.15, n = 500 per cell:
 
 | structure | K | replicates with M_P ≥ M_C | naive type-I | recursive | full-class |
@@ -217,13 +217,13 @@ uniform mixture of P4′, which has no closed form and is reported by Monte
 Carlo. At K = 20, ω = 0.3 the limit gives 9.1%, 9.1%, 6.6%, 4.9%, 4.3% and
 4.3% at ranks 1, 2, 3, 5, 10 and 20, crossing nominal between ranks 3 and 5.
 
-Evidence (SCOPE.md §16, §18):
+Evidence (SCOPE.md, Winner-chasing):
 
-- **E17** drew the anchor with probability proportional to exp(τ z_k). Naive
+- **graded-coupling** drew the anchor with probability proportional to exp(τ z_k). Naive
   type-I rose from 3.6% (loser) through 5.0% (random) to 7.0% (winner), and
   its pre-registered trend test decided for graded coupling across rules
   (p = 0.0001).
-- **E17b** fixed the anchor's rank, with the limit values above registered in
+- **anchor-rank** fixed the anchor's rank, with the limit values above registered in
   advance. It measured 9.5%, 9.7%, 6.3%, 3.9%, 3.8% and 3.7%, each inside its
   95% interval around the limit value. The pre-registered outcome was graded:
   rank 3 fell below rank 2 (34–0) and stayed above rank 10 (25–0).
@@ -240,7 +240,7 @@ evaluated by Monte Carlo in `experiments/limit_model.py`. Alongside it,
 sup|F_P − F_C| is the uniform distortion of the p-value distribution (López de
 Prado & Porcu, eq. 12), which the type-I rate at a single α does not capture.
 
-| ω | K | limit type-I | E19(c) measured | sup\|F_P − F_C\| |
+| ω | K | limit type-I | feature-count measured | sup\|F_P − F_C\| |
 |---|---|---|---|---|
 | 0 | 10 | 10.0% | 10.0% | 0.142 |
 | 0 | 20 | 15.6% | 14.2% | 0.273 |
@@ -252,11 +252,11 @@ Prado & Porcu, eq. 12), which the type-I rate at a single α does not capture.
 | 0.3 | 80 | 13.7% | 14.0% | 0.169 |
 
 Every measured value lies inside its 95% interval, and the pre-registered
-trend test found growth in K at both correlations (p = 0.0001; SCOPE.md §19).
+trend test found growth in K at both correlations (p = 0.0001; SCOPE.md, Winner-chasing).
 
 **Outside additive scoring.** The lemma needs a symmetric, nondecreasing pair
 statistic, which crossover rules do not provide: a rule's position is the sign
-of a difference of moving averages, not a weight vector. E20 (SCOPE.md §21)
+of a difference of moving averages, not a weight vector. non-additive-scoring (SCOPE.md, Winner-chasing)
 predicted the direction anyway, without a guarantee, and found it: paired on
 the same draws, winner-anchored search rejected where loser-anchored did not
 on 47 draws against 1 (single asset) and 36 against 0 (five-asset panel), both
@@ -265,7 +265,7 @@ therefore survives where the proof does not. Its size does not: naive type-I
 was 5.9% and 5.2% against nominal 5%, about a point, and the two worlds were
 not distinguishable from each other (Fisher p = 0.335).
 
-**At depth 3 (E18, SCOPE.md §17).** Winner anchoring inflated naive type-I to
+**At depth 3 (search-depth, SCOPE.md, Winner-chasing).** Winner anchoring inflated naive type-I to
 10.4% (n = 1,000), and the naive p-value was at most the recursive one on
 every draw. A random round-2 anchor still re-anchors round 3 on the round-2
 winner. The pre-registered test found that not detectably inflated (5.3%;
@@ -292,12 +292,12 @@ that the frozen anchor has rank k; average over k. ∎
 **Corollary 4.1.** A uniformly random anchor is exactly calibrated under the
 realized-menu test: its process null *is* the mixture, so the test has exact
 level. Monte Carlo of the limit, with an independently drawn rank per draw:
-5.00% ± 0.02 at K=20, ω=0.3 (`experiments/limit_model.py`), and E17 measured
+5.00% ± 0.02 at K=20, ω=0.3 (`experiments/limit_model.py`), and graded-coupling measured
 5.0% at τ = 0.
 
 **Corollary 4.2.** Ranks 1 and 2 are liberal and rank K conservative, by P4.
 Interior ranks are decided by the mixture criterion and have no closed form.
-Limit values at K=20, ω=0.3, against E17b's measurements (SCOPE.md §18):
+Limit values at K=20, ω=0.3, against anchor-rank's measurements (SCOPE.md, Winner-chasing):
 
 | anchor rank | 1 | 2 | 3 | 5 | 10 | 20 |
 |---|---|---|---|---|---|---|
@@ -335,7 +335,7 @@ at finite `T`: greedy and beam search only ever evaluate members of `Θ_d`, so
 `sr_sel ≤ max_{Θ_d}` exactly, and P3 with P2 gives a valid test. *Coincidence*
 is the limit statement: the process null of greedy or beam search equals the
 full-class null except on the event where `r_m` is not unimodal. Only the
-second needs exchangeability, and only the second is approximate. This explains SCOPE.md §5's
+second needs exchangeability, and only the second is approximate. This explains SCOPE.md, Winner-chasing's
 observation that recursive p-values were identical across beam widths: in this
 limit every width returns the same value.
 
@@ -356,15 +356,15 @@ a "within the top 5% of lattice maxima" column, dropped here because the
 script does not compute it.
 
 So "the full-class null costs greedy search no power" holds exactly at `d = 2`
-or without early stopping, and approximately at larger `d`. E18 checks how
+or without early stopping, and approximately at larger `d`. search-depth checks how
 closely recursive rates coincide across beam widths at `d = 3`.
 
-At finite `T`, even `d = 2` is not exact. In E17 (SCOPE.md §16) the
+At finite `T`, even `d = 2` is not exact. In graded-coupling (SCOPE.md, Winner-chasing) the
 winner-anchored search's recursive and full-class p-values differed on 36 of
 500 draws, each time by one replicate in 1,501 and always with the
 full-class null larger; no rejection decision differed.
 
-**Measured at d = 3 and 4 (E18, SCOPE.md §17), n = 500.** The replayed value
+**Measured at d = 3 and 4 (search-depth, SCOPE.md, Winner-chasing), n = 500.** The replayed value
 fell below the full-class maximum on 0.87% of replicates for greedy search
 and on 0.30–0.33% for beams of width 2 to 16, and at d = 4 on 0.95%. It was
 never above. The limit predicts 0.19% and 0.28%, with no difference between
@@ -428,20 +428,20 @@ Together these give the submitted value the same limit law as under a
 uniformly random anchor, which is data-oblivious and so covered by P1. The
 same two premises hold inside a replicate in the limit, so the bootstrap law
 of the value is also the random-anchor law and the recursive test is
-consistent. This predicts what e15 measured: the fixed neighbor rule behaved
-like a random anchor, mean anchor rank 11.0 of 20 against 10.7 (SCOPE.md §14).
+consistent. This predicts what anchor-coupling measured: the fixed neighbor rule behaved
+like a random anchor, mean anchor rank 11.0 of 20 against 10.7 (SCOPE.md, Winner-chasing).
 
 At finite `T` the second premise fails inside a replicate. Resampling draws
 from the empirical distribution, whose sample correlations are not
 exchangeable, so the replicate's anchor is biased toward the neighbor observed
-on the real data — E19(b) measured exactly that, anchor stability 0.088
-against the 1/19 ≈ 0.053 a uniform anchor gives (SCOPE.md §20). Because the
+on the real data — unequal-correlation arm (b) measured exactly that, anchor stability 0.088
+against the 1/19 ≈ 0.053 a uniform anchor gives (SCOPE.md, Winner-chasing). Because the
 value's law does not depend on *which* non-winner is the anchor, that identity
 bias does not bias the value's law, and it vanishes as `ρ̂ → ω`. This is a
 sketch resting on two named premises, not a proof; formalizing it is the open
 task here.
 
-**Open: partial separation.** E19(b)'s heterogeneous correlation is the regime
+**Open: partial separation.** unequal-correlation arm (b)'s heterogeneous correlation is the regime
 where both premises fail at once. The loadings differ, so `Z_a`'s law depends
 on `a`'s loading and the non-winners are no longer exchangeable; and the
 bootstrap is still biased about which `a` it picks (stability 0.192 against
@@ -548,12 +548,12 @@ reversal, random-anchor exact calibration, or the rank mixture.
 
 | Result | Status | Evidence so far | Planned |
 |---|---|---|---|
-| P1 | known | SCOPE.md §1 (null calibration of oblivious searchers) | E21 |
+| P1 | known | SCOPE.md, The obliviousness condition (null calibration of oblivious searchers) | oblivious-calibration |
 | P2 | known | none needed | none |
-| P3 | ingredients known, tier new | `estimator/full_class.py` and tests; E17 full-class null (SCOPE.md §16); E19(c) up to 3,240 members (SCOPE.md §19); E20 explicit class, exact on 4M shift comparisons (SCOPE.md §21) | E21, E22 |
-| P4 | new | e15 (SCOPE.md §14), E16 (SCOPE.md §15); E17 graded across rules (SCOPE.md §16); E17b graded by rank, matching the limit (SCOPE.md §18); E18 at depth 3 (SCOPE.md §17); E19(c) growth in K (SCOPE.md §19); E19 off-exchangeability (SCOPE.md §20); E20 sign result outside additive scoring (SCOPE.md §21) | block correlation, unequal volatilities |
-| P5 | new, corrected | exploratory limit check above; E17 at d = 2; E18 at d = 3 and 4 (SCOPE.md §17) | E22 |
-| P6 | ingredients known; equicorrelated case sketched, partial separation open | e15 neighbor rule calibrated empirically; E19(b) calibrated as separation rises (SCOPE.md §20) | formalize the sketch's two premises; find an argument for partial separation |
+| P3 | ingredients known, tier new | `estimator/full_class.py` and tests; full-class nulls in `graded-coupling`, `feature-count` (to 3,240 members) and `non-additive-scoring` (explicit class, exact on 4M shift comparisons) | oblivious-calibration, full-class-power |
+| P4 | new | `anchor-coupling`, `pointwise-dominance`, `graded-coupling`, `anchor-rank` (graded by rank, matching the limit), `search-depth` (d=3), `feature-count` (growth in K), `unequal-correlation`, `non-additive-scoring` (the sign outside additive scoring) | block correlation, unequal volatilities |
+| P5 | new, corrected | exploratory limit check above; graded-coupling at d = 2; search-depth at d = 3 and 4 (SCOPE.md, Winner-chasing) | full-class-power |
+| P6 | ingredients known; equicorrelated case sketched, partial separation open | anchor-coupling neighbor rule calibrated empirically; unequal-correlation arm (b) calibrated as separation rises (SCOPE.md, Winner-chasing) | formalize the sketch's two premises; find an argument for partial separation |
 
 ## References
 

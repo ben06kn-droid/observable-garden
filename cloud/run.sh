@@ -2,7 +2,7 @@
 # Start a command detached in tmux, logged to logs/NAME.log, so it survives disconnecting.
 # Run from the repository root on the instance.
 #
-#   cloud/run.sh e12 python -m experiments.e12_type_m_by_power
+#   cloud/run.sh e12 python -m experiments.type_m_by_power
 #   THREADS=32 cloud/run.sh big python -m experiments.some_single_process_job
 #
 #   tail -f logs/e12.log     follow the output

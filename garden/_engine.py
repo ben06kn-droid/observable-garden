@@ -9,7 +9,7 @@ matrix products.
 
 Beyond the null maximum it records what the gate's other checks need: the
 submitted column's Sharpe in every replicate (a nonparametric sampling
-distribution for power), and for the degeneracy check (SCOPE.md §11) whether
+distribution for power), and for the degeneracy check (SCOPE.md, Sparse strategies) whether
 each replicate's argmax entry was degenerate plus the maximum over
 non-degenerate entries. An entry is degenerate when its resample holds fewer
 than `support_min` distinct periods with a non-zero return for that column,

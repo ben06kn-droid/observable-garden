@@ -19,7 +19,7 @@ from garden.transcript import Transcript
 Status = Literal["PASS", "FAIL", "INADMISSIBLE", "UNDECIDABLE", "DEGENERATE"]
 EXIT_CODES = {"PASS": 0, "FAIL": 1, "INADMISSIBLE": 2, "UNDECIDABLE": 3, "DEGENERATE": 4}
 
-# Degeneracy check (SCOPE.md §11), chosen by experiments/e14_degeneracy_recalibration.py's pre-registered
+# Degeneracy check (SCOPE.md, Sparse strategies), chosen by experiments/degeneracy_recalibration.py's pre-registered
 # rule: no refusals across 9,000 dense transcripts; 90% of sparse transcripts with a broken critical value
 # refused, and 4% of those with a sound one.
 SUPPORT_MIN = 50
@@ -51,7 +51,7 @@ DEGENERATE_ROUTES = (
 POWER_SCOPE = (
     "This is power for a single pre-specified strategy, not for the search. A search broad enough to reach "
     "strategies carrying an edge can detect more often; one too narrow to reach them detects less often "
-    "(SCOPE.md §13)."
+    "(SCOPE.md, The cost of breadth)."
 )
 
 SCOPE_NOTE = (
@@ -82,7 +82,7 @@ class Verdict:
     block_length: int
     effective_breadth: float               # reported only, never used in the correction
     reference_sharpe: float
-    power_at_reference: float              # single pre-specified strategy, not search power (SCOPE.md §13)
+    power_at_reference: float              # single pre-specified strategy, not search power (SCOPE.md, The cost of breadth)
     power_floor: float
     menu_kind: str
     benchmark: str | None                  # declared benchmark subtracted before demeaning; None = absolute
@@ -166,7 +166,7 @@ def audit(
     specification it would submit. It replaces the Reality Check null with the procedure-level one
     (estimator/procedure_level_bootstrap.py), which needs re-executability but no reconstruction.
 
-    support_min, q_min, tail_share_max: the degeneracy check (SCOPE.md §11). A replicate's maximum is
+    support_min, q_min, tail_share_max: the degeneracy check (SCOPE.md, Sparse strategies). A replicate's maximum is
     degenerate when its column's resample has fewer than support_min distinct active periods, or a standard
     deviation below q_min times the full-sample one. The verdict is DEGENERATE when, among the top
     TAIL_FRACTION of replicates (the ones that set the critical value), the share with a degenerate maximum
@@ -227,7 +227,7 @@ def audit(
         method = "procedure_level"
     elif use_full_class and explicit_class:
         # The class is supplied as return streams, so the Reality Check runs on it directly: no weights to
-        # reconstruct and nothing to enumerate (prereg/E20.md).
+        # reconstruct and nothing to enumerate (non-additive-scoring's prereg, f298103).
         class_boot = null_max_bootstrap(class_returns, B=B, block_length=boot.block_length,
                                         annualization=ann, seed=seed)
         null = class_boot.M_b
@@ -285,7 +285,7 @@ def audit(
                            f"{reference_sharpe:.1f} is only {pct(power)}. Passes from low-power searches overstate "
                            f"the edge: in this project's measurements a passing result's deflated Sharpe was 12x "
                            f"the truth at 6% search power, 3.1x at 9% and 1.6x at 16%, with no overstatement by "
-                           f"about 30% (SCOPE.md §12). The single-strategy figure does not say which of those "
+                           f"about 30% (SCOPE.md, The cost of breadth). The single-strategy figure does not say which of those "
                            f"regimes this search is in, so treat {sr_deflated:.2f} as an upper bound on the true "
                            f"edge, not an estimate of it.")
             reasons.append(POWER_SCOPE)
@@ -313,7 +313,7 @@ def audit(
                        f"degenerate when a column has fewer than {support_min} distinct active periods in it or "
                        f"its standard deviation falls below {q_min:g} of the full-sample value. Sharpe "
                        f"re-estimated in every replicate explodes there, so the critical value of {c:.2f} "
-                       f"measures near-empty resamples rather than the search (SCOPE.md §11).")
+                       f"measures near-empty resamples rather than the search (SCOPE.md, Sparse strategies).")
         described =[f"{cid} (active on {pct(float((R[:, k] != 0).mean()))} of periods)"
                      for cid, (k, _) in zip(degenerate_columns, worst)]
         reasons.append("Columns that most often set a degenerate maximum: " + ", ".join(described) + ".")
@@ -330,9 +330,9 @@ def audit(
         reasons.append(f"Reality Check p-value, shown for reference: {p:.3f}. An adaptive menu biases it "
                        f"downward, so treat it as a lower bound on the true p-value, and {sr_deflated:.2f} as "
                        f"an upper bound on the deflated Sharpe. In this project's adaptive-search experiments "
-                       f"a nominal 5% test rejected 12.7–13.6% of true nulls (SCOPE.md §3, §5).")
+                       f"a nominal 5% test rejected 12.7–13.6% of true nulls (SCOPE.md, Winner-chasing).")
         if over_limit or flips:
-            reasons.append("This Reality Check null is also dominated by degenerate resamples (SCOPE.md §11), so "
+            reasons.append("This Reality Check null is also dominated by degenerate resamples (SCOPE.md, Sparse strategies), so "
                            "the reference p-value above is unreliable in either direction, not only a lower "
                            "bound.")
         reasons.append(ROUTES_FORWARD)
@@ -377,12 +377,12 @@ def audit(
         reasons.append(f"Effective breadth {breadth:,.1f} of {N:,} (participation ratio of the trial "
                        f"correlations) is reported for information and not used in the correction: the "
                        f"bootstrap already resamples trials jointly, and shrinking N as well would count "
-                       f"their correlation twice (SCOPE.md §10).")
+                       f"their correlation twice (SCOPE.md, Effective breadth).")
     else:
         reasons.append(f"Effective breadth is undefined for this menu: every one of the {N:,} columns is "
                        f"constant, so there are no trial correlations to take a participation ratio of. "
                        f"It is reported for information only and never used in the correction "
-                       f"(SCOPE.md §10).")
+                       f"(SCOPE.md, Effective breadth).")
     if benchmark_name is not None:
         reasons.append(f"Null: zero excess return over {benchmark_name}. That series was subtracted "
                        f"from every column before the bootstrap demeaned it, so this verdict is about "

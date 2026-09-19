@@ -38,7 +38,7 @@ def sharpe(R: np.ndarray, axis: int = 0, annualization: float = 1.0,
     """Per-period Sharpe (mean/std, ddof=1) along `axis`, scaled by `annualization`
     (pass sqrt(periods_per_year) to match environments.sandbox's convention).
 
-    Guards against degenerate resamples (SCOPE.md §11), counted in GUARD_COUNTS so
+    Guards against degenerate resamples (SCOPE.md, Sparse strategies), counted in GUARD_COUNTS so
     a run can show whether they ever changed an output: variance at or below
     VARIANCE_FLOOR x `var_reference` (a column's full-sample variance; by default
     its own, so only exact zeros) gives Sharpe 0, and |Sharpe| is capped at
