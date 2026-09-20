@@ -57,8 +57,12 @@ check that each one preceded the code and the run it authorises.
 
 | pre-registration | committed at | amendments and deviations |
 |---|---|---|
-| `calibration-at-1pct` | `e9ad319` | 1, skip the sizing smoke — `4f556bb`; deviation 1 and 2, arm D — `0ab5653` |
-| `costs-and-regime-change` | committed with this change | none; not yet reviewed, not yet run |
+| `calibration-at-1pct` | `e9ad319` | 1, skip the sizing smoke — `4f556bb`; deviation 1 and amendment 2, arm D — `0ab5653`; 3, what rule 4's ordering rests on — `4cb8404` |
+
+`prereg/costs-and-regime-change.md` is **committed but not live**: it is in the
+tree so it cannot be lost, it has not been reviewed, and it authorises nothing.
+6.2 does not run until it has been read. It is deliberately absent from the table
+above, which lists only pre-registrations that authorise a run.
 
 ## Phase 6
 
