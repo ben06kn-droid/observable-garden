@@ -294,7 +294,8 @@ def run_scripted(arm: str, n_draws: int, B: int, workers: int | None,
     rows = [d for s in starts for d in got[(arm, s)]]
     data = {"arm": arm, "git_at_launch": git, "seeds": SEED0 + np.arange(n_draws),
             "settings": {"M": M, "T": T, "K": K, "d": D, "B": B, "draws": n_draws,
-                         "class_size": CLASS.size(K), "class": CLASS.name},
+                         "class_size": CLASS.size(K), "class": CLASS.name,
+                         "workers": workers},
             "seconds": np.array([r["_draw"]["seconds"] for r in rows]),
             "block_length": np.array([r["_draw"]["block_length"] for r in rows]),
             "floor": np.array([r["_draw"]["floor"] for r in rows]),
@@ -330,9 +331,18 @@ def report_scripted(data: dict, out_dir: Path, full_n: int) -> str:
           f"   max {secs.max():7.2f}s",
           f"  this run   {secs.sum() / 3600:.2f} CPU-hours over {n} draws"]
     if n < full_n:
-        L.append(f"  projected  {secs.mean() * full_n / 3600:.1f} CPU-hours for the full "
-                 f"{full_n} draws "
-                 f"({secs.mean() * full_n / 3600 / 32:.1f} h wall on 32 cores)")
+        # The worker count the smoke actually used, never a hardcoded one: a
+        # projection divided by the wrong number of workers is how arm B came in
+        # at 4.7x its estimate.
+        w = s.get("workers")
+        cpu_h = secs.mean() * full_n / 3600
+        if w:
+            L.append(f"  projected  {cpu_h:.1f} CPU-hours for the full {full_n} draws "
+                     f"({cpu_h / w:.2f} h wall at the {w} workers this smoke used, "
+                     f"${cpu_h / w * 1.64:.2f} at $1.64/h)")
+        else:
+            L.append(f"  projected  {cpu_h:.1f} CPU-hours for the full {full_n} draws "
+                     f"(worker count not recorded; divide by it yourself)")
     L += ["", "GUARDS AND BLOCK LENGTHS", "-" * 78,
           f"  variance floor binds {int(data['floor'].sum())}   "
           f"sharpe cap binds {int(data['cap'].sum())}",
