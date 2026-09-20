@@ -460,7 +460,11 @@ Pre-register and run properly: Greedy and Adaptive on s0 and s3, 2,000
 draws, three certifiers — declared class on the full sample, holdout
 70/30 and 50/50, process replay on the full sample. Type-I at 5% and 1%,
 PASS rate on s3, holdout Sharpe of passes. Add one 6.2-style regime-shift
-cell (β halved at the split), the case where the holdout might win.
+cell using **β sign-flipped on S[0]** — the same shift 6.2 ran, so the two
+are directly comparable. Motivated by 6.2: under that shift the class gate's
+PASS advantage erodes from +0.46 to +0.08 in median gross OOS Sharpe, about
+80%, without inverting. 7.0 asks whether a later-in-time holdout tier
+degrades differently under the same shift, the case where it might win.
 
 Gate: decides tier order in 7.2. Expected order — replay, class, holdout.
 If replay does not beat the class gate's PASS rate on s3 at matched
