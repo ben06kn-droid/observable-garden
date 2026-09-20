@@ -79,6 +79,12 @@ advantage eroding from +0.46 to +0.08 in median gross OOS Sharpe under it. The
 question here is whether a later-in-time holdout tier degrades differently under
 the same shift, which is the case where the holdout might win.
 
+**Amended after arm D, before any 7.0 data exists.** Amendment 1 below was
+written on 2026-09-20, after `calibration-at-1pct` arm D reported and before a
+single 7.0 draw was computed. Arm D is this pre-registration's named design
+input, so incorporating its decomposition is the intended order of work, not a
+revision made in sight of 7.0's own results. Nothing in 7.0 has been run.
+
 **Recorded per draw**, so no later experiment has to re-price a null: the
 observed statistic, the p-value under each certifier, and the null-max quantiles
 at 0.90 / 0.95 / 0.99 / 0.999. Arm B stored only a mean and had to be paid for
@@ -159,3 +165,89 @@ estimate.
 **Standing configuration:** 16 workers on the 32-core instance. Not
 `nproc --all`; 32 workers are 4% slower in wall-clock and marginally dearer per
 draw on this workload.
+
+## Amendments
+
+**1 — 2026-09-20, after `calibration-at-1pct` arm D reported and before any 7.0
+draw was computed. Arm D removes most of the slack 7.0 was built to measure.**
+
+Arm D's rule 4 decomposition, on 2,000 draws: mean submitted Sharpe is 0.8211
+for the signed class maximum, 0.7045 for the unsigned sublattice maximum, and
+0.7044 for `Adaptive`. **Confinement to the reachable class costs 0.117;
+sub-maximal search within it costs 0.0001.** `Adaptive` differs from its
+reachable maximum on 1,910 of 2,000 draws but never by more than 0.025, so the
+two rejection rates coincide exactly.
+
+This changes what 7.0 can detect. Process replay's advantage over a declared
+class is that it prices the search actually performed rather than the whole
+class, so it can only recover the slack between what a searcher submits and its
+class maximum. **Against a matched class, an efficient searcher leaves almost no
+such slack.** Arm A puts the agents at 3.6% actual size against the anchor's
+5.5%, so even they leave under two points. Running 7.0 only on Greedy, Adaptive
+and their signed variants would therefore compare three certifiers on a quantity
+that is nearly zero by construction, and report a tie as if it were a finding.
+
+**Predicted, and registered as confirmation rather than failure.** For `Greedy`,
+`Adaptive`, `SignedGreedy` and `SignedAdaptive` scored against their matched
+classes, process replay and the declared-class gate are predicted to **tie** on
+PASS rate at matched actual type-I, within the paired bootstrap interval. The
+grounds are P5 and arm D: a greedy or forward-selection searcher over a lattice
+lands at or adjacent to its class optimum, so the replayed null and the
+full-class null are nulls of nearly the same statistic. A tie here confirms the
+decomposition; it is **not** evidence against replay, and it does not trigger
+any fallback.
+
+**Slack searchers are added, and rule 3 moves to them.** A certifier comparison
+needs searchers that genuinely submit below their class maximum:
+
+| searcher | source | why it has slack |
+|---|---|---|
+| `StopWhenCleared` | `searchers/meta_adaptive.py` (7.1) | stops at the first candidate clearing the bar, so it submits an early passable spec rather than the best one |
+| `BudgetedRandom` | to be written | samples a fixed budget of class members uniformly and submits the best seen; slack is set by the budget and is tunable by construction |
+
+`BudgetedRandom`'s budget is fixed before the run at 25, 100 and 400 draws from
+the class, giving three known slack levels. Reusing 7.1's `StopWhenCleared`
+keeps one searcher common to both experiments.
+
+**Every searcher's slack is reported** as its **actual size under the declared
+class gate on s0**, at α = 0.05 and 0.01, beside the anchor's. That single
+column is what makes the certifier comparison readable: a searcher whose actual
+size already sits at nominal has nothing for replay to recover, and a searcher
+at 0.1% has almost two orders of magnitude of it.
+
+**Rule 3 is replaced.**
+
+3. **Power at matched actual type-I, evaluated on the slack searchers.** PASS
+   rate on s3 across certifiers at their measured s0 rates, for
+   `StopWhenCleared` and `BudgetedRandom` at each budget. The efficient
+   searchers are reported in the same table but are **not** what the rule is
+   read on, for the reason above.
+   - *Reported both ways; no halt.* This rule ranks, it does not gate.
+
+**Rule 4 is replaced.** The earlier version said replay must beat the class gate
+on s3 or Phase 7 reduces to the holdout fallback. That is the wrong test, because
+it was to be read on searchers with no slack to recover.
+
+4. **Tier order (the gate on 7.2).** Read on the slack searchers, among
+   certifiers surviving rule 2.
+   - *Replay leads on the slack searchers:* 7.2 builds replay, class, holdout in
+     that order, and the class tier is documented as sufficient wherever the
+     searcher is efficient and its class is declarable.
+   - *Replay ties the class gate on the slack searchers too:* replay's claimed
+     advantage is for **slack searchers and undeclarable classes**. If it shows
+     no power gain even where slack exists, that is stated plainly, and Phase 7's
+     contribution is 7.1's measurement of the frozen-decision error plus the
+     coverage claim — replay certifies searches whose class cannot be enumerated
+     at all, which is a coverage argument and not a power argument. Phase 7 does
+     **not** reduce to the holdout fallback on this outcome.
+   - *Replay is liberal under rule 2:* excluded from the tier order regardless of
+     power, as rule 2 already requires.
+   - *The holdout wins outright on the slack searchers:* not predicted; the split
+     is worth its standard error and the class tier becomes the fallback.
+     Investigated before write-up.
+
+**Cost.** The added searchers price no new null — one class null per draw already
+serves every searcher, as in arm D. `BudgetedRandom` at three budgets and
+`StopWhenCleared` add four scored submissions per draw, which is closed-form
+work against a 75 s bootstrap. The process-replay certifier remains the unsized
+component and still gates the launch.
