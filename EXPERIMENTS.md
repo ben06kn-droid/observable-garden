@@ -62,6 +62,53 @@ check that each one preceded the code and the run it authorises.
 
 
 
+## What pins the code a result ran on
+
+Audited 2026-09-20, after arm D exposed the defect. Two mechanisms exist and
+they cover different things:
+
+- **`git_at_launch`** (`experiments.search_depth.git_state`) records HEAD and a
+  dirty flag. Scripted experiments in `figures/` carry this and nothing else.
+- **The `code_state` harness fingerprint** hashes every file under `CODE_PATHS`
+  plus the pre-registration's design sections. It is recorded **per agent run**
+  in `runs/<batch>/runs.csv` and is what stops a batch mid-flight when the code
+  moves. **No `figures/*_data.pkl` carries one.**
+
+**Five committed results carry `(dirty)`**, and for none of them does a
+fingerprint independently pin the code, because scripted experiments do not
+record one:
+
+| result | commit | in main history | independently fingerprinted |
+|---|---|---|---|
+| `calibration_at_1pct_armB` | `4f556bb` | yes | no |
+| `calibration_at_1pct_armC` | `4f556bb` | yes | no |
+| `calibration_at_1pct_armD` | `04dcc53` | yes | no |
+| `e_watch_validation` | `7fc06ba` | yes | no |
+| `e_watch_validation_T2000` | `7fc06ba` | yes | no |
+
+**Arm D's flag is proven spurious.** Checked on the instance while it still
+held the tree: `git diff HEAD` was empty and `git status --porcelain` listed
+only untracked paths — the checkpoint directory and the run's own outputs in
+`figures/`. The code that ran was exactly `04dcc53`.
+
+**The other four cannot be proven retroactively**, and are not claimed to be
+clean. They are in the same structural class: every one is a run that writes
+its outputs into the working tree, which is exactly the false-positive case the
+old flag could not distinguish. Their commits are all ancestors of HEAD. Nothing
+is being rerun on this basis; the honest statement is that these five are pinned
+by commit alone.
+
+`git_state` was fixed in `18e7e6e` to count tracked modifications only and to
+report untracked paths separately, so a future `(dirty)` means what it says.
+Results produced before that commit carry the old, uninformative flag.
+
+**A separate gap, in the other direction.** Fingerprint coverage in the agent
+batches is not complete: `b1-baseline` (80 runs) records none at all, and 12 of
+`b2-arms`'s 241 rows are missing one. The remaining batches are fully covered —
+`b3-models` and `b5-opus` on a single fingerprint each, `b4-s3-recal` on two,
+`b2-arms` on four across its covered rows. So 92 agent runs are pinned by commit
+alone as well.
+
 ## Phase 6
 
 | name | question | result |
