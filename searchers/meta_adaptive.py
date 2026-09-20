@@ -90,10 +90,10 @@ class MetaAdaptive(Searcher):
 
     - "policy"  — re-evaluate the policy, which is exact because the policy is
                   code. This is null 3 in 7.1.
-    - "trigger" — re-evaluate each move's predicate on the replicate's own
-                  state, which is what `_decide` already does; identical to
-                  "policy" here *by construction*, and kept separate because a
-                  real agent's triggers are declared rather than executable.
+    - "trigger" — re-evaluate each declared predicate on the replicate's own
+                  state, but only for as many steps as the realized search took;
+                  past that, fill greedily. It agrees with "policy" exactly up to
+                  the realized length and can diverge after it.
     - "fixed"   — take the realized action at each step regardless of what the
                   replicate sees. This is null 1, the error being measured.
     """
@@ -235,14 +235,18 @@ class MetaAdaptive(Searcher):
         past the realized sequence has no further declared trigger, so it is
         filled with greedy extension to the budget.
 
-        For the three scripted searchers here this coincides with full policy
-        replay exactly, and `tests/test_meta_adaptive.py` asserts it does. That is
-        not a defect of the construction, it is what makes them the right
-        validation vehicle: their "continue" move *is* greedy extension, so the
-        fill rule and the policy agree, and nulls 2 and 3 differ only for a
-        searcher whose continue-move is something else -- an agent's, in 7.3.
-        With nulls 2 and 3 pinned together, the fixed-sequence gap is measured
-        with nothing else moving."""
+        The exact invariant, asserted in `tests/test_meta_adaptive.py`: this
+        differs from full policy replay **only on replicates whose policy would
+        have run past the realized length**. Up to that point the predicates are
+        the policy, so the two agree step for step.
+
+        Past it they can differ in two ways. In the **meta** dimension, for any
+        searcher: the fill always continues, so a policy that would have stopped
+        or restarted there diverges -- `StopWhenCleared` with a short realized
+        sequence is the clear case. In the **content** dimension, only for a
+        searcher whose continue-move is not greedy extension, since the fill's
+        move is greedy by definition; that is what `ExtendBySecondBest` is for.
+        """
         return self.trace(base_columns, annualization,
                           meta_steps=n_realized_moves).score
 
@@ -318,18 +322,19 @@ class ExtendBySecondBest(MetaAdaptive):
     """Continues by adding the **second**-best available extension, not the best.
 
     Its reason for existing is narrow and structural. For the other three
-    searchers the continue-move is greedy extension, which is also 7.1's fill
-    rule, so trigger replay and policy replay coincide exactly and the fill is
-    never actually exercised: whenever a replicate runs past the realized
-    sequence, the thing filled in is the same thing the policy would have done.
-    7.3 cannot test it either -- an agent has no exact policy null to compare a
-    filled trigger replay against.
+    searchers the continue-move *is* greedy extension, which is also 7.1's fill
+    rule, so past the realized sequence the fill can only diverge from the policy
+    in the meta dimension -- when the policy would have stopped or restarted
+    there. That happens occasionally and only when the realized sequence is
+    short, so it exercises the fill's **content** choice not at all. 7.3 cannot
+    exercise it either: an agent has no exact policy null to compare a filled
+    trigger replay against.
 
-    So the fill rule would go into the gate untested. This searcher is the one
-    place it is tested: its continuation is deliberately *not* greedy, so a
-    replicate that runs past the realized sequence gets a different move from the
-    one the policy would have made, nulls 2 and 3 separate, and the signed
-    Kolmogorov distance between them says which way the fill errs.
+    Without this searcher the fill's content rule would go into the gate
+    untested. Its continuation is deliberately not greedy, so **every** filled
+    step adds a different feature from the one the policy would have added.
+    Nulls 2 and 3 then separate systematically rather than occasionally, and the
+    signed Kolmogorov distance between them says which way the fill errs.
 
     The meta trigger is the mildest one -- extend while improving -- so that what
     separates the nulls is the continue-move and nothing else.

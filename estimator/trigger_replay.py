@@ -57,14 +57,39 @@ class ReplayNulls:
         sr = self.realized_score if sr is None else sr
         return float((1 + np.sum(M_b >= sr)) / (M_b.size + 1))
 
-    def kolmogorov_distance(self, which: str, against: str = "policy") -> float:
-        """Sup-norm distance between two nulls' empirical CDFs. 7.1 reports this
-        for fixed_sequence and trigger against policy."""
+    def _cdfs(self, which: str, against: str):
         a, b = np.sort(getattr(self, which)), np.sort(getattr(self, against))
         grid = np.concatenate([a, b])
         fa = np.searchsorted(a, grid, side="right") / a.size
         fb = np.searchsorted(b, grid, side="right") / b.size
+        return fa, fb
+
+    def kolmogorov_distance(self, which: str, against: str = "policy") -> float:
+        """Sup-norm distance between two nulls' empirical CDFs. 7.1 reports this
+        for fixed_sequence and trigger against policy."""
+        fa, fb = self._cdfs(which, against)
         return float(np.max(np.abs(fa - fb)))
+
+    def signed_kolmogorov_distance(self, which: str, against: str = "policy") -> float:
+        """The same sup-norm distance, carrying the sign of the difference at the
+        point where it is largest. This is what says **which direction** a replay
+        rule errs, which the unsigned distance cannot.
+
+        Sign convention: `F_which - F_against` at the extremal point.
+
+        - **Positive** means `which` puts more mass at low values, so its null is
+          stochastically *smaller*. A smaller null is a lower bar, so the p-value
+          computed against it is smaller and the rule is **liberal** relative to
+          `against`.
+        - **Negative** means the null is stochastically larger, so the rule is
+          **conservative** relative to `against`.
+
+        For 7.1 this is the readout on the trigger null against the policy null:
+        it says whether the conservative-fill rule actually errs conservatively.
+        """
+        fa, fb = self._cdfs(which, against)
+        d = fa - fb
+        return float(d[np.argmax(np.abs(d))])
 
 
 def replay_nulls(

@@ -11,9 +11,11 @@ import pytest
 
 from environments.dgp import DGPConfig, generate
 from environments.sandbox import Sandbox
+from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
 from estimator.trigger_replay import NULLS, replay_nulls
 from searchers.meta_adaptive import (
-    BUDGET, ExtendWhileImproving, RestartAfterKFailures, StopWhenCleared)
+    BUDGET, GREEDY_CONTINUATION, ExtendBySecondBest, ExtendWhileImproving,
+    RestartAfterKFailures, StopWhenCleared)
 
 
 def _base(K=8, T=400, seed=3):
@@ -113,19 +115,42 @@ def test_fixed_sequence_replay_ignores_what_the_replicate_sees():
 
 
 @pytest.mark.parametrize("searcher", _all_three())
-def test_trigger_replay_equals_policy_replay_for_a_scripted_policy(searcher):
-    """Documented coincidence, asserted so it cannot drift silently.
-
-    All three searchers' "continue" move is greedy extension, which is also 7.1's
-    fill rule, so re-evaluating the predicates and re-running the policy give the
-    same number. That is what makes these three the right validation vehicle: with
-    nulls 2 and 3 pinned together, the fixed-sequence gap is measured with nothing
-    else moving. A searcher whose continue-move is not greedy extension -- an
-    agent's, in 7.3 -- separates them."""
+def test_trigger_replay_matches_the_policy_on_the_data_it_was_read_from(searcher):
     base, ann = _base()
     t = searcher.trace(base, ann)
     assert searcher.replay_triggers(base, t.n_moves, ann) == pytest.approx(
         searcher.replay(base, ann), rel=1e-12)
+
+
+def test_trigger_and_policy_differ_only_past_the_realized_length():
+    """The exact invariant, and the correction to an earlier claim.
+
+    Trigger replay was documented as coinciding with policy replay for every
+    greedy-continuation searcher. It does not. Up to the realized length the
+    predicates *are* the policy, so the two agree step for step; past it the fill
+    always continues, so a policy that would have stopped or restarted there
+    diverges. StopWhenCleared with a short realized sequence is the case that
+    exposed it -- one replicate in 120, worth 0.11 in Sharpe.
+
+    What is true, and is what this asserts: differences occur on no replicate
+    whose policy stopped at or before the realized length."""
+    base, ann = _base(K=10, T=600, seed=7)
+    s = StopWhenCleared(bar=0.3)
+    realized = s.trace(base, ann)
+    S0 = base - base.mean(axis=0, keepdims=True)
+    L = select_block_length(S0)
+    rng = np.random.default_rng(3)
+
+    seen_a_difference = False
+    for _ in range(120):
+        R = S0[stationary_bootstrap_indices(S0.shape[0], L, rng), :]
+        differs = abs(s.replay_triggers(R, realized.n_moves, ann)
+                      - s.replay(R, ann)) > 1e-12
+        ran_longer = s.trace(R, ann).n_moves > realized.n_moves
+        if differs:
+            assert ran_longer, "diverged without running past the realized length"
+            seen_a_difference = True
+    assert seen_a_difference, "this fixture is meant to exercise the fill"
 
 
 def test_trigger_replay_fills_past_the_realized_sequence():
@@ -198,3 +223,67 @@ def test_a_frozen_early_stop_gives_a_smaller_null_than_the_policy():
     n = replay_nulls(base, s, B=200, annualization=ann, seed=1)
     assert n.fixed_sequence.mean() < n.policy.mean()
     assert n.kolmogorov_distance("fixed_sequence", "policy") > 0.0
+
+
+# -- the fill rule, and the searcher that actually tests it ------------------
+
+def test_the_fourth_searcher_separates_trigger_from_policy_replay():
+    """The reason ExtendBySecondBest exists.
+
+    For the other three, trigger replay and policy replay coincide exactly,
+    because their continue-move is greedy extension and that is also 7.1's fill
+    rule -- so the fill is never actually exercised, and 7.3 cannot exercise it
+    either, an agent having no exact policy null to compare against. This
+    searcher's continuation is deliberately not greedy, so a replicate running
+    past the realized sequence gets a different move from the policy's, and the
+    two nulls must differ."""
+    base, ann = _base(K=10, T=600, seed=7)
+    s = ExtendBySecondBest(min_gain=0.0)
+    n = replay_nulls(base, s, B=200, annualization=ann, seed=3)
+    assert not np.allclose(n.trigger, n.policy), "nulls 2 and 3 must separate here"
+    assert n.kolmogorov_distance("trigger", "policy") > 0.0
+
+
+def test_greedy_continuation_searchers_separate_only_rarely():
+    """The contrast that justifies the fourth searcher. For a greedy-continuation
+    searcher the fill can diverge only in the meta dimension, which needs a short
+    realized sequence and is therefore occasional; ExtendBySecondBest diverges in
+    the content dimension on every filled step."""
+    base, ann = _base(K=10, T=600, seed=7)
+    rates = {}
+    for cls in GREEDY_CONTINUATION:
+        s = cls(bar=0.3) if cls is StopWhenCleared else cls()
+        n = replay_nulls(base, s, B=120, annualization=ann, seed=3)
+        rates[s.name] = float(np.mean(np.abs(n.trigger - n.policy) > 1e-12))
+    second = replay_nulls(base, ExtendBySecondBest(min_gain=0.0), B=120,
+                          annualization=ann, seed=3)
+    second_rate = float(np.mean(np.abs(second.trigger - second.policy) > 1e-12))
+    assert max(rates.values()) < 0.05, rates
+    assert second_rate > max(rates.values())
+
+
+def test_the_signed_distance_reports_direction_not_just_size():
+    base, ann = _base(K=10, T=600, seed=7)
+    n = replay_nulls(base, ExtendBySecondBest(min_gain=0.0), B=200,
+                     annualization=ann, seed=3)
+    signed = n.signed_kolmogorov_distance("trigger", "policy")
+    unsigned = n.kolmogorov_distance("trigger", "policy")
+    assert abs(signed) == pytest.approx(unsigned, rel=1e-12)
+    # a null that is stochastically smaller gives a lower bar, hence a smaller
+    # p-value: liberal. The sign must agree with the p-values it implies.
+    if signed > 0:
+        assert n.p_value("trigger") <= n.p_value("policy")
+    elif signed < 0:
+        assert n.p_value("trigger") >= n.p_value("policy")
+
+
+def test_the_fill_rule_is_conservative_here():
+    """7.1's substantive question, on one sample rather than as a sweep: filling
+    with greedy extension gives a null at least as large as the policy's,
+    because greedy extension is the best available move and the policy's
+    second-best choice cannot beat it. Conservative is the acceptable direction."""
+    base, ann = _base(K=10, T=600, seed=7)
+    n = replay_nulls(base, ExtendBySecondBest(min_gain=0.0), B=300,
+                     annualization=ann, seed=5)
+    assert n.trigger.mean() >= n.policy.mean() - 1e-12
+    assert n.signed_kolmogorov_distance("trigger", "policy") <= 0.0
