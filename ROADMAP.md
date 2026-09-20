@@ -453,6 +453,37 @@ If replay does not beat the class gate's PASS rate on s3 at matched
 type-I, Phase 7 reduces to the holdout fallback plus the measurements, and
 says so.
 
+**From 6.1's arm B (added 2026-09-20).**
+
+- *The class gate's actual size is far below nominal, so power must be compared
+  at matched actual type-I, not at matched nominal α.* Measured at α = 0.05:
+  scripted Adaptive **1.0%**, agents **3.6%** (arm A), against a nominal 5%.
+  That slack is exactly what process replay is meant to recover, and comparing
+  PASS rates at nominal α would credit replay with power that is really just the
+  class gate's unused size.
+- *The exhaustive searcher joins 7.0 as the calibration anchor.* `ExhaustiveClass`
+  submits the argmax over the declared class, so P2's conservatism vanishes and
+  P1 predicts exactness; it is the only searcher whose size measures the
+  bootstrap rather than its own position in the class. 7.0 therefore reports
+  each certifier's **actual size per searcher** alongside its PASS rate.
+- *Why agents sit closer to nominal than scripted Adaptive.* Not P5. Checked
+  against the arm A transcripts: 95.9% of agent submissions are depth 3, so it
+  is not depth, and **83.8% carry at least one short leg**. `Greedy` and
+  `Adaptive` build weights with `_one_hot_sum`, which is unsigned, so they are
+  confined to the 10,700-member unsigned sublattice — 13% of the 82,240-member
+  signed class they are priced against. The agents search the signed class and
+  get nearer its maximum. P5 concerns greedy reaching the *lattice* optimum,
+  which would put Adaptive near nominal if the lattice were the bar; the bar is
+  eight times larger than the lattice it can reach.
+- *7.0's scripted arms must use a class matched to each searcher's reach* —
+  either signed searcher variants against the signed class, or the existing
+  unsigned searchers against an unsigned class. Pricing an unsigned searcher
+  against a signed bar is what made arm B unreadable, and 7.0 compares
+  certifiers, so a mismatch would be attributed to the certifier rather than to
+  the searcher's confinement. `ExhaustiveClass` is the exception and is run
+  against whichever class is being priced, since it reaches all of it by
+  construction.
+
 ## 7.1 fixed-sequence-replay — what does freezing a decision cost? (EC2)
 
 The replay gate re-executes an agent's typed moves on each bootstrap

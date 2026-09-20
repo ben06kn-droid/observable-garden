@@ -51,6 +51,22 @@ and which pins ROADMAP 6.5-6.7) and the history-rewrite record.
 | `non-additive-scoring` | `f298103` | `prereg/E20.md` |
 | `oblivious-calibration` | `82bea64` | `prereg/E21.md` |
 
+**Live pre-registrations**, still in `prereg/` because their experiment has not
+finished reporting. Amendments are recorded by commit too, so a later reader can
+check that each one preceded the code and the run it authorises.
+
+| pre-registration | committed at | amendments and deviations |
+|---|---|---|
+| `calibration-at-1pct` | `e9ad319` | 1, skip the sizing smoke — `4f556bb`; deviation 1 and 2, arm D — `0ab5653` |
+| `costs-and-regime-change` | committed with this change | none; not yet reviewed, not yet run |
+
+## Phase 6
+
+| name | question | result |
+|---|---|---|
+| `calibration-at-1pct` | is the declared-class gate calibrated at 1%, not just 5%? | arm A: 15 of 419 graded agent runs reject at 5%. arm B: conservative, and unable to answer — see deviation 1. arm C running; arm D pre-registered, not run |
+| `costs-and-regime-change` | what does a PASS survive once costs and regime shifts are priced? | not yet run |
+
 ## Null calibration and the mechanism
 
 | name | old | question | result |

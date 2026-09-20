@@ -132,3 +132,36 @@ class PinnedSelector(Searcher):
         pinned_spec = Specification(weights=self.pinned_weights, name="pinned")
         result = sandbox.evaluate(pinned_spec)
         sandbox.submit(pinned_spec, Distribution.degenerate(result.sharpe))
+
+
+class ExhaustiveClass(Searcher):
+    """Submits the argmax over the declared class: the calibration anchor.
+
+    Every other searcher here submits something below the class maximum, so P2
+    makes its p-value conservative by construction and a KS test against U(0,1)
+    rejects whatever the bootstrap is doing. This one submits the maximum
+    itself, so its p-value is uniform if and only if the bootstrap reproduces
+    the null of that maximum. Any excess rejection rate is then a property of
+    the bootstrap -- its tail resolution at small alpha -- and not of the
+    searcher's position inside the class.
+
+    It is a diagnostic, not a realistic search: nothing about enumerating 82,240
+    specifications resembles what an agent does. The argmax is computed in
+    closed form from the base columns rather than by evaluating the class
+    through the sandbox, so the transcript holds one evaluation, and the
+    submitted value is identical either way because a class member's return
+    stream is a signed sum of base columns."""
+    name = "exhaustive_class"
+
+    def __init__(self, spec_class, seed: int = 0):
+        super().__init__(seed=seed)
+        self.spec_class = spec_class
+
+    def run(self, sandbox: Sandbox) -> None:
+        from garden._full_class_engine import full_class_observed_max
+        base = sandbox.base_feature_columns()
+        _, weights, _, _ = full_class_observed_max(
+            base, self.spec_class, annualization=np.sqrt(sandbox.periods_per_year))
+        spec = Specification(weights=weights, name="class_argmax")
+        result = sandbox.evaluate(spec)
+        sandbox.submit(spec, Distribution.degenerate(result.sharpe))

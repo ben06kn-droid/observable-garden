@@ -195,3 +195,16 @@ and resets 2026-09-30. Batch 5 runs instead on claude-opus-5, same design, same
 seeds 581–660, thinking disabled; the Fable version is deferred to the reset
 date unchanged, on the same seeds, so the two are paired by DGP draw. Four
 parked directories in `runs/_aborted/` hold no model output.
+
+**13 — 2026-09-20.** `garden/_full_class_engine.py` gains
+`full_class_observed_max`, for `calibration-at-1pct`'s arm D. `garden/` is inside
+`code_state.CODE_PATHS`, so the harness fingerprint moves; no batch was in
+flight. The addition is a new function and changes no existing code path, so the
+bar any stored run was graded against is unaltered.
+
+**Stored agent runs are not re-scored under the new fingerprint.** Every run in
+`runs/` keeps the verdict it was given, computed by the engine as it stood at
+that run's recorded fingerprint. Re-scoring them would silently replace
+pre-registered results with numbers from code written afterwards, which is the
+thing the fingerprint exists to make visible. Any future re-scoring is a new
+experiment with its own pre-registration.

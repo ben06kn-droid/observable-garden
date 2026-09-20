@@ -30,6 +30,60 @@ def _quadratic(moment: np.ndarray, idx: np.ndarray, signs: np.ndarray) -> np.nda
     return total
 
 
+def full_class_observed_max(
+    base_returns: np.ndarray,
+    spec_class: SubsetClass,
+    annualization: float = 1.0,
+) -> tuple[float, np.ndarray, int, int]:
+    """The largest Sharpe ratio any member of the class attains on the observed
+    data, and the weight vector attaining it.
+
+    Costs nothing next to the null: `full_class_null_max` already forms
+    `s^T cov s` per member at setup, and the observed numerator is just the
+    member's full-sample mean, `signs . column means`. No resampling, one pass
+    over the members -- 7 ms at K=40, d=3 signed, against ~160 s for B=10,000.
+
+    Returns (max Sharpe, weights attaining it, variance-floor binds, cap binds).
+    The guards match `full_class_null_max`'s exactly, so the observed statistic
+    and the replicate statistic are the same function of a return stream --
+    without that the comparison is between two slightly different Sharpes.
+
+    This is the quantity that makes a searcher's p-value uniform rather than
+    conservative: P2 says anything submitting less than this comes in under
+    nominal, so submitting exactly this is the only way to test the null's
+    exactness rather than its validity."""
+    base = np.asarray(base_returns, dtype=float)
+    K = base.shape[1]
+    mu = base.mean(axis=0)
+    demeaned = base - mu
+    full_second = np.atleast_2d(np.cov(demeaned, rowvar=False, ddof=1))[:, :, None]
+
+    best, best_idx, best_signs = -np.inf, None, None
+    floor_binds = cap_binds = 0
+    for m in range(1, min(spec_class.max_size, K) + 1):
+        idx, signs = spec_class.members(K, m)
+        var = _quadratic(full_second, idx, signs)[:, 0]
+        num = np.einsum("nm,nm->n", signs, mu[idx])
+        # The same two guards the replicate path applies, in the same order and
+        # against the same reference variance, so the observed statistic and the
+        # null statistic are the same function. Here var IS var_full, so the
+        # floor reduces to var > 0; it is written this way so the two paths
+        # cannot drift apart.
+        live = var > VARIANCE_FLOOR * var
+        floor_binds += int(np.sum(~live & (var > 0)))
+        sr = np.where(live, num / np.sqrt(np.where(live, var, 1.0)), 0.0) * annualization
+        capped = np.abs(sr) > SHARPE_CAP
+        cap_binds += int(np.sum(capped))
+        sr = np.where(capped, np.sign(sr) * SHARPE_CAP, sr)
+        j = int(np.argmax(sr))
+        if sr[j] > best:
+            best, best_idx, best_signs = float(sr[j]), idx[j], signs[j]
+
+    weights = np.zeros(K)
+    weights[best_idx] = best_signs
+    return best, weights, floor_binds, cap_binds
+
+
 def full_class_null_max(
     base_returns: np.ndarray,
     spec_class: SubsetClass,
