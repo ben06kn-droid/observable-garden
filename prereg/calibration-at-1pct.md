@@ -289,6 +289,75 @@ link is descriptive, so "the share of draws satisfying the chain" is a
 correctness check expected to read 100%, not a measurement with an interesting
 distribution. Any figure below 100% on any link stops arm D.
 
+**4 — 2026-09-20, before arm D runs. B is not a calibration knob, and rule 1's
+remedy was wrong.**
+
+Amendment 2's rule 1 says of a high rejection rate at 1%: *"the tail is
+under-resolved and the bootstrap over-rejects where it matters most. B rises to
+50,000 for every later Phase 6 and Phase 7 cell."* That remedy is wrong, and so
+is the reasoning behind it, which this pre-registration repeated from 6.1's
+original gate.
+
+**Finite B affects reproducibility, not calibration.** `p = (1 + #{M_b >= sr}) /
+(B + 1)` is valid at every B. Under the null the observed statistic and its B
+replicates are exchangeable, so the rank is uniform on `0..B` and
+`P(p <= α) = floor(α(B+1)) / (B+1) <= α` for any B — conservative by at most one
+grid step, never liberal. Verified here by direct simulation, 400,000 draws per
+row:
+
+| B | rejection rate at α=0.05 | at α=0.01 | attainable level |
+|---|---|---|---|
+| 99 | 0.0396 | 0.0000 | 0.0400 / 0.0000 |
+| 999 | 0.0489 | 0.0088 | 0.0490 / 0.0090 |
+| 9,999 | 0.0499 | 0.0099 | 0.0499 / 0.0099 |
+| 10,000 | 0.0502 | 0.0100 | 0.0500 / 0.0100 |
+| 50,000 | 0.0502 | 0.0099 | 0.0500 / 0.0100 |
+
+B coarsens the grid a p-value can land on; it does not bias the rate. What
+finite B does do is move an *individual* p-value: its Monte Carlo standard
+deviation is `sqrt(p(1-p)/B)`, which at p = 0.01 is 0.00099 at B = 10,000 and
+0.00044 at B = 50,000 — 9.9% and 4.4% of the threshold. That is a statement
+about whether a verdict near α would survive a different bootstrap seed, which
+is reproducibility, and it averages out across draws.
+
+*Literature.* The exact-level result for Monte Carlo tests is standard — Dwass
+(1957) and Barnard (1963) for the construction, Besag & Clifford (1989, 1991)
+for the sequential variants, Davison & Hinkley (1997) §4.2 for the textbook
+statement. **None has been read from full text here**, per this repository's
+convention; the simulation above is what the claim rests on, and the citations
+are to be checked before the write-up asserts them.
+
+**Rule 1's fails-high branch is replaced.** An excess rejection rate at α = 0.01
+in arm D implicates the **bootstrap approximation in the tail** — finite T, the
+block-length selection, the studentization that re-estimates each candidate's
+standard deviation inside every replicate — and not B. Raising B would buy
+precision on an individual p-value while leaving the rate exactly where it was.
+The remedy is to investigate those three, in that order, and B is implicated
+**only** if rule 6 below shows a signed shift. Everything else in rule 1 stands:
+the halt, its one-sidedness, and the relabelling of the agent arm's 1% figures.
+
+**6. Secondary — reproducibility, on the paired B = 50,000 subsample.** The
+**verdict flip rate**: the share of the 500 paired draws whose reject/accept
+decision differs between B = 10,000 and B = 50,000, at α = 0.05 and at α = 0.01.
+Reported with the signed mean of `p_50k − p_10k`, overall and for draws with
+`p_10k < 0.05`. No halt.
+
+- *Signed shift near zero* confirms Monte Carlo noise and leaves B exonerated.
+- *A signed shift away from zero* means the two bootstrap sizes disagree
+  systematically rather than noisily, which would implicate B after all and is
+  the only thing that reopens rule 1's B remedy.
+- *The flip rate is the number that matters operationally.* A non-trivial rate
+  at α = 0.05 or 0.01 is what would justify the gate reporting a Monte Carlo
+  interval on its p-value, or marking a near-threshold verdict as marginal
+  rather than returning a bare PASS or FAIL.
+
+Observed already on arms B and C, as background and not as a pre-registered
+result: the signed mean over all 500 paired draws is −0.000055 (greedy, t =
+−1.23) and +0.000039 (adaptive, t = +0.28), both indistinguishable from zero,
+and the flip rate is **0 of 500 at both levels for both searchers**. That last
+figure is uninformative for the same reason arm C's rule 3 was — almost no
+p-value lies near a threshold. Arm D puts them there.
+
 ## Deviations
 
 **1 — 2026-09-20, after arm B reported.** Rules 1 and 2 were the wrong shape for
