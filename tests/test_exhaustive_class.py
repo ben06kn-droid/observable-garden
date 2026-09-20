@@ -169,3 +169,52 @@ def test_arm_d_scores_all_four_against_one_common_null(monkeypatch):
         for lo, hi in zip(c.MEMBERS_D, c.MEMBERS_D[1:]):
             if sr[lo] >= sr[hi]:
                 assert r[lo]["p_value"] <= r[hi]["p_value"] + 1e-15
+
+
+def _fake_arm_d(n, p_signed, seed=0):
+    """An arm D data dict with given exhaustive-signed p-values and a strictly
+    conservative ordering for the rest."""
+    import experiments.calibration_at_1pct as c
+    rng = np.random.default_rng(seed)
+    u = np.asarray(p_signed, dtype=float)
+    ps = {"exhaustive-signed": u, "exhaustive-unsigned": u ** 0.9,
+          "adaptive": u ** 0.5, "greedy": u ** 0.3}
+    d = {"arm": "D", "git_at_launch": {"commit": "0" * 40, "dirty": False},
+         "settings": {"M": 50, "T": 5000, "K": 40, "d": 3, "B": c.B_D, "draws": n,
+                      "class_size": 82240, "class": "subset<=3 signed"},
+         "seeds": c.SEED0 + np.arange(n), "members": c.MEMBERS_D}
+    for k, v in ps.items():
+        d[k] = {"p_value": v, "sr_sel": np.zeros(n)}
+    return d
+
+
+def test_the_escape_hatch_stays_shut_on_a_perfectly_calibrated_searcher():
+    """Amendment 6's regression. Amendment 5 set the hatch at 2 expected flips,
+    reasoned on the 500 draws the conditional pass would run, but the readout
+    sums over all 2,000 stored draws -- a factor of 4. Uniform p gives 3.81
+    expected flips at a=0.05 on 2,000, so the hatch fired on exactly the case it
+    must ignore, reinstating the pass amendment 5 exists to skip."""
+    import experiments.calibration_at_1pct as c
+    n = 2000
+    u = (np.arange(n) + 0.5) / n          # exactly uniform, no sampling noise
+    _, forced = c.arm_d_rule6_analytic(_fake_arm_d(n, u))
+    assert not forced
+
+
+def test_the_escape_hatch_opens_when_p_values_pile_up_at_the_threshold():
+    import experiments.calibration_at_1pct as c
+    n = 2000
+    u = (np.arange(n) + 0.5) / n
+    piled = np.where(np.arange(n) % 4 == 0, 0.05, u)   # a quarter sit exactly on 5%
+    _, forced = c.arm_d_rule6_analytic(_fake_arm_d(n, piled))
+    assert forced
+
+
+def test_the_conditional_pass_runs_only_on_an_excess_at_one_percent():
+    import experiments.calibration_at_1pct as c
+    n = 2000
+    u = (np.arange(n) + 0.5) / n
+    assert "does NOT run" in "\n".join(c.arm_d_conditional(_fake_arm_d(n, u)))
+
+    hot = np.where(np.arange(n) % 25 == 0, 0.001, u)   # 4% reject at 1%
+    assert "the pass RUNS" in "\n".join(c.arm_d_conditional(_fake_arm_d(n, hot)))

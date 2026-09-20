@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 
 import numpy as np
-from scipy.stats import kstest
+from scipy.stats import kstest, norm
 
 from environments.dgp import DGPConfig, generate
 from environments.sandbox import Sandbox
@@ -462,6 +462,90 @@ def arm_d_paired(paired: dict, out_dir: Path) -> list[str]:
     return L
 
 
+def arm_d_integrity(data: dict, out_dir: Path) -> list[str]:
+    """Greedy's and Adaptive's p-values against arm B's stored values on the
+    shared seeds.
+
+    `run_draw` and `run_draw_d` build the same class null from the same seed and
+    run the same searchers, so on a shared seed the p-values must be *bit*
+    identical. Anything else means something drifted between the two runs -- the
+    class definition, the block-length selector, a library version -- and rule 4's
+    pairing with arm B would be comparing two different experiments.
+    """
+    f = out_dir / "calibration_at_1pct_armB_data.pkl"
+    L = ["INTEGRITY — arm D against arm B on the shared seeds", "-" * 78]
+    if not f.exists():
+        return L + ["  arm B's data file is absent; check skipped", ""]
+    with f.open("rb") as fh:
+        arm_b = pickle.load(fh)
+
+    shared = min(int(arm_b["settings"]["draws"]), int(data["settings"]["draws"]))
+    same_b = arm_b["settings"]["B"] == data["settings"]["B"]
+    if not np.array_equal(arm_b["seeds"][:shared], data["seeds"][:shared]):
+        return L + ["  SEEDS DIFFER between the arms; pairing is invalid", ""]
+    L.append(f"  {shared} shared seeds, both at B={data['settings']['B']:,}"
+             if same_b else
+             f"  {shared} shared seeds, arm B at B={arm_b['settings']['B']:,} vs "
+             f"arm D at B={data['settings']['B']:,} -- expect MC agreement, not equality")
+    for name in SEARCHERS:
+        pb, pd = arm_b[name]["p_value"][:shared], data[name]["p_value"][:shared]
+        d = np.abs(pb - pd)
+        exact = bool(np.array_equal(pb, pd))
+        verdict = "identical" if exact else f"max |diff| {d.max():.2e}"
+        if same_b and not exact:
+            se = float(np.sqrt(np.mean(pb * (1 - pb)) / data["settings"]["B"]))
+            verdict += f"  MISMATCH at shared B (MC sd would be {se:.2e})"
+        L.append(f"    {name:<12}{verdict}")
+    return L + [""]
+
+
+def arm_d_rule6_analytic(data: dict) -> list[str]:
+    """Amendment 5: rule 6 computed from the stored p-values instead of bought.
+
+    A verdict flips only if the p-value sits within Monte Carlo noise of the
+    threshold, so the expected flip count is the summed per-draw crossing
+    probability. `SE` treats the two bootstraps as independent, which they are
+    not -- the larger nests the smaller -- so this is deliberately an upper bound.
+    """
+    L = ["RULE 6 — reproducibility, reported analytically (amendment 5)", "-" * 78,
+         "  Expected verdict flips if the 2,000 draws were rerun at B=50,000.",
+         "  Upper bound: the nested replicate streams make the truth ~18% smaller.",
+         "  Amendment 6: the trigger compares the count on the 500 draws the",
+         f"  conditional pass would run. Uniform p predicts 0.95 at a=0.05.",
+         f"    {'member':<22}{'a':>6}{'per draw':>11}{'on 2,000':>11}{'on 500':>10}"]
+    trigger = False
+    for name in data["members"]:
+        ph = data[name]["p_value"]
+        for a in (0.05, 0.01):
+            se = np.sqrt(ph * (1 - ph) * (1 / B_D + 1 / B_D_PAIRED))
+            pr = np.where(se > 0, norm.cdf(-np.abs(ph - a) / np.where(se > 0, se, 1.0)), 0.0)
+            on500 = pr.mean() * N_PAIRED_D
+            trigger |= bool(on500 > 2.0)
+            L.append(f"    {name:<22}{a:>6}{pr.mean():10.4%}{pr.sum():11.2f}"
+                     f"{on500:10.2f}")
+    L += ["", "  Amendment 5's escape hatch, as restated by amendment 6: the pass runs",
+          "  anyway if the expected count on 500 draws exceeds 2.",
+          f"  Exceeded: {'YES' if trigger else 'no'}", ""]
+    return L, trigger
+
+
+def arm_d_conditional(data: dict) -> list[str]:
+    """Amendment 5's trigger: the B=50,000 pass runs only on an excess at 1%."""
+    s = summarize("exhaustive-signed", data["exhaustive-signed"]["p_value"])["levels"][0.01]
+    excess = s["lo"] > 0.01
+    L = ["CONDITIONAL B=50,000 PASS (amendment 5)", "-" * 78,
+         f"  rule 1 at a=0.01: rate {s['rate']:.4f} ({s['lo']:.4f}-{s['hi']:.4f})",
+         f"  excess at 1% (lower bound above nominal): {'YES' if excess else 'no'}"]
+    if excess:
+        L += ["  -> the pass RUNS. B must be separated from the bootstrap's tail",
+              "     approximation before rule 1's fails-high branch names a culprit:",
+              "     python -m experiments.calibration_at_1pct --arm Dpaired --workers 16"]
+    else:
+        L += ["  -> the pass does NOT run. Rule 5 is not run; arm C's rule 3 remains",
+              "     the reported empirical evidence on tail resolution."]
+    return L + [""]
+
+
 def arm_bc(arm: str, out_dir: Path, workers: int | None, checkpoint_dir: str | None,
            smoke: int | None) -> None:
     full_n, B = {"B": (N_DRAWS_B, B_B), "C": (N_DRAWS_C, B_C),
@@ -474,6 +558,12 @@ def arm_bc(arm: str, out_dir: Path, workers: int | None, checkpoint_dir: str | N
         text += "\n" + "\n".join(compare_arms(data, out_dir))
     if arm == "D" and not smoke:
         text += "\n" + "\n".join(arm_d_rules(data))
+        text += "\n" + "\n".join(arm_d_integrity(data, out_dir))
+        rule6, forced = arm_d_rule6_analytic(data)
+        cond = arm_d_conditional(data)
+        if forced:
+            cond = cond[:-1] + ["  Overridden by rule 6's escape hatch: the pass RUNS.", ""]
+        text += "\n" + "\n".join(cond) + "\n" + "\n".join(rule6)
     if arm == "Dpaired" and not smoke:
         text += "\n" + "\n".join(arm_d_paired(data, out_dir))
     if not smoke:
