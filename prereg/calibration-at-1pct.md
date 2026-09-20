@@ -436,6 +436,43 @@ it — `arm_d_rules` is gated off for smokes. Those seeds are recomputed
 deterministically by the full run. The cost figures quoted above come from that
 smoke and from the scaling curve in `ROADMAP.md`.
 
+**6 — 2026-09-20, same day, before arm D runs and before any arm D result is
+read. Amendment 5's escape hatch was mis-scaled.**
+
+Amendment 5 says the conditional B = 50,000 pass runs anyway "if the analytic
+expected count exceeds 2 at either level". That threshold was reasoned on 500
+draws — the size of the subsample the pass would run — but the analytic readout
+sums the per-draw crossing probability over all **2,000** stored draws. The two
+differ by exactly the factor 4:
+
+| α | E[flips], uniform p, 500 draws | on 2,000 draws |
+|---|---|---|
+| 0.05 | 0.95 | 3.81 |
+| 0.01 | 0.43 | 1.74 |
+
+So a **perfectly calibrated** searcher — the case amendment 5 is built around,
+and the one where the hatch must stay shut — produces 3.81 expected flips at
+α = 0.05 and trips a threshold of 2. The hatch would have fired every time,
+reinstating the pass amendment 5 exists to make conditional. Caught by testing
+the implementation against synthetic uniform p-values before any real draw
+existed; the rule as written would have silently spent the $5.50 it was meant to
+save.
+
+**The rule is restated.** The hatch fires when the expected flip count **on the
+500 draws the conditional pass would actually run** exceeds 2 — that is, the
+per-draw crossing probability averaged over the 2,000 stored p-values, times 500.
+Against the uniform-p prediction of 0.95, a count above 2 means p-values pile up
+near the threshold more than twice as densely as P1 predicts, which is a real
+signal and the thing the hatch was meant to catch.
+
+Both figures are reported — the per-draw rate, the expected count on 2,000, and
+the expected count on 500 — so the scaling is visible rather than implicit. The
+2,000-draw figure remains the better estimate of the underlying rate; the
+500-draw figure is what the trigger compares, because it is what the pass would
+buy.
+
+Nothing else in amendment 5 changes.
+
 ## Deviations
 
 **1 — 2026-09-20, after arm B reported.** Rules 1 and 2 were the wrong shape for
