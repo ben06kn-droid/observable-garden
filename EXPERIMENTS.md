@@ -58,18 +58,16 @@ check that each one preceded the code and the run it authorises.
 | pre-registration | committed at | amendments and deviations |
 |---|---|---|
 | `calibration-at-1pct` | `e9ad319` | 1, skip the sizing smoke — `4f556bb`; deviation 1 and amendment 2, arm D — `0ab5653`; 3, what rule 4's ordering rests on — `4cb8404` |
+| `costs-and-regime-change` | `16457d9` | 1, the cost half cannot measure what it claims — `04dcc53`; 2, withdraw the cost half entirely — `2ba240f` |
 
-`prereg/costs-and-regime-change.md` is **committed but not live**: it is in the
-tree so it cannot be lost, it has not been reviewed, and it authorises nothing.
-6.2 does not run until it has been read. It is deliberately absent from the table
-above, which lists only pre-registrations that authorise a run.
+
 
 ## Phase 6
 
 | name | question | result |
 |---|---|---|
 | `calibration-at-1pct` | is the declared-class gate calibrated at 1%, not just 5%? | arm A: 15 of 419 graded agent runs reject at 5%. arm B: conservative, and unable to answer — see deviation 1. arm C running; arm D pre-registered, not run |
-| `costs-and-regime-change` | what does a PASS survive once costs and regime shifts are priced? | not yet run |
+| `costs-and-regime-change` | what does a PASS survive once the regime shifts? (cost half withdrawn, amendment 2) | ran 2026-09-20 |
 
 ## Null calibration and the mechanism
 

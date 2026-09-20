@@ -1,0 +1,94 @@
+costs-and-regime-change: what does a PASS survive?
+==============================================================================
+159 graded s3 submissions at sigma = 194.40679, from b4-s3-recal + b5-opus
+The cost half is withdrawn (amendment 2); see DGP PROPERTIES below.
+
+SHIFT CONSTRUCTION — algebraic against four full generate() calls
+------------------------------------------------------------------------------
+  3 runs x 3 shifts, worst relative difference 2.50e-16
+  exact; the algebraic path is what the rest of the run uses
+
+RECONSTRUCTION
+------------------------------------------------------------------------------
+  gross OOS Sharpe against the stored value, worst relative difference 0.00e+00
+  within the pre-registered 1e-9; no run dropped
+
+DGP PROPERTIES — why there is no cost result
+------------------------------------------------------------------------------
+Features are drawn independently each period, so every position path is
+serially independent and turns over completely. Turnover cannot vary with
+the specification, so any charge is a drag common to PASS and FAIL.
+
+quantity                    value
+turnover, mean             1.4146
+turnover, sd              0.00379
+turnover, min              1.4060
+turnover, max              1.4277
+sqrt(2)                    1.4142
+
+READOUT 1 — median gross OOS Sharpe by verdict
+------------------------------------------------------------------------------
+group                      n PASS         n FAIL           PASS           FAIL            gap
+claude-opus-5                  51             29        +0.8119        +0.3456        +0.4662
+claude-sonnet-5                52             27        +0.6844        +0.2617        +0.4226
+pooled                        103             56        +0.7762        +0.3159        +0.4603
+
+READOUT 2 — survival fractions, unshifted
+------------------------------------------------------------------------------
+verdict                         n         SR > 0       SR > 0.5
+PASS                          103          94.2%          67.0%
+FAIL                           56          85.7%          37.5%
+
+READOUT 3 — the same, under each shift
+------------------------------------------------------------------------------
+shift                    PASS med       FAIL med            gap         PASS>0         FAIL>0
+unshifted                 +0.7762        +0.3159        +0.4603          94.2%          85.7%
+beta-halved               +0.6406        +0.2841        +0.3565          91.3%          78.6%
+beta-flipped              +0.2606        +0.1757        +0.0849          68.0%          62.5%
+sigma-doubled             +0.4013        +0.0816        +0.3197          74.8%          57.1%
+
+DECISION RULE 1 — the gap survives each regime shift
+------------------------------------------------------------------------------
+  One-sided Mann-Whitney, PASS > FAIL, pooled, at p < 0.05.
+  Fails high if a shift widens the gap beyond the paired bootstrap
+  interval on (shift - unshifted); that is not predicted and is
+  investigated, not claimed.
+    shift                  gap       MWU p   holds      shift - unshifted (95% CI)
+    unshifted          +0.4603    5.50e-05     yes                     (reference)
+    beta-halved        +0.3565    3.26e-04     yes      -0.1038 (-0.1608, +0.0435)
+    beta-flipped       +0.0849    5.37e-02      NO      -0.3754 (-0.5115, -0.1150)
+    sigma-doubled      +0.3197    2.79e-03     yes      -0.1406 (-0.2510, -0.0204)
+
+  Rule 1: FAILS LOW under: beta-flipped
+
+RULE 1 SPLIT — does the submission contain the altered feature?
+------------------------------------------------------------------------------
+Shift (c) doubles sigma and names no feature, so it is not split.
+A gap that survives only where the shift missed the submission means
+something different from one that survives everywhere.
+
+shift                       group              n       PASS med       FAIL med            gap
+beta-halved         contains S[0]            111        +0.6544        +0.3858        +0.2686
+beta-halved              does not             48        +0.5075        +0.2464        +0.2611
+beta-flipped        contains S[0]            111        +0.1472        -0.1233        +0.2705
+beta-flipped             does not             48        +0.5095        +0.2485        +0.2610
+
+COMPOSITION — who the feature-naming shifts land on
+------------------------------------------------------------------------------
+  PASS runs containing S[0]: 79.6% (82 of 103)
+  FAIL runs containing S[0]: 51.8% (29 of 56)
+  The gate selects for the true signal, so a shift that alters S[0]
+  lands disproportionately on PASS runs. Pooled and split gaps can
+  therefore differ without either being wrong; both are reported, and
+  rule 1 is read on the pooled figure exactly as pre-registered.
+
+DECISION RULE 2 — PASS loses value under a shift, it does not invert
+------------------------------------------------------------------------------
+  Falsifier: a significantly NEGATIVE gap under any shift.
+    shift                  gap     MWU p (FAIL > PASS)  inverted
+    beta-halved        +0.3565                1.00e+00        no
+    beta-flipped       +0.0849                9.47e-01        no
+    sigma-doubled      +0.3197                9.97e-01        no
+
+  Rule 2: HOLDS -- no inversion
+
