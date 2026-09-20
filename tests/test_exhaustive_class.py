@@ -137,3 +137,35 @@ def test_the_observed_statistic_matches_the_replicate_statistic():
         (_quadratic(second, idx, signs) - num * num) * (T / (T - 1)), 0.0)[:, 0]
 
     np.testing.assert_allclose(var_observed, var_replicate, rtol=1e-12)
+
+
+def test_arm_d_scores_all_four_against_one_common_null(monkeypatch):
+    """Arm D's load-bearing property: the two exhaustive maxima and the two
+    scripted submissions are scored against the *same* signed class null. If the
+    bar moved with the searcher, rule 4's decomposition would be measuring the
+    bar rather than the searcher's position in the class.
+
+    The configuration is shrunk so the bootstrap is affordable; what is under
+    test is the plumbing, not the calibration.
+    """
+    import experiments.calibration_at_1pct as c
+
+    for attr, value in (("M", 6), ("T", 400), ("T_OOS", 100), ("K", 8), ("D", 2),
+                        ("CLASS", SubsetClass(max_size=2, signed=True)),
+                        ("UNSIGNED", SubsetClass(max_size=2, signed=False))):
+        monkeypatch.setattr(c, attr, value)
+
+    for i in range(3):
+        r = c.run_draw_d(400, 100_000 + i)
+        assert set(r) == {"_draw", *c.MEMBERS_D}
+        assert r["_draw"]["null_q"].shape == (len(c.NULL_QUANTILES),)
+
+        sr = {k: r[k]["sr_sel"] for k in c.MEMBERS_D}
+        assert sr["exhaustive-signed"] >= sr["exhaustive-unsigned"] - 1e-12
+        assert sr["exhaustive-unsigned"] >= max(sr["adaptive"], sr["greedy"]) - 1e-12
+
+        # a common null makes p a non-increasing function of the statistic, so
+        # P2's ordering on the statistics must carry to the p-values exactly
+        for lo, hi in zip(c.MEMBERS_D, c.MEMBERS_D[1:]):
+            if sr[lo] >= sr[hi]:
+                assert r[lo]["p_value"] <= r[hi]["p_value"] + 1e-15
