@@ -68,6 +68,57 @@ def _greedy_forward_selection(K: int, max_features: int, singles_score, support_
     return support, best_score
 
 
+def _support_name(support) -> str:
+    return "[" + ",".join(f"{k}{'+' if s > 0 else '-'}" for k, s in support) + "]"
+
+
+def _signed_sum(K: int, support) -> np.ndarray:
+    """Weights for a signed subset: +-1 on each named feature, 0 elsewhere.
+    `support` is an iterable of (feature_index, sign) pairs."""
+    w = np.zeros(K)
+    for k, s in support:
+        w[k] = float(s)
+    return w
+
+
+def _greedy_forward_selection_signed(K: int, max_features: int, singles_score,
+                                     support_score):
+    """The signed counterpart of `_greedy_forward_selection`: identical control
+    flow, but every candidate is tried at both signs.
+
+    Shared by SignedAdaptive's run() and replay() for the same reason the
+    unsigned core is shared -- two implementations of one decision rule drift,
+    and recursive_bootstrap.py is only valid while they agree.
+
+    singles_score(k, sign) -> float; support_score(support) -> float, where
+    support is a list of (index, sign) pairs. Returns (support, score).
+    """
+    best, best_score = None, -np.inf
+    for k in range(K):
+        for sign in (1.0, -1.0):
+            score = singles_score(k, sign)
+            if score > best_score:
+                best, best_score = (k, sign), score
+
+    support = [best]
+    remaining = set(range(K)) - {best[0]}
+
+    for _ in range(max_features - 1):
+        round_best, round_best_score = None, -np.inf
+        for j in remaining:
+            for sign in (1.0, -1.0):
+                score = support_score(support + [(j, sign)])
+                if score > round_best_score:
+                    round_best, round_best_score = (j, sign), score
+        if round_best is None or round_best_score <= best_score:
+            break
+        support.append(round_best)
+        remaining.discard(round_best[0])
+        best_score = round_best_score
+
+    return support, best_score
+
+
 class Honest(Searcher):
     """Control: fits one pre-registered specification, no selection. N=1.
     Deflation should be ~0 and the p-value ~ uniform."""
@@ -219,4 +270,88 @@ class Adaptive(Searcher):
         that survive round 0 to seed later-round candidate generation.
         For beam_width=1 (Adaptive), that's just the single best feature."""
         sr = sharpe(base_columns, axis=0, annualization=annualization)
+        return frozenset({int(np.argmax(sr))})
+
+
+class SignedGreedy(Searcher):
+    """Greedy over the *signed* single-feature class: every feature at +1 and at
+    -1, exactly N = 2K trials.
+
+    Why it exists. `Greedy` and `Adaptive` build weights with `_one_hot_sum`,
+    which is unsigned, so they are confined to the unsigned sublattice -- 10,700
+    members of the 82,240-member signed class at K=40, d=3. Pricing them against
+    a signed bar measures their confinement, not the bootstrap; that is what made
+    `calibration-at-1pct` arm B unreadable. 7.0 matches each scripted arm to a
+    class its searcher can actually reach, which needs signed searchers to exist.
+    """
+    name = "signed-greedy"
+
+    def run(self, sandbox: Sandbox) -> None:
+        K = sandbox.num_features
+        best: tuple[Specification, EvalResult] | None = None
+        for k in range(K):
+            for sign in (1.0, -1.0):
+                spec = Specification(weights=_signed_sum(K, [(k, sign)]),
+                                     name=f"signed_greedy_f{k}{'+' if sign > 0 else '-'}")
+                result = sandbox.evaluate(spec)
+                if best is None or result.sharpe > best[1].sharpe:
+                    best = (spec, result)
+        sandbox.submit(best[0], Distribution.degenerate(best[1].sharpe))
+
+    def replay(self, base_columns: np.ndarray, annualization: float = 1.0) -> float:
+        # A negated column's Sharpe is the negation of the column's, so the best
+        # over both signs is the largest absolute single-feature Sharpe.
+        return float(np.abs(sharpe(base_columns, axis=0, annualization=annualization)).max())
+
+
+class SignedAdaptive(Searcher):
+    """Forward selection over the signed class: the same rule as `Adaptive`, but
+    each candidate is tried at +1 and -1 and the better sign is kept.
+
+    Its reach is `SubsetClass(max_size=max_features, signed=True)`, which is the
+    class 7.0 prices it against.
+    """
+    name = "signed-adaptive"
+
+    def __init__(self, max_features: int = 3, seed: int = 0):
+        super().__init__(seed=seed)
+        self.max_features = max_features
+
+    def run(self, sandbox: Sandbox) -> None:
+        K = sandbox.num_features
+
+        def singles_score(k, sign):
+            return sandbox.evaluate(Specification(
+                weights=_signed_sum(K, [(k, sign)]),
+                name=f"signed_adaptive_f{k}{'+' if sign > 0 else '-'}")).sharpe
+
+        def support_score(support):
+            return sandbox.evaluate(Specification(
+                weights=_signed_sum(K, support),
+                name=f"signed_adaptive_{_support_name(support)}")).sharpe
+
+        support, best = _greedy_forward_selection_signed(
+            K, self.max_features, singles_score, support_score)
+        spec = Specification(weights=_signed_sum(K, support),
+                             name=f"signed_adaptive_{_support_name(support)}")
+        sandbox.submit(spec, Distribution.degenerate(best))
+
+    def replay(self, base_columns: np.ndarray, annualization: float = 1.0) -> float:
+        K = base_columns.shape[1]
+
+        def singles_score(k, sign):
+            return _column_sharpe(base_columns[:, k] * sign, annualization)
+
+        def support_score(support):
+            stream = sum(base_columns[:, k] * s for k, s in support)
+            return _column_sharpe(stream, annualization)
+
+        _, best = _greedy_forward_selection_signed(
+            K, self.max_features, singles_score, support_score)
+        return best
+
+    def round1_beam(self, base_columns: np.ndarray, annualization: float = 1.0) -> frozenset[int]:
+        """Signed search still keeps one feature out of round 0; which sign it
+        took does not change *which* feature seeds the next round."""
+        sr = np.abs(sharpe(base_columns, axis=0, annualization=annualization))
         return frozenset({int(np.argmax(sr))})

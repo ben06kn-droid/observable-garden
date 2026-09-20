@@ -98,15 +98,15 @@ def test_specification_outside_the_class_is_refused():
         w.evaluate(Specification(weights=two, name="pair"))
 
 
-def test_explicit_class_is_deferred_at_open():
-    """Deferred, not excluded. The moment engine takes a SubsetClass and
-    membership refusal uses contains(), neither of which ExplicitClass offers --
-    but audit already prices explicit classes off class_returns and transcript.py
-    already checks them by spec id, so this is a second path to build, not a
-    limit of the tier. Refusing at open is the honest interim behaviour; the
-    message must point at the deferral rather than imply impossibility."""
+def test_an_explicit_class_needs_its_streams_at_open():
+    """6.4 implemented the second path: watch prices an ExplicitClass by running
+    the Reality Check on the supplied streams, exactly as audit does, and refuses
+    membership by spec id. What it will not do is accept the class without them --
+    assembling a class after seeing results is snooping, so it is declared at
+    open or not at all. The behaviour itself is covered by
+    tests/test_watch_explicit_class.py."""
     sb = sandbox_with()
-    with pytest.raises(ValueError, match="SubsetClass"):
+    with pytest.raises(ValueError, match="needs class_returns"):
         watch_mod.open(sb, ExplicitClass(), B=100, seed=6)
 
 

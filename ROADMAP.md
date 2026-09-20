@@ -182,6 +182,14 @@ Everything else unchanged. Tests: bar equals audit's explicit-class null on
 the same inputs; membership refusal by id; bar does not move. Enables 6.5's
 rule-grammar arm.
 
+**Done 2026-09-20.** `watch.open` takes `class_returns` and `class_ids`
+alongside an `ExplicitClass`; the bar is `null_max_bootstrap` on the streams,
+which is the same call `audit` makes at submit, so the two agree exactly.
+Membership is refused by id before evaluation, since the sandbox only knows
+weights. `transcript.from_sandbox` gained the explicit path, keying columns by
+spec name and deduplicating repeats -- a member seen twice is one member, not a
+second trial. 16 tests in `tests/test_watch_explicit_class.py`.
+
 ## 6.5 An agent on real data (seat, ~80 runs) — the headline
 
 **Why.** Everything the agents have done, they have done on a synthetic

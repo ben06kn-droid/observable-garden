@@ -323,7 +323,9 @@ def load_benchmark(path, n_periods: int | None = None) -> np.ndarray:
     return b
 
 
-def from_sandbox(sandbox: Sandbox, menu_kind: str = "unknown", spec_class: str | None = None) -> Transcript:
+def from_sandbox(sandbox: Sandbox, menu_kind: str = "unknown", spec_class: str | None = None,
+                 class_returns: np.ndarray | None = None,
+                 class_ids=None) -> Transcript:
     """A version-2 transcript from a sandbox log. base_returns holds all of the sandbox's features. If the
     sandbox enforced a class during the search, that class is recorded with source "sandbox"; otherwise a
     `spec_class` passed here is recorded as "attested"."""
@@ -335,6 +337,33 @@ def from_sandbox(sandbox: Sandbox, menu_kind: str = "unknown", spec_class: str |
     if not matches:
         raise TranscriptError("the submitted specification was never evaluated, so it is not in the transcript")
     ids = [f"{e.call_index}:{e.spec.name}" if e.spec.name else str(e.call_index) for e in log]
+
+    if class_returns is not None:
+        # An explicit class is matched by id, and the ids were fixed at
+        # declaration, so they cannot carry a call index. Columns are keyed by
+        # spec name instead, deduplicated on first occurrence: re-evaluating a
+        # member is not a second trial, it is the same member seen twice, and
+        # transcripts require unique spec_ids. The full-class bar is priced over
+        # class_returns regardless, so which duplicates R carries cannot move it.
+        if any(not e.spec.name for e in log):
+            raise TranscriptError(
+                "an explicit class is matched by id, so every evaluated specification needs a "
+                "name; found one with none"
+            )
+        seen: dict[str, int] = {}
+        for i, e in enumerate(log):
+            seen.setdefault(e.spec.name, i)
+        keep = sorted(seen.values())
+        R = sandbox.returns_matrix()[:, keep]
+        names = [log[i].spec.name for i in keep]
+        return Transcript(
+            R, names, spec.name, menu_kind, sandbox.periods_per_year,
+            base_returns=sandbox.base_feature_columns(),
+            spec_members=np.stack([log[i].spec.weights for i in keep]),
+            eval_order=np.array([log[i].call_index for i in keep]),
+            spec_class=(spec_class or "explicit"), spec_class_source="sandbox",
+            class_returns=class_returns, class_ids=class_ids,
+        )
 
     enforced = getattr(sandbox, "spec_class", None)
     if enforced is not None:

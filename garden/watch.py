@@ -45,26 +45,35 @@ So watch adds enforcement, standing, diagnostics and a verdict at submit -- not
 a per-query price. The only lever that changes power is the size of Theta at
 declaration, which is what `garden preflight` sizes.
 
-Class kinds: SubsetClass now, ExplicitClass deferred
-----------------------------------------------------
+Class kinds: SubsetClass and ExplicitClass
+-----------------------------------------
 `full_class_null_max` is moment-based and takes a `SubsetClass` (it needs
-`.members(K, m)` and `.max_size`), so that is the class kind watch prices at
-open, and `SubsetClass.contains(weights)` is what makes `evaluate`-time
-membership refusal cheap.
+`.members(K, m)` and `.max_size`), and `SubsetClass.contains(weights)` is what
+makes `evaluate`-time membership refusal cheap. That is the path for an
+algebraically described class.
 
-`ExplicitClass` is **deferred, not excluded**, and the distinction matters. It
-is a second code path, not a limitation of the declared-class tier: `garden.audit`
-already prices an explicit class by running the Reality Check directly on the
-supplied `class_returns`, and `garden.transcript` already checks membership by
-spec id rather than by weight vector. Watch could do both -- draw the bar once
-at open from the class streams, and refuse by id in `evaluate` -- and the tier
-argument (bar fixed before any evaluation, nothing inside Theta moves it) is
-untouched by which kind of class it is.
+An `ExplicitClass` is supplied as return streams instead, and takes the second
+path (6.4):
 
-It is deferred because it is a distinct path to build and test, not because it
-cannot work, and step 4 should not rediscover that. An LLM agent's natural class
-is closer to ExplicitClass than to SubsetClass: a tool grammar emits rules, most
-of which are not equal-weight feature subsets. See OPEN_QUESTIONS.md.
+    w = watch.open(sandbox, ExplicitClass(n_members=M),
+                   class_returns=streams,        # (T, M)
+                   class_ids=ids)                # (M,) unique names
+
+The bar is the ordinary Reality Check run once over `class_returns` at open --
+the same call `garden.audit` makes at submit, with the same B, block length,
+annualization and seed, so the number the searcher is told it must beat is the
+number it is judged against. Membership is matched by **spec id**, never by
+weight vector: correlated rules routinely produce near-duplicate return streams,
+so coinciding weights are not evidence that a rule was declared. The sandbox
+cannot enforce an explicit class -- it only knows weights -- so watch refuses by
+id itself, before any evaluation happens, and counts the refusal exactly as it
+counts the sandbox's.
+
+The tier argument is untouched by which kind of class it is: the bar is fixed
+before any evaluation, and nothing inside Theta moves it. An LLM agent's natural
+class is closer to ExplicitClass than to SubsetClass, since a tool grammar emits
+rules rather than equal-weight feature subsets, which is why 6.5's rule-grammar
+arm needed this path to exist.
 
 Non-goals (stated here so they are not quietly relaxed later)
 -------------------------------------------------------------
@@ -88,7 +97,7 @@ from garden._engine import null_max_bootstrap as engine_null_max
 from garden._full_class_engine import full_class_null_max
 from garden.audit import Verdict, audit
 from garden.power import analytic_power, bootstrap_p_value, critical_value, null_max_critical_value
-from garden.spec_class import WEIGHT_TOLERANCE, ClassLadder, SubsetClass
+from garden.spec_class import WEIGHT_TOLERANCE, ClassLadder, ExplicitClass, SubsetClass
 from garden.transcript import from_sandbox
 
 _IMPLEMENTED = True
@@ -228,8 +237,16 @@ class Watch:
                  agent_view: frozenset[str] = AGENT_VIEWS["standing"],
                  base_sharpe: np.ndarray | None = None,
                  ladder: ClassLadder | None = None, promotion: str | None = None,
-                 declared: SubsetClass | None = None):
+                 declared: SubsetClass | None = None,
+                 class_returns: np.ndarray | None = None,
+                 class_ids: tuple[str, ...] | None = None):
         self._sandbox = sandbox
+        # Explicit classes are matched by id, never by weight vector: correlated
+        # rules routinely produce near-duplicate return streams, so matching
+        # floats would silently admit a non-member.
+        self._class_returns = class_returns
+        self._class_ids = frozenset(class_ids) if class_ids is not None else None
+        self._class_id_order = tuple(class_ids) if class_ids is not None else None
         self.state = state
         self._seed = seed
         self._agent_view = frozenset(agent_view)
@@ -264,6 +281,8 @@ class Watch:
         Checked after a successful evaluate so the one case that voids the
         correction -- an out-of-class specification that actually got logged --
         is caught even when the sandbox is not enforcing."""
+        if self._class_ids is not None:
+            return spec.name in self._class_ids
         cls = self._ladder.union if self._ladder is not None else self._declared
         return bool(cls.contains(spec.weights))
 
@@ -486,6 +505,16 @@ class Watch:
         in-sample Sharpe against the critical value fixed at open, which is why
         the search can call this as often as it likes."""
         self._check_level(spec)
+        if self._class_ids is not None and spec.name not in self._class_ids:
+            # The explicit counterpart of the sandbox's weight-membership refusal.
+            # The sandbox cannot enforce an explicit class -- it only knows
+            # weights -- so watch does it here, before any evaluation happens, and
+            # the refusal is counted exactly like the sandbox's.
+            reason = (f"specification {spec.name!r} is not a member of the declared explicit "
+                      f"class ({len(self._class_ids):,} members, matched by id)")
+            self._refused.append({"spec": spec.name, "reason": reason})
+            self.state.refused_attempts = len(self._refused)
+            raise ValueError(reason)
         try:
             result = self._sandbox.evaluate(spec)  # raises if outside the class / union
         except ValueError as e:
@@ -570,7 +599,10 @@ class Watch:
             if not isinstance(predicted_oos, Distribution):
                 predicted_oos = Distribution.degenerate(float(predicted_oos))
             self._sandbox.submit(spec, predicted_oos)
-        transcript = from_sandbox(self._sandbox, menu_kind=WATCHED_MENU_KIND)
+        transcript = from_sandbox(
+            self._sandbox, menu_kind=WATCHED_MENU_KIND,
+            spec_class=(self.state.class_name if self._class_returns is not None else None),
+            class_returns=self._class_returns, class_ids=self._class_id_order)
         verdict = audit(
             transcript,
             alpha=self.state.alpha,
@@ -639,6 +671,8 @@ def largest_admissible_class_size(
 def open(
     sandbox: Sandbox,
     spec_class: SubsetClass,
+    class_returns: np.ndarray | None = None,
+    class_ids=None,
     alpha: float = 0.05,
     reference_sharpe: float = 1.0,
     power_floor: float = 0.20,
@@ -678,13 +712,44 @@ def open(
         # ladder name would not round-trip through garden.spec_class.parse, and
         # the union is what the declaration means for inference anyway.
         spec_class = ladder.union
-    if not isinstance(spec_class, SubsetClass):
+    explicit = isinstance(spec_class, ExplicitClass)
+    if not explicit and not isinstance(spec_class, SubsetClass):
         raise ValueError(
-            f"watch prices its bar with the moment engine, which takes a SubsetClass or a "
-            f"ClassLadder of them; got {type(spec_class).__name__}. An ExplicitClass is a deferred "
-            f"second code path, not a limitation of the tier -- see OPEN_QUESTIONS.md."
+            f"watch takes a SubsetClass, a ClassLadder of them, or an ExplicitClass supplied "
+            f"with class_returns; got {type(spec_class).__name__}."
         )
+    if explicit:
+        if ladder is not None:
+            raise ValueError("a ClassLadder of explicit classes is not supported")
+        if class_returns is None or class_ids is None:
+            raise ValueError(
+                "an ExplicitClass is priced from the streams themselves, so open() needs "
+                "class_returns (T, M) and class_ids (M,): the return stream and id of every "
+                "specification the search could produce. Assembling the class after seeing "
+                "results is itself snooping, which is why it is declared here."
+            )
+        class_returns = np.asarray(class_returns, dtype=float)
+        class_ids = tuple(str(c) for c in class_ids)
+        if class_returns.ndim != 2 or class_returns.shape[1] != len(class_ids):
+            raise ValueError(
+                f"class_returns must be (T, M) with one id per column; got "
+                f"{class_returns.shape} against {len(class_ids)} ids")
+        if len(set(class_ids)) != len(class_ids):
+            raise ValueError("class_ids must be unique: membership is matched by id")
+        if not np.isfinite(class_returns).all():
+            raise ValueError("class_returns contain NaN or inf")
+        if spec_class.n_members is not None and spec_class.n_members != len(class_ids):
+            raise ValueError(
+                f"the class declares {spec_class.n_members} members but {len(class_ids)} "
+                f"streams were supplied")
+    elif class_returns is not None or class_ids is not None:
+        raise ValueError("class_returns/class_ids are only meaningful for an ExplicitClass")
+
     enforced = getattr(sandbox, "spec_class", None)
+    if enforced is not None and explicit:
+        raise ValueError(
+            "the sandbox enforces a weight-based class, which cannot also be an explicit "
+            "class; open the sandbox without spec_class and let watch refuse by id")
     if enforced is not None and enforced != spec_class:
         raise ValueError(
             f"the sandbox enforces {enforced.name}, not {spec_class.name}"
@@ -699,10 +764,24 @@ def open(
     T, K = base.shape
     ppy = sandbox.periods_per_year
     ann = np.sqrt(ppy)
-    class_size = spec_class.size(K)
-
-    bar, L, floor_binds, cap_binds = full_class_null_max(
-        base, spec_class, B=B, block_length=block_length, annualization=ann, seed=seed)
+    if explicit:
+        if class_returns.shape[0] != T:
+            raise ValueError(
+                f"class_returns has {class_returns.shape[0]} periods, the sandbox {T}; "
+                "the bar and the search must be priced on the same sample")
+        class_size = len(class_ids)
+        # The ordinary Reality Check, run directly on the supplied streams. This
+        # is the same call `garden.audit` makes for an explicit class, with the
+        # same B, block length, annualization and seed, which is what makes the
+        # bar priced here and the bar priced at submit the same number.
+        res = engine_null_max(class_returns, B=B, block_length=block_length,
+                              annualization=ann, seed=seed)
+        bar, L = res.M_b, res.block_length
+        floor_binds, cap_binds = res.floor_binds, res.cap_binds
+    else:
+        class_size = spec_class.size(K)
+        bar, L, floor_binds, cap_binds = full_class_null_max(
+            base, spec_class, B=B, block_length=block_length, annualization=ann, seed=seed)
     c = critical_value(bar, alpha)
     # Power MUST be measured against the bar just priced, not against an
     # analytic independent-max critical value. Using the latter would make the
@@ -768,4 +847,6 @@ def open(
     return Watch(sandbox, state, seed=seed, agent_view=agent_view,
                  base_sharpe=sharpe(base, axis=0),
                  ladder=ladder, promotion=promotion if ladder is not None else None,
-                 declared=spec_class)
+                 declared=spec_class,
+                 class_returns=class_returns if explicit else None,
+                 class_ids=class_ids if explicit else None)
