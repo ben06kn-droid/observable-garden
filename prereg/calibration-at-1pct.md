@@ -243,6 +243,52 @@ investigation. At 159.7 s it would be 2,000 × 159.7 / 32 ≈ 2.8 h for the
 B = 10,000 pass and roughly 3.5 h for the 500-draw B = 50,000 pass. Not launched
 until the scaling curve is in and the budget rescaled.
 
+**3 — 2026-09-20, before arm D runs. What rule 4's chain actually rests on.**
+Amendment 2's rule 4 presents its four-term ordering as though P2 guaranteed
+every link. P2 does not. Amendment 2's text stands as committed; this states
+what each link rests on and what a violation of it means. All statements are
+about p-values scored against the **same signed class null**, where
+`p = (1 + #{M_b >= sr}) / (B + 1)` is nonincreasing in `sr`, so each ordering
+below is the image of an ordering on submitted Sharpes.
+
+**Links 1 and 2 — deterministic, from set inclusion.**
+`p_exhaustive-signed ≤ p_exhaustive-unsigned ≤ p_adaptive`. The signed class
+contains the unsigned sublattice, and the sublattice contains everything
+`Adaptive` can construct, so each term is a maximum over a superset of the next.
+Expected on **100% of draws**. A violation is an implementation bug — in the
+member enumeration, the weight construction, or the pairing of nulls — and not a
+statistical result. **Investigate before reading arm D's primary rules**, which
+rest on the same equality between `sr_sel` and the class maximum.
+
+**Link 3 — also deterministic, which amendment 2 did not establish and this
+amendment does.** `p_adaptive ≤ p_greedy`. Checked against the implementation
+rather than assumed:
+
+- `searchers/scripted.py:48-51`, inside `_greedy_forward_selection`: all `K`
+  singles are evaluated unconditionally, `for k in range(K)`, and the best is
+  kept. There is no early exit from that sweep.
+- `searchers/scripted.py:62`: an extension round breaks unless
+  `round_best_score > best_score`, so `best_score` begins at the maximum single
+  and is monotone non-decreasing thereafter.
+- `Adaptive.__init__` takes `max_features` and `seed` only. It has **no trial
+  budget** — unlike `GridSearch`, which takes `max_trials` — so no budget can
+  truncate the singles sweep. Arm B ran `Adaptive(max_features=3, seed=seed)`.
+- `Greedy.run` evaluates the same `K` singles through the same sandbox and
+  submits the best, so the two searchers' single-feature Sharpes are identical
+  values, not merely equal in distribution.
+
+Therefore `sr_adaptive >= sr_greedy` on every draw, with equality exactly when
+no extension improves on the best single. Link 3 takes the same treatment as
+links 1 and 2: expected on 100% of draws, a violation is an implementation bug,
+and it is investigated before the primary rules are read.
+
+**What this changes in rule 4.** Nothing in its readouts, its one-sidedness, or
+its lack of a halt. The decomposition it reports — confinement against
+sub-maximal search — is unaffected. What changes is the standard of evidence: no
+link is descriptive, so "the share of draws satisfying the chain" is a
+correctness check expected to read 100%, not a measurement with an interesting
+distribution. Any figure below 100% on any link stops arm D.
+
 ## Deviations
 
 **1 — 2026-09-20, after arm B reported.** Rules 1 and 2 were the wrong shape for
