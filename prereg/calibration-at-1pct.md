@@ -358,6 +358,84 @@ and the flip rate is **0 of 500 at both levels for both searchers**. That last
 figure is uninformative for the same reason arm C's rule 3 was — almost no
 p-value lies near a threshold. Arm D puts them there.
 
+**5 — 2026-09-20, before arm D runs and before any arm D result is read. The
+B = 50,000 pass becomes conditional.**
+
+Amendment 2 registered a paired B = 50,000 subsample on 500 draws, carrying
+rule 5, and amendment 4 hung rule 6 on the same subsample. Both rules are
+predictably uninformative, and the pass is the larger half of arm D's cost. It
+now runs only when it can inform something.
+
+**What rule 6 would measure.** A verdict flips between two bootstrap sizes only
+when the p-value sits within Monte Carlo noise of the threshold. For a searcher
+whose p-values are locally uniform near α — which is exactly what P1 predicts for
+`ExhaustiveClass`, and so the most favourable case — the expected number of flips
+on `n` paired draws has a closed form. Writing `ε_B` for the Monte Carlo error at
+size B, with `σ_B = sqrt(p(1-p)/B)`, the flip probability at threshold offset `u`
+is `P(ε₁<u)P(ε₂≥u) + P(ε₂<u)P(ε₁≥u)`, and integrating that over a locally uniform
+p is the identity
+
+    ∫ [P(ε₁<u)P(ε₂≥u) + P(ε₂<u)P(ε₁≥u)] du = E|ε₁ − ε₂|
+
+so the expected flip count is `n · sqrt(2/π) · sqrt(σ₁² + σ₂²)`. At n = 500,
+B₁ = 10,000, B₂ = 50,000:
+
+| α | σ at 10,000 | σ at 50,000 | E[flips], independent | E[flips], nested |
+|---|---|---|---|---|
+| 0.05 | 0.002179 | 0.000975 | 0.95 | 0.78 |
+| 0.01 | 0.000995 | 0.000445 | 0.43 | 0.35 |
+
+Checked against direct binomial simulation at 4,000,000 draws: 0.97 and 0.42 for
+the independent case. The **nested** column is the one that applies —
+`full_class_null_max` seeds a single `default_rng(seed)` and draws replicates
+sequentially, so B = 50,000 reuses B = 10,000's first 10,000 replicates exactly
+(verified: identical to 0.0 over the shared prefix). The two p-values are
+therefore positively correlated and flips are 18% rarer still. **Under one flip
+at α = 0.05 and under half a flip at α = 0.01 is not a measurement**; it repeats
+arm C's rule 3, which was vacuous for the same structural reason.
+
+**What rule 5 would measure.** Whether two bootstrap sizes give the same
+rejection *rate*. Amendment 4 established, by argument and by simulation at
+400,000 draws per B, that they must: the rate is `floor(α(B+1))/(B+1)` at every
+B, differing between these two sizes in the fifth decimal. Rule 5 buys a
+confirmation of something already established rather than a test of it.
+
+**Revised design.**
+
+- The **2,000-draw B = 10,000 pass runs as registered**, with rules 1–4
+  unchanged. Nothing about the primary result changes.
+- The **B = 50,000 pass is conditional**. It runs if and only if rules 1–3 show
+  an **excess at α = 0.01** — the one case where B must be separated from the
+  bootstrap's approximation in the tail before rule 1's fails-high branch can
+  name a culprit. If rules 1–3 pass, or fail low, it does not run.
+- When it does not run, **rule 6 is reported analytically** from the 2,000
+  stored p-values: per draw, the flip probability `Φ(−|p̂ − α| / SE)` with
+  `SE = sqrt(σ²₁₀ₖ + σ²₅₀ₖ)` and `σ_B = sqrt(p̂(1-p̂)/B)`, summed to an expected
+  flip count and rate at α = 0.05 and α = 0.01. The independent `SE` is used
+  deliberately, as an upper bound: the nested streams make the true figure
+  smaller, and a bound on reproducibility risk should err high. This readout uses
+  all 2,000 draws rather than 500 and carries no sampling noise of its own.
+- **Rule 5 is reported as not run**, with this reasoning, and arm C's rule 3
+  remains the reported empirical evidence on tail resolution — as amendment 2
+  already required, since it was pre-registered and it ran.
+
+**What this gives up.** An empirical flip count, which the calculation above says
+would be 0 or 1. If the analytic expected count exceeds 2 at either level — which
+requires the p-values to pile up near a threshold far more than P1 predicts — the
+conditional pass runs anyway, because the premise of this amendment has failed.
+
+**Cost.** At the measured 16-worker figure of $0.0022 per draw at B = 10,000, the
+B = 50,000 pass is 500 draws at five times the replicate work, or 2,500
+draw-equivalents: **$5.50 and 3.3 h, against $4.40 and 2.7 h for the main pass**.
+It is 56% of arm D's compute, spent on the two least informative rules.
+
+**Disclosure.** A 48-draw sizing smoke (seeds 100000–100047) ran before this
+amendment was written, to measure per-draw cost at 16 workers. Its type-I and
+uniformity table was deliberately not read, and no arm D rule was evaluated from
+it — `arm_d_rules` is gated off for smokes. Those seeds are recomputed
+deterministically by the full run. The cost figures quoted above come from that
+smoke and from the scaling curve in `ROADMAP.md`.
+
 ## Deviations
 
 **1 — 2026-09-20, after arm B reported.** Rules 1 and 2 were the wrong shape for
