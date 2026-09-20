@@ -14,8 +14,9 @@ from environments.sandbox import Sandbox
 from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
 from estimator.trigger_replay import NULLS, replay_nulls
 from searchers.meta_adaptive import (
-    BUDGET, GREEDY_CONTINUATION, ExtendBySecondBest, ExtendWhileImproving,
-    RestartAfterKFailures, StopWhenCleared)
+    BUDGET, GREEDY_CONTINUATION, INFORMATIVE_FOR_FILL, ExtendBySecondBest,
+    ExtendWhileImproving, RestartAfterKFailures, StopWhenCleared,
+    SwapWorstWhileImproving)
 
 
 def _base(K=8, T=400, seed=3):
@@ -287,3 +288,50 @@ def test_the_fill_rule_is_conservative_here():
                      annualization=ann, seed=5)
     assert n.trigger.mean() >= n.policy.mean() - 1e-12
     assert n.signed_kolmogorov_distance("trigger", "policy") <= 0.0
+
+
+# -- the amended fill: best one-step move over the whole content grammar ----
+
+def test_the_fill_ranges_over_extend_swap_and_flip():
+    """The fill is no longer greedy extension. It must be able to return a swap
+    or a flip, or the amendment is cosmetic."""
+    base, ann = _base(K=8, T=400, seed=3)
+    s = SwapWorstWhileImproving()
+    _, support_score = s._scorers_from_columns(base, ann)
+    support = [(0, 1.0), (1, 1.0), (2, 1.0)]
+    kinds = {k for _, k, _ in s._grammar(support, 8, support_score)}
+    assert kinds == {"extend", "swap", "flip"}
+    # a flip really changes the spec rather than being a no-op, which is why
+    # supports carry signs at all
+    flips = [ns for _, k, ns in s._grammar(support, 8, support_score) if k == "flip"]
+    assert any(any(sign < 0 for _, sign in ns) for ns in flips)
+
+
+def test_the_swap_searcher_separates_trigger_from_policy_replay():
+    """Rule 3's informative case. The fill dominates a swap continuation at each
+    single step, since swap is in its grammar -- but a search is a path, and the
+    locally best move is not globally optimal, so the direction is a real
+    empirical question rather than an arithmetical one."""
+    base, ann = _base(K=10, T=600, seed=7)
+    n = replay_nulls(base, SwapWorstWhileImproving(), B=200, annualization=ann, seed=5)
+    differ = np.mean(np.abs(n.trigger - n.policy) > 1e-12)
+    assert differ > 0.05, f"nulls 2 and 3 must separate here; differed on {differ:.1%}"
+    assert n.kolmogorov_distance("trigger", "policy") > 0.0
+
+
+def test_the_measured_direction_of_the_fill_is_conservative():
+    """Recorded, not assumed. On this fixture both non-greedy continuations give
+    a negative signed Kolmogorov distance -- trigger's null is stochastically
+    larger, a higher bar, a larger p-value, so the fill errs conservatively,
+    which is the acceptable direction. The swap searcher's margin is the smaller
+    and is the one rule 3 reads, the second-best searcher's being close to a
+    monotone consequence of greedy extension dominating weaker extensions."""
+    base, ann = _base(K=10, T=600, seed=7)
+    margins = {}
+    for s in (ExtendBySecondBest(), SwapWorstWhileImproving()):
+        n = replay_nulls(base, s, B=200, annualization=ann, seed=5)
+        skd = n.signed_kolmogorov_distance("trigger", "policy")
+        assert skd < 0.0, f"{s.name}: fill read liberal at {skd:+.4f}"
+        assert (n.trigger - n.policy).mean() > 0.0
+        margins[s.name] = skd
+    assert margins["swap-worst-while-improving"] > margins["second-best-while-improving"]

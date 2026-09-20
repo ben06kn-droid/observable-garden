@@ -160,3 +160,65 @@ of the time. **7.1 cannot detect trigger replay rejecting at 5.5% against a
 nominal 5%.** If the measured rate lands between nominal and the firing
 threshold, the correct report is that liberality of that size was not excluded —
 not that trigger replay is valid.
+
+**2 — 2026-09-20, before the experiment runs. The fill rule is widened, and a
+fifth searcher is added so rule 3 has an informative case.**
+
+Null 2's fill was *greedy extension to the budget*. Greedy extension dominates
+any other single-feature **extension**, so `ExtendBySecondBest` — whose
+continuation is a weaker extension — was bound to show a conservative fill by a
+near-monotone argument rather than by measurement. It says little, because the
+fill was never faced with a continuation it does not dominate. 7.2's content
+grammar contains `swap_worst` and `flip`, which greedy extension does **not**
+dominate.
+
+**The fill is redefined** as the best **one-step move across the whole content
+grammar** — `extend`, `swap`, `flip` — applied to the budget. Supports therefore
+carry signs, so `flip` is a real move rather than a no-op, and the reachable set
+is the **signed** class; null 4's declared-class bound is priced over
+`SubsetClass(max_size=3, signed=True)` accordingly.
+
+**A fifth searcher is added.** `SwapWorstWhileImproving` grows to a support of
+three by extension and then continues by **swapping** the worst member for the
+best replacement. The fill's move dominates a swap at each single step, since
+swap is in its grammar — but a search is a path and the locally best move is not
+globally optimal, so the filled path can still finish below the swap path. The
+direction is a genuine empirical question here, which it was not before.
+
+| searcher | continue-move | fill dominates it? |
+|---|---|---|
+| `StopWhenCleared` | greedy extension | identical move; diverges only in the meta dimension |
+| `RestartAfterKFailures` | greedy extension | **no** — the fill never restarts, so it cannot follow the policy's anchor change |
+| `ExtendWhileImproving` | greedy extension | identical move; meta dimension only |
+| `ExtendBySecondBest` | second-best extension | **yes, step by step** — the dominated case |
+| `SwapWorstWhileImproving` | best swap | per step yes, along the path **no** |
+
+**Rule 3 is replaced.** The signed Kolmogorov distance between nulls 2 and 3 is
+reported for all five searchers, but the rule is **read on
+`RestartAfterKFailures` and `SwapWorstWhileImproving`** — the two whose
+continuation the fill does not dominate along the path.
+`ExtendBySecondBest` is reported as the **dominated case** and is expected to
+read conservative; a conservative reading there is not evidence about the fill,
+and the pre-registration says so in advance rather than after.
+
+- *Negative or zero on both informative searchers:* the fill errs
+  conservatively, the acceptable direction.
+- *Positive and material on either:* the conservative-fill rule is not
+  conservative. This gates the replay tier's use of triggers for any search that
+  can run past its realized length, and the fill is redesigned before 7.2 builds
+  on it.
+- *The two informative searchers disagree in sign:* the fill's direction depends
+  on the continuation, which is itself the finding, and the replay tier is
+  restricted to continuations of the kind that read conservative.
+
+**Recorded now, from the unit tests and not from the experiment**
+(`tests/test_meta_adaptive.py`, K=10, T=600, 200 replicates): under the widened
+fill, `SwapWorstWhileImproving` separates nulls 2 and 3 on 65 of 200 replicates
+with a signed distance of **−0.045**, and `ExtendBySecondBest` on 107 of 200 at
+**−0.115**. Both conservative, the dominated case by the larger margin, as the
+argument above predicts. This is a single small fixture, not the experiment, and
+is stated here only so the prediction is on record before 7.1 runs.
+
+**Cost implication.** The grammar's swap moves make a filled step O(|support| × K)
+rather than O(K), so 7.1's per-draw cost rises with the budget. It remains
+unsized and still gates the launch.

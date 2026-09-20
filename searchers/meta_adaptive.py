@@ -31,10 +31,16 @@ from searchers.base import Searcher
 BUDGET = 12          # hard cap on moves, so a replicate can never run away
 
 
-def _one_hot_sum(K: int, indices) -> np.ndarray:
+def _signed_sum(K: int, support) -> np.ndarray:
+    """Weights from a list of (feature, sign) pairs."""
     w = np.zeros(K)
-    w[list(indices)] = 1.0
+    for k, s in support:
+        w[k] = float(s)
     return w
+
+
+def _support_name(support) -> str:
+    return "[" + ",".join(f"{k}{'+' if s > 0 else '-'}" for k, s in support) + "]"
 
 
 def _column_sharpe(column: np.ndarray, annualization: float = 1.0) -> float:
@@ -105,16 +111,48 @@ class MetaAdaptive(Searcher):
     # -- the continue-move ---------------------------------------------------
 
     @staticmethod
-    def _greedy_extend(support, remaining, support_score):
-        """7.1's fill rule: the best available extension. Used when a replicate
-        runs past the realized sequence and no declared trigger is left."""
-        return max((support_score(support + [j]), j) for j in remaining)
+    def _grammar(support, K, score):
+        """Every one-step move of 7.2's content grammar, scored.
 
-    def _extend(self, support, remaining, support_score):
-        """This policy's own continue-move. Greedy extension by default, which
-        makes the fill rule and the continuation coincide -- see
-        `ExtendBySecondBest` for why that must not be true of every searcher."""
-        return self._greedy_extend(support, remaining, support_score)
+        Returns (score, kind, new_support) triples over `extend`, `swap` and
+        `flip`. `support` is a list of (feature, sign) pairs, so `flip` is a real
+        move rather than a no-op -- which is why supports here carry signs even
+        though the extend-only searchers never set one to -1.
+        """
+        held = {k for k, _ in support}
+        remaining = [k for k in range(K) if k not in held]
+        out = []
+        for j in remaining:                                   # extend
+            ns = support + [(j, 1.0)]
+            out.append((score(ns), "extend", ns))
+        for i in range(len(support)):                         # swap
+            for j in remaining:
+                ns = support[:i] + [(j, support[i][1])] + support[i + 1:]
+                out.append((score(ns), "swap", ns))
+        for i in range(len(support)):                         # flip
+            ns = support[:i] + [(support[i][0], -support[i][1])] + support[i + 1:]
+            out.append((score(ns), "flip", ns))
+        return out
+
+    def _fill_move(self, support, K, score):
+        """7.1's fill rule, as amended: the best **one-step move across the whole
+        content grammar**, not merely the best extension.
+
+        The earlier rule filled with greedy extension only. Greedy extension
+        dominates any other single-feature *extension*, so a searcher whose
+        continuation was a weaker extension showed a conservative fill almost
+        mechanically. It does not dominate `swap` or `flip`, and because a search
+        is a path rather than a single step, a locally-best move can still end
+        below a swap-based continuation. Widening the fill to the full grammar is
+        what makes the comparison informative rather than arithmetical.
+        """
+        cands = self._grammar(support, K, score)
+        return max(cands) if cands else None
+
+    def _extend(self, support, K, score):
+        """This policy's own continue-move. Best *extension* by default."""
+        cands = [c for c in self._grammar(support, K, score) if c[1] == "extend"]
+        return max(cands) if cands else None
 
     # -- the one loop ------------------------------------------------------
 
@@ -135,7 +173,7 @@ class MetaAdaptive(Searcher):
         scores = np.array([single(k) for k in range(K)])
         order = list(np.argsort(-scores))
         anchor = 0
-        support = [int(order[anchor])]
+        support = [(int(order[anchor]), 1.0)]
         best = float(scores[order[anchor]])
         trace = Trace(policy=self.name)
         failures, last_gain = 0, float("inf")
@@ -165,7 +203,7 @@ class MetaAdaptive(Searcher):
                     trace.moves.append(Move(step, "stop", "exhausted", float(anchor),
                                             tuple(support), best))
                     break
-                support = [int(order[anchor])]
+                support = [(int(order[anchor]), 1.0)]
                 failures, last_gain = 0, float("inf")
                 trace.moves.append(Move(step, "restart", trigger, value,
                                         tuple(support), best))
@@ -176,18 +214,17 @@ class MetaAdaptive(Searcher):
             # continue-move) or the fill running past the realized sequence
             # (greedy, by 7.1's rule). For most searchers these are the same
             # function; the point of ExtendBySecondBest is that they are not.
-            remaining = [k for k in range(K) if k not in support]
-            if not remaining:
+            filling = trigger == "fill"
+            chosen = (self._fill_move(support, K, support_score) if filling
+                      else self._extend(support, K, support_score))
+            if chosen is None:
                 trace.moves.append(Move(step, "stop", "exhausted", 0.0,
                                         tuple(support), best))
                 break
-            filling = trigger == "fill"
-            gain_score, j = (self._greedy_extend(support, remaining, support_score)
-                             if filling else
-                             self._extend(support, remaining, support_score))
+            gain_score, kind, new_support = chosen
             last_gain = gain_score - best
             if gain_score > best:
-                support.append(int(j))
+                support = list(new_support)
                 best = float(gain_score)
                 failures = 0
             else:
@@ -205,7 +242,8 @@ class MetaAdaptive(Searcher):
             return _column_sharpe(base[:, k], annualization)
 
         def support_score(support):
-            return _column_sharpe(base[:, list(support)].sum(axis=1), annualization)
+            stream = sum(base[:, k] * s for k, s in support)
+            return _column_sharpe(stream, annualization)
 
         return single, support_score
 
@@ -255,17 +293,17 @@ class MetaAdaptive(Searcher):
 
         def single(k):
             return sandbox.evaluate(Specification(
-                weights=_one_hot_sum(K, [k]), name=f"{self.name}_f{k}")).sharpe
+                weights=_signed_sum(K, [(k, 1.0)]), name=f"{self.name}_f{k}")).sharpe
 
         def support_score(support):
             return sandbox.evaluate(Specification(
-                weights=_one_hot_sum(K, support),
-                name=f"{self.name}_{sorted(support)}")).sharpe
+                weights=_signed_sum(K, support),
+                name=f"{self.name}_{_support_name(support)}")).sharpe
 
         t = self._search(K, single, support_score)
         self.last_trace = t
-        spec = Specification(weights=_one_hot_sum(K, t.support),
-                             name=f"{self.name}_{sorted(t.support)}")
+        spec = Specification(weights=_signed_sum(K, t.support),
+                             name=f"{self.name}_{_support_name(t.support)}")
         sandbox.submit(spec, Distribution.degenerate(t.score))
 
 
@@ -350,10 +388,46 @@ class ExtendBySecondBest(MetaAdaptive):
         return (("stop" if gain <= self.min_gain else "continue"),
                 f"last_gain > {self.min_gain}", float(gain))
 
-    def _extend(self, support, remaining, support_score):
-        ranked = sorted(((support_score(support + [j]), j) for j in remaining),
-                        reverse=True)
+    def _extend(self, support, K, score):
+        ranked = sorted((c for c in self._grammar(support, K, score)
+                         if c[1] == "extend"), reverse=True)
+        if not ranked:
+            return None
         return ranked[1] if len(ranked) > 1 else ranked[0]
+
+
+class SwapWorstWhileImproving(MetaAdaptive):
+    """Continues by **swapping**, not extending: once the support reaches
+    `min_support`, every continue-move replaces one member with the best
+    available replacement.
+
+    This is the searcher the amended fill rule needs. The fill takes the best
+    one-step move over the whole grammar, which includes swap, so it dominates
+    this policy's move *at each step* -- but a search is a path, and the locally
+    best move is not globally optimal, so the filled path can still finish below
+    the swap path. Unlike `ExtendBySecondBest`, whose continuation the fill
+    dominates by a monotone argument, the direction here is a genuine empirical
+    question, which is why rule 3 reads it on this searcher and on
+    `RestartAfterKFailures`.
+    """
+    name = "swap-worst-while-improving"
+
+    def __init__(self, min_gain: float = 0.0, min_support: int = 3, seed: int = 0):
+        super().__init__(seed=seed)
+        self.min_gain = float(min_gain)
+        self.min_support = int(min_support)
+
+    def _decide(self, state):
+        gain = state["last_gain"]
+        return (("stop" if gain <= self.min_gain else "continue"),
+                f"last_gain > {self.min_gain}", float(gain))
+
+    def _extend(self, support, K, score):
+        # grow to min_support first; there is nothing to swap out of a support
+        # of one that would not simply be a different single feature
+        kind = "extend" if len(support) < self.min_support else "swap"
+        cands = [c for c in self._grammar(support, K, score) if c[1] == kind]
+        return max(cands) if cands else None
 
 
 # The three whose continue-move is greedy extension. They are the clean
@@ -361,4 +435,8 @@ class ExtendBySecondBest(MetaAdaptive):
 # and nothing but the freezing moves. ExtendBySecondBest is deliberately not one
 # of them.
 GREEDY_CONTINUATION = (StopWhenCleared, RestartAfterKFailures, ExtendWhileImproving)
-SEARCHERS = GREEDY_CONTINUATION + (ExtendBySecondBest,)
+SEARCHERS = GREEDY_CONTINUATION + (ExtendBySecondBest, SwapWorstWhileImproving)
+
+# Rule 3's informative cases: their continuation is not dominated by the fill's
+# best-one-step-over-the-grammar move along the whole path.
+INFORMATIVE_FOR_FILL = (RestartAfterKFailures, SwapWorstWhileImproving)
