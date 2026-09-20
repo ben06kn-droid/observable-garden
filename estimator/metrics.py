@@ -19,7 +19,16 @@ def wilson_ci(successes: int, n: int, confidence: float = 0.95) -> tuple[float, 
     denom = 1 + z ** 2 / n
     center = phat + z ** 2 / (2 * n)
     half = z * np.sqrt(phat * (1 - phat) / n + z ** 2 / (4 * n ** 2))
-    return float((center - half) / denom), float((center + half) / denom)
+    # The boundaries are exact and are set as such. At k=0 the closed form gives
+    # center == half, so the lower bound is zero -- but in floating point it came
+    # out as +4.3e-19, which printed as "-0.000" in one report and, worse, made a
+    # `lo <= rate <= hi` containment test read false for an arm whose observed
+    # rate was exactly zero. Clamping to [0, 1] does not fix that: the residue is
+    # positive. Symmetrically, k == n gives an upper bound of exactly one. The
+    # final clamp guards the interior against the same kind of drift.
+    lo = 0.0 if successes == 0 else (center - half) / denom
+    hi = 1.0 if successes == n else (center + half) / denom
+    return float(min(max(lo, 0.0), 1.0)), float(min(max(hi, 0.0), 1.0))
 
 
 def type1_rate(p_values: np.ndarray, alpha: float = 0.05, confidence: float = 0.95) -> tuple[float, float, float]:

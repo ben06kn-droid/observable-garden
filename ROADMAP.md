@@ -856,3 +856,35 @@ much as time.
 **Practical rule.** If a script's expected runtime is over two hours or
 its B × T exceeds 10⁸, it goes to EC2. Everything else, including every
 run that talks to the seat, stays on the laptop.
+
+**Measured, 2026-09-20, on c7a-class 32 physical cores (AMD EPYC 9R14, no SMT),
+the full-class null at K=40, d=3 signed, T=5,000, B=10,000.** The 32-worker row
+is `calibration-at-1pct` arm B's own 5,000-draw run, not a smoke.
+
+| workers | s/draw | wall s/draw | draws/hour | $/draw at $1.64/h | parallel efficiency |
+|---|---|---|---|---|---|
+| 1 | 38.77 | 38.77 | 93 | $0.0177 | 100% |
+| 4 | 41.31 | 10.33 | 349 | $0.0047 | 94% |
+| 16 | 76.85 | 4.80 | 750 | $0.0022 | 50% |
+| 32 | 159.73 | 4.99 | 721 | $0.0023 | 24% |
+
+**This workload saturates at about 16 workers, and 32 is worse than 16 on both
+axes** — 4% slower in wall-clock and marginally dearer per draw. Single-core on
+the instance is 38.8 s against 34 s on the laptop, so per-core speed is within
+12% and the remaining 4.1× is contention, not hardware. The inner loop streams
+the (T, K) demeaned array roughly ten thousand times per draw; past sixteen
+concurrent workers the memory system, not the cores, sets the rate.
+
+Two consequences. Size EC2 sweeps at **16 workers**, not `nproc --all`. And do
+not assume a smaller instance is cheaper: bandwidth scales with instance size in
+this family, so 16 workers on a 16-vCPU box would plausibly contend as much as 32
+do here and show none of the 16-worker figure's advantage. That is untested; one
+short run would settle it before committing a sweep to a smaller box.
+
+**Standing step before any EC2 sweep.** Measure per-draw cost end to end at the
+worker count the sweep will actually use, with every worker busy — never from a
+component sum, a low-worker run, or a handful of draws. Skipping it cost a 4.7×
+miss on arm B (34 s predicted from two laptop workers, 159.7 s observed at 32).
+A four-point scaling curve at 1 / 4 / 16 / 32, two draws per worker, costs about
+fifteen minutes and gives the right worker count as well as the cost, which a
+single full-worker smoke does not.
