@@ -116,8 +116,11 @@ alone as well.
 | `calibration-at-1pct` | is the declared-class gate calibrated at 1%, not just 5%? | arm A: 15 of 419 graded agent runs reject at 5%. arm B: conservative, and unable to answer — see deviation 1. arm C running; arm D pre-registered, not run |
 | `costs-and-regime-change` | what does a PASS survive once the regime shifts? (cost half withdrawn, amendment 2) | ran 2026-09-20 |
 | `gate-comparison` | which of the three certifiers should the gate use, and in what order should 7.2 fall back? | draft, not live |
+| `fixed-sequence-replay` | what does freezing a search's meta decisions cost, and do declared triggers remove it? | draft, not live |
+| `heterogeneous-correlation-fat-tails` | does the full-class null survive factor-structured correlation and fat tails? | draft, not live |
 
-`prereg/gate-comparison.md` is **committed but not live**: it is in the tree so it cannot be lost, it has not been reviewed, and it authorises nothing. 7.0 does not run until it has been read and the launch decision is taken, which waits on `calibration-at-1pct` arm D — arm D's rule 4 decomposition is what the matched-class design rests on. It is deliberately absent from the commit table above, which lists only pre-registrations that authorise a run.
+`prereg/gate-comparison.md`, `prereg/fixed-sequence-replay.md` and
+`prereg/heterogeneous-correlation-fat-tails.md` are **committed but not live**: it is in the tree so it cannot be lost, it has not been reviewed, and it authorises nothing. 7.0 does not run until it has been read and the launch decision is taken, which waits on `calibration-at-1pct` arm D — arm D's rule 4 decomposition is what the matched-class design rests on. It is deliberately absent from the commit table above, which lists only pre-registrations that authorise a run.
 
 ## Null calibration and the mechanism
 

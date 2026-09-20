@@ -1,0 +1,134 @@
+# fixed-sequence-replay (7.1): what does freezing a decision cost?
+
+**DRAFT — committed but not live.** It authorises nothing and 7.1 does not run
+until it has been read. Code exists and is unit-tested
+(`searchers/meta_adaptive.py`, `estimator/trigger_replay.py`,
+`tests/test_meta_adaptive.py`); no sweep has been run.
+
+## Question
+
+The replay gate re-executes a search's typed moves on each bootstrap resample.
+Its moves split in two:
+
+- **Content choices** — which feature to extend by — are rules. They are
+  functions of the sample, so a replicate re-executes them exactly.
+- **Meta choices** — when to stop, when to restart, whether to move at all —
+  were made *after seeing results*. Freezing them at their realized positions is
+  the realized-menu error one level up (THEORY.md P4), and stop-when-cleared is
+  its winner-anchored case.
+
+How large is the error from freezing meta choices, and does declaring them as
+re-evaluable **triggers** remove it?
+
+## Design
+
+**Searchers.** Four scripted meta-adaptive policies, each recording its move
+sequence and, per move, the predicate behind the meta choice and the value that
+predicate saw.
+
+| searcher | meta trigger | continue-move |
+|---|---|---|
+| `StopWhenCleared` | best-so-far exceeds a bar fixed before the search | greedy extension |
+| `RestartAfterKFailures` | k consecutive non-improving extensions | greedy extension |
+| `ExtendWhileImproving` | last gain exceeds `min_gain` | greedy extension |
+| `ExtendBySecondBest` | last gain exceeds `min_gain` | **second-best** extension |
+
+The fourth exists for a specific reason. The fill rule below supplies greedy
+extension when a replicate runs past the realized sequence. For the first three
+that is also their continue-move, so the fill's *content* choice is never
+exercised — they can only diverge in the meta dimension, and only when the
+realized sequence is short. 7.3 cannot exercise it either, an agent having no
+exact policy null to compare against. `ExtendBySecondBest` diverges on every
+filled step, so the fill's content rule is tested somewhere.
+
+**Nulls.** Four per draw. Nulls 1-3 are drawn on one shared resampled index, so
+they are paired replicate by replicate and any difference between them is the
+replay rule alone.
+
+1. **fixed_sequence** — meta choices frozen at their realized positions, content
+   rules re-executed. The error being measured.
+2. **trigger** — each declared predicate re-evaluated on the replicate. A
+   replicate whose predicate fires earlier stops there; one that would run past
+   the realized sequence has no declared trigger left and is **filled with greedy
+   extension to the budget**.
+3. **policy** — the policy re-executed, exact because the policy is code. The
+   reference.
+4. **declared_class** — the full-class bound, priced by
+   `garden._full_class_engine`, independent of the search.
+
+**The realized sequence is taken on the data as they are, not demeaned.** The
+sequence null 1 freezes must be the one the real search actually produced,
+including a stop that fired because the real data cleared a bar. Replicates are
+drawn from the demeaned columns. Taking the realized sequence from demeaned data
+would freeze a sequence no search ever ran and invert the effect being measured.
+
+**Known invariant, asserted in the unit tests, recorded here so it is not
+mistaken for a result.** Nulls 2 and 3 agree step for step up to the realized
+length — up to there the predicates *are* the policy — and can diverge only past
+it. So a small Kolmogorov distance between them is expected and is not evidence
+that trigger replay works; the informative quantity is its **sign** and the
+behaviour of null 1.
+
+**Draws.** 2,000 per searcher on seeds 300000-301999, a block used by no other
+pre-registration. K = 40, M = 50, T = 5,000, rho = 0, s0 only — this experiment
+is about size, not power. B = 10,000.
+
+## Decision rules
+
+Per `prereg/README.md`: validity claims get one-sided rules, exactness rules name
+the proposition predicting them, and every rule states both directions.
+
+1. **Trigger replay is valid (primary, one-sided).** For each of the four
+   searchers, the **upper** end of the Wilson 95% interval for the rejection rate
+   under null 2 does not exceed nominal by more than 0.5 points at alpha = 0.05
+   or 0.2 at alpha = 0.01. Only validity is claimed, so only an excess fails;
+   **conservative is acceptable**.
+   - *Holds:* in-the-loop agents are certifiable with triggers declared, and 7.2
+     builds the replay tier on declared triggers.
+   - *Fails high:* trigger replay is liberal for that searcher. The replay tier
+     requires full policy replay instead — the agent writes a policy rather than
+     searching in the loop — and the searcher that broke it is named.
+   - *Fails low:* conservative, reported with its size, and the power cost is
+     carried into 7.0's comparison rather than treated as a defect.
+2. **The frozen-decision error, measured (primary readout, no halt).** The
+   rejection rate under null 1 at alpha = 0.05 and 0.01, per searcher, beside
+   null 3's. Predicted direction: **liberal**, because freezing an early stop
+   holds replicates to fewer moves than their own trigger would allow, making the
+   null too small.
+   - *Liberal as predicted:* reported as the size of the error that declaring
+     triggers removes. This is the number 7.1 exists to produce.
+   - *Not liberal:* the P4 argument does not bite for that searcher, which is
+     reported rather than explained away; the likely cause is a realized
+     sequence long enough that freezing binds on almost no replicate, and the
+     realized length is reported alongside so this is checkable.
+3. **Direction of the fill (secondary, no halt).** The **signed** Kolmogorov
+   distance between nulls 2 and 3, per searcher, with the sign convention that
+   positive means null 2 is stochastically smaller, hence a lower bar, hence
+   liberal.
+   - *Negative or zero:* the fill errs conservatively, which is the acceptable
+     direction, and `ExtendBySecondBest` is the searcher that establishes it,
+     for the reason in the Design section.
+   - *Positive and material:* the conservative-fill rule is not conservative.
+     This gates the replay tier's use of triggers on any search that can run past
+     its realized length, and the fill rule is redesigned before 7.2 builds on
+     it.
+4. **Distance of null 1 from null 3 (secondary, no halt).** Unsigned Kolmogorov
+   distance per searcher, reported with null 2's for contrast. Expected to be
+   much the larger of the two; if it is not, freezing costs little for that
+   searcher and that is reported.
+
+## Cost
+
+Per draw, three nulls are computed on one shared index. Each replicate runs the
+search three times over K = 40 at depth up to the budget, in closed form on
+resampled columns — no full-class bootstrap, which is what makes this cheaper
+per draw than `calibration-at-1pct` despite re-executing the search.
+
+**Not yet sized, and 7.1 does not launch until it is.** Per-draw cost is
+dominated by B re-executions of the search and cannot be inferred from the
+75.03 s/draw measured for the full-class null, which does no re-execution. The
+standing pre-launch step in `ROADMAP.md`'s Compute section applies: a four-point
+scaling curve at 1/4/16/32 workers and an end-to-end smoke at the worker count
+the run will use. Skipping it cost `calibration-at-1pct` arm B 4.7x its estimate.
+
+**Standing configuration:** 16 workers on the 32-core instance.
