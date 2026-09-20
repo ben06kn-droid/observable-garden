@@ -37,3 +37,52 @@ record: `oblivious-calibration` sized from a 4-draw smoke and came in 5× low, a
 `calibration-at-1pct` arm B sized from a 2-worker laptop run and came in 4.7×
 low, because the workload is memory-bandwidth bound and 32 concurrent workers
 contend. See `ROADMAP.md`'s Compute section for the standing pre-launch smoke.
+
+## Amendment 1 — 2026-09-20. The one-sided validity rule was mis-specified.
+
+The wording above — *"the upper end of the interval does not exceed α by more
+than a stated tolerance"* — is **wrong**, and it is left in place above because
+this file's own convention is that originals stay intact and corrections are
+appended.
+
+**Why it is wrong.** The upper end of a Wilson interval at n = 2,000 sits well
+above the point estimate, so demanding it stay under `α + tolerance` demands a
+point estimate well *below* nominal. At the tolerances the drafts used:
+
+| α | tolerance | rule passes iff | i.e. observed rate | an exactly valid test passes |
+|---|---|---|---|---|
+| 0.05 | 0.5 pp | k ≤ 90 | ≤ 4.50% | **16.5%** of the time |
+| 0.01 | 0.2 pp | k ≤ 14 | ≤ 0.70% | **10.4%** of the time |
+
+A rule that a correctly calibrated procedure fails 84% of the time is not a
+validity rule; it is a test for conservatism wearing one's clothes. Concretely,
+`calibration-at-1pct` arm D's anchor — which is **exactly calibrated**, k = 110
+at α = 0.05 and k = 19 at α = 0.01, with KS not rejecting — fails it at both
+levels, upper ends 6.59% and 1.48%. Verified with `scipy.stats.binom.cdf` and
+`estimator.metrics.wilson_ci`.
+
+**The corrected rule.** A validity claim fails high **iff the LOWER end of the
+Wilson 95% interval exceeds nominal** — that is, only when liberality has been
+demonstrated rather than merely not excluded. The **upper** end is still
+reported, as *the largest liberality the data do not rule out*, which is the
+honest thing it measures. No tolerance parameter appears, because there is
+nothing left for it to do.
+
+**Every such rule must state its detectable liberality at the registered n**, so
+that "passes" is never read as "is valid" when the experiment could not have
+detected the failure. At n = 2,000:
+
+| α | rule fires at | true rate detected with 80% power | false-fire rate if exactly valid |
+|---|---|---|---|
+| 0.05 | k ≥ 120 (6.00%) | **6.44%** | 2.51% |
+| 0.01 | k ≥ 29 (1.45%) | **1.67%** | 3.36% |
+
+So at n = 2,000 a one-sided validity rule sees a procedure that rejects at 6.4%
+against a nominal 5%, and is blind to one rejecting at 5.5%. Any pre-registration
+claiming more than that from 2,000 draws is overclaiming, and must either raise n
+or say what it cannot see.
+
+Applied by appended amendment to `gate-comparison` rule 2,
+`fixed-sequence-replay` rule 1, and `heterogeneous-correlation-fat-tails`
+rule 2. No result already reported changes: arm D's rules were exactness rules
+under P1, not validity rules, and are unaffected.

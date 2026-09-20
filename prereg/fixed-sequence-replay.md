@@ -132,3 +132,31 @@ scaling curve at 1/4/16/32 workers and an end-to-end smoke at the worker count
 the run will use. Skipping it cost `calibration-at-1pct` arm B 4.7x its estimate.
 
 **Standing configuration:** 16 workers on the 32-core instance.
+
+## Amendments
+
+**1 — 2026-09-20, before the experiment runs. Rule 1's one-sided form is
+corrected.**
+
+Rule 1 above says the **upper** end of the Wilson interval must not exceed
+nominal by more than 0.5 points at α = 0.05 or 0.2 at α = 0.01. Wrong, for the
+reason `prereg/README.md` amendment 1 records: at n = 2,000 that passes only at
+an observed rate of 4.50% or below (0.70% at α = 0.01), which an exactly valid
+test manages 16.5% (10.4%) of the time, and which `calibration-at-1pct` arm D's
+exactly-calibrated anchor fails at both levels.
+
+**Rule 1 is replaced.** For each searcher, trigger replay **fails high iff the
+LOWER end of the Wilson 95% interval for its null-2 rejection rate exceeds
+nominal**. The **upper** end is reported as the largest liberality not ruled out.
+The three outcome branches are unchanged: a pass licenses the replay tier on
+declared triggers, a demonstrated excess sends the tier to full policy replay and
+names the searcher that broke it, and a low rate is reported as conservatism with
+its size carried into 7.0.
+
+**Detectable liberality at n = 2,000**: the rule fires at k ≥ 120 (6.00%) at
+α = 0.05 and k ≥ 29 (1.45%) at α = 0.01, giving 80% power against true rates of
+**6.44%** and **1.67%**, and firing on an exactly valid procedure 2.51% and 3.36%
+of the time. **7.1 cannot detect trigger replay rejecting at 5.5% against a
+nominal 5%.** If the measured rate lands between nominal and the firing
+threshold, the correct report is that liberality of that size was not excluded —
+not that trigger replay is valid.

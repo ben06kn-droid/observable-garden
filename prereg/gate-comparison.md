@@ -251,3 +251,27 @@ serves every searcher, as in arm D. `BudgetedRandom` at three budgets and
 `StopWhenCleared` add four scored submissions per draw, which is closed-form
 work against a 75 s bootstrap. The process-replay certifier remains the unsized
 component and still gates the launch.
+
+**2 — 2026-09-20, before any 7.0 data exists. Rule 2's one-sided form is
+corrected.**
+
+Rule 2 above says the **upper** end of the Wilson interval must not exceed
+nominal by more than 0.5 points at α = 0.05 or 0.2 at α = 0.01. Wrong, for the
+reason `prereg/README.md` amendment 1 records: at n = 2,000 it demands an
+observed rate at or below 4.50% (0.70% at α = 0.01), which an exactly valid test
+achieves 16.5% (10.4%) of the time, and which arm D's exactly-calibrated anchor
+fails at both levels.
+
+**Rule 2 is replaced.** For each searcher and certifier on s0, validity **fails
+high iff the LOWER end of the Wilson 95% interval exceeds nominal**. The upper
+end is reported as the largest liberality not ruled out. Branches unchanged: a
+demonstrated excess excludes that certifier from the tier order regardless of its
+power, and a low rate is the conservatism rule 3 then has to price.
+
+**Detectable liberality at n = 2,000**: fires at k ≥ 120 (6.00%) at α = 0.05 and
+k ≥ 29 (1.45%) at α = 0.01; 80% power against **6.44%** and **1.67%**; false-fire
+2.51% and 3.36% on an exactly valid certifier. This matters most for the replay
+certifier, whose validity is asymptotic — **7.0 cannot rule out replay rejecting
+at 5.5%**, and rule 4's tier order must not be read as saying it did.
+
+Rule 1, the anchor's exactness rule, is unchanged.

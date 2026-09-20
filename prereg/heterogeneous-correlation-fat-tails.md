@@ -131,3 +131,33 @@ workers on cell (C), the most expensive, before the budget is committed.
 Skipping that cost arm B 4.7x its estimate.
 
 **Standing configuration:** 16 workers on the 32-core instance.
+
+## Amendments
+
+**1 — 2026-09-20, before the experiment runs. Rule 2's one-sided form is
+corrected.**
+
+Rule 2 above says the **upper** end of the Wilson interval must not exceed
+nominal by more than 0.5 points at α = 0.05 or 0.2 at α = 0.01. That wording came
+from `prereg/README.md` and is wrong for the reason its amendment 1 records: at
+n = 2,000 it passes only if the observed rate is at or below 4.50% and 0.70%
+respectively, which an exactly valid test achieves just 16.5% and 10.4% of the
+time. It would fail `calibration-at-1pct` arm D's anchor at both levels.
+
+**Rule 2 is replaced.** For `Greedy`, `Adaptive` and `SignedAdaptive` in each
+cell, validity **fails high iff the LOWER end of the Wilson 95% interval exceeds
+nominal** — liberality demonstrated, not merely un-excluded. The **upper** end is
+reported as the largest liberality the data do not rule out. Both other branches
+are unchanged: a rate below nominal is expected under P2 and is reported as the
+conservatism it is, and no KS test is applied to these three.
+
+**Detectable liberality at this experiment's n = 2,000 per cell**, stated so a
+pass is not read as more than it is: the rule fires at k ≥ 120 (6.00%) at
+α = 0.05 and k ≥ 29 (1.45%) at α = 0.01, giving 80% power against a true rate of
+**6.44%** and **1.67%** respectively, and firing on an exactly valid procedure
+2.51% and 3.36% of the time. **This experiment cannot see a searcher that rejects
+at 5.5% against a nominal 5%**, and does not claim to.
+
+Rule 1, the anchor's exactness rule, is **unchanged** — it is a two-sided
+containment rule licensed by P1, which is a different claim and was never
+affected.
