@@ -22,6 +22,7 @@ from estimator.full_class import full_class_matrix
 from estimator.metrics import type1_rate
 from estimator.recursive_bootstrap import recursive_null_max_bootstrap
 from experiments._parallel import run_cells
+from experiments.search_depth import git_state
 from searchers.dose_response import GumbelAnchored, normalized_rank
 
 K, M, T, T_OOS, RHO = 20, 50, 500, 250, 0.3
@@ -55,12 +56,6 @@ def run_draw(tau: float, seed: int) -> dict:
     out.update({"kappa": normalized_rank(base, anchor), "anchor": anchor, "winner": winner, "sr_sel": sr_sel,
                 "block_length": L})
     return out
-
-
-def git_state() -> dict:
-    head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-    dirty = bool(subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout.strip())
-    return {"commit": head, "dirty": dirty}
 
 
 def run(n_draws: int, workers: int | None, checkpoint_dir: str | None, git: dict) -> dict:

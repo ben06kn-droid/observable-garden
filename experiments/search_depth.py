@@ -78,9 +78,24 @@ def run_draw(label: str, seed: int) -> dict:
 
 
 def git_state() -> dict:
-    head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-    dirty = bool(subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout.strip())
-    return {"commit": head, "dirty": dirty}
+    """The code state a run launched from.
+
+    `dirty` counts **tracked** modifications only. Counting untracked files too
+    made every run on the instance self-report as dirty, because a run writes its
+    own outputs into figures/ and its checkpoints into the working tree before
+    this is read at the end. That is the wolf-crying failure: a label that is
+    always on cannot flag the case it exists for, which is code that differs from
+    the recorded commit. Untracked paths are reported separately, so the
+    information is not lost -- just not conflated with modified code.
+    """
+    def out(*args):
+        return subprocess.run(["git", *args], capture_output=True, text=True).stdout.strip()
+
+    head = out("rev-parse", "HEAD")
+    tracked = out("status", "--porcelain", "--untracked-files=no")
+    untracked = out("status", "--porcelain", "--untracked-files=all")
+    n_untracked = sum(1 for ln in untracked.splitlines() if ln.startswith("??"))
+    return {"commit": head, "dirty": bool(tracked), "untracked": n_untracked}
 
 
 def run(scale: float, workers: int | None, checkpoint_dir: str | None, git: dict) -> dict:

@@ -1,0 +1,93 @@
+calibration-at-1pct — arm D: scripted searchers under the declared class
+==============================================================================
+n=2000 draws, B=10,000, K=40, M=50, T=5,000, class subsets:max_size=3,signs=both (82,240 members)
+git at launch 04dcc53 (dirty)
+
+TYPE-I AND UNIFORMITY
+------------------------------------------------------------------------------
+group                      n                 a=0.1                a=0.05                a=0.01
+                                k    rate (95% CI)    k    rate (95% CI)    k    rate (95% CI)
+exhaustive-signed       2000 192  0.0960 (0.084-0.110) 110  0.0550 (0.046-0.066)  19  0.0095 (0.006-0.015)
+exhaustive-unsigned     2000  51  0.0255 (0.019-0.033)  27  0.0135 (0.009-0.020)   4  0.0020 (0.001-0.005)
+adaptive                2000  51  0.0255 (0.019-0.033)  27  0.0135 (0.009-0.020)   4  0.0020 (0.001-0.005)
+greedy                  2000   1  0.0005 (0.000-0.003)   1  0.0005 (0.000-0.003)   1  0.0005 (0.000-0.003)
+
+group                      n     KS stat        KS p   KS crit .05
+exhaustive-signed       2000      0.0179      0.5353        0.0304
+exhaustive-unsigned     2000      0.3862      0.0000        0.0304
+adaptive                2000      0.3862      0.0000        0.0304
+greedy                  2000      0.8680      0.0000        0.0304
+
+COST
+------------------------------------------------------------------------------
+  per draw   mean   75.50s   median   74.22s   max  155.59s
+  this run   41.95 CPU-hours over 2000 draws
+
+GUARDS AND BLOCK LENGTHS
+------------------------------------------------------------------------------
+  variance floor binds 0   sharpe cap binds 0
+  block length: min 1, median 1, max 2
+
+DECISION RULES — amendment 2
+------------------------------------------------------------------------------
+  Rules 1-2 (exactness). The Wilson interval must contain nominal.
+  One-sided halt: only an excess triggers it.
+    a=0.1   k=192   rate 0.0960 (0.0839-0.1097)   contains 0.1: yes
+    a=0.05  k=110   rate 0.0550 (0.0458-0.0659)   contains 0.05: yes
+    a=0.01  k=19    rate 0.0095 (0.0061-0.0148)   contains 0.01: yes
+
+  Rule 3 (uniformity). KS D=0.0179 vs 5% critical 0.0304, p=0.5353: does not reject
+
+  Rule 4 (secondary, no halt). P2's ordering, all four scored against
+  the same signed class null. A liberal violation falsifies P2.
+    link                                               holds   violations
+    p[exhaustive-signed] <= p[exhaustive-unsigned]   100.00%            0
+    p[exhaustive-unsigned] <= p[adaptive]            100.00%            0
+    p[adaptive] <= p[greedy]                         100.00%            0
+    full chain                                       100.00%            0
+
+    Decomposition of arm B's 1.0% at a=0.05, on the paired draws:
+    exhaustive-signed       a=0.1   9.60%   a=0.05   5.50%   a=0.01   0.95%
+    exhaustive-unsigned     a=0.1   2.55%   a=0.05   1.35%   a=0.01   0.20%
+    adaptive                a=0.1   2.55%   a=0.05   1.35%   a=0.01   0.20%
+    greedy                  a=0.1   0.05%   a=0.05   0.05%   a=0.01   0.05%
+    The gap signed->unsigned is the cost of confinement to the
+    sublattice; unsigned->adaptive is sub-maximal search within it.
+
+INTEGRITY — arm D against arm B on the shared seeds
+------------------------------------------------------------------------------
+  2000 shared seeds, both at B=10,000
+    greedy      identical
+    adaptive    identical
+
+CONDITIONAL B=50,000 PASS (amendment 5)
+------------------------------------------------------------------------------
+  rule 1 at a=0.01: rate 0.0095 (0.0061-0.0148)
+  excess at 1% (lower bound above nominal): no
+  -> the pass does NOT run. Rule 5 is not run; arm C's rule 3 remains
+     the reported empirical evidence on tail resolution.
+
+RULE 6 — reproducibility, reported analytically (amendment 5)
+------------------------------------------------------------------------------
+  Expected verdict flips if the 2,000 draws were rerun at B=50,000.
+  Upper bound: the nested replicate streams make the truth ~18% smaller.
+  Amendment 6: the trigger compares the count on the 500 draws the
+  conditional pass would run. Uniform p predicts 0.95 at a=0.05.
+    member                     a   per draw   on 2,000    on 500
+    exhaustive-signed       0.05   0.2113%       4.23      1.06
+    exhaustive-signed       0.01   0.1114%       2.23      0.56
+    exhaustive-unsigned     0.05   0.0723%       1.45      0.36
+    exhaustive-unsigned     0.01   0.0485%       0.97      0.24
+    adaptive                0.05   0.0723%       1.45      0.36
+    adaptive                0.01   0.0485%       0.97      0.24
+    greedy                  0.05   0.0000%       0.00      0.00
+    greedy                  0.01   0.0000%       0.00      0.00
+
+  Amendment 5's escape hatch, as restated by amendment 6: the pass runs
+  anyway if the expected count on 500 draws exceeds 2.
+  Exceeded: no
+
+FIGURE
+------------------------------------------------------------------------------
+  figures/calibration_at_1pct_armD_ecdf.png
+
