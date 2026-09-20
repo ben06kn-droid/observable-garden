@@ -889,11 +889,17 @@ the instance is 38.8 s against 34 s on the laptop, so per-core speed is within
 the (T, K) demeaned array roughly ten thousand times per draw; past sixteen
 concurrent workers the memory system, not the cores, sets the rate.
 
-Two consequences. Size EC2 sweeps at **16 workers**, not `nproc --all`. And do
-not assume a smaller instance is cheaper: bandwidth scales with instance size in
-this family, so 16 workers on a 16-vCPU box would plausibly contend as much as 32
-do here and show none of the 16-worker figure's advantage. That is untested; one
-short run would settle it before committing a sweep to a smaller box.
+Confirmed independently by `calibration-at-1pct` arm D's 48-draw sizing smoke:
+**75.03 s/draw at 16 workers** (median 74.43, max 132.32), within 2.4% of the
+16-worker row above. Two measurements on different code paths agreeing to that
+tolerance is what the row rests on.
+
+**Standing configuration: 16 workers on this 32-core instance**, for arm D, 7.0
+and 7.1 alike. Not `nproc --all`, which costs 4% wall-clock and gains nothing.
+The smaller-instance question — whether 16 workers on a 16-vCPU box would contend
+as much as 32 do here, since bandwidth scales with instance size in this family —
+is **not being tested**; the saving would be marginal and a second instance shape
+is another thing to get wrong. Decided 2026-09-20.
 
 **Standing step before any EC2 sweep.** Measure per-draw cost end to end at the
 worker count the sweep will actually use, with every worker busy — never from a
@@ -902,3 +908,9 @@ miss on arm B (34 s predicted from two laptop workers, 159.7 s observed at 32).
 A four-point scaling curve at 1 / 4 / 16 / 32, two draws per worker, costs about
 fifteen minutes and gives the right worker count as well as the cost, which a
 single full-worker smoke does not.
+
+Two further traps, both hit on this workload. `nproc` honours `OMP_NUM_THREADS`,
+which `cloud/run.sh` exports as 1, so `--workers $(nproc)` silently launches one
+worker — use `nproc --all`. And a projection must divide by the worker count the
+smoke actually used: `calibration_at_1pct` divided by a hardcoded 32 regardless,
+which understated arm D's main pass by exactly 2× until it was fixed.
