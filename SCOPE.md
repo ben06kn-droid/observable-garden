@@ -364,6 +364,17 @@ turnover is `sqrt(2)` for every specification (measured 1.4146, sd 0.0038) and
 any charge is a drag common to PASS and FAIL. Costs need real data, where
 turnover is a property of what was selected.
 
+**Declare the tightest class the searcher's grammar can reach.** This is the
+single most consequential choice a user of the gate makes, and it is now
+measured. Scored against the 10,700-member class `Adaptive` can actually reach,
+its actual size sits in the neighbourhood of nominal; scored against the
+82,240-member signed class it cannot reach, the same searcher's actual size falls
+to **1.35% at α = 0.05**. The lost power is class mismatch, not conservatism in
+the estimator: a searcher submitting the maximum of its declared class comes in
+exactly calibrated at 1%, 5% and 10% (`calibration-at-1pct` arm D, 2,000 draws),
+while sub-maximal search within a reachable class costs 0.0001 in mean Sharpe
+against the 0.117 that confinement costs.
+
 **Open.** The procedure-level bootstrap is the fully general fix, but it
 requires re-running the search B times — which for an agent means B× the token
 cost against a non-deterministic procedure, so "re-running the same procedure"

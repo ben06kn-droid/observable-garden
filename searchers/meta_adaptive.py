@@ -102,6 +102,20 @@ class MetaAdaptive(Searcher):
     def _decide(self, state: dict) -> tuple[str, str, float]:
         raise NotImplementedError
 
+    # -- the continue-move ---------------------------------------------------
+
+    @staticmethod
+    def _greedy_extend(support, remaining, support_score):
+        """7.1's fill rule: the best available extension. Used when a replicate
+        runs past the realized sequence and no declared trigger is left."""
+        return max((support_score(support + [j]), j) for j in remaining)
+
+    def _extend(self, support, remaining, support_score):
+        """This policy's own continue-move. Greedy extension by default, which
+        makes the fill rule and the continuation coincide -- see
+        `ExtendBySecondBest` for why that must not be true of every searcher."""
+        return self._greedy_extend(support, remaining, support_score)
+
     # -- the one loop ------------------------------------------------------
 
     def _search(self, K: int, single: callable, support_score: callable,
@@ -157,14 +171,20 @@ class MetaAdaptive(Searcher):
                                         tuple(support), best))
                 continue
 
-            # continue: greedily extend the current support by one feature
+            # continue: extend the current support by one feature. Which feature
+            # depends on whether this step is the policy running (its own
+            # continue-move) or the fill running past the realized sequence
+            # (greedy, by 7.1's rule). For most searchers these are the same
+            # function; the point of ExtendBySecondBest is that they are not.
             remaining = [k for k in range(K) if k not in support]
             if not remaining:
                 trace.moves.append(Move(step, "stop", "exhausted", 0.0,
                                         tuple(support), best))
                 break
-            cand = [(support_score(support + [j]), j) for j in remaining]
-            gain_score, j = max(cand)
+            filling = trigger == "fill"
+            gain_score, j = (self._greedy_extend(support, remaining, support_score)
+                             if filling else
+                             self._extend(support, remaining, support_score))
             last_gain = gain_score - best
             if gain_score > best:
                 support.append(int(j))
@@ -294,4 +314,46 @@ class ExtendWhileImproving(MetaAdaptive):
                 f"last_gain > {self.min_gain}", float(gain))
 
 
-SEARCHERS = (StopWhenCleared, RestartAfterKFailures, ExtendWhileImproving)
+class ExtendBySecondBest(MetaAdaptive):
+    """Continues by adding the **second**-best available extension, not the best.
+
+    Its reason for existing is narrow and structural. For the other three
+    searchers the continue-move is greedy extension, which is also 7.1's fill
+    rule, so trigger replay and policy replay coincide exactly and the fill is
+    never actually exercised: whenever a replicate runs past the realized
+    sequence, the thing filled in is the same thing the policy would have done.
+    7.3 cannot test it either -- an agent has no exact policy null to compare a
+    filled trigger replay against.
+
+    So the fill rule would go into the gate untested. This searcher is the one
+    place it is tested: its continuation is deliberately *not* greedy, so a
+    replicate that runs past the realized sequence gets a different move from the
+    one the policy would have made, nulls 2 and 3 separate, and the signed
+    Kolmogorov distance between them says which way the fill errs.
+
+    The meta trigger is the mildest one -- extend while improving -- so that what
+    separates the nulls is the continue-move and nothing else.
+    """
+    name = "second-best-while-improving"
+
+    def __init__(self, min_gain: float = 0.0, seed: int = 0):
+        super().__init__(seed=seed)
+        self.min_gain = float(min_gain)
+
+    def _decide(self, state):
+        gain = state["last_gain"]
+        return (("stop" if gain <= self.min_gain else "continue"),
+                f"last_gain > {self.min_gain}", float(gain))
+
+    def _extend(self, support, remaining, support_score):
+        ranked = sorted(((support_score(support + [j]), j) for j in remaining),
+                        reverse=True)
+        return ranked[1] if len(ranked) > 1 else ranked[0]
+
+
+# The three whose continue-move is greedy extension. They are the clean
+# measurement of the fixed-sequence gap, because nulls 2 and 3 coincide for them
+# and nothing but the freezing moves. ExtendBySecondBest is deliberately not one
+# of them.
+GREEDY_CONTINUATION = (StopWhenCleared, RestartAfterKFailures, ExtendWhileImproving)
+SEARCHERS = GREEDY_CONTINUATION + (ExtendBySecondBest,)

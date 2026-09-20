@@ -71,6 +71,14 @@ results?
   and so defeat the first repair entirely. The second needs no re-execution,
   only an honest declaration, and it is conservative: it buys validity at some
   cost in power.
+- **Declare the tightest class your searcher's grammar can actually reach.**
+  Most of the second repair's cost in power turns out to be class mismatch
+  rather than conservatism. Moving `Adaptive` from the 10,700-member class it
+  can reach to the 82,240-member signed class it cannot took its actual size
+  from the neighbourhood of nominal down to 1.35% at a nominal 5% — while a
+  searcher that submits the maximum of its declared class comes in exactly
+  calibrated, and searching sub-optimally *within* a reachable class costs
+  almost nothing.
 - **Breadth is not free, and a lucky pass is worse than no pass.** Holding the
   reported result fixed, every extra specification makes an edge harder to
   certify. Results that scrape past an underpowered search overstate the edge

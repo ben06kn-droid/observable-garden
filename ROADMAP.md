@@ -129,6 +129,35 @@ and it is the only result that could implicate B — and then only if the paired
 shift is signed rather than noise. See `prereg/calibration-at-1pct.md`
 amendment 4.
 
+**CLOSED 2026-09-20. Exact at 1% with B = 10,000.**
+
+Arm D ran 2,000 draws on seeds 100000-101999 at B = 10,000, 16 workers, 41.95
+CPU-hours at 75.50 s per draw. `ExhaustiveClass` submits the class argmax, so P2
+binds with equality and P1 predicts exactness — this measures the certifier, not
+a searcher's position in the class.
+
+| α | k | rate | 95% CI | contains α |
+|---|---|---|---|---|
+| 0.10 | 192 | 0.0960 | 0.0839–0.1097 | yes |
+| 0.05 | 110 | 0.0550 | 0.0458–0.0659 | yes |
+| 0.01 | 19 | 0.0095 | 0.0061–0.0148 | yes |
+
+KS D = 0.0179 against a 5% critical value of 0.0304, p = 0.5353 — does not
+reject. Guards never bound. **B = 10,000 resolves the 1% tail, and the agent
+arm's stored 1% figures stand.** Rule 4's ordering chain holds on every draw,
+all three links, zero violations. No excess at 1%, so amendment 5's conditional
+B = 50,000 pass did not run; rule 6's analytic readout gives at most 1.06
+expected verdict flips on 500 draws against a uniform-p prediction of 0.95.
+
+**The decomposition, which is 7.0's named design input.** Mean submitted Sharpe:
+signed class maximum 0.8211, unsigned sublattice maximum 0.7045, `Adaptive`
+0.7044. **Confinement to the reachable sublattice costs 0.117; sub-maximal search
+within it costs 0.0001.** Adaptive differs from the unsigned maximum on 1,910 of
+2,000 draws but never by more than 0.025, so the two rejection rates coincide
+exactly (2.55 / 1.35 / 0.20 percent at 10 / 5 / 1%) and their KS statistics agree
+to four decimals. The class gate's conservatism against an efficient searcher is
+essentially all class mismatch, not search inefficiency.
+
 ## 6.2 Costs and regime change (free, synthetic)
 
 **Why.** The gate corrects for search breadth only. A practitioner's
