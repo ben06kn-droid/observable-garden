@@ -89,3 +89,76 @@ Free and local. 160 runs × four panels (gross plus three shifts) is 640 calls t
 `generate` at M = 50, K = 40, T = 5,000, T_oos = 1,000 — about 100 MB transient
 each, sequential, well inside the laptop's 8 GB. Expect tens of minutes. No
 bootstraps, no model calls, no EC2.
+
+## Amendments
+
+**1 — 2026-09-20, before the experiment runs. The cost half cannot measure what
+it claims, and its rules are restated.**
+
+Checked against the 159 graded s3 submissions at sigma = 194.407, reconstructing
+positions exactly as the Design section specifies. Two structural facts, neither
+of which is a statistical outcome:
+
+**Turnover is `sqrt(2)` for every submission.** Over 60 distinct specs: mean
+1.4144, sd 0.0042, min 1.4060, max 1.4224, against `sqrt(2)` = 1.4142 — a spread
+of 0.3%. The reason is in the DGP, not the cost model: `_draw_features` draws
+each period independently, so `p_t` and `p_{t-1}` are independent draws from the
+same distribution whatever weights the agent chose, and under the unit-gross
+convention `E|p_t - p_{t-1}| = sqrt(2)` for Gaussian features. **No submission
+can have a different turnover**, so `u_t` carries no information about the spec
+and the charge `c·u_t` is a constant, identical for PASS and FAIL runs. The
+turnover channel the experiment was built to price does not exist in this DGP.
+
+**The charge is four orders of magnitude too small to matter.** At the largest
+grid point, c = 20 bps, the drag is 8.6e-5 of the return sd, and net Sharpe
+differs from gross in the fifth decimal:
+
+| | mean Sharpe | max |gross − net| |
+|---|---|---|
+| gross | +0.042184 | — |
+| net, c = 5 bps | +0.042164 | 2.2e-5 |
+| net, c = 10 bps | +0.042143 | 4.3e-5 |
+| net, c = 20 bps | +0.042102 | 8.6e-5 |
+
+The cost that would actually extinguish the gross Sharpe is about **9,800 bps —
+98% per period, roughly 490× the largest grid point**. Rule 1 as written ("the
+PASS − FAIL gap decays with cost") therefore cannot fail at any c on the grid,
+and a rule that cannot fail is not a decision rule.
+
+**Why, and why it is not fixable by raising c.** A cost in basis points is only
+interpretable against a realistic return scale. sigma = 194.407 was chosen to
+recalibrate s3's power, not because it represents any real return magnitude, so
+the units the grid is denominated in are arbitrary. Raising c until something
+happens would be choosing the answer.
+
+**Restated design for the cost half.**
+
+- The `c ∈ {5, 10, 20}` bps grid is **withdrawn**. It is reported once, as the
+  table above, to record that costs at realistic bps are immaterial *at this
+  DGP's return scale* — which is a statement about the simulation, not about
+  trading.
+- The cost readout becomes **scale-free**: the breakeven charge `c*` at which the
+  PASS − FAIL gap in net Sharpe reaches zero, expressed as a multiple of the
+  per-period return standard deviation. This is dimensionless and unaffected by
+  sigma.
+- Because turnover is constant, net Sharpe is `(mu_i - c·sqrt(2))/sigma_i`, so
+  the only channel by which cost moves the PASS − FAIL gap is a **difference in
+  return volatility** between PASS and FAIL runs, not a difference in trading
+  behaviour. That channel is reported explicitly — median `sigma_i` by verdict —
+  so the mechanism is visible rather than attributed to turnover.
+- **Rule 1 is replaced.** Old: the gap decays with cost, with a halving threshold.
+  New, one-sided and falsifiable: `c*` is reported with a bootstrap interval, and
+  the claim under test is that `c*` **exceeds 1.0** — that it takes a charge
+  larger than one per-period return sd to erase the gate's discrimination.
+  - *Holds:* the limitations section reports `c*` and states that costs at any
+    plausible fraction of volatility do not erase the gap.
+  - *Fails:* `c*` below 1.0 means the gap is fragile to costs in volatility
+    units, reported as such.
+  - Either way the report states that this DGP has no turnover variation, so
+    `c*` measures sensitivity to a constant drag and **not** to trading
+    behaviour. A cost experiment that discriminates between specs needs a DGP
+    with time-series persistence in the features; that is a Phase 7 question,
+    logged in `OPEN_QUESTIONS.md`, not something to retrofit here.
+
+**The regime-change half is unaffected.** Shifts (a), (b) and (c) act on the
+return process and do not depend on turnover or on the cost units.

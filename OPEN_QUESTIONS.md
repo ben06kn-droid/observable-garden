@@ -228,3 +228,20 @@ checked. And the estimator prices the whole class once per draw and scores every
 searcher against it, so a sequential rule has to stop on the *class* statistic,
 not per searcher — which may cost back much of the saving when several searchers
 share one null. Reference not read from full text.
+
+## The DGP has no turnover variation, so no cost experiment can discriminate
+
+Logged 2026-09-20 from `costs-and-regime-change` amendment 1. `_draw_features`
+draws each period independently, so a submission's position path is serially
+independent and its turnover is `sqrt(2)` under the unit-gross convention —
+measured at 1.4144 with sd 0.0042 across 60 specs, regardless of which features
+or signs the agent chose.
+
+Every strategy therefore turns over completely every period and pays exactly the
+same charge. Trading cost enters as a constant, so it cannot separate a spec that
+trades patiently from one that churns, which is the thing a cost check is for.
+
+Pricing costs properly needs persistence in the features — an AR(1) factor, or
+overlapping windows — so that a spec's turnover becomes a property of what it
+selected. That changes the null the gate is tested against and so is not a patch
+to the existing DGP; it is a separate arm. Not built.
