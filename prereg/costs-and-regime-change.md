@@ -162,3 +162,77 @@ happens would be choosing the answer.
 
 **The regime-change half is unaffected.** Shifts (a), (b) and (c) act on the
 return process and do not depend on turnover or on the cost units.
+
+**2 — 2026-09-20, before the experiment runs, replacing amendment 1's
+restatement. The cost half is withdrawn entirely.**
+
+Amendment 1 replaced the bps grid with a scale-free breakeven `c*`, tested
+one-sided against 1.0. That replacement is wrong for the same reason the thing it
+replaced was wrong, and the algebra makes it plain.
+
+With turnover identically `sqrt(2)`, the constant factors out of the net return:
+
+    net SR(c) = (mu - c·sqrt(2)) / sigma_R
+    c* solves net SR = 0   =>   c* = mu / sqrt(2)
+    in return-sd units:  c*/sigma_R = SR_period / sqrt(2)
+
+**`c*` is gross per-period Sharpe divided by a constant.** It is a monotone
+rescaling of the quantity the experiment already reports, not a cost quantity at
+all: ranking runs by `c*` reproduces the ranking by gross OOS Sharpe exactly
+(rank correlation 1.000000). And the threshold is unreachable — from the measured
+gross `SR_period` = 0.042184, `c*` = 0.0298; at an annualized Sharpe of 1,
+`c*` = 0.0445; reaching `c*` = 1.0 requires `SR_period` = `sqrt(2)`, an
+annualized Sharpe of **22.4**. Amendment 1's rule could never hold, exactly
+mirroring the original rule that could never fail. Two rules that cannot move is
+a sign the quantity, not the threshold, is the problem.
+
+**The cost half is withdrawn.** No cost grid, no `c*`, no cost decision rule, and
+no cost readout beyond the record below. Because the features are drawn
+independently each period, every specification's position path is serially
+independent and turns over completely every period; any charge is therefore a
+drag common to every run and **cannot discriminate between specifications by
+construction**. This is a property of the DGP, not a modelling choice to be
+tuned, and no reweighting of the cost model escapes it.
+
+**Costs are tested where they can be tested**: on real data, in 6.5 and 7.4,
+where turnover is a property of what the specification selected rather than a
+constant.
+
+**Kept as a reported finding.** Turnover is `sqrt(2)` for every submission —
+measured 1.4144, sd 0.0042, min 1.4060, max 1.4224 over 60 distinct specs — and
+at c = 20 bps the drag is 8.6e-5 of the return sd, moving Sharpe in the fifth
+decimal. Both are reported as properties of this DGP, in the limitations section,
+as the reason no cost result appears for the synthetic arm.
+
+**Readouts, revised.** Readouts 1, 2 and 4 drop "at each cost" and are computed
+on gross OOS Sharpe. Readout 3 stands. One is added: **the split by whether the
+submission contains the altered beta's feature**, for shifts (a) and (b), which
+are the shifts that name a feature. Shift (c) doubles sigma and touches no
+particular beta, so the split does not apply to it and is not reported there.
+
+**Decision rules, revised.**
+
+1. **The gate's discrimination survives regime change.** The PASS − FAIL gap in
+   median **gross** OOS Sharpe, under each of shifts (a), (b) and (c) separately,
+   by a one-sided Mann-Whitney test at p < 0.05 in the pooled population.
+   - **Holds:** the limitations section reports the gap under each shift and its
+     size relative to the unshifted gap.
+   - **Fails high** — the gap is *larger* under a shift than unshifted, beyond
+     what the paired bootstrap interval covers: not predicted by anything in the
+     theory, and investigated before write-up rather than reported as a strength.
+     The likely cause is a selection artefact in which runs survive grading.
+   - **Fails low** — the gap is not significantly positive under some shift: a
+     material limitation, stated plainly, naming the shift. The gate's advantage
+     does not survive that perturbation. Reportable, not to be tuned away.
+   - **Reported either way:** the gap split by whether the submission contains
+     the altered beta's feature, for (a) and (b). A gap that survives only in the
+     runs that missed the altered feature means the gate is being credited for
+     specifications the shift happened not to touch, which changes what the
+     result means without changing its sign.
+2. **PASS is expected to lose predictive value under each shift, not to invert.**
+   Unchanged from the original, now read on gross Sharpe. A PASS − FAIL gap that
+   goes significantly negative under any shift would mean the gate selects
+   specifications worse than those it refuses once the regime moves, which
+   nothing in the theory predicts, and is investigated before write-up.
+
+**Cost.** Unchanged: free and local, 640 calls to `generate`, tens of minutes.
