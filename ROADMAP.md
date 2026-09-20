@@ -111,9 +111,23 @@ the agents used), rejections at 1% and 5%, KS on the p-values. At 5,000
 draws the 1% interval is ±0.3 points. Also 500 draws at B=50,000 to check
 the bootstrap tail resolution at 1% against B=10,000.
 
-**Gate.** Rejection at 1% within its interval of nominal, and KS not
-rejecting, for every searcher. If the 1% rate is high while 5% is fine,
-the bootstrap tail is under-resolved and B rises before anything else runs.
+**Gate — calibration only.** Rejection at 1% within its interval of nominal,
+and KS not rejecting, for every searcher. If the 1% rate is high while 5% is
+fine, the bootstrap approximation is failing in the tail, and the things to
+examine are finite T, the block length, and the studentization — **not B**. The
+`(1 + #)/(B + 1)` p-value is valid at every B: the rank is uniform under the
+null, so the rejection rate is `floor(α(B+1))/(B+1) ≤ α` whatever B is.
+Raising B cannot move a rate that is already correct.
+
+**Separately — reproducibility, which is what B does control.** An individual
+p-value has Monte Carlo standard deviation `sqrt(p(1-p)/B)`, so at p = 0.01 a
+re-run with a different bootstrap seed moves it by about 1% of the threshold at
+B = 10,000. That is a question about whether a near-threshold verdict is stable,
+not about whether the rate is right, and it averages out across draws. The
+B = 50,000 subsample measures it as a **verdict flip rate**; it does not gate,
+and it is the only result that could implicate B — and then only if the paired
+shift is signed rather than noise. See `prereg/calibration-at-1pct.md`
+amendment 4.
 
 ## 6.2 Costs and regime change (free, synthetic)
 
@@ -250,7 +264,7 @@ agent sees Sharpe ratios either way).
 | step | work | where | gate |
 |---|---|---|---|
 | 1 | 6.1 free re-score; 6.2 re-grades | local, minutes | — |
-| 2 | 6.1 scripted; 6.3 | local, hours | 1% within interval, KS holds, in every cell; else fix B or block length before anything else |
+| 2 | 6.1 scripted; 6.3 | local, hours | 1% within interval, KS holds, in every cell; else examine T, block length and studentization — not B — before anything else |
 | 3 | 6.4 explicit-class watch | code | bar equals audit; tests green |
 | 4 | 6.5 panel, features, preflight, pre-registration | local | preflight OK at some class; class recorded |
 | 5 | 6.5 main arms | seat, one window | — |

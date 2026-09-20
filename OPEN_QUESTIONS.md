@@ -205,3 +205,26 @@ entry point, not of the method.
   dominate the holdout tier (Fithian, Sun & Taylor). Not built.
 - The which-statistic fork in `pick`: bounded by the library, priced only
   when the consistency check fails.
+
+## Sequential Monte Carlo p-values as a cost reduction for calibration sweeps
+
+Logged 2026-09-20, not built. Arm D spends 6 hours and about $10 running
+B = 50,000 replicates on all 500 draws, but the bar it is buying resolution on
+only matters near the threshold: a draw whose p-value is 0.4 needed a few
+hundred replicates to say so, and got 50,000.
+
+Besag & Clifford (1991) give the sequential construction — stop sampling once
+the running count of exceedances reaches a fixed h, and report a p-value that is
+still exactly valid — which spends replicates in proportion to how close a draw
+is to rejecting. For a calibration sweep, where most draws are nowhere near α,
+the saving should be large, and it grows as α falls, which is precisely the
+regime 6.1 is about.
+
+Two things to check before it is worth building. The validity argument is for a
+single test with i.i.d. replicates; the stationary-bootstrap replicates here are
+exchangeable under the null, which is what the fixed-B proof uses too, but the
+stopping rule interacts with the full-class maximum in a way that has not been
+checked. And the estimator prices the whole class once per draw and scores every
+searcher against it, so a sequential rule has to stop on the *class* statistic,
+not per searcher — which may cost back much of the saving when several searchers
+share one null. Reference not read from full text.
