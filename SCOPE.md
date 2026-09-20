@@ -343,6 +343,27 @@ holds *provided* the specification class is algebraically rich enough to
 reconstruct untried candidates. This is not guaranteed for a general searcher,
 and not at all for an LLM agent.
 
+**Limited by regime change.** A PASS says the in-sample Sharpe survives the
+search that produced it; it says nothing about the return process staying put.
+Measured on the 159 graded s3 submissions (`costs-and-regime-change`, 6.2): the
+PASS − FAIL gap in median gross out-of-sample Sharpe is **+0.46 unshifted, +0.36
+with one true beta halved, +0.32 with the noise scale doubled, and +0.08 with one
+true beta sign-flipped** — an erosion of roughly 80% under a signal reversal. The
+gap never inverts under any shift, so the gate does not select specifications
+that are worse than those it refuses once the regime moves; it simply stops
+distinguishing them. The three shifts are reported uncorrected for multiplicity,
+as pre-registered.
+
+Two things sharpen that number. Within strata the gap is stable at about +0.27
+under every shift *including none*, so most of the pooled erosion is a change in
+composition rather than in discrimination: the gate selects for the true signal,
+so 79.6% of PASS runs contain the altered feature against 51.8% of FAIL runs, and
+a shift aimed at that feature lands hardest on what the gate passed. And costs
+are not tested here at all — the features are drawn independently each period, so
+turnover is `sqrt(2)` for every specification (measured 1.4146, sd 0.0038) and
+any charge is a drag common to PASS and FAIL. Costs need real data, where
+turnover is a property of what was selected.
+
 **Open.** The procedure-level bootstrap is the fully general fix, but it
 requires re-running the search B times — which for an agent means B× the token
 cost against a non-deterministic procedure, so "re-running the same procedure"

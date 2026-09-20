@@ -164,6 +164,19 @@ def paired_gap_ci(sr_shift: np.ndarray, sr_base: np.ndarray, is_pass: np.ndarray
     return float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))
 
 
+def gap_ci(sr: np.ndarray, is_pass: np.ndarray, mask: np.ndarray):
+    """Percentile interval for a stratum's PASS - FAIL median gap, resampling
+    PASS and FAIL within the stratum separately so each side's n is preserved.
+    Reported because one stratum (FAIL, contains S[0]) is small."""
+    rng = np.random.default_rng(RNG_SEED)
+    a, b = sr[is_pass & mask], sr[~is_pass & mask]
+    if a.size < 2 or b.size < 2:
+        return float("nan"), float("nan")
+    draws = np.array([np.median(rng.choice(a, a.size)) - np.median(rng.choice(b, b.size))
+                      for _ in range(BOOT)])
+    return float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))
+
+
 def _verdict_row(label: str, sr: np.ndarray, is_pass: np.ndarray,
                  group: np.ndarray) -> list[str]:
     """One row of readout 1: PASS and FAIL medians within a group, and the gap.
@@ -177,10 +190,14 @@ def _verdict_row(label: str, sr: np.ndarray, is_pass: np.ndarray,
 
 def table(title: str, header: list[str], rows: list[list[str]], note: str = "") -> list[str]:
     L = [title, "-" * 78] + ([note, ""] if note else [])
-    L.append("".join(h.ljust(18) if i == 0 else h.rjust(15)
+    # auto-size each column to its widest cell; a table whose numbers run into
+    # one another is a table that gets misread
+    w = [max(len(h), *(len(r[i]) for r in rows)) + 2 if rows else len(h) + 2
+         for i, h in enumerate(header)]
+    L.append("".join(h.ljust(w[i]) if i == 0 else h.rjust(w[i])
                      for i, h in enumerate(header)))
     for r in rows:
-        L.append("".join(c.ljust(18) if i == 0 else c.rjust(15)
+        L.append("".join(c.ljust(w[i]) if i == 0 else c.rjust(w[i])
                          for i, c in enumerate(r)))
     return L + [""]
 
@@ -283,19 +300,28 @@ def main() -> None:
           f"  Rule 1: {'HOLDS under every shift' if all(verdicts.values()) else 'FAILS LOW under: ' + ', '.join(k for k, v in verdicts.items() if not v)}",
           ""]
 
+    split_rows = []
+    for k in ("unshifted",) + NAMES_A_B:
+        for g, m in (("contains S[0]", hits), ("does not", ~hits)):
+            lo, hi = gap_ci(sr[k], is_pass, m)
+            gg = np.median(sr[k][is_pass & m]) - np.median(sr[k][~is_pass & m])
+            split_rows.append([k, g, f"{int((is_pass & m).sum())}/{int((~is_pass & m).sum())}",
+                               f"{np.median(sr[k][is_pass & m]):+.4f}",
+                               f"{np.median(sr[k][~is_pass & m]):+.4f}",
+                               f"{gg:+.4f}", f"({lo:+.3f},{hi:+.3f})"])
     L += table("RULE 1 SPLIT — does the submission contain the altered feature?",
-               ["shift", "group", "n", "PASS med", "FAIL med", "gap"],
-               [[k, g, str(int(m.sum())),
-                 f"{np.median(sr[k][is_pass & m]):+.4f}",
-                 f"{np.median(sr[k][~is_pass & m]):+.4f}",
-                 f"{np.median(sr[k][is_pass & m]) - np.median(sr[k][~is_pass & m]):+.4f}"]
-                for k in NAMES_A_B
-                for g, m in (("contains S[0]", hits), ("does not", ~hits))],
-               "Shift (c) doubles sigma and names no feature, so it is not split.\n"
-               "A gap that survives only where the shift missed the submission means\n"
-               "something different from one that survives everywhere.")
+               ["shift", "group", "n P/F", "PASS med", "FAIL med", "gap", "gap 95% CI"],
+               split_rows,
+               "Registered by amendment 2. Shift (c) doubles sigma and names no\n"
+               "feature, so it is not split. `unshifted` is each stratum's own\n"
+               "baseline, so a shifted subgroup gap is read against it rather than\n"
+               "against the pooled unshifted figure. Intervals are percentile\n"
+               "bootstrap, resampling PASS and FAIL within the stratum separately;\n"
+               "the FAIL/contains-S[0] cell is the small one.")
 
     L += ["COMPOSITION — who the feature-naming shifts land on", "-" * 78,
+          "  EXPLORATORY: added after the result, not pre-registered. The split",
+          "  above is registered (amendment 2); this readout explains it.",
           f"  PASS runs containing S[0]: {hits[is_pass].mean():.1%} "
           f"({int(hits[is_pass].sum())} of {int(is_pass.sum())})",
           f"  FAIL runs containing S[0]: {hits[~is_pass].mean():.1%} "

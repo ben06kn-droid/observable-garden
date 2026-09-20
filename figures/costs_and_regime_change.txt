@@ -19,33 +19,33 @@ Features are drawn independently each period, so every position path is
 serially independent and turns over completely. Turnover cannot vary with
 the specification, so any charge is a drag common to PASS and FAIL.
 
-quantity                    value
-turnover, mean             1.4146
-turnover, sd              0.00379
-turnover, min              1.4060
-turnover, max              1.4277
-sqrt(2)                    1.4142
+quantity            value
+turnover, mean     1.4146
+turnover, sd      0.00379
+turnover, min      1.4060
+turnover, max      1.4277
+sqrt(2)            1.4142
 
 READOUT 1 — median gross OOS Sharpe by verdict
 ------------------------------------------------------------------------------
-group                      n PASS         n FAIL           PASS           FAIL            gap
-claude-opus-5                  51             29        +0.8119        +0.3456        +0.4662
-claude-sonnet-5                52             27        +0.6844        +0.2617        +0.4226
-pooled                        103             56        +0.7762        +0.3159        +0.4603
+group              n PASS  n FAIL     PASS     FAIL      gap
+claude-opus-5          51      29  +0.8119  +0.3456  +0.4662
+claude-sonnet-5        52      27  +0.6844  +0.2617  +0.4226
+pooled                103      56  +0.7762  +0.3159  +0.4603
 
 READOUT 2 — survival fractions, unshifted
 ------------------------------------------------------------------------------
-verdict                         n         SR > 0       SR > 0.5
-PASS                          103          94.2%          67.0%
-FAIL                           56          85.7%          37.5%
+verdict      n  SR > 0  SR > 0.5
+PASS       103   94.2%     67.0%
+FAIL        56   85.7%     37.5%
 
 READOUT 3 — the same, under each shift
 ------------------------------------------------------------------------------
-shift                    PASS med       FAIL med            gap         PASS>0         FAIL>0
-unshifted                 +0.7762        +0.3159        +0.4603          94.2%          85.7%
-beta-halved               +0.6406        +0.2841        +0.3565          91.3%          78.6%
-beta-flipped              +0.2606        +0.1757        +0.0849          68.0%          62.5%
-sigma-doubled             +0.4013        +0.0816        +0.3197          74.8%          57.1%
+shift            PASS med  FAIL med      gap  PASS>0  FAIL>0
+unshifted         +0.7762   +0.3159  +0.4603   94.2%   85.7%
+beta-halved       +0.6406   +0.2841  +0.3565   91.3%   78.6%
+beta-flipped      +0.2606   +0.1757  +0.0849   68.0%   62.5%
+sigma-doubled     +0.4013   +0.0816  +0.3197   74.8%   57.1%
 
 DECISION RULE 1 — the gap survives each regime shift
 ------------------------------------------------------------------------------
@@ -63,18 +63,25 @@ DECISION RULE 1 — the gap survives each regime shift
 
 RULE 1 SPLIT — does the submission contain the altered feature?
 ------------------------------------------------------------------------------
-Shift (c) doubles sigma and names no feature, so it is not split.
-A gap that survives only where the shift missed the submission means
-something different from one that survives everywhere.
+Registered by amendment 2. Shift (c) doubles sigma and names no
+feature, so it is not split. `unshifted` is each stratum's own
+baseline, so a shifted subgroup gap is read against it rather than
+against the pooled unshifted figure. Intervals are percentile
+bootstrap, resampling PASS and FAIL within the stratum separately;
+the FAIL/contains-S[0] cell is the small one.
 
-shift                       group              n       PASS med       FAIL med            gap
-beta-halved         contains S[0]            111        +0.6544        +0.3858        +0.2686
-beta-halved              does not             48        +0.5075        +0.2464        +0.2611
-beta-flipped        contains S[0]            111        +0.1472        -0.1233        +0.2705
-beta-flipped             does not             48        +0.5095        +0.2485        +0.2610
+shift                   group  n P/F  PASS med  FAIL med      gap       gap 95% CI
+unshifted       contains S[0]  82/29   +0.8234   +0.5556  +0.2678  (-0.182,+0.637)
+unshifted            does not  21/27   +0.5079   +0.2457  +0.2622  (+0.046,+0.675)
+beta-halved     contains S[0]  82/29   +0.6544   +0.3858  +0.2686  (-0.183,+0.637)
+beta-halved          does not  21/27   +0.5075   +0.2464  +0.2611  (+0.048,+0.676)
+beta-flipped    contains S[0]  82/29   +0.1472   -0.1233  +0.2705  (-0.185,+0.621)
+beta-flipped         does not  21/27   +0.5095   +0.2485  +0.2610  (+0.054,+0.679)
 
 COMPOSITION — who the feature-naming shifts land on
 ------------------------------------------------------------------------------
+  EXPLORATORY: added after the result, not pre-registered. The split
+  above is registered (amendment 2); this readout explains it.
   PASS runs containing S[0]: 79.6% (82 of 103)
   FAIL runs containing S[0]: 51.8% (29 of 56)
   The gate selects for the true signal, so a shift that alters S[0]
