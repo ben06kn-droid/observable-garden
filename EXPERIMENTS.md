@@ -91,23 +91,45 @@ held the tree: `git diff HEAD` was empty and `git status --porcelain` listed
 only untracked paths — the checkpoint directory and the run's own outputs in
 `figures/`. The code that ran was exactly `04dcc53`.
 
-**The other four cannot be proven retroactively**, and are not claimed to be
-clean. They are in the same structural class: every one is a run that writes
-its outputs into the working tree, which is exactly the false-positive case the
-old flag could not distinguish. Their commits are all ancestors of HEAD. Nothing
-is being rerun on this basis; the honest statement is that these five are pinned
-by commit alone.
+**Arms B and C are functionally pinned by reproduction**, which is stronger than
+a flag. Arm D, proven clean, reran arm B's seeds and reproduced results exactly:
+
+| pair | shared seeds | what matched | what that pins |
+|---|---|---|---|
+| D against B | 2,000 | `p_value` **bit-identical**, greedy and adaptive | the DGP, the sandbox, both searchers, and the full-class null engine at B = 10,000 |
+| C against B | 500 | `sr_sel` **bit-identical**, greedy and adaptive (max abs diff 0.0) | the DGP, the sandbox and both searchers |
+
+Arm C's p-values differ from arm B's, as they must: arm C prices at B = 50,000
+against arm B's B = 10,000, so the nulls are different objects. What arm C can
+share, and does share exactly, is the observed statistic. **So arm C's bootstrap
+path at B = 50,000 is the one thing no other run reproduces**; everything
+upstream of it is pinned.
+
+**The two watch validations are pinned by neither.** No later run reproduces
+them, and no fingerprint was recorded. They stand on commit `7fc06ba` alone.
+Nothing is being rerun on this basis.
 
 `git_state` was fixed in `18e7e6e` to count tracked modifications only and to
 report untracked paths separately, so a future `(dirty)` means what it says.
 Results produced before that commit carry the old, uninformative flag.
 
-**A separate gap, in the other direction.** Fingerprint coverage in the agent
-batches is not complete: `b1-baseline` (80 runs) records none at all, and 12 of
-`b2-arms`'s 241 rows are missing one. The remaining batches are fully covered —
-`b3-models` and `b5-opus` on a single fingerprint each, `b4-s3-recal` on two,
-`b2-arms` on four across its covered rows. So 92 agent runs are pinned by commit
-alone as well.
+**A separate gap, in the other direction: 92 agent runs are pinned by commit
+alone.** Fingerprint coverage in the agent batches is not complete.
+
+| batch | runs | fingerprints | commit-pinned only |
+|---|---|---|---|
+| `b1-baseline` | 80 | none recorded | **80** |
+| `b2-arms` | 241 | 4 distinct, 12 rows missing | **12** |
+| `b3-models` | 180 | 1 | 0 |
+| `b4-s3-recal` | 80 | 2 | 0 |
+| `b5-opus` | 80 | 1 | 0 |
+
+Those 92 runs carry no harness fingerprint, so a code change during them would
+not have stopped the batch and is not detectable after the fact. They are used
+in the `calibration-at-1pct` arm A re-score and in `costs-and-regime-change`;
+both report pooled rates over hundreds of runs, so the exposure is a fraction of
+one batch rather than a whole result, but it is not zero and is recorded here
+rather than in a footnote.
 
 ## Phase 6
 
