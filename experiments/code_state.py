@@ -90,15 +90,22 @@ def dirty_paths() -> list[str]:
     return sorted(line[3:].strip() for line in out.splitlines() if line.strip())
 
 
-def code_fingerprint() -> str:
+def code_fingerprint(paths=None) -> str:
     """sha256 over: the committed tree of each code path, the diff against it,
-    the bytes of every untracked file under it, and the prereg design md5."""
+    the bytes of every untracked file under it, and the prereg design md5.
+
+    `paths` defaults to CODE_PATHS. It is a parameter so that a caller needing a
+    wider set -- `quixote/fingerprint.py` does -- can have one **without
+    widening CODE_PATHS itself**, which would move every published fingerprint
+    for a reason unrelated to the runs they pin.
+    """
+    paths = CODE_PATHS if paths is None else tuple(paths)
     h = hashlib.sha256()
-    for p in CODE_PATHS:
+    for p in paths:
         h.update(f"{p}:{_git('rev-parse', f'HEAD:{p}').strip()}\n".encode())
     h.update(_git("diff", "HEAD", "--", *CODE_PATHS).encode())
     for rel in _git("ls-files", "--others", "--exclude-standard", "--",
-                    *CODE_PATHS).split("\n"):
+                    *paths).split("\n"):
         rel = rel.strip()
         # Compiled bytecode is not source. It is normally filtered by
         # --exclude-standard via .gitignore, but resting a mid-batch guard on an
