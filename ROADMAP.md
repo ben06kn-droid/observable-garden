@@ -892,7 +892,12 @@ whatever 7.0 selects, and the bracket bounds what judgment could have changed.
 | 7 | 7.3, incl. items 1 and 2 scripted validation | EC2, then seat | bracket coverage; total size ≤ α |
 | 8 | item 5 scripted twins | seat | nominal at the attainable grid |
 | 9 | 7.4, incl. item 2 arm and per-dataset twins | seat | 7.4's own rules |
-| 10 | item 7 coverage on the scripted judgment searcher | seat | bound covers the true p on ≥95% |
+| 10 | item 7 **agent** use | seat | bound covers the true p on ≥95% |
+
+**Sequence tweak, 2026-09-21.** Item 7's **scripted validation** — the judgment
+searcher with a hidden rule, checked against full policy replay — moves into
+**step 7 (7.3)**, alongside the other scripted validations, since it needs no
+agent and shares 7.3's fixtures. Only its **agent** use stays after 7.4.
 
 **6.5's status is unchanged** and is not decided here. **The real-data sandbox is
 built once, in part one, to serve both 6.5 and 7.4** — panel loader, a sandbox

@@ -208,3 +208,27 @@ that run's recorded fingerprint. Re-scoring them would silently replace
 pre-registered results with numbers from code written afterwards, which is the
 thing the fingerprint exists to make visible. Any future re-scoring is a new
 experiment with its own pre-registration.
+
+**14 — 2026-09-21.** `pyproject.toml` gains `quixote` in its `packages` list, for
+the Don Quixote build. **`pyproject.toml` is inside `code_state.CODE_PATHS`, so
+the harness fingerprint moves.** No batch was in flight.
+
+The change is **packaging only**: it tells the build backend which directories to
+install, and alters no import, no estimator, no bar and no verdict. `quixote` is
+itself deliberately **outside** `CODE_PATHS`, and nothing in `garden`,
+`estimator`, `environments` or `searchers` imports it — a test asserts that
+direction — so no existing code path can reach it.
+
+This resolves a conflict between two instructions that could not both hold: keep
+quixote out of `CODE_PATHS` so no fingerprint moves, and add quixote to
+pyproject's package list. The packages list is itself hashed, so the second moves
+the fingerprint however the first is honoured. The conflict is recorded rather
+than resolved silently, and the packaging need won.
+
+**Amendment 13's rule applies unchanged:** every run in `runs/` keeps the verdict
+it was given, at the fingerprint recorded for it. Nothing is re-scored.
+
+Quixote runs do not use this fingerprint at all. They record their own, over
+`quixote` plus everything quixote imports, via `quixote/fingerprint.py`;
+`code_fingerprint` gained an optional `paths` argument so that is possible
+without widening `CODE_PATHS` further.
