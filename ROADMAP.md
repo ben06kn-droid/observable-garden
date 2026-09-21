@@ -832,6 +832,107 @@ measured failure, which is also a section.
 
 ---
 
+## Phase 7 amendment — 2026-09-21, seven additions
+
+Appended; everything above is left intact. **Authorised exception** to this
+document's no-new-estimator-variants rule, recorded as such. **Items 3 and 4
+change a statistic. Items 1, 2, 5, 6 and 7 reuse the existing engines.** No item
+below is described as novel anywhere in this repository; prior art is either
+cited from the search already done or marked not yet searched.
+
+### What each item is, and where it sits
+
+| # | item | sits in | pre-registration | changes a statistic? |
+|---|---|---|---|---|
+| 1 | **Bracketed verdicts** — `p_frozen` and `p_upper` for any decision the gate cannot replay, plus a `DEPENDS_ON_JUDGMENT` state with its own exit code | 7.2 verdict path; validated in 7.3 | `prereg/bracketed-verdicts.md` | no |
+| 2 | **Prior-weighted α** — a capped, timestamped short list tested at α_prior, the search at α_search | 7.2 slot; scripted validation in 7.3; an arm in 7.4 | `prereg/prior-weighted-alpha.md` | no |
+| 3 | **Living verdict** — an e-process on forward returns, with a revocation rule | 6.9; **stub only, built after the paper** | `prereg/living-verdict.md` | **yes** |
+| 4 | **Stability statistic** — `--statistic stability`, minimum Sharpe over J = 4 blocks, an option and never the default | its own experiment | `prereg/stability-statistic.md` | **yes** |
+| 5 | **Twin calibration** — the same agent re-run on K placebo twins; the real run's rank is the p-value | new Phase 7 item | `prereg/twin-calibration.md` | no |
+| 6 | **Bits of selection** — a measurement layer, reported and never used in a correction | Verdict field, everywhere | `prereg/bits-of-selection.md` | no |
+| 7 | **Pivotal interrogation** — ask the agent only at decisions where its answer could move the verdict | resolves item 1's `DEPENDS_ON_JUDGMENT` | `prereg/pivotal-interrogation.md` | no |
+
+### What certifies
+
+**Where twin calibration is run, it is what certifies.** Replay, the declared-
+class gate and item 1's bracket then serve as its **statistic** and its
+**explanation** — they say where a run ranks and why, and the twin rank says
+whether that rank clears the bar. This is a change in the role of the replay
+null, not an addition beside it.
+
+Where twins are not run — which is most cells, on cost — the certifier is
+whatever 7.0 selects, and the bracket bounds what judgment could have changed.
+
+### What gates what
+
+- **7.1 licenses the bracket's lower end.** `p_frozen` is only a lower bound if
+  freezing is liberal, which is 7.1's rule 2.
+- **7.3 licenses the bracket's upper end.** Until it confirms local-max pricing
+  is conservative, `p_upper` is the declared-class p-value, valid under P3 with
+  no conjecture.
+- **7.1 also gates 7.2's part two** — the certifying null, the fill inside the
+  agent path, local-max pricing, fidelity-driven pricing. Part one does not
+  depend on it and is built first.
+- **Item 1 gates item 7**: no bracket, no pivotal group.
+- **Item 5 audits items 1 and 7**, never the reverse. Twins are exact under
+  exchangeability; the cheaper steps are not.
+- **Item 6 gates nothing.** Bits enter no verdict.
+- **Item 3 is gated on 6.9's seal** and is not built until after the paper.
+
+### Revised sequence
+
+| step | work | where | gate |
+|---|---|---|---|
+| 1 | 6.3 cells A, B, C | EC2 | anchor exact in every cell; else the registered replication branch |
+| 2 | 7.1 sizing, then run | EC2 | trigger replay not liberal; fill direction from rule 3 |
+| 3 | **7.2 part one** (Don Quixote, `quixote/`) | local, no runs | tests green; stubs where part two decides |
+| 4 | 7.0 gate-comparison | EC2 | tier order, read on the slack searchers |
+| 5 | **7.2 part two** | local | design fixed by 7.1 |
+| 6 | item 4's experiment | EC2 | anchor exact under the new statistic |
+| 7 | 7.3, incl. items 1 and 2 scripted validation | EC2, then seat | bracket coverage; total size ≤ α |
+| 8 | item 5 scripted twins | seat | nominal at the attainable grid |
+| 9 | 7.4, incl. item 2 arm and per-dataset twins | seat | 7.4's own rules |
+| 10 | item 7 coverage on the scripted judgment searcher | seat | bound covers the true p on ≥95% |
+
+**6.5's status is unchanged** and is not decided here. **The real-data sandbox is
+built once, in part one, to serve both 6.5 and 7.4** — panel loader, a sandbox
+variant holding no out-of-sample data, and offline grading.
+
+### Revised compute and seat budget
+
+EC2, at the measured two-null rate where it applies:
+
+| work | basis | wall | cost |
+|---|---|---|---|
+| 6.3, three cells | measured 244 s/cell at 16 workers | 15.0 h remaining | ~$25 |
+| 7.1 | **not sized**; B re-executions per draw | — | — |
+| 7.0 declared-class half | measured 75.03 s/draw | 5.2 h | $8.6 |
+| 7.0 process-replay half | **not sized** | — | — |
+| item 4's experiment | **not sized**; per-block moments change the shape | — | — |
+
+Seat, **sized from 661 stored runs at $0.268 mean per run** (median $0.220, 90th
+percentile $0.473, mean wall 160 s):
+
+| work | runs | cost |
+|---|---|---|
+| twin certification at K = 19 (α = 0.05) | 20 | **$5.35** |
+| twin certification at K = 99 (α = 0.01) | 100 | **$26.77** |
+| **registered budget: five per-dataset 7.4 certifications at K = 19** | 100 | **$27**, ~4.5 seat-hours |
+| synthetic cells | **0 marginal** — the 419 stored graded s0 runs serve as a population-level twin pool | $0 |
+| item 7, per judgment decision | tens of short calls | **not sized** |
+
+The shared-pool economy is what makes item 5 affordable at all: for a fixed agent
+and configuration, twins of the *process* need not be twins of the *dataset*. Its
+limitation is registered with it — a shared pool tests the agent-and-config, not
+the dataset, so per-dataset twins are reserved for 7.4 where the dataset is the
+question.
+
+### Links recorded, not acted on
+
+- **Item 6 feeds the later effective-N note.** The note is **not written now**.
+- **Item 3 waits until after the paper**, and needs 6.9's pre-registration
+  amended before it is built, because it reads the sealed forward returns.
+
 # Compute — what runs on the laptop and what needs EC2
 
 The machine is a MacBook Air, M3, 8 GB. Two things decide placement: total

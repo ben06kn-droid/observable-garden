@@ -86,3 +86,33 @@ Applied by appended amendment to `gate-comparison` rule 2,
 `fixed-sequence-replay` rule 1, and `heterogeneous-correlation-fat-tails`
 rule 2. No result already reported changes: arm D's rules were exactness rules
 under P1, not validity rules, and are unaffected.
+
+## Amendment 2 — 2026-09-21. State how often a correct procedure passes.
+
+Before any rule goes live, compute **how often a procedure that is behaving
+correctly would pass it**, and write that number into the file beside the rule.
+
+The reason is amendment 1's failure mode generalised. That rule looked
+reasonable and a correct procedure failed it 84% of the time; nobody noticed
+until the number was computed. A rule whose pass rate under correctness is not
+written down has not been checked, however carefully its branches are worded.
+
+At n = 2,000 the standard rules come out as:
+
+| rule | passes if the procedure is correct |
+|---|---|
+| validity, lower Wilson end > nominal, α = 0.05 | 0.9749 |
+| validity, lower Wilson end > nominal, α = 0.01 | 0.9664 |
+| exactness, interval contains nominal, α = 0.05 | 0.9548 |
+| exactness, interval contains nominal, α = 0.01 | 0.9455 |
+| KS at 0.05 | 0.9500 |
+
+These compose. A file making many such checks must also state the **family**
+rate, and carry the one-shot replication branch on a registered fresh seed
+block that `heterogeneous-correlation-fat-tails` amendment 2(b) established.
+
+**No novelty claims.** No pre-registration, ROADMAP entry or write-up in this
+repository describes a method as novel, new, first or unprecedented. Where prior
+art matters, either cite what a search found or write "prior art not yet
+searched". Novelty is settled separately and deliberately, not asserted in
+passing.

@@ -139,10 +139,17 @@ rather than in a footnote.
 | `calibration-at-1pct` | is the declared-class gate calibrated at 1%, not just 5%? | arm A: 15 of 419 graded agent runs reject at 5%. arm B: conservative, and unable to answer — see deviation 1. arm C running; arm D pre-registered, not run |
 | `costs-and-regime-change` | what does a PASS survive once the regime shifts? (cost half withdrawn, amendment 2) | ran 2026-09-20 |
 | `gate-comparison` | which of the three certifiers should the gate use, and in what order should 7.2 fall back? | draft, not live |
-| `fixed-sequence-replay` | what does freezing a search's meta decisions cost, and do declared triggers remove it? | draft, not live |
+| `fixed-sequence-replay` | what does freezing a search's meta decisions cost, and do declared triggers remove it? | live, awaiting sizing |
 | `heterogeneous-correlation-fat-tails` | does the full-class null survive factor-structured correlation and fat tails? | live, awaiting smoke |
+| `bracketed-verdicts` | what does reporting two p-values cost for a decision the gate cannot replay? | draft, not live |
+| `prior-weighted-alpha` | is splitting alpha between a declared short list and the adaptive search worth the power? | draft, not live |
+| `living-verdict` | can a certification be kept under continuous review and revoked? (stub, built after the paper) | draft, not live |
+| `stability-statistic` | does minimum-Sharpe-across-blocks reduce non-persistent passes enough to justify its power cost? | draft, not live |
+| `twin-calibration` | does re-running the same agent on placebo twins certify what the log-based null misses? | draft, not live |
+| `bits-of-selection` | is there a common unit for how much a search looked at? (measurement only, enters no verdict) | draft, not live |
+| `pivotal-interrogation` | can DEPENDS_ON_JUDGMENT be resolved by querying the agent only where its answer could move the verdict? | draft, not live |
 
-`prereg/gate-comparison.md` and `prereg/fixed-sequence-replay.md` are
+`prereg/gate-comparison.md` and the seven Phase 7 amendment drafts are
 **committed but not live**: it is in the tree so it cannot be lost, it has not been reviewed, and it authorises nothing. 7.0 does not run until it has been read and the launch decision is taken, which waits on `calibration-at-1pct` arm D — arm D's rule 4 decomposition is what the matched-class design rests on. It is deliberately absent from the commit table above, which lists only pre-registrations that authorise a run.
 
 ## Null calibration and the mechanism

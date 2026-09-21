@@ -245,3 +245,26 @@ Pricing costs properly needs persistence in the features — an AR(1) factor, or
 overlapping windows — so that a spec's turnover becomes a property of what it
 selected. That changes the null the gate is tested against and so is not a patch
 to the existing DGP; it is a separate arm. Not built.
+
+## Negative results from unregistered scouting (not this repository's runs)
+
+Logged 2026-09-21. **These come from the author's own unregistered scouting
+outside the repository.** They are recorded so nobody retries them blind. They
+were not pre-registered, the code is not here, and the numbers have not been
+reproduced by anything in this tree — treat them as direction, not as results.
+
+**Entropy of the replayed search's final selection across bootstrap resamples,
+as a statistic.** Rank correlation with max Sharpe was −0.84 on s0 and −0.91 on
+s3. Power at 5% was 0.71 alone, against 0.75 for max Sharpe and 0.74 for the two
+combined. So it is strongly redundant with the statistic already in use and adds
+nothing when combined. The reading offered: bootstrap stability reflects the
+realized sample rather than the population.
+
+**Agreement of the replayed search across four disjoint time blocks.** It does
+separate luck from signal at matched Sharpe — 0.97 against 1.31 for shared
+features — but power was 0.29 alone, and naive Fisher combination *lowered* power
+from 0.71 to 0.66. A discrimination that works but costs more power than it adds
+is not usable as a certifier, and combining it naively makes things worse.
+
+Neither is a reason to abandon the underlying idea; both are reasons not to
+repeat that particular construction without a different one in mind.
