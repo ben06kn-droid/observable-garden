@@ -42,14 +42,62 @@ too. **Recorded, not corrected.**
 
 **Download list:** the nine names above plus `SOXX`, `XLK`, `XLC`.
 
+### Amendment, 2026-09-21: the registered fallback is invoked
+
+Decided before any bar is opened, on power rather than on data: six names make a
+noisy dollar-neutral book. ROADMAP 7.4's registered widening is invoked. **The
+treated panel is now the six tech names plus the twelve EU large caps (18
+names)**, with the six tech names kept as a **sub-panel**, reported as a readout
+and never separately certified. **The control panel is unchanged** (ARM, NXPI,
+SPOT).
+
+| ticker | company | home market | MIC | benchmark ETF | sub-panel |
+|---|---|---|---|---|---|
+| NVS | Novartis | SIX Swiss | XSWX | XLV | large-cap |
+| AZN | AstraZeneca | London | XLON | XLV | large-cap |
+| SNY | Sanofi | Euronext Paris | XPAR | XLV | large-cap |
+| NVO | Novo Nordisk | Nasdaq Copenhagen | XCSE | XLV | large-cap |
+| HSBC | HSBC Holdings | London | XLON | XLF | large-cap |
+| BCS | Barclays | London | XLON | XLF | large-cap |
+| UL | Unilever | London | XLON | XLP | large-cap |
+| DEO | Diageo | London | XLON | XLP | large-cap |
+| TTE | TotalEnergies | Euronext Paris | XPAR | XLE | large-cap |
+| SHEL | Shell | London | XLON | XLE | large-cap |
+| BP | BP | London | XLON | XLE | large-cap |
+| RIO | Rio Tinto | London | XLON | XLB | large-cap |
+
+**Home market is the venue open during US hours.** HSBC's Hong Kong line and
+RIO's Sydney line are closed throughout the US session; AZN's Stockholm, and
+UL's and SHEL's Amsterdam, lines are secondary. **Benchmark** is the Select Sector
+SPDR for each name's sector (XLV, XLF, XLP, XLE, XLB), downloaded 2026-09-21 into
+`data/adr_fallback_manifest.json` beside the twelve names.
+
+**To verify before features are built, not assumed:** whether any of the
+eighteen changed its US listing structure or ADR ratio inside the window. AZN
+and TTE are the names to check first; each depositary's notices and the vendor's
+splits endpoint are the sources. A ratio change that `adjusted=true` does not
+absorb is a price-level break, and would be handled as a registered exclusion,
+not smoothed.
+
+**Found 2026-09-21 from the vendor's splits endpoint** (metadata only, in the
+manifests): **AZN, 2026-02-02, split 2 → 1**, which is consistent with the ADR
+(one ADR = half a share) becoming an ordinary-share line; **UL, 2025-12-09,
+9 → 8**. None for the other sixteen, TTE included. Whether `adjusted=true`
+absorbs both events cleanly, and whether TTE had an unrecorded change, is
+checked by hand against the depositary notices when the features are built.
+
 **ARM's history.** ARM listed 2023-09; the free-tier window opens ~2024-09, so
 ARM should cover it fully. **Confirm at download and record actual first and
 last bar per name** — this is an assumption until the manifest says otherwise.
 
 ## Sessions
 
-**US regular session only, 09:30–16:00 ET.** VWAP is computed from
-regular-session bars only. The volume feature takes a **20-trading-day warm-up**,
+**US regular session, 09:35–15:55 ET traded; first and last bars dropped**
+(amended 2026-09-21 from 09:30–16:00, to match ROADMAP 7.4; decided before any
+bar is opened). The 09:30 and 15:55 bars are not traded and carry no return, but
+their prices and volumes enter the features: VWAP and the volume profile use
+every regular-session bar from 09:30. **Flat overnight**, and the first traded
+bar's return is measured from its own open; see `prereg/adr-features.md`. The volume feature takes a **20-trading-day warm-up**,
 so the first 20 sessions of the window carry no volume feature and are excluded
 from scoring rather than filled.
 
@@ -83,6 +131,8 @@ bar is `TRANSITION` too**, so the uncross can never land in a traded bar.
 | XAMS | **17:30 CET** | **17:35 CET, random end**; Trading-at-Last 17:35–17:40 | **primary** — Euronext *Appendix to Trading Manual 4-01* (xlsx, euronext.com/en/media/1927/download), group J0 "Equities AEX": continuous 09:00–17:30, CA 17:35 random, TAL 17:35–17:40 |
 | XPAR | **17:30 CET** | **17:35 CET, random end**; TAL 17:35–17:40 | **primary** — same appendix, groups F1/F2 "Equities CAC40": identical times |
 | XETR | **17:30 CET** | **17:35 CET earliest, random end** (plus any volatility interruption); Trade-at-Close to 17:40 | **primary** — Deutsche Börse cash-market trading-hours page ("Trading on Xetra takes place … from 9 until 17:30 CET"); Xetra Trade-at-Close factsheet, data as of July 2026 (closing auction ends 17:35 CET, randomized) |
+| XLON | **16:30 UK** | **16:35 UK, random end**, then the Closing Price Crossing session at the auction price | **mechanism primary** — LSE *MIT201 Guide to the Trading System* 15.8 (effective 19 Jan 2026): closing auction, a random period before the uncross, CPX after it; **the 16:30 / 16:35 times are secondary**, since MIT201 refers them to the Business Parameters workbook, which was not obtained |
+| XCSE | **16:55 CET** | **17:00 CET**, uncross random in the last 30 s | **primary** — Nasdaq European Markets page, Copenhagen Equities row (09:00–17:00) and the same last-five-minutes note as XSTO |
 
 In US time, from `zoneinfo` at tz 2026.4 (continuous / auction end, ET): XSWX
 11:20 / 11:30; XSTO and XHEL 11:25 / 11:30; XAMS, XPAR, XETR 11:30 / 11:35 —
@@ -98,6 +148,10 @@ each one hour later during the clock-mismatch weeks.
 | ASML | XAMS | 11:30–11:40 | 12:30–12:40 | 2 | auction end randomised past 11:35, so the 11:35–11:40 bar is flagged too |
 | STM | XPAR | 11:30–11:40 | 12:30–12:40 | 2 | as XAMS |
 | SAP | XETR | 11:30–11:40 | 12:30–12:40 | 2 | 11:35 is the *earliest* auction end, plus any volatility interruption |
+| NVS | XSWX | 11:20–11:30 | 12:20–12:30 | 2 | as LOGI |
+| SNY, TTE | XPAR | 11:30–11:40 | 12:30–12:40 | 2 | as STM |
+| AZN, HSBC, BCS, UL, DEO, SHEL, BP, RIO | XLON | 11:30–11:40 | 12:30–12:40 | 2 | the uncross follows a random period after 16:35, so the next bar is flagged too |
+| NVO | XCSE | 10:55–11:00 | 11:55–12:00 | 1 | uncross in the final 30 s before 17:00, as XSTO |
 
 The auction-end sensitivity readout takes the end of each name's last
 `TRANSITION` bar as its boundary.
@@ -127,7 +181,7 @@ constants apply throughout by assumption, not by verification.
 ## Calendars
 
 `exchange_calendars` 4.13.2, pinned in the manifest. Coverage confirmed for
-**XAMS, XPAR, XETR, XHEL, XSTO, XSWX** and XNYS/XNAS. tz database **2026.4**.
+**XAMS, XPAR, XETR, XHEL, XSTO, XSWX, XLON, XCSE** and XNYS/XNAS. tz database **2026.4**.
 Holiday and early-close handling comes from that library, spot-checked against
 primary sources with the read-level recorded.
 
@@ -140,6 +194,8 @@ primary sources with the read-level recorded.
 | XSTO | 13:00 CET half days, 9 in the window (2024-11-01, 2025-04-17, 2025-04-30, 2025-05-28, 2025-10-31, 2026-01-05, 2026-04-02, 2026-04-30, 2026-05-13) | Nasdaq's page lists 2026 half days Jan 5, Apr 2, Apr 30, May 13 — matches; half-day equities 09:00–13:00 | dates primary for 2026; **continuous end on half days (presumably 12:55) unverified** |
 | XHEL | none | Nasdaq's page lists no Helsinki half days | primary |
 | XSWX | none; shut 24 and 31 Dec | not spot-checked against SIX | library only |
+| XLON | 12:30 UK on 24 and 31 Dec 2024 and 2025 (4 days) | not spot-checked | library only |
+| XCSE | none | Nasdaq's 2026 Copenhagen closure list matches the library's closed days | primary for 2026 |
 
 ## Secondary falsification readouts — counted, not estimated
 
