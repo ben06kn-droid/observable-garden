@@ -161,3 +161,97 @@ at 5.5% against a nominal 5%**, and does not claim to.
 Rule 1, the anchor's exactness rule, is **unchanged** — it is a two-sided
 containment rule licensed by P1, which is a different claim and was never
 affected.
+
+**2 — 2026-09-20, before the code is written. Cell (B) is pinned numerically, and
+a replication branch is added against family false alarms.**
+
+### (a) Cell (B), fixed now
+
+**GARCH(1,1) on a common volatility factor.** One path `σ_t`, shared by all
+M = 50 assets:
+
+    σ²_t = ω + α ε²_{t-1} + β σ²_{t-1},   α = 0.10, β = 0.85
+
+**Persistence α + β = 0.95**, comfortably stationary, and a standard daily-equity
+calibration rather than one chosen to produce an outcome. `ω = σ²(1 − α − β)`, so
+the unconditional variance equals the configured `sigma²` and cell (B) differs
+from arm D's baseline in the *shape* of the noise, not its scale. The path is
+burned in for 1,000 periods before the sample starts.
+
+**Common, not per-asset, and this is the load-bearing choice.** A base feature
+column is `mean_i(x[t,i,k] · ε[t,i])`, an average over 50 assets. Independent
+per-asset t(4) innovations have finite variance (ν > 2), so that average is close
+to Gaussian by the central limit theorem and independent per-asset volatility
+paths average away likewise — the cell would stress the estimator barely at all
+while appearing to. A **common** factor multiplies every asset's innovation by
+the same `σ_t`, so the clustering and the heavy tail survive the
+cross-sectional average and reach the statistic the null is taken over. Per-asset
+innovations are therefore **not** what is registered, and the reason is recorded
+here rather than discovered afterwards.
+
+**The t(4) enters the return noise only; features stay Gaussian.** `ε[t,i]` is
+`t(4)`, scaled to unit variance and multiplied by `σ_t`; `x` is unchanged from
+arm D's configuration. This isolates one channel — cell (A) is the feature-side
+stress — and it matches what `DGPConfig.fat_tails` already does, so no second
+code path is introduced. **Fat-tailed features are not tested by this experiment**
+and that is a named gap, not an oversight.
+
+**ν = 4 sits on a boundary, deliberately, and this is registered in advance.**
+`t(4)` has finite variance but **infinite kurtosis**. The bootstrap consistency
+results behind P1 and P6 assume finite fourth moments. So a failure in cell (B)
+or (C) is possible **for a reason attributable to the stress level rather than to
+the method**, and must not be reported as a failure of the full-class null
+without that distinction. If a failure replicates (see (b)), the named diagnostic
+is a re-run at **ν = 6**, which has finite kurtosis: a failure that vanishes at
+ν = 6 is a moment-condition failure, one that persists is not. That diagnostic is
+**not** part of this experiment's registered cells and would be a separate,
+separately-registered run.
+
+### (b) Family false-alarm rates and the replication branch
+
+Under exact calibration, each check false-alarms at a known rate, and these
+experiments make many checks:
+
+| check | per-check false alarm |
+|---|---|
+| rule 1 containment at α = 0.05 | 0.0452 |
+| rule 1 containment at α = 0.01 | 0.0545 |
+| rule 1 KS at 0.05 | 0.0500 |
+| rule 2 one-sided at α = 0.05 | 0.0251 |
+| rule 2 one-sided at α = 0.01 | 0.0336 |
+
+**Rule 1 makes 9 checks** (3 cells × 3). Within a cell the three are computed on
+the same 2,000 draws and are positively dependent, so the family rate is a little
+below the independence figure: **0.1358 per cell** by simulation at 40,000
+replications, giving **0.3546** across three independent cells. Treating all nine
+as independent would say 0.3698.
+
+**Rule 2 makes 18 checks** (3 cells × 3 searchers × 2 levels), giving a family
+rate of **0.4151** if every searcher were exactly calibrated. That is not a
+conservative overestimate here: arm D measured sub-maximal search as costing
+0.0001 in mean Sharpe, so a *matched* searcher sits very close to exact, and
+0.4151 is close to the rate actually faced.
+
+So **more likely than not, at least one check fails somewhere in this experiment
+even if nothing is wrong.** Reading the first such failure as a finding is the
+error this branch exists to prevent.
+
+**Replication branch.** The first failure of any check in rules 1 or 2 triggers
+**one** pre-registered replication of **that cell and that searcher only**, on a
+fresh seed block, at identical settings. Nothing else is rerun and no parameter
+is changed.
+
+- **Replication seed block: 410000–411999**, registered now, used by no other
+  experiment.
+- **If the replication passes:** the original is recorded as a family false
+  alarm, with both rates reported side by side, and the halt / restriction
+  branches of rules 1 and 2 do **not** fire.
+- **If the replication fails too:** the failure is confirmed and the original
+  rules' branches apply in full — the halt, the block-length investigation, the
+  SCOPE restriction, as each rule already specifies.
+- **Only one replication per failing check**, fixed now, so this cannot become
+  resampling until a pass appears.
+- The replication is itself a check and its own false-alarm rate is the
+  per-check rate above; two independent failures of an exactly-calibrated check
+  occur with probability at most 0.0545² ≈ 0.003, which is the level this branch
+  actually buys.
