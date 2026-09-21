@@ -208,6 +208,10 @@ class MetaAdaptive(Searcher):
         anchor = 0
         support = [(int(order[anchor]), 1.0)]
         best = float(scores[order[anchor]])
+        # The support that scored `best`. A restart replaces `support` but not
+        # `best`, so without this the trace would report one support with
+        # another's score (fixed-sequence-replay amendment 5).
+        best_support = list(support)
         trace = Trace(policy=self.name)
         failures, last_gain = 0, float("inf")
 
@@ -259,13 +263,14 @@ class MetaAdaptive(Searcher):
             if gain_score > best:
                 support = list(new_support)
                 best = float(gain_score)
+                best_support = list(support)
                 failures = 0
             else:
                 failures += 1
             trace.moves.append(Move(step, "continue", trigger, value,
                                     tuple(support), best))
 
-        trace.support, trace.score = tuple(support), best
+        trace.support, trace.score = tuple(best_support), best
         return trace
 
     # -- entry points ------------------------------------------------------

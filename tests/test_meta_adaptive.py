@@ -408,3 +408,49 @@ def test_a_capped_replay_refuses_the_same_moves_as_the_capped_run():
         R = S0[stationary_bootstrap_indices(S0.shape[0], L, rng), :]
         t = s.trace(R, ann)
         assert len(t.support) <= 2
+
+
+# -- the submission matches its claimed score (amendment 5) -------------------
+
+def _every_searcher():
+    return [StopWhenCleared(bar=0.5), RestartAfterKFailures(k=1), RestartAfterKFailures(k=2),
+            ExtendWhileImproving(min_gain=0.0), ExtendBySecondBest(min_gain=0.0),
+            SwapWorstWhileImproving(min_gain=0.0)]
+
+
+def test_claimed_score_is_the_submitted_supports_own_on_the_replay_path():
+    """fixed-sequence-replay amendment 5. After a restart the search keeps the
+    global best score; the reported support must be the one that earned it.
+    Exact, because the claim and the recomputation are the same function of the
+    same base columns. Restarts must actually occur, or the test is vacuous."""
+    from searchers.meta_adaptive import _column_sharpe
+    restarts = 0
+    for seed in range(12):
+        base, ann = _base(K=10, T=600, seed=seed)
+        for s in _every_searcher():
+            t = s.trace(base, ann)
+            restarts += "restart" in t.actions()
+            stream = sum(base[:, k] * g for k, g in t.support)
+            assert _column_sharpe(stream, ann) == t.score, (s.name, seed, t.actions())
+    assert restarts >= 10, f"only {restarts} runs restarted; the fixture is not exercising the fix"
+
+
+def test_claimed_score_is_the_submitted_supports_own_on_the_live_path():
+    """The same claim through run(): the Sharpe submitted equals a fresh sandbox's
+    evaluation of the submitted weights. Both come from the sandbox's own scorer
+    on identical weights, so equality is exact."""
+    from environments.sandbox import Specification
+    restarts = 0
+    for seed in range(6):
+        cfg = DGPConfig(M=10, T=600, T_oos=100, K=10, s=1, rho=0.0, sigma=1.0, seed=seed)
+        data = generate(cfg)
+        for s in _every_searcher():
+            sb = Sandbox(data, periods_per_year=cfg.periods_per_year)
+            s.run(sb)
+            restarts += "restart" in s.last_trace.actions()
+            spec, dist = sb.submission
+            fresh = Sandbox(data, periods_per_year=cfg.periods_per_year)
+            got = fresh.evaluate(Specification(weights=np.asarray(spec.weights, dtype=float),
+                                               name="recheck")).sharpe
+            assert got == float(dist.mean), (s.name, seed)
+    assert restarts >= 5
