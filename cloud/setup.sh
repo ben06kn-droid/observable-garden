@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# Provision an Ubuntu 24.04 EC2 instance (sized for c7a.8xlarge) to run observable-garden experiments.
+# Provision an Ubuntu EC2 instance (x86_64) to run observable-garden experiments.
+# Nothing here is size-dependent; it has been used on c7a.8xlarge and c7a.48xlarge.
+#
+# The instance's "shutdown behavior" must be STOP, not terminate: cloud/wait_fetch_stop.sh
+# and the usual finish-a-run pattern both issue `sudo shutdown -h now`, which destroys the
+# volume and every unfetched result if the behavior is terminate. On Spot that setting is
+# usually not available, so on Spot ALWAYS rsync results off before ending a run.
 #
 # From your Mac, once the instance is running:
 #   scp -i KEY.pem cloud/setup.sh ubuntu@PUBLIC_IP:~
