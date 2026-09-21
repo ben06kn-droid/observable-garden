@@ -292,3 +292,49 @@ computed from the mean only.** The consequence for the effective-N note, when it
 is written, is that "effective N" is not one number — quoting it without naming
 the moment it matches is quoting a design choice as a measurement. Whether some
 two-parameter summary does better is open and not investigated.
+
+## A span bound as a computable declared-class null for deep linear grammars
+
+Logged 2026-09-21 from `fixed-sequence-replay` amendment 4, which had to withdraw
+null 4 because the searchers' reachable class — signed subsets up to size 12 —
+holds 2.9e13 members at K = 40 and would take roughly 325 years per draw to
+enumerate. **Not built.**
+
+The idea: stop enumerating. For **any** weight vector `w`,
+
+    Sharpe(w) = w'mu / sqrt(w' S w)  <=  sqrt(mu' S^-1 mu)
+
+by Cauchy–Schwarz, with equality at `w ∝ S^-1 mu`. So `sqrt(mu' S^-1 mu)` — the
+maximum Sharpe over the whole span — **dominates every signed equal-weight subset
+of any depth**, and computing it costs one linear solve rather than an
+enumeration. Depth stops mattering.
+
+Its null is closed-form. Under `H0: mu = 0`, Hotelling's statistic
+`T · mu_hat' S^-1 mu_hat ~ ((T-1)K/(T-K)) · F(K, T-K)`, so the bar needs no
+bootstrap at all.
+
+**Verified at T = 5,000, K = 40:**
+
+| quantity | value |
+|---|---|
+| 95th-percentile bar, annualised | **1.6845** |
+| mean of the statistic on 20 s0 draws | 1.3913 (min 0.9592, max 1.6189) |
+| measured depth-3 signed class bar (arm D) | 1.0213 |
+| dominance over the depth-3 class maximum | 10 of 10 draws, ratio 1.67–1.77 |
+
+**The figure to quote is 1.68, not 1.4.** 1.39 is the mean of the statistic; the
+bar is its 95th percentile. An earlier rough estimate conflated the two.
+
+**Why it is not obviously worth building.** The bar is **65% higher** than the
+depth-3 class bar (1.68 against 1.02), and the observed statistic runs 1.7× the
+class maximum, so it buys computability at a real cost in power. It bounds a
+searcher that can take *any* weights, which is far more freedom than a sparse
+signed-subset grammar actually has — the looseness is the price of not caring
+about depth.
+
+**Three things to check before building.** It needs `T > K` for `S` to invert,
+and is sensitive to how `S` is estimated at K near T. The Hotelling null assumes
+iid Gaussian returns, which 6.3 cell (B) is in the middle of stressing. And the
+dominance is over the span of the *base columns*, so a grammar producing
+non-linear functions of them (moving averages, thresholds) is not covered — the
+same limitation that made `non-additive-scoring` a separate experiment.

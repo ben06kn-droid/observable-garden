@@ -335,3 +335,76 @@ def test_the_measured_direction_of_the_fill_is_conservative():
         assert (n.trigger - n.policy).mean() > 0.0
         margins[s.name] = skd
     assert margins["swap-worst-while-improving"] > margins["second-best-while-improving"]
+
+
+# -- the optional class cap (amendment 4) -----------------------------------
+
+def _all_five(bar=0.5):
+    return [StopWhenCleared(bar=bar), RestartAfterKFailures(k=2),
+            ExtendWhileImproving(), ExtendBySecondBest(),
+            SwapWorstWhileImproving()]
+
+
+@pytest.mark.parametrize("searcher", _all_five())
+def test_uncapped_is_bit_identical_to_the_registered_behaviour(searcher):
+    """`None` must change nothing. 7.1 runs uncapped, so a regression here would
+    silently alter the experiment the pre-registration fixed."""
+    base, ann = _base(K=12, T=600, seed=5)
+    before = searcher.trace(base, ann)
+    searcher.set_class(None)
+    after = searcher.trace(base, ann)
+    assert after.score == before.score          # bit-identical, not approx
+    assert after.support == before.support
+    assert after.actions() == before.actions()
+
+
+@pytest.mark.parametrize("d", [1, 2, 3])
+@pytest.mark.parametrize("searcher", _all_five())
+def test_a_capped_search_never_leaves_the_declared_class(searcher, d):
+    from garden.spec_class import SubsetClass
+    from searchers.meta_adaptive import _signed_sum
+    cls = SubsetClass(max_size=d, signed=True)
+    base, ann = _base(K=10, T=600, seed=2)
+    searcher.set_class(cls)
+    t = searcher.trace(base, ann)
+    assert cls.contains(_signed_sum(10, t.support))
+    assert len(t.support) <= d
+    assert all(m.action in {"continue", "restart", "stop"} for m in t.moves)
+
+
+def test_the_cap_binds_where_it_should():
+    """The cap must actually bind somewhere, or every test above passes
+    vacuously. It binds on 7.1's registered configuration and not on the small
+    fixtures, which is itself worth pinning: extend-while-improving stops at
+    depth 1 on a short noisy panel and runs to depth 5 on the real one."""
+    from garden.spec_class import SubsetClass
+    cfg = DGPConfig(M=50, T=5000, T_oos=1000, K=40, s=0, rho=0.0, sigma=1.0,
+                    seed=300_000)                      # 7.1's registered seed block
+    base = Sandbox(generate(cfg),
+                   periods_per_year=cfg.periods_per_year).base_feature_columns()
+    ann = float(np.sqrt(cfg.periods_per_year))
+
+    free = ExtendWhileImproving().trace(base, ann)
+    capped = ExtendWhileImproving().set_class(
+        SubsetClass(max_size=3, signed=True)).trace(base, ann)
+    assert len(free.support) > 3, "fixture no longer exercises the cap"
+    assert len(capped.support) <= 3
+    assert capped.score <= free.score + 1e-12
+
+
+def test_a_capped_replay_refuses_the_same_moves_as_the_capped_run():
+    """Amendment 4's licence-transfer argument, as far as code can check it:
+    membership depends on the support and the class, not on the data, so the
+    restriction applies identically to a replicate."""
+    from garden.spec_class import SubsetClass
+    from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
+    cls = SubsetClass(max_size=2, signed=True)
+    base, ann = _base(K=10, T=600, seed=7)
+    s = ExtendWhileImproving().set_class(cls)
+    S0 = base - base.mean(axis=0, keepdims=True)
+    L = select_block_length(S0)
+    rng = np.random.default_rng(0)
+    for _ in range(25):
+        R = S0[stationary_bootstrap_indices(S0.shape[0], L, rng), :]
+        t = s.trace(R, ann)
+        assert len(t.support) <= 2

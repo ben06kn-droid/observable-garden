@@ -48,8 +48,8 @@ from scoring rather than filled.
 **Everything is computed in UTC** from `zoneinfo`, never from an assumed ET or
 CET offset. DST rules are not hand-verified; they come from the tz database, and
 its version is pinned in the download manifest. Verified empirically: Euronext
-Amsterdam's close lands at 16:30 UTC year-round, which is 11:30 ET in winter,
-11:30 ET in summer, and **12:30 ET during the weeks when US and EU clocks
+Amsterdam's continuous end is 17:30 local, which is 16:30 UTC in winter and 15:30
+UTC in summer, and so 11:30 ET in winter, 11:30 ET in summer, and **12:30 ET during the weeks when US and EU clocks
 disagree**.
 
 ## The home-open boundary
@@ -68,21 +68,34 @@ when continuous trading stops rather than when the auction prints.
 | MIC | end of continuous | end of closing auction | read-level |
 |---|---|---|---|
 | XSWX | **17:20 CET** | **17:30 CET** | **primary** — six-group.com trading-hours page, fetched |
-| XSTO | 17:25 local | ~17:27 local | **primary-adjacent** — Nasdaq's own Appendix 4 gives 09:00–17:25 for Swedish stock-related *derivatives*; cash equities not separately confirmed |
-| XHEL | 18:25 local (= 17:25 CET) | ~18:27 local | **secondary** — aggregator |
-| XAMS | 17:30 CET | 17:30 CET (auction at close) | **secondary** — Euronext's own pages link to downloadable PDFs and do not state hours inline; two fetch attempts failed |
-| XPAR | 17:30 CET | 17:30 CET | **secondary**, as XAMS |
-| XETR | **not verified** | **not verified** | — |
+| XSTO | **17:25 CET** | **17:30 CET**, uncross random in the last 30 s | **primary** — Nasdaq European Markets trading-hours page, Main Market *Equities* row (09:00–17:30) and its note: last five minutes no matching, final uncross random in the last 30 s |
+| XHEL | **18:25 EET** (= 17:25 CET) | **18:30 EET**, as XSTO | **primary** — same Nasdaq page, Helsinki Equities row (10:00–18:30) |
+| XAMS | **17:30 CET** | **17:35 CET, random end**; Trading-at-Last 17:35–17:40 | **primary** — Euronext *Appendix to Trading Manual 4-01* (xlsx, euronext.com/en/media/1927/download), group J0 "Equities AEX": continuous 09:00–17:30, CA 17:35 random, TAL 17:35–17:40 |
+| XPAR | **17:30 CET** | **17:35 CET, random end**; TAL 17:35–17:40 | **primary** — same appendix, groups F1/F2 "Equities CAC40": identical times |
+| XETR | **17:30 CET** | **17:35 CET earliest, random end** (plus any volatility interruption); Trade-at-Close to 17:40 | **primary** — Deutsche Börse cash-market trading-hours page ("Trading on Xetra takes place … from 9 until 17:30 CET"); Xetra Trade-at-Close factsheet, data as of July 2026 (closing auction ends 17:35 CET, randomized) |
 
-**`exchange_calendars` 4.13.2 reports a single close of 16:30 UTC for all six**,
-which is the *official close* (auction end). That reconciles two apparently
-conflicting facts: the six do share one official close, and they do **not** share
-one continuous end. The convention above selects the boundary on which they
-differ, so **per-name constants are required and a panel-wide 11:30 ET is wrong**.
+In US time, from `zoneinfo` at tz 2026.4 (continuous / auction end, ET): XSWX
+11:20 / 11:30; XSTO and XHEL 11:25 / 11:30; XAMS, XPAR, XETR 11:30 / 11:35 —
+each one hour later during the clock-mismatch weeks. At 5-minute bars the
+`TRANSITION` window is two bars for XSWX and one bar for the other five. For
+XAMS, XPAR and XETR 17:35 is the *earliest* auction end, so the uncross can land
+a few seconds inside the following bar; the auction-end readout uses the 17:35
+bar edge and says so.
 
-Unverified cells must be resolved from primary documents **before the feature
-commit**, since the indicator depends on them. Whether either constant changed
-inside the two-year window is also unresolved.
+**`exchange_calendars` 4.13.2 reports one close for all six: 17:30 CET/CEST
+(16:30 UTC in winter, 15:30 UTC in summer; an earlier draft wrongly said 16:30 UTC
+year-round).**
+That is **not** one kind of close: it is the *auction end* for XSWX, XSTO and
+XHEL, and the *continuous end* for XAMS, XPAR and XETR, whose auctions run to
+17:35 CET. (The earlier draft of this file called it the official close for all
+six; the primary documents above contradict that for the three Euronext/Xetra
+names.) Either way the six do not share one continuous end, so **per-name
+constants are required and a panel-wide 11:30 ET is wrong**.
+
+**Still unresolved: whether any constant changed inside the two-year window.**
+All six sources above are current documents; none is a dated history. This must
+be resolved before the feature commit, or the feature commit must register the
+current constants as applying throughout and say so.
 
 ## Calendars
 
@@ -109,8 +122,9 @@ such.
 
 ## Independent units
 
-All six official closes coincide at 16:30 UTC, but the **continuous** ends do
-not, so per-name boundaries carry a small amount of extra identification. **The
+The six continuous ends fall at 17:20, 17:25 and 17:30 CET and the auction ends
+at 17:30 and 17:35 CET, so neither set coincides, and per-name boundaries carry a
+small amount of extra identification. **The
 independent unit is therefore no longer strictly the day**, though it is much
 closer to the day (~500 in the window) than to the bar. Twin construction
 respects each name's own boundary and drops `TRANSITION` bars.

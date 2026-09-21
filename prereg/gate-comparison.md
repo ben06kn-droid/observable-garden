@@ -205,6 +205,8 @@ needs searchers that genuinely submit below their class maximum:
 | `StopWhenCleared` | `searchers/meta_adaptive.py` (7.1) | stops at the first candidate clearing the bar, so it submits an early passable spec rather than the best one |
 | `BudgetedRandom` | to be written | samples a fixed budget of class members uniformly and submits the best seen; slack is set by the budget and is tunable by construction |
 
+**Both slack searchers run CAPPED to the declared class**, via `MetaAdaptive.set_class`. 7.0 scores against the class gate, so a searcher that can leave the class has no bar to be scored against. This is the opposite of `fixed-sequence-replay`, which runs them **uncapped** — its amendment 4 records why, and states the licence-transfer argument that carries rule 1's conclusion from the uncapped setting to this one. That argument is reasoning rather than measurement; if capped and uncapped searchers behave differently under replay here, it is the first thing to suspect.
+
 `BudgetedRandom`'s budget is fixed before the run at 25, 100 and 400 draws from
 the class, giving three known slack levels. Reusing 7.1's `StopWhenCleared`
 keeps one searcher common to both experiments.

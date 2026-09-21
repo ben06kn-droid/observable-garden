@@ -1,0 +1,42 @@
+heterogeneous-correlation-fat-tails — cell C
+==============================================================================
+n=96 draws, B=10,000, K=40, M=50, T=5,000, seeds from 400000
+classes: signed 82,240, unsigned 10,700 (two nulls per draw, each searcher matched)
+GARCH(0.1, 0.85) common path, t(4) noise
+git at launch df161c3
+
+RULE 1 — anchor exactness (P1 predicts it; claimed here only)
+------------------------------------------------------------------------------
+  a=0.05  k=6     rate 0.0625 (0.0290-0.1297)   contains 0.05: yes
+  a=0.01  k=2     rate 0.0208 (0.0057-0.0728)   contains 0.01: yes
+  KS D=0.0471 vs 5% critical 0.1388, p=0.9766: does not reject
+
+RULE 2 — validity, one-sided (README amendment 1: fails high iff the
+         LOWER end exceeds nominal; upper end is the largest
+         liberality not ruled out). No KS: P2 does not predict uniformity.
+------------------------------------------------------------------------------
+    searcher                 a      k     rate    lower    upper  liberal?
+    signed-adaptive       0.05      6   0.0625   0.0290   0.1297        no
+    signed-adaptive       0.01      2   0.0208   0.0057   0.0728        no
+    greedy                0.05      1   0.0104   0.0018   0.0567        no
+    greedy                0.01      1   0.0104   0.0018   0.0567        no
+    adaptive              0.05      5   0.0521   0.0224   0.1162        no
+    adaptive              0.01      1   0.0104   0.0018   0.0567        no
+
+RULE 3 — block lengths (reported, not gated)
+------------------------------------------------------------------------------
+  min 1, median 2, max 24, mean 2.08
+  arm D's Gaussian iid baseline chose 1 (median 1, max 2); cells B and C
+  must choose longer or the selector is not seeing the dependence.
+
+RULE 4 — guards (reported, not gated)
+------------------------------------------------------------------------------
+  variance floor binds 0   sharpe cap binds 0
+
+COST
+------------------------------------------------------------------------------
+  per draw   mean  153.74s   median  208.94s   max  226.32s
+  this run   4.10 CPU-hours over 96 draws
+  projected  85.4 CPU-hours for 2000 draws (1.78 h wall at 48 workers, $2.92 at $1.64/h)
+  all three cells: 5.34 h wall, $8.75
+

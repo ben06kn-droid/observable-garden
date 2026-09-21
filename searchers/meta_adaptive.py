@@ -104,6 +104,29 @@ class MetaAdaptive(Searcher):
                   replicate sees. This is null 1, the error being measured.
     """
     budget = BUDGET
+    spec_class = None          # None = unbounded by any class; see set_class()
+
+    def set_class(self, spec_class):
+        """Restrict every move to a declared class.
+
+        `None` -- the default -- is the behaviour `fixed-sequence-replay`
+        registered and runs: bounded only by `budget`, reaching whatever support
+        size its trigger takes it to. Amendment 4 records why 7.1 is not capped.
+
+        When a class is given, a move producing a support outside it is
+        **refused**, in the realized run and in every replicate alike.
+        Membership is a function of the support and the class, not of the data,
+        so a replicate refuses exactly the moves the realized run refused --
+        which is what amendment 4's licence-transfer argument rests on. 7.0 uses
+        capped variants, because that cell scores against the class gate.
+        """
+        self.spec_class = spec_class
+        return self
+
+    def _allowed(self, support) -> bool:
+        if self.spec_class is None:
+            return True
+        return bool(self.spec_class.contains(_signed_sum(self._K, support)))
 
     def _decide(self, state: dict) -> tuple[str, str, float]:
         raise NotImplementedError
@@ -134,6 +157,15 @@ class MetaAdaptive(Searcher):
             out.append((score(ns), "flip", ns))
         return out
 
+    def _grammar_allowed(self, support, K, score):
+        """`_grammar` filtered to the declared class. A refused move is simply
+        not a candidate, so the policy chooses among what it may actually do."""
+        self._K = K
+        cands = self._grammar(support, K, score)
+        if self.spec_class is None:
+            return cands
+        return [c for c in cands if self._allowed(c[2])]
+
     def _fill_move(self, support, K, score):
         """7.1's fill rule, as amended: the best **one-step move across the whole
         content grammar**, not merely the best extension.
@@ -146,12 +178,12 @@ class MetaAdaptive(Searcher):
         below a swap-based continuation. Widening the fill to the full grammar is
         what makes the comparison informative rather than arithmetical.
         """
-        cands = self._grammar(support, K, score)
+        cands = self._grammar_allowed(support, K, score)
         return max(cands) if cands else None
 
     def _extend(self, support, K, score):
         """This policy's own continue-move. Best *extension* by default."""
-        cands = [c for c in self._grammar(support, K, score) if c[1] == "extend"]
+        cands = [c for c in self._grammar_allowed(support, K, score) if c[1] == "extend"]
         return max(cands) if cands else None
 
     # -- the one loop ------------------------------------------------------
@@ -170,6 +202,7 @@ class MetaAdaptive(Searcher):
         replicate that would run past the realized sequence is filled with greedy
         extension rather than truncated, since there is no declared trigger left
         to re-evaluate."""
+        self._K = K
         scores = np.array([single(k) for k in range(K)])
         order = list(np.argsort(-scores))
         anchor = 0
@@ -389,7 +422,7 @@ class ExtendBySecondBest(MetaAdaptive):
                 f"last_gain > {self.min_gain}", float(gain))
 
     def _extend(self, support, K, score):
-        ranked = sorted((c for c in self._grammar(support, K, score)
+        ranked = sorted((c for c in self._grammar_allowed(support, K, score)
                          if c[1] == "extend"), reverse=True)
         if not ranked:
             return None
@@ -426,7 +459,7 @@ class SwapWorstWhileImproving(MetaAdaptive):
         # grow to min_support first; there is nothing to swap out of a support
         # of one that would not simply be a different single feature
         kind = "extend" if len(support) < self.min_support else "swap"
-        cands = [c for c in self._grammar(support, K, score) if c[1] == kind]
+        cands = [c for c in self._grammar_allowed(support, K, score) if c[1] == kind]
         return max(cands) if cands else None
 
 
