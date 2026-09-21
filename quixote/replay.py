@@ -116,3 +116,59 @@ class LoggedPolicy:
     def replay_triggers(self, base_columns: np.ndarray, n_realized_moves: int,
                         annualization: float = 1.0) -> float:
         return self._run(base_columns, annualization, meta_steps=n_realized_moves).score
+
+
+# -- the identity-replicate guard -------------------------------------------
+
+@dataclass
+class IdentityCheck:
+    """Did the replay path reproduce the live path on the UN-resampled data?
+
+    The live search scores through the sandbox's panel; a replay scores by
+    summing base columns. They agree to about 1e-12, not exactly. On a near-tie
+    that difference can flip an argmax, and a flipped argmax early in a forward
+    selection changes every move after it -- so the replayed policy would be
+    pricing a search that never ran.
+
+    The guard is cheap and exact: replay the identity resample and compare move
+    sequences. A run that fails is **flagged and not priced**, because there is
+    no defensible way to price a search whose own replay disagrees with it.
+    """
+    agrees: bool
+    realized_support: tuple
+    replayed_support: tuple
+    realized_score: float
+    replayed_score: float
+    n_moves_realized: int
+    n_moves_replayed: int
+
+    @property
+    def score_gap(self) -> float:
+        return abs(self.realized_score - self.replayed_score)
+
+    def reason(self) -> str:
+        if self.agrees:
+            return (f"Identity-replicate guard: PASS. The base-column replay "
+                    f"reproduces the realized support; scores differ by "
+                    f"{self.score_gap:.2e}, which is float accumulation and not "
+                    "a different search.")
+        return ("Identity-replicate guard: FAIL. Replaying the un-resampled data "
+                f"gives support {self.replayed_support} against the realized "
+                f"{self.realized_support}. The two scoring paths differ at ~1e-12 "
+                "and that has flipped an argmax, so every later move priced a "
+                "search that did not run. This run is flagged and not priced.")
+
+
+def identity_check(log: SessionLog, spec_class, base: np.ndarray,
+                   annualization: float = 1.0) -> IdentityCheck:
+    """Replay `log` on `base` itself -- no resampling -- and compare."""
+    realized_support = log.records[-1].support_after if log.records else ()
+    realized_score = log.records[-1].score_after if log.records else float("-inf")
+    t = LoggedPolicy(log, spec_class).trace(base, annualization)
+    kinds = [r.move.kind for r in log.records if r.move.note not in ("stop", "rejected")]
+    return IdentityCheck(
+        agrees=(tuple(t.support) == tuple(realized_support)),
+        realized_support=tuple(realized_support), replayed_support=tuple(t.support),
+        realized_score=float(realized_score), replayed_score=float(t.score),
+        n_moves_realized=len(kinds),
+        n_moves_replayed=sum(1 for m in t.moves if m == "accept"))

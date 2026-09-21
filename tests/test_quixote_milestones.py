@@ -154,3 +154,57 @@ def test_quixote_is_not_in_code_paths_and_has_its_own_fingerprint():
     assert quixote_fingerprint() != code_fingerprint()
     for dep in ("garden", "estimator"):
         assert dep in QUIXOTE_PATHS             # what quixote imports is inside it
+
+
+# -- the identity-replicate guard -------------------------------------------
+
+def test_the_identity_guard_passes_a_normal_run():
+    data, cfg, cls = _fixture(0, 10, 3, s=0)
+    sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=cls)
+    s = Session.on_sandbox(sb, cls)
+    signed_adaptive(s, max_features=3)
+    from quixote.replay import identity_check
+    c = identity_check(s.log, cls, sb.base_feature_columns(),
+                       float(np.sqrt(cfg.periods_per_year)))
+    assert c.agrees
+    assert c.score_gap < 1e-9          # float accumulation, not a different search
+    assert "PASS" in c.reason()
+
+
+def test_the_identity_guard_catches_a_disagreeing_replay():
+    """Constructed rather than waited for. The live and replay paths differ at
+    ~1e-12, which flips an argmax only on a near-tie -- rare enough that a test
+    cannot rely on finding one, and consequential enough that the guard has to
+    be known to work."""
+    from dataclasses import replace as dc_replace
+    from quixote.replay import identity_check
+    data, cfg, cls = _fixture(1, 10, 3, s=0)
+    sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=cls)
+    s = Session.on_sandbox(sb, cls)
+    signed_adaptive(s, max_features=3)
+
+    # a support the replay will not reproduce
+    last = s.log.records[-1]
+    wrong = tuple((k, -sign) for k, sign in last.support_after)
+    s.log.records[-1] = dc_replace(last, support_after=wrong)
+
+    c = identity_check(s.log, cls, sb.base_feature_columns(),
+                       float(np.sqrt(cfg.periods_per_year)))
+    assert not c.agrees
+    assert "flagged and not priced" in c.reason()
+
+
+def test_the_guard_fires_rarely_enough_to_be_usable():
+    """Measured, not assumed: if it fired often the whole grammar approach would
+    be unusable, and if it never could fire it would be decoration."""
+    from quixote.replay import identity_check
+    fired = 0
+    for seed in range(40):
+        data, cfg, cls = _fixture(seed, 12, 3, s=0, T=400)
+        sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=cls)
+        s = Session.on_sandbox(sb, cls)
+        signed_adaptive(s, max_features=3)
+        if not identity_check(s.log, cls, sb.base_feature_columns(),
+                              float(np.sqrt(cfg.periods_per_year))).agrees:
+            fired += 1
+    assert fired == 0, f"guard fired on {fired} of 40 clean runs"
