@@ -60,3 +60,25 @@ The engine is White's Reality Check (2000). It is twenty-six years old and
 it is the right tool. This project asks what a logged search lets you do with
 it. `SCOPE.md` has every number and caveat, `THEORY.md` the proofs, and
 `EXPERIMENTS.md` the commit each pre-registration was fixed at.
+
+## Setup
+
+```
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+pytest -q
+```
+
+## Layout
+
+```
+garden/         the gate: transcript format, audit, preflight, explain, CLI
+quixote/        Don Quixote, the agent-facing gate: move grammar, session log
+environments/   simulated data, the sandbox contract, price worlds
+searchers/      scripted, meta-adaptive, dose-response and diagnostic searchers
+estimator/      naive, recursive, trigger-replay and procedure-level bootstraps
+experiments/    one module per experiment, named in EXPERIMENTS.md; parallel runner
+prereg/         every experiment's rules, fixed before it ran
+cloud/          EC2 setup and detached-run scripts
+tests/, figures/, runs/
+```
