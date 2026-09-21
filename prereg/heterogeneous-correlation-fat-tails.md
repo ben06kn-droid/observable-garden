@@ -255,3 +255,59 @@ is changed.
   per-check rate above; two independent failures of an exactly-calibrated check
   occur with probability at most 0.0545² ≈ 0.003, which is the level this branch
   actually buys.
+
+**3 — 2026-09-20, before the experiment runs, found while writing the code. Cell
+(A) as registered tests nothing, and the cost figure was wrong.**
+
+### (a) Cell (A) needs rho > 0, and the loading range was misdescribed
+
+The Design section registered cells (A) and (C) at **rho = 0**, inheriting arm
+D's configuration. `environments.dgp.heterogeneous_correlation` **returns the
+identity matrix when rho <= 0** — deliberately, so that "no correlation" has one
+meaning whether or not the structure is heterogeneous. So at rho = 0 the
+`heterogeneous` flag is a no-op: **cell (A) would have been arm D's baseline
+rerun on fresh seeds, and cell (C) would have been identical to cell (B).**
+Caught by running all three cells at small scale and finding (B) and (C)
+producing bit-identical output.
+
+**Registered fix.** Cells (A) and (C) run at **rho = 0.3**, which is exactly what
+`unequal-correlation` used, so the structure is one this project has already
+exercised rather than a new one invented here. Cell (B) stays at rho = 0, so each
+cell changes one thing from arm D's baseline and (C) changes both:
+
+| cell | correlation | noise |
+|---|---|---|
+| arm D baseline | rho = 0, equicorrelated | Gaussian |
+| (A) | **rho = 0.3, heterogeneous** | Gaussian |
+| (B) | rho = 0, equicorrelated | **common GARCH, t(4)** |
+| (C) | **rho = 0.3, heterogeneous** | **common GARCH, t(4)** |
+
+**The loading range in the Design section is wrong and is corrected here.** It
+says "loadings spread 0.2–0.8", repeating `ROADMAP.md`'s description. The
+implementation draws loadings uniformly on `sqrt(rho) +- 0.15`, so at rho = 0.3
+they span **0.398 to 0.698**, giving pairwise correlations from **0.164 to
+0.482** with mean 0.306. Measured, not asserted.
+
+**On the confound.** Cell (A) now differs from arm D's baseline in two ways at
+once: the correlation level (0 to 0.3) and its heterogeneity. An equicorrelated
+rho = 0.3 control is **not** added, because one already exists: every earlier
+null-calibration experiment in this project ran at rho = 0.3 under
+equicorrelation and cost nothing (`SCOPE.md`, *The obliviousness condition*). If
+cell (A) fails, that prior result is what separates the two explanations, and
+the report must cite it rather than leaving the confound unresolved.
+
+### (b) Two class nulls per draw, not one
+
+The Cost section says "one null is priced per draw and shared across the four
+searchers, as in arm D, so the searcher count does not multiply the cost." That
+is wrong **because of this experiment's own matched-class design**: `Greedy` and
+`Adaptive` are priced against the 10,700-member unsigned class while
+`SignedAdaptive` and the anchor are priced against the 82,240-member signed
+class, so **two** nulls are priced per draw.
+
+The moment engine's cost is roughly linear in class size, so the unsigned null
+adds about 13% to the signed one. The registered estimate of 7.8 h and $12.8 is
+therefore an **underestimate by roughly that factor**, and no figure is asserted
+here to replace it: the pre-launch smoke on cell (C) measures it, as the Cost
+section already requires, and the measured number is what the launch decision
+uses. Recorded now so the correction is not made after seeing the smoke.
