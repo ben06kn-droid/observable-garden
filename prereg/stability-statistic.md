@@ -14,8 +14,11 @@ buy anything worth its cost in power?
 
 ## Design
 
-**J = 4**, registered here. Blocks are contiguous and equal-length; at T = 5,000
-that is 1,250 periods each.
+**J = 2 and J = 4 are both registered**, and both are run. J = 4 is the primary;
+J = 2 is registered alongside it so the **power-cost curve is visible** rather
+than a single point, since the loss grows steeply with J and a lone figure would
+hide that. Blocks are contiguous and equal-length: 2,500 periods each at J = 2,
+1,250 at J = 4.
 
 **The statistic is priced under the same null**, so validity needs no new
 argument: whatever the statistic, the bar is the maximum of that statistic over
@@ -47,10 +50,9 @@ N ≈ 4,442 that matches the null-max *mean*, and item 6 records that sensitivit
 | **stability, J = 4** | **0.7835** | **22.0%** |
 | stability, J = 5 | 0.7160 | 18.6% |
 
-**The registered figure is a drop from 46.2% to 22.0% at J = 4.** An earlier
-estimate of "roughly 45% → 35%" corresponds to **J = 2**; the loss grows steeply
-with J, so J must be registered before the number means anything. It is
-registered above.
+**The registered figures are 46.2% → 34.0% at J = 2 and 46.2% → 22.0% at J = 4.**
+Reporting both is the point: the cost is not a constant of the method, it is a
+function of J, and a single number would present a design choice as a property.
 
 **The regime cell needs a large enough within-block edge to discriminate**, and
 this was nearly registered wrong. With an edge of Sharpe 1.0 in one of four
@@ -81,8 +83,10 @@ the point: it refuses non-persistent edges.
    - *Fails high:* the per-block moment path is wrong; nothing else is read.
    - *Fails low:* conservative where P1 predicts exactness; reported, and the
      stated size becomes an upper bound.
-2. **Power cost, reported not gated.** s3 PASS rate under both statistics at
-   matched nominal α, against the registered 46.2% → 22.0%.
+2. **Power cost at both J, reported not gated.** s3 PASS rate under the default
+   and under stability at **J = 2 and J = 4**, at matched nominal α, against the
+   registered 46.2% → 34.0% and 46.2% → 22.0%. The two points are reported
+   together as the cost curve.
    - *Within a paired bootstrap interval of the prediction:* as designed.
    - *Materially worse:* the option costs more than registered and that is
      stated in the write-up.

@@ -24,8 +24,13 @@ the real run's rank among them:
 Under the twin null the K+1 runs are **exchangeable**, so this controls type-I at
 any K. The construction is the permutation-test logic of Phipson & Smyth,
 *Permutation p-values should never be zero*, Statistical Applications in Genetics
-and Molecular Biology 9(1):Article 39, 2010. **Read-level: seen in another
-paper's reference list, not opened.**
+and Molecular Biology 9(1):Article 39, 2010 (arXiv:1603.05766). **Read-level: opened
+in full.** Its argument is directly the one this item needs — that a permutation
+or Monte Carlo procedure should be read as **generating an exact discrete null
+distribution**, not as estimating a tail probability, and that the naive
+`#/K` form understates the p-value by about `1/K`. The `(1 + #)/(K + 1)` form
+above is the correction, and it is the same form the gate already uses for its
+bootstrap p-values.
 
 **The replay null becomes the test statistic, not the certifier.** Replay, the
 class gate and item 1's bracket explain *why* a run ranks where it does; the twin
@@ -103,6 +108,12 @@ departure at the 5% point is not itself established.
 
 **This holds only for a fixed agent and configuration.** It is exploratory, not
 pre-registered, and is not evidence about any other agent, model or dataset.
+
+**The 0.0661 threshold is used nowhere.** It is not a calibration, not a
+recommended cut-off, and enters no rule in this or any other file. It is reported
+because it is the natural summary of what a twin pool says about a gate's
+realized size, and for no other reason. Any later use of it would require its own
+pre-registration.
 
 ## Decision rules
 

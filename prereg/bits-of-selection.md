@@ -39,6 +39,8 @@ gives N = 4,442 for the signed class; matching arm D's measured **5% quantile**
 (1.0213) gives N = 19,071 — **2.1 bits apart**. The registered definition matches
 the **mean**, as the formula above specifies. Any figure quoted in bits must say
 which moment it inverted, and the 5% figure is reported alongside for every cell.
+`OPEN_QUESTIONS.md` records why no single N reproduces both: the
+independent-maximum model has one parameter and the real null has a shape.
 
 **Why bits, and not some other monotone transform of N.** Russo & Zou bound the
 bias of an adaptively chosen estimate by `|E[phi_T - mu_T]| <= sigma * sqrt(2 I(T;phi))`,

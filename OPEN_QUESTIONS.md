@@ -268,3 +268,27 @@ is not usable as a certifier, and combining it naively makes things worse.
 
 Neither is a reason to abandon the underlying idea; both are reasons not to
 repeat that particular construction without a different one in mind.
+
+## No single effective N reproduces the null's shape
+
+Logged 2026-09-21 for the later effective-N note, from `bits-of-selection`
+(item 6).
+
+Inverting Bailey & López de Prado's expected maximum against arm D's signed-class
+null gives a different answer depending on which feature of that null you match:
+
+| matched to | effective N | bits |
+|---|---|---|
+| the null-max **mean** (0.8211) | 4,442 | 12.12 |
+| the measured **5% quantile** (1.0213) | 19,071 | 14.24 |
+
+**2.1 bits apart.** The independent-maximum model has one parameter and the real
+null has a shape, so no single N reproduces both the centre and the tail: the
+class's members are correlated, and correlation compresses the distribution
+differently at the mean than at the quantile.
+
+The consequence for item 6 is registered there: **bits are descriptive, and are
+computed from the mean only.** The consequence for the effective-N note, when it
+is written, is that "effective N" is not one number — quoting it without naming
+the moment it matches is quoting a design choice as a measurement. Whether some
+two-parameter summary does better is open and not investigated.
