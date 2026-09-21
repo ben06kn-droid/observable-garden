@@ -222,3 +222,82 @@ is stated here only so the prediction is on record before 7.1 runs.
 **Cost implication.** The grammar's swap moves make a filled step O(|support| × K)
 rather than O(K), so 7.1's per-draw cost rises with the budget. It remains
 unsized and still gates the launch.
+
+**3 — 2026-09-20, before the experiment runs. A replication branch for rule 1,
+and a definition of "material" for rule 3.**
+
+### (c) Rule 1's family false-alarm rate, and its replication branch
+
+Rule 1 makes **10 one-sided checks** — five searchers × two levels. Under exact
+calibration each fires at 0.0251 (α = 0.05) or 0.0336 (α = 0.01), so the family
+rate is
+
+    1 − (1 − 0.0251)^5 × (1 − 0.0336)^5 = **0.2577**
+
+and these five searchers are **near-exact by design**: they are scripted
+policies replayed by their own predicates, so null 2 differs from the exact
+null 3 only past the realized length. A one-in-four chance of firing on nothing
+is not acceptable when **the consequence of firing is abandoning in-the-loop
+agents** — rule 1's fails-high branch sends the replay tier to full policy
+replay, which means the agent must write a policy instead of searching in the
+loop. That is a large architectural decision to hang on a single check.
+
+**Replication branch.** The first failure of any rule 1 check triggers **one**
+pre-registered replication of **that searcher and that level only**, on a fresh
+seed block, at identical settings.
+
+- **Replication seed block: 310000–311999**, registered now, used by no other
+  experiment.
+- **If the replication passes:** recorded as a family false alarm, both rates
+  reported side by side, and rule 1's fails-high branch does **not** fire.
+- **If the replication fails too:** confirmed, and rule 1's branch applies in
+  full — the replay tier requires full policy replay and the searcher that broke
+  it is named.
+- **One replication per failing check**, fixed now.
+- Two independent failures of an exactly-calibrated check occur with probability
+  at most 0.0336² ≈ 0.0011, which is what this branch buys.
+
+Rules 2 and 4 are unaffected: neither halts, so a false alarm in them costs a
+sentence in the report rather than a decision.
+
+### (d) Rule 3: what "positive and material" means
+
+Undefined in the original, and fixed here before any data.
+
+**Aggregation.** `signed_kolmogorov_distance` compares null 2 against null 3
+**within one draw**, over that draw's B replicates, so the experiment yields
+2,000 signed distances per searcher. They are aggregated by the **median**, and
+the **share of draws with a positive distance** is reported beside it with a
+Wilson interval. The median is used rather than the mean because a per-draw
+Kolmogorov distance is bounded in [−1, 1] but heavily skewed toward zero, and a
+few draws with short realized sequences would otherwise dominate the mean.
+
+**"Material" is a conjunction**, so that a directional artefact too small to
+change any decision cannot trigger a redesign:
+
+> Rule 3 fires for a searcher iff **(i)** its median signed distance over the
+> 2,000 draws is **positive**, and **(ii)** its null-2 rejection rate from
+> rule 1 exceeds nominal in the **point estimate** at the same α.
+
+Condition (i) says the fill's null is stochastically smaller — a lower bar.
+Condition (ii) says that this actually reaches the type-I rate rather than
+living in a part of the distribution no verdict depends on. Both are required
+because either alone is uninformative: a positive median with the rejection rate
+at or below nominal is a shift that no decision sees, and a rejection rate above
+nominal with a non-positive median points at something other than the fill.
+
+Note that (ii) is deliberately the **point estimate**, not rule 1's interval
+test. Rule 1 asks whether liberality is *demonstrated*; rule 3 asks whether the
+fill is the *direction of travel*, and requiring demonstrated liberality here
+would make rule 3 strictly weaker than rule 1 and therefore redundant.
+
+**Also reported, gating nothing:** the share of draws positive with its interval,
+the median distance for all five searchers, and a one-sided sign test on the
+share exceeding one half. At 2,000 draws the median is precisely determined, so
+the sign test is a diagnostic rather than a gate — it is reported so that a
+median near zero can be read as "no direction" rather than mistaken for evidence
+of conservatism.
+
+**Read on the informative searchers only**, as amendment 2 already establishes:
+`RestartAfterKFailures` and `SwapWorstWhileImproving`. `ExtendBySecondBest`
+reports the same quantities as the dominated case.
