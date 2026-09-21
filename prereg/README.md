@@ -128,3 +128,20 @@ in the commit that follows it**, by its full hash. The guard cannot name the
 commit that contains it, so the amendment and its guard entry are always two
 commits. Until the second one lands, the guard still passes on the older list,
 so the new amendment is not enforced. Nothing may run on the panel in between.
+
+## Smokes and scaling curves never touch registered seeds
+
+**A smoke or scaling curve runs on a dedicated seed block, disjoint from every
+experiment's registered seeds, and its report prints no rule quantity:** cost,
+wall time, memory and guard counts only.
+
+Why this rule exists: 6.3's cell C scaling curve ran `--smoke N`, which takes
+the first N *registered* seeds, and each report printed rules 1–4. So interim
+readouts of the experiment's own draws, at up to 19% of the cell, were produced
+and committed before the n = 2,000 read (6.3 deviation 2). Cost measurement
+never needs the experiment's seeds, because per-draw cost does not depend on
+which seed is drawn.
+
+Each pre-registration names its smoke seed block beside its registered one. An
+experiment script's smoke mode takes that block and suppresses its rule output.
+7.1's scaling curve and smoke are the first to follow this.
