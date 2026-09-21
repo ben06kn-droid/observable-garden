@@ -187,9 +187,9 @@ their recorded fingerprints per amendment 13.
 
 ---
 
-## The two milestones
+## The three milestones
 
-Both were required before building further, and both came out **bit-identical**
+The first two were required before building further, and both came out **bit-identical**
 rather than merely close.
 
 **Milestone 1 — the grammar can express a known searcher.** A scripted driver
@@ -211,6 +211,36 @@ base columns in the same order.
 If either had failed, the grammar would be too narrow to stand in for a searcher
 and nothing obtained through it would mean anything.
 
+**Milestone 3 — meta moves replay too.** `restart` and `stop` are grammar moves,
+each taken because a declared trigger fired: a named predicate from
+`quixote/triggers.py` with its parameter, stamped with the value it saw **before**
+the move executes. The session tracks the information set the triggers read
+(best so far with its support, failures, last gain, budget), and the submission
+is the best pair, never the current support. Against the scripted
+`StopWhenCleared` and `RestartAfterKFailures`:
+
+- (a) the grammar-driven submission is **bit-identical** in Sharpe and weights,
+  and the step-by-step actions match, on 60 cases (five trigger settings × six
+  seeds × two signal levels), 24 with restarts and 24 with stops;
+- (b) the log through `estimator/trigger_replay.py` returns the **same three
+  nulls** (fixed-sequence, trigger, policy), realized score and realized actions,
+  array-equal, in all 15 cells tested; re-declaring the logged stop bar moves the
+  policy null and leaves the frozen one alone, so the replay is reading the
+  triggers and not merely agreeing;
+- (c) the identity-replicate guard compares the action sequence as well as the
+  support, reproduces every realized stop and restart, and catches a constructed
+  restart recorded as an extension.
+
+Two things this needed first. `MetaAdaptive` itself reported the current support
+with the global best score after a restart, and was fixed before this milestone
+(7.1 amendment 5). And the grammar's base-column Sharpe now calls
+`estimator.bootstrap.sharpe`, guards included, so a replay scores exactly as the
+scripted searchers do rather than agreeing away from degenerate streams.
+
+The trigger null's fill past the realized length is **7.1's registered scripted
+fill**, imported from `searchers.meta_adaptive`, because (b) is about reproducing
+that searcher's own null. It is not a choice of fill for an agent's path.
+
 ---
 
 ## Deliberately not built
@@ -224,9 +254,7 @@ them now would mean guessing, and the guess is the thing under test.
 - **fidelity-driven pricing**
 - **the living verdict** (item 3), which waits until after the paper
 
-Still to come in part one, in order: **meta-moves** (`restart` and `stop` with
-declared triggers — the grammar above is content-only, and 7.1 is entirely about
-meta-moves), the **real-data sandbox** (panel loader, no-out-of-sample variant,
+Still to come in part one, in order: the **real-data sandbox** (panel loader, no-out-of-sample variant,
 offline grading), the **consistency check**, `pick`, and the **twin generator with
 identifier masking**.
 

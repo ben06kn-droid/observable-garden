@@ -54,6 +54,10 @@ class MoveRecord:
     trigger: str | None = None
     trigger_value: float | None = None
     replayable: bool = True
+    # milestone 3: the declared trigger as a re-evaluable record (kind, param,
+    # action), and when it was stamped -- before the move it justified executed
+    trigger_params: dict | None = None
+    trigger_stamped_at: float | None = None
 
 
 @dataclass
@@ -65,6 +69,8 @@ class SessionLog:
     prediction: dict | None = None
     opened_at: float = field(default_factory=time.monotonic)
     first_evaluation_at: float | None = None
+    # the step budget a meta-adaptive session runs under; None for a plain search
+    budget: int | None = None
 
     # -- append-only ------------------------------------------------------
 
@@ -82,6 +88,30 @@ class SessionLog:
 
     def kinds(self) -> list[str]:
         return [r.move.kind for r in self.records]
+
+    def is_meta(self) -> bool:
+        """A session run under a budget with declared triggers, as opposed to a
+        plain forward selection."""
+        return self.budget is not None
+
+    def declared_triggers(self) -> list[dict]:
+        """Every distinct trigger the session stamped, in order of first use.
+        Together they are the declared policy a replay re-evaluates."""
+        out = []
+        for r in self.records:
+            if r.trigger_params is not None and r.trigger_params not in out:
+                out.append(r.trigger_params)
+        return out
+
+    def actions(self) -> list[str]:
+        """The meta decision at each step after the anchor, in the vocabulary of
+        `searchers.meta_adaptive`: an extension proposed (taken or not) is
+        "continue", and `restart` and `stop` are themselves."""
+        out = []
+        for r in self.records[1:]:
+            k = r.move.kind
+            out.append(k if k in ("restart", "stop") else "continue")
+        return out
 
     def unreplayable(self) -> list[MoveRecord]:
         """The decisions item 1's bracket is about."""

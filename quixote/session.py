@@ -15,6 +15,7 @@ import numpy as np
 
 from quixote.grammar import Grammar, Move, Support, weights
 from quixote.log import InformationSet, MoveRecord, SessionLog
+from quixote.triggers import Trigger
 
 
 class Session:
@@ -25,6 +26,15 @@ class Session:
         self.support: Support = ()
         self.score: float = float("-inf")
         self._pending = None
+        # The information set triggers are evaluated on. `best` and its support
+        # are tracked apart from the current support, because a restart replaces
+        # the support without resetting the best (fixed-sequence-replay
+        # amendment 5): the submission is the best pair, never a mix of the two.
+        self.best_score: float = float("-inf")
+        self.best_support: Support = ()
+        self.failures: int = 0
+        self.last_gain: float = float("inf")
+        self.n_restarts: int = 0
 
     @classmethod
     def on_sandbox(cls, sandbox, spec_class, name_prefix: str = "quixote"):
@@ -76,6 +86,33 @@ class Session:
                 raise ValueError("short list names a specification outside the declared class")
         self.log.short_list = supports
 
+    def declare_budget(self, budget: int) -> None:
+        """The step budget of a meta-adaptive session. Declared before any
+        evaluation: a budget chosen after seeing results is itself a meta
+        decision, and is refused rather than logged as a prior."""
+        self.log.refuse_if_late("budget")
+        self.log.budget = int(budget)
+
+    # -- the information set and triggers -----------------------------------
+
+    @property
+    def steps_taken(self) -> int:
+        """Steps after the anchor, counted as the scripted searchers count them."""
+        return max(0, self.log.n_moves - 1)
+
+    def info_state(self) -> dict:
+        budget = self.log.budget
+        return {"step": self.steps_taken, "best": self.best_score,
+                "failures": self.failures, "last_gain": self.last_gain,
+                "budget_left": None if budget is None else budget - self.steps_taken}
+
+    def evaluate_trigger(self, trigger: Trigger) -> tuple[bool, float, float]:
+        """Evaluate a declared trigger on the current information set and stamp
+        it. Returns (fires, value seen, stamp). The stamp is taken here, before any
+        move it justifies executes, and travels into that move's record."""
+        fires, value = trigger.evaluate(self.info_state())
+        return bool(fires), float(value), time.monotonic()
+
     # -- the search -------------------------------------------------------
 
     def propose(self, move: Move, shown: tuple = ()) -> tuple[Support, float, int]:
@@ -95,8 +132,9 @@ class Session:
         self._pending = (move, new_support, new_score, n_cand, tuple(shown))
         return new_support, new_score, n_cand
 
-    def accept(self, trigger: str | None = None, trigger_value: float | None = None,
-               replayable: bool = True) -> float:
+    def accept(self, trigger: str | Trigger | None = None,
+               trigger_value: float | None = None, replayable: bool = True,
+               stamped_at: float | None = None) -> float:
         """Commit the pending proposal and record it."""
         if self._pending is None:
             raise ValueError("nothing proposed to accept")
@@ -105,15 +143,30 @@ class Session:
                               score_before=self.score, shown=shown,
                               n_candidates_seen=n_cand)
         self.support, self.score = support, score
+        self.last_gain = score - self.best_score
+        if score > self.best_score:
+            self.best_score, self.best_support, self.failures = score, support, 0
+        else:
+            self.failures += 1
+        name, params = _trigger_fields(trigger)
         self.log.record(MoveRecord(
             step=info.step, move=move, support_after=support, score_after=score,
             n_candidates=n_cand, information=info, timestamp=time.monotonic(),
-            trigger=trigger, trigger_value=trigger_value, replayable=replayable))
+            trigger=name, trigger_value=trigger_value, replayable=replayable,
+            trigger_params=params, trigger_stamped_at=stamped_at))
         self._pending = None
         return score
 
-    def reject(self, trigger: str | None = None,
-               trigger_value: float | None = None) -> None:
+    def cancel(self) -> None:
+        """Drop a proposal that produced no candidates. Nothing was computed, so
+        nothing is recorded; the caller records the stop that follows."""
+        if self._pending is None or self._pending[3] != 0:
+            raise ValueError("cancel is only for a proposal with no candidates")
+        self._pending = None
+
+    def reject(self, trigger: str | Trigger | None = None,
+               trigger_value: float | None = None,
+               stamped_at: float | None = None) -> None:
         """Discard the pending proposal, recording that it was computed and not
         taken. The candidates were evaluated, so they count toward breadth even
         though the support did not move."""
@@ -123,25 +176,64 @@ class Session:
         info = InformationSet(step=self.log.n_moves, support_before=self.support,
                               score_before=self.score, shown=shown,
                               n_candidates_seen=n_cand)
+        self.last_gain = score - self.best_score
+        self.failures += 1
+        name, params = _trigger_fields(trigger)
         self.log.record(MoveRecord(
             step=info.step, move=Move(kind=move.kind, statistic=move.statistic,
                                       feature=move.feature, note="rejected"),
             support_after=self.support, score_after=self.score,
             n_candidates=n_cand, information=info, timestamp=time.monotonic(),
-            trigger=trigger, trigger_value=trigger_value, replayable=True))
+            trigger=name, trigger_value=trigger_value, replayable=True,
+            trigger_params=params, trigger_stamped_at=stamped_at))
         self._pending = None
 
-    def stop(self, trigger: str, trigger_value: float,
-             replayable: bool = True) -> None:
-        """A meta-move. It changes no support, so it is recorded with a zero
-        candidate count and its declared trigger."""
+    def stop(self, trigger: str | Trigger, trigger_value: float,
+             replayable: bool = True, stamped_at: float | None = None) -> None:
+        """The `stop` meta move. It changes no support, so it is recorded with a
+        zero candidate count, its declared trigger, and when that trigger was
+        stamped."""
+        if self._pending is not None:
+            raise ValueError("resolve the pending proposal before stopping")
+        stamped_at = time.monotonic() if stamped_at is None else stamped_at
+        name, params = _trigger_fields(trigger)
         info = InformationSet(step=self.log.n_moves, support_before=self.support,
                               score_before=self.score)
         self.log.record(MoveRecord(
-            step=info.step, move=Move(kind="refine", note="stop"),
+            step=info.step, move=Move("stop"),
             support_after=self.support, score_after=self.score, n_candidates=0,
-            information=info, timestamp=time.monotonic(), trigger=trigger,
-            trigger_value=trigger_value, replayable=replayable))
+            information=info, timestamp=time.monotonic(), trigger=name,
+            trigger_value=trigger_value, replayable=replayable,
+            trigger_params=params, trigger_stamped_at=stamped_at))
+
+    def restart(self, trigger: Trigger, trigger_value: float,
+                stamped_at: float, statistic: str = "sharpe") -> bool:
+        """The `restart` meta move: abandon the current support for the next
+        anchor in the ranking of single features. The best score and its support
+        are kept -- a restart changes where the search goes next, not what it has
+        already found. Past the last anchor there is nowhere to go, and the move
+        is recorded as a stop on the harness's own `exhausted` trigger, as the
+        scripted searchers do. Returns whether the restart happened."""
+        if self._pending is not None:
+            raise ValueError("resolve the pending proposal before restarting")
+        rank = self.n_restarts + 1
+        new_support, new_score, n_cand = self.grammar.anchor(rank, statistic)
+        if new_support is None:
+            self.stop("exhausted", float(rank), stamped_at=stamped_at)
+            return False
+        name, params = _trigger_fields(trigger)
+        info = InformationSet(step=self.log.n_moves, support_before=self.support,
+                              score_before=self.score, n_candidates_seen=n_cand)
+        self.support, self.score = new_support, new_score
+        self.failures, self.last_gain = 0, float("inf")
+        self.n_restarts = rank
+        self.log.record(MoveRecord(
+            step=info.step, move=Move("restart", statistic=statistic),
+            support_after=new_support, score_after=new_score, n_candidates=n_cand,
+            information=info, timestamp=time.monotonic(), trigger=name,
+            trigger_value=trigger_value, trigger_params=params,
+            trigger_stamped_at=stamped_at))
+        return True
 
     # -- the prediction slot ----------------------------------------------
 
@@ -153,7 +245,20 @@ class Session:
                                "note": note, "timestamp": time.monotonic()}
 
     def submission(self) -> tuple[Support, float]:
-        return self.support, self.score
+        """The best support seen and its score. For a search that only ever
+        accepts improvements this is the current support; after a restart it is
+        not, and reporting the current one would pair one support's weights with
+        another's score."""
+        return self.best_support, self.best_score
 
     def submitted_weights(self) -> np.ndarray:
-        return weights(self.support, self.grammar.K)
+        return weights(self.best_support, self.grammar.K)
+
+
+def _trigger_fields(trigger) -> tuple[str | None, dict | None]:
+    """A trigger is logged by name, and -- when it is a declared library trigger
+    rather than a harness condition like `exhausted` -- by its re-evaluable
+    record."""
+    if isinstance(trigger, Trigger):
+        return trigger.name, trigger.as_record()
+    return trigger, None

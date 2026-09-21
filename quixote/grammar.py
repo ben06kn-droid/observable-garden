@@ -13,6 +13,13 @@ Content moves (ROADMAP 7.2): `init`, `extend_best`, `swap_worst`, `flip`,
 `refine`. Each is a pure function of (support, data, statistic) -- no randomness,
 no hidden state -- which is what lets a bootstrap replicate re-execute it
 exactly.
+
+Meta moves (milestone 3): `restart` and `stop`. Neither is chosen by the grammar;
+each is taken because a declared trigger fired (`quixote/triggers.py`), and the
+session stamps the trigger before the move executes. `restart` is still a pure
+function of the data: it moves to the next anchor in the ranking of single
+features by the statistic, and the rank is the harness's own restart count, so a
+replicate re-derives it rather than copying it.
 """
 from __future__ import annotations
 
@@ -20,11 +27,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from estimator.bootstrap import sharpe as _sharpe
 from garden.spec_class import SubsetClass
 
 Support = tuple[tuple[int, float], ...]
 
-MOVE_KINDS = ("init", "extend_best", "swap_worst", "flip", "refine")
+CONTENT_KINDS = ("init", "extend_best", "swap_worst", "flip", "refine")
+META_KINDS = ("restart", "stop")
+MOVE_KINDS = CONTENT_KINDS + META_KINDS
 
 
 @dataclass(frozen=True)
@@ -43,6 +53,10 @@ class Move:
             raise ValueError("flip names the feature to flip")
         if self.kind != "flip" and self.feature is not None:
             raise ValueError(f"{self.kind} does not take a feature")
+
+    @property
+    def is_meta(self) -> bool:
+        return self.kind in META_KINDS
 
 
 def weights(support: Support, K: int) -> np.ndarray:
@@ -98,10 +112,11 @@ class Grammar:
         for k, s in support:
             stream = stream + self.base[:, k] * s
         if statistic == "sharpe":
-            sd = stream.std(ddof=1)
-            if sd <= 0:
-                return float("-inf")
-            return float(stream.mean() / sd * self.annualization)
+            # The estimator's own Sharpe, guards included, so a replay scores
+            # exactly as the scripted searchers do rather than agreeing with
+            # them only away from degenerate streams.
+            return float(_sharpe(stream[:, None], axis=0,
+                                 annualization=self.annualization)[0])
         raise ValueError(
             f"unknown statistic {statistic!r}; this package implements 'sharpe'. "
             "'stability' is pre-registered and deliberately unbuilt here.")
@@ -143,6 +158,18 @@ class Grammar:
             # support does not change
             out.append((self.score(support, move.statistic), tuple(support)))
         return out
+
+    def anchor(self, rank: int, statistic: str = "sharpe") -> tuple[Support | None, float, int]:
+        """The `rank`-th single feature by `statistic`, at sign +1: what `init`
+        takes at rank 0 and each `restart` takes at the next rank. Ranked with
+        `np.argsort(-scores)`, the same call `searchers.meta_adaptive` makes, so
+        ties resolve identically. Returns (None, -inf, K) past the last feature."""
+        scores = np.array([self.score(((k, 1.0),), statistic) for k in range(self.K)])
+        order = np.argsort(-scores)
+        if rank >= self.K:
+            return None, float("-inf"), self.K
+        k = int(order[rank])
+        return ((k, 1.0),), float(scores[k]), self.K
 
     def apply(self, support: Support, move: Move) -> tuple[Support, float, int]:
         """Execute `move`. Returns (new support, its score, candidates considered).

@@ -14,6 +14,15 @@ search to about 1e-12 rather than bit for bit, exactly as
 inside an *agent's* path, local-max pricing, and fidelity-driven pricing are all
 7.2 part two, and `fixed-sequence-replay` (7.1) decides their design. This module
 re-executes; it does not adjudicate.
+
+**Meta-adaptive logs (milestone 3).** A log with a declared budget and stamped
+triggers is replayed by `_run_meta`, step for step the loop of
+`searchers.meta_adaptive.MetaAdaptive._search`: content moves through the
+grammar, meta moves from the declared triggers re-evaluated on the replicate's
+own information set. Its trigger mode fills past the realized length with **7.1's
+registered scripted fill**, imported from `searchers.meta_adaptive`, because the
+milestone is that a logged scripted searcher reproduces that searcher's own
+three nulls. It is not a choice of fill for an agent's path, which 7.1 decides.
 """
 from __future__ import annotations
 
@@ -23,6 +32,7 @@ import numpy as np
 
 from quixote.grammar import Grammar, Move
 from quixote.log import SessionLog
+from quixote.triggers import Trigger
 
 
 @dataclass
@@ -56,8 +66,8 @@ class LoggedPolicy:
         self.statistic = statistic
         self.max_features = spec_class.max_size
         self.name = "logged-policy"
-        # the proposed move kinds, stop records excluded
-        self._kinds = [r.move.kind for r in log.records if r.move.note != "stop"]
+        self.budget = log.budget
+        self.triggers = [Trigger.from_record(t) for t in log.declared_triggers()]
 
     # -- the policy --------------------------------------------------------
 
@@ -100,22 +110,96 @@ class LoggedPolicy:
 
     # -- the interface estimator/trigger_replay consumes -------------------
 
+    def _run_meta(self, base: np.ndarray, annualization: float,
+                  frozen: list[str] | None = None,
+                  meta_steps: int | None = None) -> ReplayTrace:
+        """The logged meta-adaptive policy on `base`. `frozen` freezes each
+        step's action at the realized one (null 1); `meta_steps` re-evaluates the
+        declared triggers for that many steps and fills past them (null 2);
+        neither re-evaluates them throughout (null 3)."""
+        from searchers.meta_adaptive import MetaAdaptive   # 7.1's scripted fill only
+
+        g = Grammar(self.spec_class, base, annualization)
+        K = g.K
+        support, best, _ = g.anchor(0, self.statistic)
+        support = list(support)
+        best_support = list(support)
+        failures, last_gain, restarts = 0, float("inf"), 0
+        trace = ReplayTrace()
+
+        def score_list(ns):
+            return g.score(tuple(ns), self.statistic)
+
+        for step in range(self.budget):
+            filling = False
+            if frozen is not None:
+                if step >= len(frozen):
+                    break
+                action = frozen[step]
+            elif meta_steps is not None and step >= meta_steps:
+                action, filling = "continue", True
+            else:
+                state = {"step": step, "best": best, "failures": failures,
+                         "last_gain": last_gain, "budget_left": self.budget - step}
+                action = "continue"
+                for trig in self.triggers:
+                    fires, _ = trig.evaluate(state)
+                    if fires:
+                        action = trig.action
+                        break
+
+            if action == "stop":
+                trace.moves.append("stop")
+                break
+            if action == "restart":
+                restarts += 1
+                new, _, _ = g.anchor(restarts, self.statistic)
+                if new is None:
+                    trace.moves.append("stop")
+                    break
+                support = list(new)
+                failures, last_gain = 0, float("inf")
+                trace.moves.append("restart")
+                continue
+
+            if filling:
+                cands = MetaAdaptive._grammar(support, K, score_list)
+                chosen = max(cands) if cands else None
+                cand_score, cand_support = (chosen[0], chosen[2]) if chosen else (None, None)
+            else:
+                cs, sc, n = g.apply(tuple(support), Move("extend_best", self.statistic))
+                cand_score, cand_support = (sc, list(cs)) if n else (None, None)
+            if cand_support is None:
+                trace.moves.append("stop")
+                break
+            last_gain = cand_score - best
+            if cand_score > best:
+                support, best = list(cand_support), float(cand_score)
+                best_support, failures = list(support), 0
+            else:
+                failures += 1
+            trace.moves.append("continue")
+
+        trace.support, trace.score = tuple(best_support), best
+        return trace
+
     def trace(self, base: np.ndarray, annualization: float = 1.0,
               frozen: list[str] | None = None,
               meta_steps: int | None = None) -> ReplayTrace:
-        return self._run(base, annualization, frozen=frozen, meta_steps=meta_steps)
+        run = self._run_meta if self.log.is_meta() else self._run
+        return run(base, annualization, frozen=frozen, meta_steps=meta_steps)
 
     def replay(self, base_columns: np.ndarray, annualization: float = 1.0) -> float:
         """Full policy replay: triggers re-evaluated on this replicate."""
-        return self._run(base_columns, annualization).score
+        return self.trace(base_columns, annualization).score
 
     def replay_fixed_sequence(self, base_columns: np.ndarray, actions: list[str],
                               annualization: float = 1.0) -> float:
-        return self._run(base_columns, annualization, frozen=actions).score
+        return self.trace(base_columns, annualization, frozen=actions).score
 
     def replay_triggers(self, base_columns: np.ndarray, n_realized_moves: int,
                         annualization: float = 1.0) -> float:
-        return self._run(base_columns, annualization, meta_steps=n_realized_moves).score
+        return self.trace(base_columns, annualization, meta_steps=n_realized_moves).score
 
 
 # -- the identity-replicate guard -------------------------------------------
@@ -141,6 +225,11 @@ class IdentityCheck:
     replayed_score: float
     n_moves_realized: int
     n_moves_replayed: int
+    # milestone 3: the step-by-step meta decisions, compared for meta logs, so a
+    # replay that stops or restarts at a different step fails even if it lands
+    # on the same support
+    realized_actions: tuple = ()
+    replayed_actions: tuple = ()
 
     @property
     def score_gap(self) -> float:
@@ -152,23 +241,45 @@ class IdentityCheck:
                     f"reproduces the realized support; scores differ by "
                     f"{self.score_gap:.2e}, which is float accumulation and not "
                     "a different search.")
+        seq = ("" if self.realized_actions == self.replayed_actions else
+               f" The meta decisions differ too: replayed {list(self.replayed_actions)} "
+               f"against realized {list(self.realized_actions)}.")
         return ("Identity-replicate guard: FAIL. Replaying the un-resampled data "
                 f"gives support {self.replayed_support} against the realized "
-                f"{self.realized_support}. The two scoring paths differ at ~1e-12 "
+                f"{self.realized_support}.{seq} The two scoring paths differ at ~1e-12 "
                 "and that has flipped an argmax, so every later move priced a "
                 "search that did not run. This run is flagged and not priced.")
 
 
 def identity_check(log: SessionLog, spec_class, base: np.ndarray,
                    annualization: float = 1.0) -> IdentityCheck:
-    """Replay `log` on `base` itself -- no resampling -- and compare."""
-    realized_support = log.records[-1].support_after if log.records else ()
-    realized_score = log.records[-1].score_after if log.records else float("-inf")
+    """Replay `log` on `base` itself -- no resampling -- and compare.
+
+    The realized submission is the best accepted support: the last record whose
+    move was a content move that was taken. For a plain forward selection that is
+    the last support held; after a restart it is not, and the current support is
+    never what was submitted. For a meta log the step-by-step actions are
+    compared as well, so the guard covers where the search stopped or restarted.
+    """
+    taken = [r for r in log.records
+             if not r.move.is_meta and r.move.note != "rejected"]
+    realized_support = taken[-1].support_after if taken else ()
+    realized_score = taken[-1].score_after if taken else float("-inf")
     t = LoggedPolicy(log, spec_class).trace(base, annualization)
-    kinds = [r.move.kind for r in log.records if r.move.note not in ("stop", "rejected")]
+    same_support = tuple(t.support) == tuple(realized_support)
+    if log.is_meta():
+        realized_actions, replayed_actions = tuple(log.actions()), tuple(t.moves)
+        agrees = same_support and realized_actions == replayed_actions
+        n_real = sum(1 for a in realized_actions if a == "continue")
+        n_rep = sum(1 for a in replayed_actions if a == "continue")
+    else:
+        realized_actions = replayed_actions = ()
+        agrees = same_support
+        n_real = len(taken)
+        n_rep = sum(1 for m in t.moves if m == "accept")
     return IdentityCheck(
-        agrees=(tuple(t.support) == tuple(realized_support)),
+        agrees=agrees,
         realized_support=tuple(realized_support), replayed_support=tuple(t.support),
         realized_score=float(realized_score), replayed_score=float(t.score),
-        n_moves_realized=len(kinds),
-        n_moves_replayed=sum(1 for m in t.moves if m == "accept"))
+        n_moves_realized=n_real, n_moves_replayed=n_rep,
+        realized_actions=realized_actions, replayed_actions=replayed_actions)
