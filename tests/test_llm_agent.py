@@ -13,6 +13,10 @@ from environments.dgp import DGPConfig, generate
 from environments.sandbox import Sandbox, Specification
 from garden import watch as watch_mod
 from garden.spec_class import SubsetClass
+pytest.importorskip(
+    "claude_agent_sdk",
+    reason="searchers.llm_agent imports the agent SDK at module level. Agent runs\ngo through the seat on the laptop and never on EC2, so the SDK is absent there\nand these tests skip rather than failing collection for the whole suite.")
+
 from searchers.llm_agent import (
     ARMS, LIVE_ARMS, SERVER_NAME, AgentConfig, LLMAgent, RunPaths, build_prompt, spec_from,
     tool_names,

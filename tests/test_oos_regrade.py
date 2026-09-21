@@ -25,6 +25,10 @@ import numpy as np
 import pytest
 
 from environments.dgp import DGPConfig, generate
+pytest.importorskip(
+    "claude_agent_sdk",
+    reason="searchers.llm_agent imports the agent SDK at module level. Agent runs\ngo through the seat on the laptop and never on EC2, so the SDK is absent there\nand these tests skip rather than failing collection for the whole suite.")
+
 from searchers.llm_agent import spec_from
 
 # CONFIGS and dgp_seeds are the authoritative run configuration and seed
@@ -35,9 +39,6 @@ from searchers.llm_agent import spec_from
 # instance). Moving them would shift the harness fingerprint, since e_agent.py
 # is inside code_state.CODE_PATHS. Skipping is the cheaper honest answer: the
 # re-grades this gates are local work, and run where the SDK is installed.
-pytest.importorskip("claude_agent_sdk",
-                    reason="experiments.e_agent imports the agent SDK; the "
-                           "offline re-grades this test gates run locally")
 from experiments.e_agent import CONFIGS, dgp_seeds  # noqa: E402
 
 RUNS = pathlib.Path(__file__).resolve().parent.parent / "runs"

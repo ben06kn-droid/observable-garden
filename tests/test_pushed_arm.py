@@ -13,6 +13,10 @@ import types
 
 import pytest
 
+pytest.importorskip(
+    "claude_agent_sdk",
+    reason="searchers.llm_agent imports the agent SDK at module level. Agent runs\ngo through the seat on the laptop and never on EC2, so the SDK is absent there\nand these tests skip rather than failing collection for the whole suite.")
+
 from experiments.e_agent import read_prompts, system_prompt_for
 from searchers.llm_agent import ARMS, LIVE_ARMS, LLMAgent, tool_names
 from tests.test_llm_agent import call, handlers, make_agent, text_of
