@@ -86,6 +86,45 @@ manifests): **AZN, 2026-02-02, split 2 → 1**, which is consistent with the ADR
 absorbs both events cleanly, and whether TTE had an unrecorded change, is
 checked by hand against the depositary notices when the features are built.
 
+**AZN and TTE, verified 2026-09-21 from the companies' own announcements** (still
+before any bar is opened):
+
+- **AZN: depositary receipt to direct listing, inside the window.** The Nasdaq
+  ADSs represented ordinary shares "on a two-for-one basis" and ceased trading
+  30 January 2026. Ordinary shares began trading on the NYSE on Monday 2 February
+  2026, same ticker (AstraZeneca press release, "AstraZeneca to complete direct
+  listing of ordinary shares … on the New York Stock Exchange"). **The vendor
+  covers the price step:** its split record, 2026-02-02 at 2 → 1, matches the
+  ratio and the date, and `adjusted=true` applies split records. Whether the
+  vendor also adjusts **volume** is not documented. So **AZN's relative-volume
+  feature is registered as missing for the 20 sessions from 2026-02-02** (its
+  look-back crosses the change), unless the build-time check shows volume is
+  adjusted. The venue also changed from Nasdaq to NYSE, which the consolidated
+  aggregates do not separate.
+- **TTE: depositary receipt to ordinary share, inside the window, at one for
+  one.** The ADR program terminated and every ADR was converted into one
+  NYSE-listed ordinary share on 8 December 2025, same ticker (TotalEnergies
+  press release of that date). A one-for-one conversion creates no price-level
+  step, which is consistent with the vendor recording no split. **No adjustment
+  is needed.** One cost consequence is recorded rather than resolved:
+  TotalEnergies' ADR-holder FAQ states that its NYSE-traded shares are within
+  the French financial transaction tax. The flat-overnight book holds no
+  end-of-day position; whether that takes it outside the tax is **not verified**,
+  and the cost model does not charge it.
+- **UL's 2025-12-09 record (9 → 8) is not yet explained** by a primary source and
+  stays on the hand-check list.
+
+**Placebo limitation.** All three controls are technology names (two
+semiconductors and SPOT), while twelve of the eighteen treated names are not
+tech. So the placebo panel matches the **tech sub-panel** in sector, not the
+treated panel as a whole. A home-close "effect" found on the large caps and
+absent on the controls cannot separate the mechanism from sector. **The
+like-for-like placebo comparison is tech sub-panel against controls.** The large
+caps have **no placebo of their own**; for them the within-name falsification
+readouts (clock-mismatch weeks, home holidays, home early closes) are the only
+check. Three control names also make a very noisy dollar-neutral book, so a null
+placebo result is weak evidence either way.
+
 **ARM's history.** ARM listed 2023-09; the free-tier window opens ~2024-09, so
 ARM should cover it fully. **Confirm at download and record actual first and
 last bar per name** — this is an assumption until the manifest says otherwise.
@@ -131,7 +170,7 @@ bar is `TRANSITION` too**, so the uncross can never land in a traded bar.
 | XAMS | **17:30 CET** | **17:35 CET, random end**; Trading-at-Last 17:35–17:40 | **primary** — Euronext *Appendix to Trading Manual 4-01* (xlsx, euronext.com/en/media/1927/download), group J0 "Equities AEX": continuous 09:00–17:30, CA 17:35 random, TAL 17:35–17:40 |
 | XPAR | **17:30 CET** | **17:35 CET, random end**; TAL 17:35–17:40 | **primary** — same appendix, groups F1/F2 "Equities CAC40": identical times |
 | XETR | **17:30 CET** | **17:35 CET earliest, random end** (plus any volatility interruption); Trade-at-Close to 17:40 | **primary** — Deutsche Börse cash-market trading-hours page ("Trading on Xetra takes place … from 9 until 17:30 CET"); Xetra Trade-at-Close factsheet, data as of July 2026 (closing auction ends 17:35 CET, randomized) |
-| XLON | **16:30 UK** | **16:35 UK, random end**, then the Closing Price Crossing session at the auction price | **mechanism primary** — LSE *MIT201 Guide to the Trading System* 15.8 (effective 19 Jan 2026): closing auction, a random period before the uncross, CPX after it; **the 16:30 / 16:35 times are secondary**, since MIT201 refers them to the Business Parameters workbook, which was not obtained |
+| XLON | **16:30 UK** | **16:35 UK at the earliest, random end**; price-monitoring extensions can run to 16:49 at the latest; then the Closing Price Crossing session at the auction price | **primary** — LSE, *Exchange Traded Funds: Introducing and Operating ETFs in the UK* (Feb 2024): the order book is continuous "until the start of the closing auction at 16:30", which "runs from 16:30 until at least 16:35", with the uncross "dependent on random end times and price monitoring periods" and "the latest possible time of uncrossing is 16:49". The guide's subject is ETFs on the order book; the same timings are in LSE's *Market Close ceremony* note (2019: auction launched at 16:30, trades executed at 16:35), and the mechanism is in *MIT201* 15.8 (random period before the uncross, CPX after). The Business Parameters workbook itself was not obtained |
 | XCSE | **16:55 CET** | **17:00 CET**, uncross random in the last 30 s | **primary** — Nasdaq European Markets page, Copenhagen Equities row (09:00–17:00) and the same last-five-minutes note as XSTO |
 
 In US time, from `zoneinfo` at tz 2026.4 (continuous / auction end, ET): XSWX
@@ -150,11 +189,16 @@ each one hour later during the clock-mismatch weeks.
 | SAP | XETR | 11:30–11:40 | 12:30–12:40 | 2 | 11:35 is the *earliest* auction end, plus any volatility interruption |
 | NVS | XSWX | 11:20–11:30 | 12:20–12:30 | 2 | as LOGI |
 | SNY, TTE | XPAR | 11:30–11:40 | 12:30–12:40 | 2 | as STM |
-| AZN, HSBC, BCS, UL, DEO, SHEL, BP, RIO | XLON | 11:30–11:40 | 12:30–12:40 | 2 | the uncross follows a random period after 16:35, so the next bar is flagged too |
+| AZN, HSBC, BCS, UL, DEO, SHEL, BP, RIO | XLON | 11:30–11:40 | 12:30–12:40 | 2 | the auction runs until *at least* 16:35 with a random end, so the next bar is flagged too |
 | NVO | XCSE | 10:55–11:00 | 11:55–12:00 | 1 | uncross in the final 30 s before 17:00, as XSTO |
 
 The auction-end sensitivity readout takes the end of each name's last
 `TRANSITION` bar as its boundary.
+
+**Known residue.** A price-monitoring extension (London, up to 16:49) or a
+volatility interruption (Xetra) can push an uncross past the second
+`TRANSITION` bar. This is rare, is not flagged per day, and the two-bar rule
+stands.
 
 **Post-auction phases are not price discovery.** Euronext's Trading-at-Last
 (17:35–17:40 CET) and Xetra's Trade-at-Close (to 17:40 CET) match only at the
