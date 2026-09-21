@@ -32,6 +32,14 @@ not hold it and `XLC` is the honest match. That makes three benchmark series
 rather than two. Flagged rather than smoothed over; overridable before the
 feature commit.
 
+**SOXX self-weight (recorded 2026-09-21).** SOXX holds **ASML at 2.33%** and
+**NXPI at 3.15%**, as of 2026-09-17. **Read-level: secondary**
+(stockanalysis.com, data from Finnhub), because iShares' own holdings file is
+not served to scripted requests. STM and ARM are not among the 25 listed of 34
+holdings, so each is at most 1.00% if held at all. "Own return minus SOXX" for
+ASML and NXPI therefore carries a small self-weight, and possibly STM and ARM
+too. **Recorded, not corrected.**
+
 **Download list:** the nine names above plus `SOXX`, `XLK`, `XLC`.
 
 **ARM's history.** ARM listed 2023-09; the free-tier window opens ~2024-09, so
@@ -110,17 +118,28 @@ six; the primary documents above contradict that for the three Euronext/Xetra
 names.) Either way the six do not share one continuous end, so **per-name
 constants are required and a panel-wide 11:30 ET is wrong**.
 
-**Still unresolved: whether any constant changed inside the two-year window.**
-All six sources above are current documents; none is a dated history. This must
-be resolved before the feature commit, or the feature commit must register the
-current constants as applying throughout and say so.
+**The constants are assumed fixed across the window.** `exchange_calendars`
+4.13.2 encodes one close time for each of the six, with no change inside
+2024-09-23 to 2026-09-18, and no dated primary source for the continuous or
+auction ends was found. Every source above is a current document, so today's
+constants apply throughout by assumption, not by verification.
 
 ## Calendars
 
 `exchange_calendars` 4.13.2, pinned in the manifest. Coverage confirmed for
 **XAMS, XPAR, XETR, XHEL, XSTO, XSWX** and XNYS/XNAS. tz database **2026.4**.
-Holiday and early-close handling comes from that library, to be spot-checked
-against primary sources for a sample of dates with the read-level recorded.
+Holiday and early-close handling comes from that library, spot-checked against
+primary sources with the read-level recorded.
+
+**Early closes in the window, 2024-09-23 to 2026-09-18, per exchange:**
+
+| MIC | from `exchange_calendars` | primary spot-check | read-level |
+|---|---|---|---|
+| XAMS, XPAR | 14:05 CET on 24 and 31 Dec 2024 and 2025 (4 days each) | Euronext trading-hours page: cash markets "close by 14:05 CET" on half days (wording from its 2021 year-end notice); 24 and 31 Dec 2026 listed as half days | primary, but the 2024–25 year-end appendices were not fetched |
+| XETR | shut 24 and 31 Dec; **14:00 CET on 30 Dec 2024 and 2025** | Deutsche Börse's non-trading-day list confirms 24 and 31 Dec closed; for 30 Dec it says only that deviating hours may apply, set by circular | closures primary; **30 Dec time unverified** |
+| XSTO | 13:00 CET half days, 9 in the window (2024-11-01, 2025-04-17, 2025-04-30, 2025-05-28, 2025-10-31, 2026-01-05, 2026-04-02, 2026-04-30, 2026-05-13) | Nasdaq's page lists 2026 half days Jan 5, Apr 2, Apr 30, May 13 — matches; half-day equities 09:00–13:00 | dates primary for 2026; **continuous end on half days (presumably 12:55) unverified** |
+| XHEL | none | Nasdaq's page lists no Helsinki half days | primary |
+| XSWX | none; shut 24 and 31 Dec | not spot-checked against SIX | library only |
 
 ## Secondary falsification readouts — counted, not estimated
 
@@ -146,3 +165,14 @@ small amount of extra identification. **The
 independent unit is therefore no longer strictly the day**, though it is much
 closer to the day (~500 in the window) than to the bar. Twin construction
 respects each name's own boundary and drops `TRANSITION` bars.
+
+## Deviation: where the correcting commit's content landed
+
+The correction of 2ea8574's close times was meant to be one commit on its own.
+Most of it landed inside **2dd4473** ("add an optional class cap to MetaAdaptive,
+…"), an unrelated commit that swept up the uncommitted edit to this file. That
+part covers the primary-source close times, the per-name exchange_calendars
+reading and the 17:30-local correction. **0a5a15a** carries the rest: two
+`TRANSITION` bars for XAMS, XPAR and XETR, and the post-auction phases. The
+pushed history was not rewritten; the download manifest records all three
+hashes.
