@@ -193,3 +193,116 @@ correlation is not modeled and would widen the standard error.
 - The listing-structure and ADR-ratio check of `prereg/adr-universe.md`'s
   amendment: AZN's 2026-02-02 and UL's 2025-12-09 split records, and TTE, checked
   by hand against the depositary notices.
+
+## Amendment 1 — 2026-09-21, costs and corporate actions
+
+Appended before any bar is opened; everything above is left intact, and where
+this section and §6 disagree, this section governs. The feature code's ancestor
+guard requires this commit as well as the original one.
+
+### A1. The spread estimator runs on 5-minute bars
+
+**§6 as committed computed Abdi–Ranaldo on daily close/high/low**, one pair per
+session over 21 sessions. That is superseded. For a liquid, high-priced name the
+daily range is roughly a hundred times the spread, so a daily estimate is mostly
+noise and would often collapse to the floor.
+
+**Primary: Abdi–Ranaldo on 5-minute bars.** For name *i* priced on session *d*,
+take every pair of consecutive regular-session bars (09:30–16:00, both bars
+present, same session) in the **20 sessions before *d***. With *c* the log close
+of a bar and η = (log high + log low) / 2,
+
+  ŝ²_{i,d} = max(0, 4 · mean over pairs of (c_t − η_t)(c_t − η_{t+1})),
+
+giving about 20 × 77 = 1,540 pairs. The window is 20 sessions rather than 21 so
+that the first scored session, which follows the 20-session warm-up, has a full
+window. **Session *d* itself is never used.** No pair crosses a session boundary.
+
+**Cross-check readout: Roll on the same bars**,
+ŝ_Roll = 2·√max(0, −cov(r_t, r_{t−1})), with *r* the within-session 5-minute log
+returns over the same 20 sessions. Reported per name, together with the share of
+name-sessions where the covariance is positive (so Roll is undefined) and the
+ratio of Abdi–Ranaldo to Roll.
+
+**Why Abdi–Ranaldo is primary.** Roll's estimate is the lag-1 autocovariance of
+returns, the same statistic the lag-1 own-return feature trades on and that
+readout 3 (the bounce) measures. As the cost model it would absorb any real lag-1
+reversal into cost by construction, and it would make the bounce readout
+circular. Roll is also undefined whenever that autocovariance is positive.
+Abdi–Ranaldo uses the within-bar range. It is not independent of return
+dynamics, but it is not the tested statistic.
+
+**Citations, checked 2026-09-21 against Crossref publisher metadata:**
+Abdi, F. and Ranaldo, A. (2017), "A Simple Estimation of Bid-Ask Spreads from
+Daily Close, High, and Low Prices", *Review of Financial Studies* 30(12),
+4437–4480, doi:10.1093/rfs/hhx084. Roll, R. (1984), "A Simple Implicit Measure of
+the Effective Bid-Ask Spread in an Efficient Market", *Journal of Finance* 39(4),
+1127–1139, doi:10.1111/j.1540-6261.1984.tb03897.x. **The formulas are checked
+against the `bidask` R package source** (Ardia, Guidotti and Kroencke, CRAN
+2.1.5: `s2 <- 4 * (c1 - m1) * (c1 - m2)` for Abdi–Ranaldo and
+`s2 <- -4 * cov` for Roll), **not against the papers' own text**: the journal
+PDF was not retrieved. Read-level: secondary for the formulas, primary for the
+bibliographic data.
+
+**Readout at build time:** the share of name-sessions at the floor, per name. A
+high share means the estimator is not resolving the spread for that name.
+
+### A2. The floor is in basis points as well as cents
+
+  ŝ_{i,d} ≥ max(0.01 / close_{d−1}, **2 bps**).
+
+One cent is about 20 bps for NOK and a fraction of a basis point for ASML, so a
+cents-only floor binds only for the cheap names. **2 bps is an assumption, not a
+measurement**, labelled as the fee is. It is a rounded lower bound for the quoted
+spread of a liquid US-listed large cap. Too low a floor undercharges; A3 is what
+catches a verdict that depends on undercharging.
+
+### A3. COST-FRAGILE
+
+**A CERTIFIED verdict that does not survive the 2×-spread readout is reported as
+CERTIFIED, COST-FRAGILE**, meaning its p-value with every spread doubled
+(floor and fee unchanged) fails its own route's α. This applies on both routes.
+**Reason:** trade-based bars contain bid-ask bounce worth about half a spread per
+trade, so an underestimated spread lets that artifact through the net-of-cost
+null. A result that needs the spread to be as small as estimated is exactly the
+result the bounce would produce.
+
+### A4. UL: consolidation and demerger
+
+**Verified from Unilever's own announcement** ("Update on Share Consolidation",
+RNS of 8 December 2025) and its circular: the demerger of The Magnum Ice Cream
+Company completed on **8 December 2025**, with **one TMICC share for every five
+Unilever shares or ADSs**. The share consolidation took effect on **9 December
+2025** at **8 new shares for 9**, and ADS holders received 8 new ADSs for every 9,
+with new ADSs trading on the NYSE from market open that day. The vendor's
+2025-12-09 record (9 → 8) is the consolidation. **The split adjustment covers the
+consolidation and not the demerger distribution**, which remains a price-level
+break in the adjusted series.
+
+**Rule:** UL's overnight gap is **missing on 2025-12-08 and 2025-12-09**, as for
+ex-dates. Both dates are excluded because the sources read do not pin which day
+the ADSs traded ex-distribution. UL's relative-volume feature is missing for the
+20 sessions from 2025-12-09 unless the build-time check shows the vendor adjusts
+volume, the same rule as AZN's. Flat overnight keeps the break out of every
+return, and every other feature is within-session.
+
+### A5. AZN: no UK stamp duty on NYSE purchases
+
+**Verified from AstraZeneca's circular for the listing harmonisation (2025),
+Part on UK taxation:** "No UK stamp duty will be payable in respect of transfers
+of AstraZeneca Shares … provided that no written instrument of transfer is
+used", and "while the AstraZeneca Shares are held within the DTC clearance
+system, agreements to transfer such shares should not be subject to SDRT". The
+1.5% charge applies to transfers *into* DTC, not to trades within it.
+**Read-level: primary**, though worded as the company's tax statement ("should
+not"), not as a ruling on every trade. **No stamp duty is charged**, from
+2026-02-02 or at any other time.
+
+### A6. TTE: French financial transaction tax, still unverified
+
+TotalEnergies' FAQ (question 14) states its NYSE-traded shares are within the
+tax, "due on any acquisition for consideration … (except where applicable
+exemptions apply)", and does not describe intraday treatment. That the tax falls
+on net end-of-day positions, which would exempt a flat-overnight book, is **not
+verified from a primary source**. It is **not charged**, and this is recorded as
+an open item.

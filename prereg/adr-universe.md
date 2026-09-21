@@ -111,8 +111,9 @@ before any bar is opened):
   the French financial transaction tax. The flat-overnight book holds no
   end-of-day position; whether that takes it outside the tax is **not verified**,
   and the cost model does not charge it.
-- **UL's 2025-12-09 record (9 → 8) is not yet explained** by a primary source and
-  stays on the hand-check list.
+- **UL's 2025-12-09 record (9 → 8) is the 8-for-9 share consolidation**, which
+  followed the Magnum Ice Cream demerger of 8 December 2025. Verified and handled
+  in `prereg/adr-features.md` amendment 1, A4.
 
 **Placebo limitation.** All three controls are technology names (two
 semiconductors and SPOT), while twelve of the eighteen treated names are not
