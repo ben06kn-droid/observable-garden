@@ -25,10 +25,28 @@ the source of `data/SPY_daily.csv` and the one ROADMAP 6.5 names. Reachable on
 dividend-adjusted**, so returns from it are total returns. For a short position
 that is the right sign, because the short pays the dividend.
 
+**One fetch, on the holdout host, for the whole span.** The full 2005-01-01 to
+2025-12-31 adjusted series is fetched **once**, on the holdout host, and hashed
+there. **The holdout host is the EC2 c7a.48xlarge `i-0e0c1484de3c755ad`** (ssh
+alias `og-c7a`), which is never the agent's machine. From that single fetch:
+
+- the **in-sample rows (2005-01-01 to 2022-12-31)** are exported to the agent's
+  machine as derived files, each with its own hash and the hash of the fetch it
+  came from;
+- the **holdout rows (2023-01-01 to 2025-12-31)** stay on the holdout host and are
+  never copied to the agent's machine.
+
+**Why once.** Back-adjusted closes are rewritten at every later dividend and
+split, and the vendor revises and rounds them, so two fetches on different dates
+are not one series and do not hash the same. A single fetch is the only way for
+in-sample and holdout to be one hashed series, with every derived file traceable
+to it.
+
 **Before any bar is opened**, a manifest (`data/etf_manifest.json`, the ADR
-pattern) records: the universe commit, source, endpoint, request parameters,
-download date, adjustment method, tzdata and calendar versions, and a hash, row
-count and first/last date per file. Raw series stay out of git.
+pattern) records: the universe commit, the holdout host, source, endpoint,
+request parameters, download date, adjustment method, tzdata and calendar
+versions, and a hash, row count and first/last date for the fetch and for each
+derived file. Raw series stay out of git.
 
 **Survivorship, noted.** The universe is "ETFs with continuous daily history
 from 2005-01-01 through the end of the holdout", fixed by a rule and committed
@@ -43,21 +61,19 @@ rather than assumed away. Survivorship-free ETF history would need a paid source
 **Holdout: 3 years, 2023-01-01 to 2025-12-31, daily.** In-sample: 2005-01-01 to
 2022-12-31, which is 4,531 NYSE sessions.
 
-*These two choices are proposed here and are the author's to confirm.* Three
-years rather than two because the per-run Sharpe standard error is 0.58 rather
+*Confirmed 2026-09-21.* Three years rather than two because the per-run Sharpe standard error is 0.58 rather
 than 0.71 (below). Whole calendar years because the brief asks for it. The slice
 from 2026-01-01 to the search date is **in neither**: it keeps 6.5's holdout to
 whole years, and keeps 6.9's sealed forward window strictly after the search
 date, where it has to be.
 
 **The holdout is never on the machine the agent runs on.**
-- The in-sample download requests end at 2022-12-31. No holdout date is ever
-  requested on the agent's machine.
+- Nothing is fetched on the agent's machine. It receives only the exported
+  in-sample rows from the holdout host's single fetch.
 - The in-sample loader refuses any date on or after 2023-01-01. This is a hard
   check, not a filter.
-- The holdout is downloaded, and submissions graded, only on the grading host
-  (the EC2 instance, or another machine that is never the agent's), after every
-  submission is committed.
+- Submissions are graded only on the holdout host, `i-0e0c1484de3c755ad`, after
+  every submission is committed.
 
 **Ancestor-commit guard, as for 7.4.** Feature building refuses unless the
 universe commit, the feature-list commit and this pre-registration's live
@@ -82,7 +98,7 @@ spreads are wider, so 5 bps one-way per unit turnover sits above typical
 half-spread plus commission for all of them, and 10 bps sits above it by a
 margin. Both are **assumptions, not measurements**, and labelled so.
 
-### Features, class, arms
+### Features and class
 
 As ROADMAP 6.5: **K = 40** price-based, dollar-neutral cross-sectional signals
 with strict one-day lag, committed in their own feature-list commit before any
@@ -91,8 +107,23 @@ benchmark subtraction is needed. **Class: signed subsets of size ≤ 3 (82,240
 members)**, admissible by preflight at this length: bar 1.14, power **0.27** at
 reference Sharpe 1.0, above the 20% floor. It would fall back to unsigned
 depth-3 (power 0.43) or signed depth-2 (0.53) only if this were inadmissible,
-and it is not. **Arms:** control and gate, 40 runs each, claude-sonnet-5, one
-fixed in-sample panel.
+and it is not.
+
+### Arms, matching Phase 7 as amended
+
+claude-sonnet-5, one fixed in-sample panel, **40 runs per arm**:
+
+| arm | certification route |
+|---|---|
+| **control** | none; the agent searches and submits |
+| **declared-class gate** | full-class null over the signed depth-3 class, α = 0.05 |
+| **prior-weighted α** (item 2, `prereg/prior-weighted-alpha.md`) | a short list of up to 5 specifications declared before the first `evaluate`, and refused if late, tested by Reality Check at **α_prior = 0.04**; the search tested against the class at **α_search = 0.01** |
+| **replay gate** | the process null of 7.2 part two, **conditional**: it runs only if 7.2 part two is built when 6.5 goes live. It is not stubbed. If absent, the arm is recorded as deferred and 6.5 runs with three arms. |
+
+Reported beside every verdict, per the Phase 7 amendment: item 1's bracket where
+a decision was not replayable, and item 6's bits of selection. Twin calibration
+(item 5) is not run here. Its per-dataset twins are reserved for 7.4, where the
+dataset is the question.
 
 ### Out-of-sample readouts
 
@@ -124,24 +155,39 @@ predictive distribution is the Monte Carlo sample
 with point `sr_deflated = SR_obs − mean(M)` and the **95% interval** its 2.5 and
 97.5 percentiles. `SE_oos = sqrt((1 + sr_deflated²/2) / years_oos)`.
 
-**Label, fixed:** "expected out-of-sample Sharpe under a search-only decay
-model". **Reported, never a decision input.** No verdict, tier or threshold
-reads it.
+**Labels, fixed.** The point is **"expected out-of-sample Sharpe under a
+search-only decay model"**. The interval is **"predictive interval for the
+realized out-of-sample Sharpe under the same model"**: it includes the holdout's
+own sampling error, so it is wider than an interval for the expectation.
+**Reported, never a decision input.** No verdict, tier or threshold reads either.
 
-**What the model assumes, and which way it errs.** All decay is selection:
-the null-max is how far search alone lifts the maximum. When a real edge
-exists, selection lifts the observed Sharpe *less* than the null-max, so the
-model **over-deflates**, and the forecast is biased low. Costs and regime
-change are outside it entirely.
+**What the model assumes, and how far it is off where measured.** All decay is
+selection: the null-max is how far search alone lifts the maximum. The point is
+exactly `estimator.bootstrap.deflate`'s `sr_deflated = sr_sel − mean(M_b)`, whose
+bias SCOPE measures ("Effective breadth"; "The headline cell"), with an oracle
+ceiling of 1.0, so with a real edge present. Predicted decay minus realized
+decay is **+0.017** at the headline cell (rho = 0, N = 1,000) and between
+**−0.031 and +0.029** across rho 0–0.9 and N 10–1,000. **Near-unbiased there**, in
+either direction. Two things are not covered by that measurement and are
+stated rather than assumed:
+- **those searches were oblivious menus**, not an adaptive agent;
+- **the declared-class gate's `M_b` is the class maximum.** For a searcher that
+  does not reach the class maximum, P2 makes the class null-max larger than what
+  its own search lifted, so the point **over-deflates** by the searcher's
+  shortfall. The size of that shortfall on real data is unmeasured.
+
+Costs and regime change are outside the model entirely.
 
 ### Checks on `sr_deflated`
 
-1. **Coverage at nominal on synthetic data.** On s0 draws, where the model's
-   assumption holds, the 95% interval should cover the realized OOS Sharpe at
-   about 95%. This is predicted by the construction under the null, to a normal
-   approximation. On s3 draws, where a real edge exists, the predicted
-   direction is realizations **above** the interval more often than 2.5%
-   (over-deflation), reported rather than gated.
+1. **Coverage on synthetic data, one-sided.** No proposition predicts nominal
+   coverage for `SR_obs − M_b + SE·Z`, and with an exhaustive searcher under s0
+   over-coverage is expected. So the check is **one-sided**: under-coverage is
+   the failure, and over-coverage is reported as the conservatism it is. On s3
+   the per-side miss rates are reported, gating nothing.
+   **Prospective only.** Stored runs kept the gate's critical value and null
+   quantiles, not the draws `M_b`, so the check runs on synthetic runs made
+   after this goes live, with `M_b` stored.
 2. **On the ETF holdout: under-coverage is expected**, with realizations
    **below** the interval, attributed to costs (net figures) and regime change.
    Reported with its direction. The gross-versus-net gap says how much of it is
@@ -159,32 +205,30 @@ Per `prereg/README.md`.
 
 1. **Admissibility, fixed now.** Signed depth-3 at power 0.27 ≥ 0.20: admissible.
    The class does not change after any bar is opened.
-2. **`sr_deflated` synthetic coverage (rule, two-sided).** On s0, the Wilson 95%
-   interval of the interval's coverage contains 0.95. Exactness is licensed by
-   the construction under the null, to a normal approximation, and that
-   proposition is named here.
-   - *Holds:* `sr_deflated` is reported on the ETF holdout as calibrated under
-     its own assumption.
-   - *Fails low (coverage under 95%):* the interval is too narrow even where its
-     model holds. It is reported on the ETF holdout with an "uncalibrated,
-     too narrow" label.
-   - *Fails high:* too wide, reported as conservative.
+2. **`sr_deflated` synthetic coverage (one-sided).** On s0, prospective runs:
+   fails **iff the upper end of the Wilson 95% interval of the coverage is below
+   0.95**, meaning under-coverage is demonstrated. No exactness is claimed.
+   - *Holds:* reported on the ETF holdout with the synthetic coverage beside it.
+   - *Fails (under-covers):* too narrow even where its model holds. Reported on
+     the ETF holdout labelled "uncalibrated, too narrow".
+   - *Coverage above nominal:* the expected direction, reported as
+     conservatism, with its size.
 3. **The pooled PASS-versus-FAIL readout is descriptive.** No threshold. If PASS
    does not predict holdout, that is the result (ROADMAP 6.5).
 
 ## Cost
 
-Seat: 80 runs at the measured $0.268 mean per run, **about $21**. Local: feature
-building, both gates, grading and `sr_deflated` on stored null-max draws. The
-synthetic coverage check reuses stored s0 and s3 runs where the null-max draws
-were kept, and recomputes them locally where they were not. No EC2 except as
-the grading host.
+Seat: 160 runs (four arms of 40) at the measured $0.268 mean per run, **about
+$43**, or about $32 if the replay arm is deferred. Local: feature building and
+the gates. Holdout host: the single fetch, the export, and grading, minutes of
+instance time. The synthetic coverage check runs prospectively on new runs with
+`M_b` stored.
 
 ## Open, to fix before live
 
-- **The holdout length and start (3 years from 2023-01-01) are proposals** pending
-  confirmation.
 - The universe rule's volume threshold and the exact ETF list: their own commit.
 - The feature list: its own commit.
-- **The synthetic coverage check needs `M_b` stored per run.** Whether the
-  existing runs kept it is to be checked before this goes live.
+- **Checked:** stored runs kept only the critical value (`runs.csv` has
+  `critical_value`, and no null draws), so the coverage check is prospective.
+- **Whether 7.2 part two exists** when this goes live decides whether the replay
+  arm runs.
