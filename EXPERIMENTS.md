@@ -59,7 +59,7 @@ check that each one preceded the code and the run it authorises.
 |---|---|---|
 | `calibration-at-1pct` | `e9ad319` | 1, skip the sizing smoke — `4f556bb`; deviation 1 and amendment 2, arm D — `0ab5653`; 3, what rule 4's ordering rests on — `4cb8404` |
 | `costs-and-regime-change` | `16457d9` | 1, the cost half cannot measure what it claims — `04dcc53`; 2, withdraw the cost half entirely — `2ba240f` |
-| `heterogeneous-correlation-fat-tails` | `96b48dc` | 1, the one-sided validity rule — `5b8042c`; 2, cell (B) pinned and a replication branch — `6739589`; 3, cell (A) needs rho>0 and two nulls per draw — `7cc4c67` |
+| `heterogeneous-correlation-fat-tails` | `96b48dc` | 1, the one-sided validity rule — `5b8042c`; 2, cell (B) pinned and a replication branch — `6739589`; 3, cell (A) needs rho>0 and two nulls per draw — `7cc4c67`; deviation 1, the skipped pre-launch smoke — `35a3fab`; deviation 2, box change partway through cell (C), cross-box check identical, interim outputs disclosed — this commit |
 
 
 
@@ -140,7 +140,7 @@ rather than in a footnote.
 | `costs-and-regime-change` | what does a PASS survive once the regime shifts? (cost half withdrawn, amendment 2) | ran 2026-09-20 |
 | `gate-comparison` | which of the three certifiers should the gate use, and in what order should 7.2 fall back? | draft, not live |
 | `fixed-sequence-replay` | what does freezing a search's meta decisions cost, and do declared triggers remove it? | live, awaiting sizing |
-| `heterogeneous-correlation-fat-tails` | does the full-class null survive factor-structured correlation and fat tails? | live, awaiting smoke |
+| `heterogeneous-correlation-fat-tails` | does the full-class null survive factor-structured correlation and fat tails? | running (2026-09-21): cell (C) resumed on a c7a.48xlarge at `df161c3` from 800 draws run at `35a3fab`, then (A), then (B); no rule read at n = 2,000 yet — deviation 2 |
 | `bracketed-verdicts` | what does reporting two p-values cost for a decision the gate cannot replay? | draft, not live |
 | `prior-weighted-alpha` | is splitting alpha between a declared short list and the adaptive search worth the power? | draft, not live |
 | `living-verdict` | can a certification be kept under continuous review and revoked? (stub, built after the paper) | draft, not live |

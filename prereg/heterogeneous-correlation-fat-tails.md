@@ -360,3 +360,47 @@ workload needs it, and a $500 rerun of an already-measured workload does not.
 
 No decision rule of this pre-registration is affected; only the Cost section's
 figure, which is superseded by the measured one above.
+
+**2 — 2026-09-21. The run moved box partway through cell (C); interim outputs
+exist on the registered seeds.** Recorded before any rule is read at n = 2,000.
+
+*The box change.* Cell (C) began on the 32-vCPU instance at commit **`35a3fab`**.
+It completed 800 draws (32 of 80 checkpoints, `C_0`–`C_775`, seeds
+400000–400799) and stopped without an exit marker; its log was last written at
+03:21 UTC on 2026-09-21. Cells (A) and (B) were not started there. Those 32
+checkpoints were swept into git by an unrelated commit, **`de50c68`**. The
+experiment resumed on a c7a.48xlarge (192 vCPU) at commit **`df161c3`**, at
+18:38 UTC on 2026-09-21, with 192 workers. It ran cell (C) from the 32 existing
+checkpoints, then (A), then (B), in one detached chain. Between `35a3fab` and
+`df161c3` the only change to anything 6.3 imports or runs is `pyproject.toml`'s
+package list, which gained `quixote`; `experiments/heterogeneous_and_fat.py`,
+`experiments/_parallel.py`, `environments`, `estimator`, `garden` and
+`searchers` are identical. The 32 checkpoints have identical SHA-256 on the old
+box, in the repository, and on the c7a before the resume.
+
+*The cross-box check.* Before resuming, the first checkpoint's 25 draws (seeds
+400000–400024) were recomputed on the c7a into a separate directory and
+compared with the old box's `C_0` in every stored field except wall-clock
+seconds. Result: **identical**, 25 of 25 draws, with an equal canonical hash over
+all stored arrays. The comparison tested equality only and computed no rule
+quantity.
+
+*Interim outputs on the registered seeds, disclosed.* Two exist before the
+n = 2,000 read.
+
+1. **The 800-draw checkpoint set of cell (C).** No rule quantity was computed
+   from it in the session that found it. Its structure (field names, draw count)
+   was inspected to establish how far the run had got. It has been in the public
+   repository since `de50c68`, so an earlier reading cannot be ruled out, and
+   none is claimed.
+2. **Six scaling-smoke reports of cell (C)**, at n = 2, 32, 96, 192, 288 and 384,
+   in `figures/scaling_c7a48xl/`, committed in `2dd4473`. `--smoke N` runs the
+   first N registered seeds from 400000, and each report prints rules 1–4 on
+   those draws. They are therefore interim readouts of the same draws the full
+   cell contains, at up to 19% of its sample. They were produced to measure cost,
+   and this record does not state their values.
+
+Neither changes a decision rule, a threshold or a draw. Every rule is read once
+at n = 2,000 per cell, in the registered order, and the interim outputs are
+disclosed here so that the read is not presented as the first look at these
+seeds.
