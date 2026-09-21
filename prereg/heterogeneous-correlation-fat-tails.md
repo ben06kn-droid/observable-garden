@@ -311,3 +311,52 @@ therefore an **underestimate by roughly that factor**, and no figure is asserted
 here to replace it: the pre-launch smoke on cell (C) measures it, as the Cost
 section already requires, and the measured number is what the launch decision
 uses. Recorded now so the correction is not made after seeing the smoke.
+
+## Deviations
+
+**1 — 2026-09-21. The standing pre-launch smoke was skipped, deliberately, and
+it cost a 2.2x cost surprise.**
+
+`ROADMAP.md`'s Compute section carries a standing rule: measure per-draw cost end
+to end, at the worker count the sweep will use, before any EC2 sweep. The Cost
+section above repeats it. **It was not done.** The decision was explicit, not an
+oversight, and the reasoning was:
+
+1. at roughly $13 no measurement could change the go/no-go, since the experiment
+   is on the roadmap either way and even 5x over is $65; and
+2. the crash risk was already retired — cells A and C had been run end to end
+   locally at the **full registered configuration** (K = 40, M = 50, T = 5,000,
+   B = 10,000, both nulls), so the code was known to work at the size it would
+   run.
+
+Both points were true. The conclusion drawn from them was wrong, because they
+address *whether the run works* and *whether to run it*, and the rule exists for
+a third thing: **whether the quoted cost is right**.
+
+**What happened.** Predicted 78 s/draw at 16 workers, from a local single-core
+measurement scaled by arm D's laptop-to-instance ratio. Measured on the instance,
+from four cell completions: **10.75 s/draw wall, 172 s/draw CPU** — 2.24x the
+prediction. Cell C alone projects to 5.97 h and $9.79; all three cells to 17.9 h
+and $29.37, against the 7.8 h and $12.8 the Cost section registered.
+
+**Why the local measurement could not have caught it.** Serial work rose only
+1.19x when the second class null was added — 26.97 s to 32.15 s, measured by
+timing classes of increasing size and fitting: shared per-replicate work is
+1.91 s, and the rest is class enumeration, roughly linear in class size at
+305 s per million members. But contended throughput fell 2.24x. The extra
+**1.91x is pure contention**: at 16 workers with one null the workload was
+already at the memory-bandwidth knee, and 19% more bandwidth-bound work per draw
+bought a 91% penalty. A single-core run cannot observe contention by
+construction.
+
+**The rule's scope, restated.** As written, the standing rule reads as a
+budget-protection measure, which is what made it look disproportionate for a $13
+run. That is the wrong justification. Its real content is: **contended per-draw
+cost is not predictable from serial measurement whenever the workload changes
+shape**, and adding a second bootstrap pass is a change of shape. The rule should
+therefore bind on *shape changes*, not on *budget size* — a $13 run with a new
+workload needs it, and a $500 rerun of an already-measured workload does not.
+`ROADMAP.md` is amended to say that.
+
+No decision rule of this pre-registration is affected; only the Cost section's
+figure, which is superseded by the measured one above.

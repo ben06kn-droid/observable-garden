@@ -923,6 +923,16 @@ is `calibration-at-1pct` arm B's own 5,000-draw run, not a smoke.
 | 16 | 76.85 | 4.80 | 750 | $0.0022 | 50% |
 | 32 | 159.73 | 4.99 | 721 | $0.0023 | 24% |
 
+**Measured again 2026-09-21, on a two-null draw** (6.3 prices both the 82,240-
+member signed class and the 10,700-member unsigned class per draw). At 16 workers:
+**172 s/draw CPU, 10.75 s/draw wall**, against 75.5 s and 4.80 s for arm D's
+one-null draw. Serial cost rose only 1.19x (26.97 s to 32.15 s single-core), so
+1.91x of the 2.24x is contention — the second pass pushes an already-saturated
+memory system further past its knee. The corollary is that **the 16-worker
+optimum below is specific to the one-null workload** and should not be assumed
+for a heavier draw; for the two-null draw the optimum is probably lower and has
+not been measured.
+
 **This workload saturates at about 16 workers, and 32 is worse than 16 on both
 axes** — 4% slower in wall-clock and marginally dearer per draw. Single-core on
 the instance is 38.8 s against 34 s on the laptop, so per-core speed is within
@@ -942,9 +952,20 @@ as much as 32 do here, since bandwidth scales with instance size in this family 
 is **not being tested**; the saving would be marginal and a second instance shape
 is another thing to get wrong. Decided 2026-09-20.
 
-**Standing step before any EC2 sweep.** Measure per-draw cost end to end at the
-worker count the sweep will actually use, with every worker busy — never from a
-component sum, a low-worker run, or a handful of draws. Skipping it cost a 4.7×
+**Standing step before any EC2 sweep whose workload has changed shape.** Measure
+per-draw cost end to end at the worker count the sweep will actually use, with
+every worker busy — never from a component sum, a low-worker run, or a handful of
+draws.
+
+*Scope, corrected 2026-09-21.* This is **not** a budget-protection rule, and
+reading it as one is what got it skipped for 6.3 at a cost of a 2.2x surprise.
+Its content is that **contended per-draw cost is not predictable from serial
+measurement once the workload changes shape**. So it binds whenever the shape
+changes — a new null, a second bootstrap pass, a different class size — however
+small the budget; and it does not bind on a rerun of a workload already measured,
+however large. 6.3 added a second class null: serial work rose 1.19x, contended
+throughput fell 2.24x, and the extra 1.91x was contention a single-core
+measurement cannot see. Skipping it cost a 4.7×
 miss on arm B (34 s predicted from two laptop workers, 159.7 s observed at 32).
 A four-point scaling curve at 1 / 4 / 16 / 32, two draws per worker, costs about
 fifteen minutes and gives the right worker count as well as the cost, which a
