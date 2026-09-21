@@ -42,7 +42,10 @@ PANELS = {
     "treated": (["ASML", "SAP", "STM", "NOK", "ERIC", "LOGI", "ARM", "NXPI", "SPOT",
                  "SOXX", "XLK", "XLC"], "adr_manifest.json"),
     "fallback": (["NVS", "AZN", "SNY", "NVO", "HSBC", "BCS", "UL", "DEO", "TTE", "SHEL",
-                  "BP", "RIO"], "adr_fallback_manifest.json"),
+                  "BP", "RIO",
+                  # sector benchmarks for the large caps, added 2026-09-21 when the
+                  # fallback was invoked; the name-to-ETF mapping awaits approval
+                  "XLV", "XLF", "XLP", "XLE", "XLB"], "adr_fallback_manifest.json"),
 }
 START, END = "2024-09-23", "2026-09-18"
 ADJUSTED = "true"
@@ -153,15 +156,19 @@ def assemble(ticker: str, pages: list[Path]) -> dict:
             "pages": len(pages)}
 
 
-DIVIDEND_NAMES = ["ASML", "SAP", "STM", "NOK", "ERIC", "LOGI", "ARM", "NXPI", "SPOT"]
+DIVIDEND_NAMES = {
+    "treated": ["ASML", "SAP", "STM", "NOK", "ERIC", "LOGI", "ARM", "NXPI", "SPOT"],
+    "fallback": ["NVS", "AZN", "SNY", "NVO", "HSBC", "BCS", "UL", "DEO", "TTE", "SHEL",
+                 "BP", "RIO"],
+}
 
 
-def fetch_dividends(man: dict) -> None:
+def fetch_dividends(man: dict, panel: str) -> None:
     """Ex-dates and amounts per treated name, for the rule excluding ex-dates from the
     overnight-gap feature (decided 2026-09-21). One call per name; ARM and SPOT pay no
     dividend and are queried anyway so the manifest shows zero rather than assuming it."""
     out = man.setdefault("dividends", {})
-    for tk in DIVIDEND_NAMES:
+    for tk in DIVIDEND_NAMES[panel]:
         if tk in out:
             continue
         url = (f"{HOST}/v3/reference/dividends?ticker={tk}&ex_dividend_date.gte={START}"
@@ -173,6 +180,21 @@ def fetch_dividends(man: dict) -> None:
         out[tk] = [{k: d.get(k) for k in keep} for d in js.get("results", [])]
         print(f"  dividends {tk}: {len(out[tk])} ex-dates", flush=True)
     man["dividends_source"] = f"{HOST}/v3/reference/dividends, ex_dividend_date {START}..{END}"
+    # Splits and ratio changes, for the listing-structure check registered in
+    # prereg/adr-universe.md's 2026-09-21 amendment. Recorded, not acted on.
+    sp = man.setdefault("splits", {})
+    for tk in DIVIDEND_NAMES[panel]:
+        if tk in sp:
+            continue
+        url = (f"{HOST}/v3/reference/splits?ticker={tk}&execution_date.gte={START}"
+               f"&execution_date.lte={END}&limit=1000")
+        code, js = _get(url)
+        if code != 200 or js.get("status") != "OK":
+            sys.exit(f"splits {tk}: HTTP {code} status={js.get('status')} message={js.get('message')}")
+        sp[tk] = [{k: d.get(k) for k in ("execution_date", "split_from", "split_to")}
+                  for d in js.get("results", [])]
+        print(f"  splits {tk}: {len(sp[tk])}", flush=True)
+    man["splits_source"] = f"{HOST}/v3/reference/splits, execution_date {START}..{END}"
 
 
 def main() -> None:
@@ -180,7 +202,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--panel", choices=sorted(PANELS), default="treated")
     ap.add_argument("--dividends", action="store_true",
-                    help="fetch ex-dates and amounts for the treated names instead of bars")
+                    help="fetch ex-dates and amounts for the panel's names instead of bars")
     args = ap.parse_args()
     panel = args.panel
     tickers, manifest_name = PANELS[panel]
@@ -205,7 +227,7 @@ def main() -> None:
         "exchange_calendars": md.version("exchange_calendars"),
     })
     if args.dividends:
-        fetch_dividends(man)
+        fetch_dividends(man, panel)
         MANIFEST.write_text(json.dumps(man, indent=2) + "\n")
         print("DONE", flush=True)
         return
