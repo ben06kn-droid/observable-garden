@@ -92,6 +92,9 @@ def test_batch5_seeds_do_not_collide_with_any_earlier_batch():
 
 def test_batch5_seeds_are_drawable():
     """Amendment 11 extended the draw to 661 values so seed 660 exists at all."""
+    pytest.importorskip(
+        "claude_agent_sdk",
+        reason="experiments.e_agent pulls in searchers.llm_agent, which imports the\n    agent SDK at module level. Absent on EC2 by design, so this test skips there.")
     from experiments.e_agent import dgp_seeds
     seeds = dgp_seeds()
     assert len(seeds) > 660
@@ -121,6 +124,9 @@ def test_a_bad_replacement_is_refused(monkeypatch, over, match):
 def test_replacement_seed_is_drawable_and_leaves_earlier_draws_alone():
     """Amendment 5 puts the replacement at index 500, past the 500 draws the
     stream used to take. Extending it must not move any earlier seed."""
+    pytest.importorskip(
+        "claude_agent_sdk",
+        reason="experiments.e_agent pulls in searchers.llm_agent, which imports the\n    agent SDK at module level. Absent on EC2 by design, so this test skips there.")
     from experiments.e_agent import MASTER_SEED, dgp_seeds
     seeds = dgp_seeds()
     assert len(seeds) > 500                           # index 500 exists
