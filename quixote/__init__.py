@@ -20,8 +20,9 @@ Deliberately NOT here, because 7.1 decides them:
 
 `Verdict` carries the fields those will populate, stubbed and marked.
 
-Dependency direction is one-way and enforced by test: `quixote` imports `garden`,
-`estimator`, `environments` and `searchers`; nothing in those imports `quixote`.
+Dependency direction is one-way and enforced by test: nothing imports `quixote`,
+and `quixote` stays out of `CODE_PATHS`. What quixote itself imports is not
+restricted; today that is `garden`, `estimator`, `environments` and `searchers`.
 `quixote` is deliberately absent from `experiments.code_state.CODE_PATHS`, so
 adding it moves no published fingerprint; quixote runs record their own
 fingerprint instead. See `quixote/fingerprint.py`.

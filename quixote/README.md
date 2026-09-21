@@ -173,10 +173,15 @@ Adding it would move every published fingerprint, and a fingerprint that moves
 for a reason unrelated to the runs it pins is worse than none.
 
 Quixote runs record their own, over `QUIXOTE_PATHS` — quixote **plus everything
-quixote imports**. The dependency is one-way and a test asserts it across five
-packages: `quixote` imports `garden`, `estimator`, `environments`, `searchers`;
-none of them imports `quixote`. But a change in `garden/` still changes what a
-quixote run does, so it has to be inside the hash.
+quixote imports**.
+
+**The dependency constraint is exactly two rules:** nothing imports `quixote`
+(a test asserts it across `garden`, `estimator`, `environments`, `searchers` and
+`experiments`), and `quixote` stays out of `CODE_PATHS`. Which packages quixote
+itself imports is not restricted. Today it imports `garden`, `estimator`,
+`environments` and `searchers` — the last for 7.1's registered scripted fill in
+the meta replay — and all four are inside `QUIXOTE_PATHS`, because a change in
+any of them changes what a quixote run does.
 
 `code_fingerprint()` gained an optional `paths` argument to make this possible
 without widening `CODE_PATHS`. One related change did move the fingerprint —
