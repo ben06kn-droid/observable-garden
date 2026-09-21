@@ -404,3 +404,33 @@ Neither changes a decision rule, a threshold or a draw. Every rule is read once
 at n = 2,000 per cell, in the registered order, and the interim outputs are
 disclosed here so that the read is not presented as the first look at these
 seeds.
+
+## Rule reading at n = 2,000, 2026-09-21
+
+Read once, in registered order, from the fetched cell reports (commit `df161c3`,
+2,000 draws per cell on seeds 400000–401999). **26 of 27 checks pass.** The one
+failure is rule 1's KS test on cell (A)'s anchor: **D = 0.0367 against a 5%
+critical value of 0.0304, p = 0.0090**. Both of cell (A)'s containment checks
+pass: 5.60% (4.67–6.70) at α = 0.05 and 1.00% (0.65–1.54) at α = 0.01. Rule 2
+shows no liberal failure in any cell. Block lengths have median 1, 2 and 2 in
+cells (A), (B) and (C), with maxima of 2, 52 and 55. Guard counts are zero
+throughout.
+
+**Where cell (A)'s anchor ECDF departs from the diagonal.** It lies **above** the
+diagonal through the middle and upper range. The largest gap is +0.037 at
+p ≈ 0.61, and it stays above from about p = 0.25 to 0.95. There is excess mass in
+[0.5, 0.6), 241 draws against 200 expected, and a deficit over [0.6, 1.0), 728
+against 800. **The rejection tail is on the diagonal:** ECDF(0.01) = 0.0100,
+ECDF(0.05) = 0.056, ECDF(0.10) = 0.1005. The largest gap below the diagonal is
+0.007, at p = 0.17. So the p-values are slightly too small in the body of the
+distribution, not in the region any decision reads.
+
+**How strong p = 0.009 is.** Under exact calibration the three cells' KS
+p-values are independent and uniform, so the chance that the smallest is at or
+below 0.009 is 1 − 0.991³ ≈ **2.7%**. That is stronger evidence than a bare
+false alarm at the 5% KS level, and weaker than it looks in isolation. Rule 1's
+registered family rate (0.3546 across the three cells) covers all nine of its
+checks at their own thresholds, not this p-value. **The replication decides**,
+per amendment 2(b): cell (A), anchor, seeds 410000–411999, identical settings.
+If it passes, cell (A)'s KS rejection is recorded as a family false alarm. If it
+fails, rule 1's branches apply in full.
