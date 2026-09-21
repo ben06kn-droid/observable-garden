@@ -1058,6 +1058,21 @@ as much as 32 do here, since bandwidth scales with instance size in this family 
 is **not being tested**; the saving would be marginal and a second instance shape
 is another thing to get wrong. Decided 2026-09-20.
 
+**7.1 moves to the c7a.48xlarge (192 vCPU), decided 2026-09-21.** Measured on
+6.3's cell C, a two-null draw, as total throughput over the run: **1.96 s/draw
+wall at 192 workers** (35 chunks of 25 draws in 1,718 s; the 192-worker scaling
+smoke gave 1.95), against **9.86 s/draw** on the 32-vCPU box at 16 workers. So it
+is **about 5x faster and about 20% dearer per draw**: $0.0054 against $0.0045, at
+$9.85/h and $1.64/h. The choice buys wall-clock time, not money. Two conditions
+come with it. **An on-instance self-stop is installed before anything launches**:
+a detached session that waits for the run to exit, whatever its exit code, sleeps
+ten minutes for the fetch, then shuts down. The instance's shutdown behaviour is
+confirmed as Stop, not terminate. And 7.1 is a different workload shape, so the
+figures above do not size it: its own scaling curve and smoke run on this
+instance first, on a dedicated seed block, printing no rule quantities
+(`prereg/README.md`). The 16-worker configuration above stands for the one-null
+workloads it was measured on.
+
 **Standing step before any EC2 sweep whose workload has changed shape.** Measure
 per-draw cost end to end at the worker count the sweep will actually use, with
 every worker busy — never from a component sum, a low-worker run, or a handful of
