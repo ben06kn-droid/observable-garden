@@ -357,3 +357,53 @@ past the realized length is greedy over the grammar, which the cap also
 restricts. Neither is measured here. If 7.0 or 7.3 shows capped and uncapped
 searchers behaving differently under replay, this argument is what to suspect
 first.
+
+**5 — 2026-09-21, before the driver is written and before any draw.
+`MetaAdaptive` submits a support that does not match its score after a
+restart; the fix, and why no null moves.**
+
+**The defect.** `MetaAdaptive._search` keeps `best`, the best score seen, and
+`support`, the support currently being extended. A restart replaces `support`
+with the next anchor but deliberately keeps `best`, so that later extensions must
+beat the global best. At the end, `trace.support` is the *current* support and
+`trace.score` is `best`. `run()` submits that pair. After any restart that is not
+followed by a new global best, the submitted weights belong to one support and
+the claimed Sharpe to another.
+
+**Measured, 2026-09-21**, on the registered data configuration (K = 40, M = 50,
+T = 5,000, s0), on scratch seeds 900000–900039, outside this experiment's block:
+`RestartAfterKFailures(k=2)` restarted in **21 of 40** runs, and **all 21**
+submitted a support whose recomputed Sharpe differs from the claimed one. The
+other four searchers never restart and are unaffected (0 of 40 each). A smaller
+check (K = 10, T = 600, 60 seeds, two DGP settings) found 120 of 120 restart
+runs mismatched.
+
+**The fix.** Track `best_support` alongside `best`, updated in the same place
+`best` is and only there. `trace.support` and the submission become
+(`best_support`, `best`). The current support is still what the policy extends,
+and each move record still carries it.
+
+**Why no registered quantity moves, stated as a prediction and checked before
+commit.** Every null, the realized score and the realized action sequence are
+functions of `best` and of the path of current supports, and neither changes;
+only which support is *reported* at the end changes. **Prediction:** nulls 1–3,
+the realized score and the realized actions are **bit-identical** before and
+after the fix for all five searchers. It is checked on saved pre-fix nulls (K =
+10, T = 600, two seeds, B = 150, all five searchers), and the result is recorded
+in the fix's commit. If any array differs, the fix is wrong and does not go in.
+
+**What the fix does change:** the submitted weights of `RestartAfterKFailures`
+after an unrecovered restart, and so anything graded from those weights (an
+out-of-sample Sharpe, a sandbox evaluation). 7.1's rules read none of these. No
+7.1 draw has been run, so nothing already reported is affected. The fix is in
+`searchers/`, inside `CODE_PATHS`, so the published fingerprint moves with it.
+
+**Test added with the fix:** for every `MetaAdaptive` subclass, the claimed score
+equals the recomputed Sharpe of the submitted support, on the replay path (base
+columns) exactly, and on the live path (`run()` on a sandbox) to the recorded
+~1e-12 difference between the two scoring paths.
+
+**Also recorded: the searchers' own parameters are not registered.**
+`StopWhenCleared` has no default bar, and the `k` of `RestartAfterKFailures` and
+the `min_gain` and `min_support` values appear only in the tests. They must be
+fixed here before the driver is written, not chosen in it.
