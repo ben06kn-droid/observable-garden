@@ -301,3 +301,59 @@ of conservatism.
 **Read on the informative searchers only**, as amendment 2 already establishes:
 `RestartAfterKFailures` and `SwapWorstWhileImproving`. `ExtendBySecondBest`
 reports the same quantities as the dominated case.
+
+**4 — 2026-09-21, before the driver is written and before any draw. Null 4 is
+withdrawn.**
+
+Null 4 was "the full-class bound, priced by `garden._full_class_engine`,
+independent of the search". It cannot be computed, and the reason is a property
+of the searchers this experiment registered.
+
+**`MetaAdaptive` is bounded only by `BUDGET = 12` moves**, not by any declared
+class. Measured on the registered configuration (K = 40, M = 50, T = 5,000,
+s0, seed 300000), the five searchers reach final support sizes of 1, 2, 3, 4 and
+5. Nothing stops a support reaching 12. So the reachable set is signed subsets
+up to size 12, which at K = 40 is
+
+| class | members |
+|---|---|
+| `SubsetClass(max_size=3, signed=True)` | 82,240 |
+| `SubsetClass(max_size=5, signed=True)` | 22,600,736 |
+| **`SubsetClass(max_size=12, signed=True)`** | **28,648,668,522,528** |
+
+The moment engine enumerates members, so cost is close to linear in class size.
+Arm D priced 82,240 members at **29.4 s per draw single-core**, which puts
+max_size = 12 at roughly **348 million times that — about 325 years per draw**.
+At 2,000 draws it is not a question of a bigger instance.
+
+**No registered rule reads null 4.** Rule 1 is trigger replay's size, rule 2 the
+frozen-decision error, rules 3 and 4 distances among nulls 1–3. Null 4 was
+context. **Rules 1–4 stand unchanged on nulls 1–3.**
+
+**Why capping the searchers at depth 3 was rejected.** It would make every search
+end at the cap rather than at its trigger, which shrinks exactly the
+meta-adaptivity 7.1 exists to measure: a stop-when-cleared search that is forced
+to stop at depth 3 is no longer stopping *because it cleared*. The measurement
+would survive in name and lose its content.
+
+**Licence transfer — an argument, not a measurement.** Quixote agents search
+under a declared class; 7.1's searchers do not. So 7.1's conclusion has to
+travel from an uncapped setting to a capped one, and the argument is:
+
+> A capped search is the uncapped search with some moves refused. The harness
+> refuses a move that would leave the class, and **a replicate refuses the same
+> moves**, because membership is a function of the support and the class, not of
+> the data. So the capped policy is a deterministic restriction of the uncapped
+> one, applied identically in the realized run and in every replicate. Rule 1
+> asks whether re-evaluating a declared trigger on a replicate keeps the
+> rejection rate at or below nominal; that question is about the trigger, and
+> the restriction does not touch it.
+
+**This is reasoning, not evidence, and it is flagged as such.** It has two known
+soft spots. The restriction changes *which* states a search visits, so a trigger
+could fire at a different rate under the cap even though its re-evaluation is
+faithful — the size could move without the mechanism failing. And the fill rule
+past the realized length is greedy over the grammar, which the cap also
+restricts. Neither is measured here. If 7.0 or 7.3 shows capped and uncapped
+searchers behaving differently under replay, this argument is what to suspect
+first.
