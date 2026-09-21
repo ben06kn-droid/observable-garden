@@ -61,7 +61,9 @@ when continuous trading stops rather than when the auction prints.
 **End of closing auction is a registered sensitivity readout**, not the primary.
 
 **Bars between a name's continuous end and its auction end are flagged
-`TRANSITION` and are not traded** — in real data and in twins alike.
+`TRANSITION` and are not traded** — in real data and in twins alike. **Where the
+auction end is randomised past a bar boundary (XAMS, XPAR, XETR), the following
+bar is `TRANSITION` too**, so the uncross can never land in a traded bar.
 
 ### Per-name boundary constants
 
@@ -76,11 +78,27 @@ when continuous trading stops rather than when the auction prints.
 
 In US time, from `zoneinfo` at tz 2026.4 (continuous / auction end, ET): XSWX
 11:20 / 11:30; XSTO and XHEL 11:25 / 11:30; XAMS, XPAR, XETR 11:30 / 11:35 —
-each one hour later during the clock-mismatch weeks. At 5-minute bars the
-`TRANSITION` window is two bars for XSWX and one bar for the other five. For
-XAMS, XPAR and XETR 17:35 is the *earliest* auction end, so the uncross can land
-a few seconds inside the following bar; the auction-end readout uses the 17:35
-bar edge and says so.
+each one hour later during the clock-mismatch weeks.
+
+**`TRANSITION` bars at 5 minutes, per name:**
+
+| name | MIC | `TRANSITION` (ET) | mismatch weeks (ET) | bars | why |
+|---|---|---|---|---|---|
+| LOGI | XSWX | 11:20–11:30 | 12:20–12:30 | 2 | continuous end to auction end |
+| ERIC | XSTO | 11:25–11:30 | 12:25–12:30 | 1 | uncross is random within the final 30 s *before* 11:30, so it stays inside the bar |
+| NOK | XHEL | 11:25–11:30 | 12:25–12:30 | 1 | as XSTO |
+| ASML | XAMS | 11:30–11:40 | 12:30–12:40 | 2 | auction end randomised past 11:35, so the 11:35–11:40 bar is flagged too |
+| STM | XPAR | 11:30–11:40 | 12:30–12:40 | 2 | as XAMS |
+| SAP | XETR | 11:30–11:40 | 12:30–12:40 | 2 | 11:35 is the *earliest* auction end, plus any volatility interruption |
+
+The auction-end sensitivity readout takes the end of each name's last
+`TRANSITION` bar as its boundary.
+
+**Post-auction phases are not price discovery.** Euronext's Trading-at-Last
+(17:35–17:40 CET) and Xetra's Trade-at-Close (to 17:40 CET) match only at the
+closing-auction price. They are recorded as post-auction phases: the home book
+is closed for price discovery once the auction has printed, and neither phase
+moves either boundary.
 
 **`exchange_calendars` 4.13.2 reports one close for all six: 17:30 CET/CEST
 (16:30 UTC in winter, 15:30 UTC in summer; an earlier draft wrongly said 16:30 UTC
