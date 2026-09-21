@@ -116,3 +116,15 @@ repository describes a method as novel, new, first or unprecedented. Where prior
 art matters, either cite what a search found or write "prior art not yet
 searched". Novelty is settled separately and deliberately, not asserted in
 passing.
+
+## 7.4 ADR amendments and the ancestor guard
+
+`data/adr_guard.py` refuses to build 7.4 features unless every registration
+commit it lists is an ancestor of HEAD and `prereg/adr-features.md` and
+`prereg/adr-universe.md` have no uncommitted changes.
+
+**Every new ADR amendment must be added to the guard's `REGISTRATION_COMMITS`
+in the commit that follows it**, by its full hash. The guard cannot name the
+commit that contains it, so the amendment and its guard entry are always two
+commits. Until the second one lands, the guard still passes on the older list,
+so the new amendment is not enforced. Nothing may run on the panel in between.
