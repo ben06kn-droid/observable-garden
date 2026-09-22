@@ -5,7 +5,8 @@
     python data/fetch_etf.py export     # 2005-2022 for the agent's machine; 2023-2025 stays
 
 Registered in `prereg/agent-on-real-data.md` and `prereg/etf-universe.md`. **This
-runs on the holdout host, the c7a `i-0e0c1484de3c755ad`, and nowhere else.** The
+runs on the holdout host, the c7a.8xlarge `i-0886a189b85d4d051`, and nowhere
+else.** The
 agent harness never runs there, and the agent's machine never fetches.
 
 - `fetch` pulls every candidate's full 2005-01-01..2025-12-31 daily series from
@@ -49,7 +50,7 @@ IN_SAMPLE_END = dt.date(2022, 12, 31)
 FIRST_SESSION = dt.date(2005, 1, 3)
 MIN_MEDIAN_SHARE_VOLUME = 500_000
 MIN_PANEL = 30
-HOST = "c7a.48xlarge i-0e0c1484de3c755ad"
+HOST = "c7a.8xlarge i-0886a189b85d4d051"
 NY = ZoneInfo("America/New_York")
 
 

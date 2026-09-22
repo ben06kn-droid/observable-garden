@@ -27,8 +27,11 @@ that is the right sign, because the short pays the dividend.
 
 **One fetch, on the holdout host, for the whole span.** The full 2005-01-01 to
 2025-12-31 adjusted series is fetched **once**, on the holdout host, and hashed
-there. **The holdout host is the EC2 c7a.48xlarge `i-0e0c1484de3c755ad`** (ssh
-alias `og-c7a`), which is never the agent's machine. **The agent harness never
+there. **The holdout host is the EC2 c7a.8xlarge `i-0886a189b85d4d051`** (ssh
+alias `og-32`), which is never the agent's machine. (Changed on 2026-09-22,
+before the fetch, from the c7a.48xlarge `i-0e0c1484de3c755ad` named when this was
+first drafted. The session moved to this box; no data had been fetched on
+either.) **The agent harness never
 runs on this host.** From that single fetch:
 
 - the **in-sample rows (2005-01-01 to 2022-12-31)** are exported to the agent's
@@ -73,7 +76,7 @@ date, where it has to be.
   in-sample rows from the holdout host's single fetch.
 - The in-sample loader refuses any date on or after 2023-01-01. This is a hard
   check, not a filter.
-- Submissions are graded only on the holdout host, `i-0e0c1484de3c755ad`, after
+- Submissions are graded only on the holdout host, `i-0886a189b85d4d051`, after
   every submission is committed.
 
 **Ancestor-commit guard, as for 7.4.** Feature building refuses unless the
