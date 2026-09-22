@@ -632,3 +632,28 @@ only.**
   pre-launch rule requires.
 
 The on-instance self-stop is installed before anything launches.
+
+## Deviations
+
+**1 — 2026-09-22, before the scaling curve, the smoke and any draw. The session
+runs on the c7a.8xlarge, unattended.** The author will not be available for
+about two days, and ran the session on the 32-vCPU c7a.8xlarge
+`i-0886a189b85d4d051`, not the c7a.48xlarge amendment 7 named. The changes all
+follow from the box:
+
+- **Scaling curve:** B = 500 at **1, 8, 16, 24 and 32** workers, two draws per
+  worker, on 970000+.
+- **Smoke:** B = 10,000 at **32 workers, 32 draws** (one full round at that worker
+  count), on 970000+. Cost only.
+- **Amendment 7's rule** is applied to this box's projection at **$1.64/h**: the
+  full run at B = 10,000 launches iff the smoke projects it at $100 or less.
+  Otherwise nothing launches. B = 1,000 is not launched unattended; it waits for
+  the author.
+- **The rule is applied by the session script, mechanically**, from the smoke's
+  cost report, because nobody is present to apply it. The script, its parse and
+  its decision are logged on the instance and fetched with the results.
+- **The full run uses 32 workers**, and an on-instance self-stop shuts the box
+  down ten minutes after the whole session ends, whatever its exit code.
+
+The registered seeds, B = 10,000, the six searchers and every rule are
+unchanged.
