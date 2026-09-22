@@ -47,6 +47,21 @@ def _column_sharpe(column: np.ndarray, annualization: float = 1.0) -> float:
     return float(sharpe(column[:, None], axis=0, annualization=annualization)[0])
 
 
+def _moment_sharpe(mean: float, var: float, annualization: float = 1.0) -> float:
+    """The Sharpe of a stream from its mean and sample variance, with the same
+    guards as `estimator.bootstrap.sharpe` (a zero-variance stream scores 0; the
+    cap applies), counted in the same GUARD_COUNTS."""
+    from estimator.bootstrap import GUARD_COUNTS, SHARPE_CAP
+    if not var > 0.0:
+        GUARD_COUNTS["zero_variance"] += 1
+        return 0.0
+    sr = mean / np.sqrt(var) * annualization
+    if abs(sr) > SHARPE_CAP:
+        GUARD_COUNTS["sharpe_cap"] += 1
+        return float(np.sign(sr) * SHARPE_CAP)
+    return float(sr)
+
+
 @dataclass
 class Move:
     """One step of a search, with the meta decision that preceded it.
@@ -63,6 +78,7 @@ class Move:
     trigger_value: float             # what the predicate evaluated to
     support: tuple[int, ...] = ()    # the support after the move ( () if stopped )
     score: float = float("-inf")     # best-so-far after the move
+    filled: bool = False             # the continuation was 7.1's fill (amendment 6)
 
 
 @dataclass
@@ -197,11 +213,12 @@ class MetaAdaptive(Searcher):
         fixed-sequence replay. The realized sequence is the whole search, so when
         it runs out the search is over.
 
-        `meta_steps` caps how many steps consult `_decide` at all. Past it the
-        search continues greedily to the budget, which is 7.1's fill rule: a
-        replicate that would run past the realized sequence is filled with greedy
-        extension rather than truncated, since there is no declared trigger left
-        to re-evaluate."""
+        `meta_steps` is the realized length. Past it the declared triggers are
+        STILL evaluated at every step (fixed-sequence-replay amendment 6); only
+        when they say continue is the continuation replaced by 7.1's fill, the
+        best one-step content move. So a replicate stops or restarts past the
+        realized length exactly as the policy would, and the trigger null differs
+        from the policy null in content alone."""
         self._K = K
         scores = np.array([single(k) for k in range(K)])
         order = list(np.argsort(-scores))
@@ -219,15 +236,15 @@ class MetaAdaptive(Searcher):
             state = {"step": step, "support": tuple(support), "best": best,
                      "failures": failures, "last_gain": last_gain,
                      "n_features": K}
+            filling = False
             if frozen is not None:
                 if step >= len(frozen):
                     break                       # the realized search ended here
                 action = frozen[step]
                 trigger, value = "frozen", float("nan")
-            elif meta_steps is not None and step >= meta_steps:
-                action, trigger, value = "continue", "fill", float("nan")
             else:
                 action, trigger, value = self._decide(state)
+                filling = meta_steps is not None and step >= meta_steps
 
             if action == "stop":
                 trace.moves.append(Move(step, "stop", trigger, value,
@@ -251,7 +268,6 @@ class MetaAdaptive(Searcher):
             # continue-move) or the fill running past the realized sequence
             # (greedy, by 7.1's rule). For most searchers these are the same
             # function; the point of ExtendBySecondBest is that they are not.
-            filling = trigger == "fill"
             chosen = (self._fill_move(support, K, support_score) if filling
                       else self._extend(support, K, support_score))
             if chosen is None:
@@ -268,20 +284,51 @@ class MetaAdaptive(Searcher):
             else:
                 failures += 1
             trace.moves.append(Move(step, "continue", trigger, value,
-                                    tuple(support), best))
+                                    tuple(support), best, filled=filling))
 
         trace.support, trace.score = tuple(best_support), best
         return trace
 
     # -- entry points ------------------------------------------------------
 
+    # "columns" sums base columns and computes each candidate's Sharpe from its
+    # stream: O(T) per candidate, and bit-identical to the scripted searchers.
+    # "moments" computes the resampled mean vector and covariance ONCE per base
+    # matrix and scores every candidate from them: O(|support|^2) per candidate.
+    # It agrees with "columns" to ~1e-12, not bit for bit, and is opt-in; its
+    # equivalence is asserted in tests/test_meta_adaptive.py.
+    scoring = "columns"
+
     def _scorers_from_columns(self, base: np.ndarray, annualization: float):
+        if self.scoring == "moments":
+            return self._scorers_from_moments(base, annualization)
+
         def single(k):
             return _column_sharpe(base[:, k], annualization)
 
         def support_score(support):
             stream = sum(base[:, k] * s for k, s in support)
             return _column_sharpe(stream, annualization)
+
+        return single, support_score
+
+    def _scorers_from_moments(self, base: np.ndarray, annualization: float):
+        cache = getattr(self, "_moment_cache", None)
+        if cache is not None and cache[0] is base:
+            mu, C = cache[1], cache[2]
+        else:
+            mu = base.mean(axis=0)
+            C = np.cov(base, rowvar=False, ddof=1)
+            self._moment_cache = (base, mu, C)
+
+        def single(k):
+            return _moment_sharpe(mu[k], C[k, k], annualization)
+
+        def support_score(support):
+            idx = [k for k, _ in support]
+            sg = np.array([g for _, g in support], dtype=float)
+            return _moment_sharpe(float(sg @ mu[idx]),
+                                  float(sg @ C[np.ix_(idx, idx)] @ sg), annualization)
 
         return single, support_score
 
@@ -307,21 +354,20 @@ class MetaAdaptive(Searcher):
         """Trigger replay: every meta choice's predicate re-evaluated on this
         replicate. 7.1's null 2.
 
-        A replicate whose predicate fires earlier stops there. One that would run
-        past the realized sequence has no further declared trigger, so it is
-        filled with greedy extension to the budget.
+        Every declared predicate is evaluated at every step, before and past the
+        realized length alike (amendment 6). Past it, a step whose triggers say
+        continue takes 7.1's fill -- the best one-step content move -- in place of
+        the policy's own continuation.
 
         The exact invariant, asserted in `tests/test_meta_adaptive.py`: this
-        differs from full policy replay **only on replicates whose policy would
-        have run past the realized length**. Up to that point the predicates are
-        the policy, so the two agree step for step.
-
-        Past it they can differ in two ways. In the **meta** dimension, for any
-        searcher: the fill always continues, so a policy that would have stopped
-        or restarted there diverges -- `StopWhenCleared` with a short realized
-        sequence is the clear case. In the **content** dimension, only for a
-        searcher whose continue-move is not greedy extension, since the fill's
-        move is greedy by definition; that is what `ExtendBySecondBest` is for.
+        differs from full policy replay **only in content, and only on replicates
+        that run past the realized length**. The meta decisions are the policy's
+        at every step. So a searcher whose continuation is the fill's move
+        (greedy extension over a support the fill cannot improve by swap or flip)
+        has nulls 2 and 3 identical, and a searcher whose realized search runs to
+        the budget has them identical by construction. `LookaheadStopWhenCleared`
+        and `ExtendBySecondBest` are the cases where content can differ, in
+        opposite directions.
         """
         return self.trace(base_columns, annualization,
                           meta_steps=n_realized_moves).score
@@ -466,6 +512,99 @@ class SwapWorstWhileImproving(MetaAdaptive):
         kind = "extend" if len(support) < self.min_support else "swap"
         cands = [c for c in self._grammar_allowed(support, K, score) if c[1] == kind]
         return max(cands) if cands else None
+
+
+class ClearedRestart(MetaAdaptive):
+    """Restart after k failures, and stop once the best clears a bar: the only
+    registered searcher with two declared triggers, the shape of an agent's
+    policy that both restarts and stops (amendment 6)."""
+    name = "cleared-restart"
+
+    def __init__(self, k: int = 1, bar: float = 0.0, seed: int = 0):
+        super().__init__(seed=seed)
+        self.k, self.bar = int(k), float(bar)
+
+    def _decide(self, state):
+        if state["best"] > self.bar:
+            return "stop", "best_so_far > bar", state["best"] - self.bar
+        return (("restart" if state["failures"] >= self.k else "continue"),
+                f"failures >= {self.k}", float(state["failures"]))
+
+
+class LookaheadStopWhenCleared(StopWhenCleared):
+    """Width-2 beam over extend and swap, stopping at the bar. The beam moves at
+    every step; the reported support and best move only on improvement, so a
+    beam path can pass through a non-improving step and finish above one-step
+    greedy -- the continuation 7.1's fill can be LIBERAL against (amendment 6)."""
+    name = "lookahead-stop-when-cleared"
+
+    def _search(self, K, single, support_score, frozen=None, meta_steps=None):
+        self._beam = None
+        return super()._search(K, single, support_score, frozen, meta_steps)
+
+    def _extend(self, support, K, score):
+        beam = self._beam if self._beam else [list(support)]
+        cands = {}
+        for b in beam:
+            for sc, kind, ns in self._grammar_allowed(b, K, score):
+                if kind in ("extend", "swap"):
+                    # One feature set is one candidate: the beam can reach a set
+                    # in two orders, which tie exactly and are then split by float
+                    # noise differently on each scoring path. Canonical order.
+                    ns = sorted(ns)
+                    key = tuple(ns)
+                    if key not in cands:
+                        cands[key] = (score(ns), kind, ns)
+        if not cands:
+            return None
+        ranked = sorted(cands.values(), key=lambda c: (c[0], c[1], c[2]), reverse=True)
+        self._beam = [list(c[2]) for c in ranked[:2]]
+        return ranked[0]
+
+
+class RandomExtendWhileImproving(MetaAdaptive):
+    """Extends by the next feature, not yet held, of a permutation fixed by the
+    searcher's seed, keeping it only if it improves, and stops once an extension
+    gains no more than `min_gain`. The fill dominates its continuation, so it is
+    the predicted-CONSERVATIVE case (amendment 6)."""
+    name = "random-extend-while-improving"
+
+    def __init__(self, min_gain: float = 0.0, seed: int = 0):
+        super().__init__(seed=seed)
+        self.min_gain = float(min_gain)
+
+    def _decide(self, state):
+        gain = state["last_gain"]
+        return (("stop" if gain <= self.min_gain else "continue"),
+                f"last_gain > {self.min_gain}", float(gain))
+
+    def _search(self, K, single, support_score, frozen=None, meta_steps=None):
+        self._perm = [int(k) for k in np.random.default_rng(self.seed).permutation(K)]
+        self._ptr = 0
+        return super()._search(K, single, support_score, frozen, meta_steps)
+
+    def _extend(self, support, K, score):
+        held = {k for k, _ in support}
+        while self._ptr < K and self._perm[self._ptr] in held:
+            self._ptr += 1
+        if self._ptr >= K:
+            return None
+        j = self._perm[self._ptr]
+        self._ptr += 1
+        ns = list(support) + [(j, 1.0)]
+        if not self._allowed(ns):
+            return None
+        return (score(ns), "extend", ns)
+
+
+def registered_71(seed: int, se: float) -> list:
+    """Amendment 6's six searchers with their registered parameters. `se` is one
+    Sharpe standard error at the configuration's T, so the stop bar is 3.5 se."""
+    bar = 3.5 * se
+    return [StopWhenCleared(bar=bar, seed=seed), ExtendWhileImproving(min_gain=0.0, seed=seed),
+            ClearedRestart(k=1, bar=bar, seed=seed), LookaheadStopWhenCleared(bar=bar, seed=seed),
+            RandomExtendWhileImproving(min_gain=0.0, seed=seed),
+            ExtendBySecondBest(min_gain=0.0, seed=seed)]
 
 
 # The three whose continue-move is greedy extension. They are the clean

@@ -19,7 +19,8 @@ re-executes; it does not adjudicate.
 triggers is replayed by `_run_meta`, step for step the loop of
 `searchers.meta_adaptive.MetaAdaptive._search`: content moves through the
 grammar, meta moves from the declared triggers re-evaluated on the replicate's
-own information set. Its trigger mode fills past the realized length with **7.1's
+own information set. Its trigger mode keeps evaluating the declared triggers past
+the realized length (7.1 amendment 6) and, where they say continue, uses **7.1's
 registered scripted fill**, imported from `searchers.meta_adaptive`, because the
 milestone is that a logged scripted searcher reproduces that searcher's own
 three nulls. It is not a choice of fill for an agent's path, which 7.1 decides.
@@ -136,9 +137,9 @@ class LoggedPolicy:
                 if step >= len(frozen):
                     break
                 action = frozen[step]
-            elif meta_steps is not None and step >= meta_steps:
-                action, filling = "continue", True
             else:
+                # the declared triggers decide at every step, past the realized
+                # length too (7.1 amendment 6); past it a continue takes the fill
                 state = {"step": step, "best": best, "failures": failures,
                          "last_gain": last_gain, "budget_left": self.budget - step}
                 action = "continue"
@@ -147,6 +148,7 @@ class LoggedPolicy:
                     if fires:
                         action = trig.action
                         break
+                filling = meta_steps is not None and step >= meta_steps
 
             if action == "stop":
                 trace.moves.append("stop")

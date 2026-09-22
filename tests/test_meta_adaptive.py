@@ -123,40 +123,41 @@ def test_trigger_replay_matches_the_policy_on_the_data_it_was_read_from(searcher
         searcher.replay(base, ann), rel=1e-12)
 
 
-def test_trigger_and_policy_differ_only_past_the_realized_length():
-    """The exact invariant, and the correction to an earlier claim.
+def test_trigger_and_policy_differ_only_in_filled_content():
+    """Amendment 6's invariant. The declared triggers are evaluated at every step,
+    past the realized length too, so trigger replay takes the policy's meta
+    decision wherever its state is the policy's, and the two nulls can differ
+    only on a replicate where some step was actually filled.
 
-    Trigger replay was documented as coinciding with policy replay for every
-    greedy-continuation searcher. It does not. Up to the realized length the
-    predicates *are* the policy, so the two agree step for step; past it the fill
-    always continues, so a policy that would have stopped or restarted there
-    diverges. StopWhenCleared with a short realized sequence is the case that
-    exposed it -- one replicate in 120, worth 0.11 in Sharpe.
-
-    What is true, and is what this asserts: differences occur on no replicate
-    whose policy stopped at or before the realized length."""
+    (The earlier fill kept moving where a stop policy would have stopped, so
+    StopWhenCleared diverged in the meta dimension. That divergence is gone by
+    construction, and is what forced rule 3's sign conservative.)"""
     base, ann = _base(K=10, T=600, seed=7)
-    s = StopWhenCleared(bar=0.3)
-    realized = s.trace(base, ann)
     S0 = base - base.mean(axis=0, keepdims=True)
     L = select_block_length(S0)
-    rng = np.random.default_rng(3)
-
-    seen_a_difference = False
-    for _ in range(120):
-        R = S0[stationary_bootstrap_indices(S0.shape[0], L, rng), :]
-        differs = abs(s.replay_triggers(R, realized.n_moves, ann)
-                      - s.replay(R, ann)) > 1e-12
-        ran_longer = s.trace(R, ann).n_moves > realized.n_moves
-        if differs:
-            assert ran_longer, "diverged without running past the realized length"
-            seen_a_difference = True
-    assert seen_a_difference, "this fixture is meant to exercise the fill"
+    for s in (StopWhenCleared(bar=0.3), ExtendBySecondBest(min_gain=0.0)):
+        realized = s.trace(base, ann)
+        n = realized.n_moves
+        rng = np.random.default_rng(3)
+        seen = 0
+        for _ in range(120):
+            R = S0[stationary_bootstrap_indices(S0.shape[0], L, rng), :]
+            trig, pol = s.trace(R, ann, meta_steps=n), s.trace(R, ann)
+            if abs(trig.score - pol.score) > 1e-12:
+                assert any(m.filled for m in trig.moves), \
+                    f"{s.name}: diverged with no filled step"
+                seen += 1
+            # the first step past the realized length: same meta decision
+            if len(trig.moves) > n and len(pol.moves) > n:
+                assert trig.moves[n].action == pol.moves[n].action
+        if isinstance(s, ExtendBySecondBest):
+            assert seen > 0, "the dominated continuation must diverge somewhere"
 
 
 def test_trigger_replay_fills_past_the_realized_sequence():
-    """A replicate that would run longer than the real search has no declared
-    trigger left, so it extends greedily to the budget rather than truncating."""
+    """A replicate that runs longer than the real search is filled, not truncated:
+    its triggers still decide (here the bar is never cleared, so it continues),
+    and the fill supplies each continuation."""
     base, ann = _base()
     s = StopWhenCleared(bar=1e9)
     short = s.replay_triggers(base, 1, ann)          # one meta step, then fill
@@ -308,10 +309,10 @@ def test_the_fill_ranges_over_extend_swap_and_flip():
 
 
 def test_the_swap_searcher_separates_trigger_from_policy_replay():
-    """Rule 3's informative case. The fill dominates a swap continuation at each
-    single step, since swap is in its grammar -- but a search is a path, and the
-    locally best move is not globally optimal, so the direction is a real
-    empirical question rather than an arithmetical one."""
+    """On this small fixture (K = 10) swap engages the fill and separates nulls 2
+    and 3. At the registered K = 40 it does not (engagement 0 of 2,000 on the
+    design block), which is why amendment 6 dropped it from rule 3; this test
+    pins only that the machinery can separate them when it engages."""
     base, ann = _base(K=10, T=600, seed=7)
     n = replay_nulls(base, SwapWorstWhileImproving(), B=200, annualization=ann, seed=5)
     differ = np.mean(np.abs(n.trigger - n.policy) > 1e-12)
@@ -323,9 +324,9 @@ def test_the_measured_direction_of_the_fill_is_conservative():
     """Recorded, not assumed. On this fixture both non-greedy continuations give
     a negative signed Kolmogorov distance -- trigger's null is stochastically
     larger, a higher bar, a larger p-value, so the fill errs conservatively,
-    which is the acceptable direction. The swap searcher's margin is the smaller
-    and is the one rule 3 reads, the second-best searcher's being close to a
-    monotone consequence of greedy extension dominating weaker extensions."""
+    which is the acceptable direction. On this fixture the swap searcher's margin
+    is the smaller. (Amendment 6 reads rule 3 on lookahead, random-extend and
+    second-best; swap is inert at K = 40.)"""
     base, ann = _base(K=10, T=600, seed=7)
     margins = {}
     for s in (ExtendBySecondBest(), SwapWorstWhileImproving()):
@@ -454,3 +455,35 @@ def test_claimed_score_is_the_submitted_supports_own_on_the_live_path():
                                                name="recheck")).sharpe
             assert got == float(dist.mean), (s.name, seed)
     assert restarts >= 5
+
+
+# -- the moment scorer: equivalence with the column path (amendment 6 sizing) --
+
+def test_moment_scoring_matches_column_scoring_on_the_design_block():
+    """The fast scorer computes each replicate's mean vector and covariance once
+    and scores every candidate from them. It must reproduce the column path:
+    identical actions -- realized and on every replicate, in all three nulls --
+    and values within 1e-10, for all six registered searchers at the registered
+    configuration (K = 40, M = 50, T = 5,000), on design seeds only."""
+    from searchers.meta_adaptive import registered_71
+    for seed in (960000, 960001):
+        cfg = DGPConfig(M=50, T=5000, T_oos=1000, K=40, s=0, rho=0.0, sigma=1.0, seed=seed)
+        base = Sandbox(generate(cfg), periods_per_year=cfg.periods_per_year).base_feature_columns()
+        ann = float(np.sqrt(cfg.periods_per_year))
+        se = float(np.sqrt(cfg.periods_per_year / cfg.T))
+        S0 = base - base.mean(axis=0, keepdims=True)
+        L = select_block_length(S0)
+        for slow, fast in zip(registered_71(seed, se), registered_71(seed, se)):
+            fast.scoring = "moments"
+            rs, rf = slow.trace(base, ann), fast.trace(base, ann)
+            assert rs.actions() == rf.actions(), slow.name
+            assert abs(rs.score - rf.score) < 1e-10, slow.name
+            acts, n = rs.actions(), rs.n_moves
+            rng = np.random.default_rng(seed)
+            for _ in range(3):
+                R = S0[stationary_bootstrap_indices(S0.shape[0], L, rng), :]
+                for kw in ({}, {"meta_steps": n}, {"frozen": acts}):
+                    a, b = slow.trace(R, ann, **kw), fast.trace(R, ann, **kw)
+                    assert a.actions() == b.actions(), (slow.name, kw)
+                    assert a.support == b.support, (slow.name, kw)
+                    assert abs(a.score - b.score) < 1e-10, (slow.name, kw, a.score - b.score)
