@@ -407,3 +407,177 @@ columns) exactly, and on the live path (`run()` on a sandbox) to the recorded
 `StopWhenCleared` has no default bar, and the `k` of `RestartAfterKFailures` and
 the `min_gain` and `min_support` values appear only in the tests. They must be
 fixed here before the driver is written, not chosen in it.
+
+**6 — 2026-09-21, before the driver is written and before any draw. The fill is
+redefined, rule 3 becomes a paired content test with a size readout, and the
+searcher set and its parameters are fixed.**
+
+*Every number below is a **design measurement, not a 7.1 draw**.* The design seed
+block is 960000–960999, disjoint from the registered 300000–301999 and the
+replication block 310000–311999. The configuration is the registered one (K = 40,
+M = 50, T = 5,000, rho = 0, s0). `experiments/fsr_design.py` produces the numbers
+and mirrors `replay_nulls`' resampling exactly. One Sharpe standard error at
+T = 5,000 is se = 0.2245.
+
+### (a) The fill, redefined
+
+**The fill is the best one-step content move over extend, swap and flip, with
+the declared triggers still evaluated at every filled step.** Past the realized
+length, the replicate's own triggers decide whether it stops, restarts or
+continues, exactly as in the policy. Only when they say continue is the
+continuation replaced by the fill's move. This supersedes amendment 2's fill
+("the best one-step move ... applied to the budget"), which never stopped.
+
+**Why.** Under the old fill a stop searcher's replicate kept moving where the
+policy would have stopped, so null 2 could only come out larger than null 3.
+That forced a conservative sign, whatever the fill's content did. It masked
+exactly the liberal case a stronger continuation produces, and it was a
+property of the gate, not only of the measurement. With the triggers evaluated,
+nulls 2 and 3 can differ **only in content**. **7.2 part two builds the fill this
+way.** Rules 1, 2 and 4 read null 2 as redefined here.
+
+**Consequence for the comparison.** The searcher's own continuation with its
+triggers evaluated *is* the policy, so the content-only null 2′ is **null 3
+itself**. Rule 3 compares null 2 with null 3, and the difference is the fill's
+content choice and nothing else.
+
+### (b) The structural property, and engagement as a readout
+
+**The fill engages only on replicates that run past the realized length.** A
+searcher whose realized search always runs to the budget therefore has nulls 2
+and 3 equal **by construction**, whatever the fill is. **The engagement rate** —
+the share of replicates in which at least one step past the realized length is
+filled — **is a registered readout for every searcher**, reported beside rules 1–4
+so that a null result can be told apart from a fill that never ran.
+
+### (c) Findings on the design block, not failures
+
+- **Restart carries no size cost for greedy content policies at K = 40.**
+  `RestartAfterKFailures` (k = 2) restarted in 936 of 2,000 replicates. A
+  post-restart climb beat the pre-restart best in **0 of 2,000**, and nulls 2 and 3
+  differed in **0 of 2,000**. It has no stop trigger, so it runs to the budget in
+  100% of null runs. Random-anchor restart does no better: 0 of 2,000
+  differences at k = 1 and 2, and post-restart climbs winning in 0.75% and 0.45%.
+  Adding a stop made nulls 2 and 3 separate (16–19%), but the separation was the
+  stop's, not the restart's.
+- **The fill's choice is immaterial for greedy continuations.** Swap's post-swap
+  climb beat the earlier best in 0.45% of replicates. Under the redefined fill,
+  stop-when-cleared, extend-while-improving and ClearedRestart engage on about
+  24% of replicates, yet show nulls 2 and 3 identical in **0 of 2,000**, because
+  the fill's best one-step move is their own.
+- Both are **consistent with arm D**: sub-maximal greedy search near its class
+  maximum costs almost nothing, so there is little for a replay rule to get
+  wrong.
+
+### (d) The searcher set: six
+
+**Dropped as inert on the design block:**
+- `RestartAfterKFailures`: 0 of 2,000 differences; always at budget.
+- random-extend at the 3.5 se bar: engagement 0 of 2,000; always at budget.
+- `SwapWorstWhileImproving`: engagement 0 of 2,000 under the redefined fill,
+  because its gain trigger stops a filled replicate before any content step.
+
+| searcher | continuation | stop trigger | engagement | nulls 2 ≠ 3 | role |
+|---|---|---|---|---|---|
+| `StopWhenCleared` | greedy extension | best > 3.5 se | 24.1% | 0 | rules 1, 2, 4 |
+| `ExtendWhileImproving` | greedy extension | gain ≤ 0 | 24.5% | 0 | rules 1, 2, 4 |
+| `ClearedRestart` | greedy extension; restart after k failures | best > 3.5 se | 24.1% | 0 | rules 1, 2, 4; the one searcher with two declared triggers |
+| **`LookaheadStopWhenCleared`** | width-2 beam over extend and swap | best > 3.5 se | 24.1% | **3.8%** | rules 1–4; **predicted liberal** |
+| **`RandomExtendWhileImproving`** | the next feature of a permutation fixed by the draw's seed | gain ≤ 0 | 3.9% | 3.9% | rules 1–4; **predicted conservative** |
+| **`ExtendBySecondBest`** | second-best extension | gain ≤ 0 | 33.1% | 33.1% | rules 1–4; **predicted conservative** |
+
+Engagement and divergence are from seeds 960000–960019, 100 replicates each,
+under the redefined fill. **Direction on the design block:** lookahead's policy
+scored higher than the fill on all 76 divergent replicates, with 13 of 13
+non-zero seeds positive. Random-extend's fill scored higher on all 77 (19 of 19
+seeds negative), and second-best's on all 662 (12 of 12 negative).
+
+### (e) Parameters, registered with their reasons
+
+Chosen on design seeds 960100–960299 (200 realized null runs per configuration),
+so that each meta decision fires in a meaningful share of null runs rather than
+always or never.
+
+| parameter | value | firing on null runs | reason |
+|---|---|---|---|
+| budget | **12** steps | the stop searchers stop before it in 47–73% of runs | cost is linear in it |
+| stop bar (`StopWhenCleared`, `ClearedRestart`, lookahead) | **3.5 se = 0.786** annualised | 73%, median at step 5 | see below |
+| `ClearedRestart` k | **1** | restarts in 17.7% of replicates | at k = 2 the bar ends most searches first (15.0%) |
+| `ExtendWhileImproving`, `ExtendBySecondBest`, `RandomExtendWhileImproving` min_gain | **0** | 47%, 51%, and early (median realized length 2) | 0.1 se already fires in 99% |
+| lookahead beam width | **2**, over extend and swap | — | the smallest beam that can pass through a non-improving step |
+| searcher seed | the draw's seed | — | used only by random-extend's permutation |
+
+**The stop bar is a fixed Sharpe in standard-error units, not a critical value.**
+A critical value at level α fires in about α of null runs by construction. 7.1
+runs entirely under the null, so such a bar would almost never fire. 3.5 se is
+fixed before the search, depends on no statistic of the draw, and means the same
+thing if T changes.
+
+**Seed blocks.** Design: 960000–960999, used. **Smoke and scaling curve:
+970000–970999**, reports printing no rule quantities (`prereg/README.md`).
+Registered 300000–301999 and replication 310000–311999, unchanged.
+
+### (f) Rule 3, replaced: null 2 against null 3, a sign test with a tie rule
+
+Read on **lookahead (predicted liberal), random-extend (predicted conservative)
+and second-best (predicted conservative)**. The other three are reported and
+expected to read "identical".
+
+Per searcher and per draw, the signed Kolmogorov distance between null 2 and
+null 3 is computed over that draw's B replicates (positive means null 2 is
+smaller, a lower bar, liberal). Then:
+
+- **Draws with distance exactly zero are excluded**, and their share is reported.
+- On the remaining draws, a **one-sided sign test at 0.005 in each direction**
+  tests the share positive against one half.
+
+Branches, per searcher:
+
+- **Identical:** every draw is zero. The fill never engaged, and nothing is said
+  about its direction.
+- **Predicted direction confirmed:** the sign test rejects in the predicted
+  direction.
+- **Opposite direction:** it rejects against the prediction. Reported as the
+  finding, and explained before 7.2 builds on the fill.
+- **No direction detected:** neither. Reported as "no direction detected at this
+  number of draws", which is not evidence either way.
+
+**Standing check on this rule, per searcher** (20,000 simulated experiments of
+2,000 draws each):
+
+| fill | zero-distance share | rejects toward positive | rejects toward negative | no direction | identical |
+|---|---|---|---|---|---|
+| (i) exact in distribution | any, 0 to 0.99 | 0.4% | 0.3–0.5% | 99% | — |
+| (ii) pointwise identical | 1.0 | — | — | — | **100%** |
+| (iii) liberal, 55% of signs positive | 0 / 0.5 / 0.9 / 0.99 | 97% / 71% / 11% / 1% | 0 | the rest | — |
+| (iii) liberal, 60% positive | 0 / 0.5 / 0.9 / 0.99 | ≈100% / ≈100% / 58% / 3% | 0 | the rest | — |
+
+Lookahead runs to the budget in about 35% of draws (7 of 20 design seeds), where
+it cannot engage, so its expected zero-distance share is about 0.35. The design
+block's non-zero seeds were 13 of 13 positive.
+
+**Size readout, lookahead.** Its type-I rate under null 2 and under null 3 at
+α = 0.05 and 0.01, each with a Wilson interval, and its median signed distance.
+Because both nulls price the same draws, **inflation** is tested as a paired
+comparison: an exact one-sided McNemar test on the discordant draws (rejected
+under null 2 and not null 3, against the reverse), at 0.05, per α level.
+
+**Part-two consequence, keyed to size:**
+
+- **Inflation not detectable** (McNemar does not reject at either level), even
+  if the sign test confirms liberal: strengthening the agent-path fill is
+  **optional**. The known liberal direction and the upper end of the inflation's
+  interval are stated wherever the fill is used.
+- **Inflation detectable** at either level: strengthening is **mandatory** before
+  7.2 part two certifies with the fill. Either a **multi-step fill**, or pricing
+  unreplayable continuations at the **local-max upper end**, or requiring the
+  agent to **declare its continuation** so it replays exactly.
+
+Rule 3's condition (ii) from amendment 3(d) is withdrawn; the size readout
+replaces it.
+
+### (g) B and cost: open
+
+**B = [10,000 or 1,000]**, fixed in the next amendment after the scorer is
+profiled. **Cost: [from the c7a scaling curve and smoke on 970000–970999].** No
+7.1 draw runs until both are fixed.
