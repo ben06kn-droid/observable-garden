@@ -581,3 +581,54 @@ replaces it.
 **B = [10,000 or 1,000]**, fixed in the next amendment after the scorer is
 profiled. **Cost: [from the c7a scaling curve and smoke on 970000–970999].** No
 7.1 draw runs until both are fixed.
+
+**7 — 2026-09-21, before the scaling curve, the smoke and any draw. B is fixed by
+a rule stated before its cost is measured.**
+
+**The scorer.** Scoring every candidate from each replicate's mean vector and
+covariance, computed once, is **9.6× faster** than summing base columns: 1,791 to
+187 ms per replicate for all three nulls across the six searchers, single-core,
+design seeds 960004–960005. It is held to identical actions and supports, and to
+values within 1e-10 of the column path, by `tests/test_meta_adaptive.py`, at the
+registered configuration on design seeds. The published fingerprint moved from
+`cb0c1fed82c65939` to `d99d85c912a5d88a` (commit `a7623bd`).
+
+**Projected at B = 10,000 and 2,000 draws: about 1,040–1,120 CPU-hours
+single-core**, which is 5.5–9 hours on the c7a.48xlarge depending on contention,
+and about $55–90 at $9.85/h.
+
+**The rule, fixed now:**
+
+- **B = 10,000** if the c7a scaling curve and smoke project the full registered
+  run (2,000 draws, six searchers) at **$100 or less** at the measured contended
+  rate;
+- **B = 1,000** otherwise.
+
+The threshold is set before either number exists. The smoke's projection is
+recorded beside the choice.
+
+**What B = 1,000 would change, restated so a B = 1,000 run is not read as more
+than it is:**
+- **Rule 1's detectable liberality is unchanged.** It depends on the number of
+  draws, not B. At 2,000 draws the rule fires at k ≥ 120 (6.00%) at α = 0.05 and
+  k ≥ 29 (1.45%) at α = 0.01, with 80% power against 6.44% and 1.67% (amendment 1).
+- **P-value resolution** becomes 1/1,001. It still resolves α = 0.01: a draw
+  rejects when at most 9 replicates reach the realized statistic. Monte Carlo
+  noise in each p-value adds variance to the rejection indicators, not bias.
+- **Rule 3 is coarser per draw.** Lookahead diverges on about 3.8% of
+  replicates, so about 38 per engaging draw at B = 1,000 against about 380 at
+  B = 10,000. The sign test's zero-distance share rises only through draws with
+  no divergent replicate at all, which at that rate is rare; its standing-check
+  table in amendment 6 applies with the measured share.
+- **The size readout's McNemar test** is on draws, so it is unaffected except
+  through the rejection indicators' Monte Carlo noise.
+
+**Scaling curve and smoke, on the c7a, on seeds 970000–970999, printing cost
+only.**
+- **Scaling:** B = 500 at 1, 16, 48, 96, 144 and 192 workers, two draws per
+  worker. Per-draw cost is linear in B, since replicates are independent and the
+  per-draw fixed work is small, so contention measured at B = 500 transfers.
+- **Smoke:** B = 10,000 at 192 workers, 192 draws, end to end, as the standing
+  pre-launch rule requires.
+
+The on-instance self-stop is installed before anything launches.
