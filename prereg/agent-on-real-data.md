@@ -28,7 +28,8 @@ that is the right sign, because the short pays the dividend.
 **One fetch, on the holdout host, for the whole span.** The full 2005-01-01 to
 2025-12-31 adjusted series is fetched **once**, on the holdout host, and hashed
 there. **The holdout host is the EC2 c7a.48xlarge `i-0e0c1484de3c755ad`** (ssh
-alias `og-c7a`), which is never the agent's machine. From that single fetch:
+alias `og-c7a`), which is never the agent's machine. **The agent harness never
+runs on this host.** From that single fetch:
 
 - the **in-sample rows (2005-01-01 to 2022-12-31)** are exported to the agent's
   machine as derived files, each with its own hash and the hash of the fetch it
