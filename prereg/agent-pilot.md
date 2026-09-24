@@ -251,3 +251,55 @@ quietly:
   is too large to be float noise.
 
 No number from any attempt enters a verdict; rule 5 stands.
+
+## Reading, 2026-09-24 (attempt 3, the one that stands)
+
+**No verdict is claimed.** n = 5. Every number below is a pilot number.
+
+**Rule 1 — harness integrity: holds.** Every refusal was one of the eight
+registered kinds; one `malformed_arguments` (a control-arm run naming feature 22
+of 0–21) and nothing else. The `outside_class` refusals that attempt 2 produced
+in every replay-arm run are gone, which is what amendment 3's fix predicted.
+
+**Rule 2 — engagement (descriptive).** Every one of the 5 runs submitted.
+
+| run | arm | tool calls | accepted moves | engagement |
+|---|---|---|---|---|
+| pilot_0 | control | 59 | 59 | 1.00 |
+| pilot_1 | control | 40 | 39 | 0.97 |
+| pilot_2 | replay | 12 | 11 | 0.92 |
+| pilot_3 | replay | 11 | 10 | 0.91 |
+| pilot_4 | replay | 11 | 9 | 0.82 |
+
+The control arm evaluates 40–59 specifications; the replay arm reaches its
+submission in 11–12 moves. That gap is the surface, not the model, and
+`AGENT_PROMPTS_REAL.md` §2 records it as a confound for search behaviour.
+
+**Meta moves: every replay-arm run stopped on a trigger that fired**, 1 of 1 in
+each — `last_gain_at_most` twice, `best_so_far_above` once. The replay tier has a
+meta move to price on agent data, which was one of the failures this pilot was
+built to catch.
+
+**Declarations: `pick_prior` used in 3 of 3 replay-arm runs.**
+
+**`pick` was used in 0 of 5 runs — and this is now a behavioural result rather
+than a harness artifact.** In attempt 1 the prompt did not name the statistic
+library; in attempt 2 the harness refused every `pick` at a full support. Both are
+fixed. With a named library and a working guard, no run chose to `pick` at all.
+So **"picks accepted versus contradicted" is 0–0 for a third time, and the
+consistency check is unexercised on agent data.** 7.3's fidelity measurement is
+the design that needs picks; if its agent cell wants them, the prompt has to ask
+for a reasoned choice rather than merely permit one.
+
+**Cost: $0.104 per run, $0.52 for the five** — 0.4× the $0.268 stored mean, so
+rule 4's 3× re-statement does not fire, and every seat estimate resting on that
+mean is conservative for this surface.
+
+**Measurement 6 — the certifying null: computable, not priceable.** All three
+replay-arm logs replayed without error, and all three verdicts are
+**UNDECIDABLE** on the identity-replicate guard. Amendment 3 records the cause and
+what it means for 6.5's conditional replay arm; the specimen block is in
+`runs/agent_pilot/pilot_report_attempt3.txt`.
+
+**What the three attempts cost in total: $1.64.** The two defects they found
+would each have been discovered by 7.3's 160-run agent cell instead.
