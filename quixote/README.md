@@ -250,11 +250,16 @@ that searcher's own null. It is not a choice of fill for an agent's path.
 
 ## Deliberately not built
 
-These wait on `fixed-sequence-replay` (7.1), which decides their design. Building
-them now would mean guessing, and the guess is the thing under test.
+7.1 reported on 2026-09-24, so the first two are built (`quixote/certify.py`):
+**trigger replay certifies**, and **the fill is the best one-step content move
+with the declared triggers still evaluated at every filled step**. Fixed-sequence
+replay fills in the bracket's lower end, which 7.1's rule 2 licensed by measuring
+freezing as liberal. Every verdict whose replicates used the fill carries its
+measured direction: liberal against a width-2 beam, no verdict moved, untested
+beyond that.
 
-- **which null certifies** — trigger replay against a declared policy
-- **the fill inside the agent path**
+Still waiting, and still not guessed:
+
 - **local-max pricing as a certifier** — 7.3's conjecture
 - **fidelity-driven pricing**
 - **the living verdict** (item 3), which waits until after the paper

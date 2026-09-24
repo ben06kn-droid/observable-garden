@@ -13,7 +13,11 @@ from dataclasses import dataclass, field
 # PASS/FAIL/INADMISSIBLE/UNDECIDABLE/DEGENERATE come from garden.audit; this adds
 # one state and one exit code. garden/cli.py's codes are 0/1/2/3/4 and 64.
 DEPENDS_ON_JUDGMENT = "DEPENDS_ON_JUDGMENT"
-EXIT_CODES = {"PASS": 0, "FAIL": 1, "INADMISSIBLE": 2, "UNDECIDABLE": 3,
+# CERTIFIED is the replay tier's pass (ROADMAP 7.2: CERTIFIED / PASS / CONFIRMED,
+# each labelled with its tier). It shares PASS's exit code: both mean the run
+# cleared the bar it was priced against, and the tier is in the verdict.
+CERTIFIED = "CERTIFIED"
+EXIT_CODES = {"PASS": 0, CERTIFIED: 0, "FAIL": 1, "INADMISSIBLE": 2, "UNDECIDABLE": 3,
               "DEGENERATE": 4, DEPENDS_ON_JUDGMENT: 5}
 
 
@@ -39,6 +43,14 @@ class QuixoteVerdict:
     bits_bracket: tuple[float, float] | None = None
     bits_ledger: tuple = ()
 
+    # -- the certifying null (7.2 part two; the null 7.1 selected) ---------
+    certifying_null: str | None = None
+    p_certifying: float | None = None
+    p_policy: float | None = None                # exact for a scripted policy
+    realized_score: float | None = None
+    fill_engaged: int | None = None              # replicates that used the fill
+    fill_replicates: int | None = None
+
     # -- provenance --------------------------------------------------------
     n_moves: int = 0
     n_candidates: int = 0
@@ -60,12 +72,22 @@ class QuixoteVerdict:
         b = self.bracket
         return None if b is None else (b[0] <= self.alpha <= b[1])
 
+    @property
+    def fill_share(self) -> float | None:
+        if self.fill_engaged is None or not self.fill_replicates:
+            return None
+        return self.fill_engaged / self.fill_replicates
+
     def standard_reasons(self) -> list[str]:
         out = list(self.reasons)
         out.append("Bits are descriptive. They report how much the search "
                    "absorbed and never enter the correction.")
-        if self.bracket is None:
+        if self.bracket is None and self.p_frozen is None:
             out.append("No bracket: its ends are licensed by fixed-sequence-replay "
                        "(lower) and 7.3's conjecture test (upper), neither of which "
                        "has reported. This build does not compute it.")
+        elif self.bracket is None:
+            out.append("Half a bracket: the lower end is fixed-sequence replay, which "
+                       "7.1 licensed by measuring freezing as liberal. The upper end "
+                       "waits on 7.3's local-max pricing and is not computed.")
         return out

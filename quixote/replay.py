@@ -44,6 +44,10 @@ class ReplayTrace:
     support: tuple = ()
     score: float = float("-inf")
     policy: str = "logged"
+    # whether any step past the realized length took the fill: what
+    # quixote.certify reports as engagement, and the condition under which a
+    # verdict carries the fill's measured direction
+    filled: bool = False
 
     @property
     def n_moves(self) -> int:
@@ -165,6 +169,7 @@ class LoggedPolicy:
                 continue
 
             if filling:
+                trace.filled = True
                 cands = MetaAdaptive._grammar(support, K, score_list)
                 chosen = max(cands) if cands else None
                 cand_score, cand_support = (chosen[0], chosen[2]) if chosen else (None, None)

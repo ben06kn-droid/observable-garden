@@ -10,12 +10,22 @@ cannot disagree with what ran; the log carries timestamps, so a declaration made
 after seeing results can be refused rather than trusted; and the twin generator
 and masking exist so a run can be scored against placebo datasets.
 
-Deliberately NOT here, because 7.1 decides them:
+**7.1 has reported (2026-09-24), so two of these are now decided and built:**
 
-- which null certifies (trigger replay against a declared policy),
-- the fill inside the agent path,
-- local-max pricing as a certifier,
-- fidelity-driven pricing,
+- **which null certifies: trigger replay** (`quixote/certify.py`). Its rejection
+  rate came in at or below nominal for all six registered searchers, so it is
+  valid to certify with; the rates sit under nominal as P2 predicts, and no
+  exactness is claimed.
+- **the fill**: the best one-step content move over extend, swap and flip, with
+  the declared triggers still evaluated at every filled step. 7.1 measured its
+  direction as liberal against a width-2 beam and conservative against
+  continuations it dominates, with no verdict moved, so every verdict whose
+  replicates used it says so.
+
+Still deliberately NOT here:
+
+- local-max pricing as a certifier, and fidelity-driven pricing: both wait on
+  7.3's scripted runs and are built behind a flag, off by default,
 - the living verdict (item 3), which waits until after the paper.
 
 `Verdict` carries the fields those will populate, stubbed and marked.
@@ -27,9 +37,11 @@ restricted; today that is `garden`, `estimator`, `environments` and `searchers`.
 adding it moves no published fingerprint; quixote runs record their own
 fingerprint instead. See `quixote/fingerprint.py`.
 """
+from quixote.certify import CERTIFYING_NULL, certify, three_nulls
 from quixote.grammar import Grammar, Move, Support
 from quixote.log import InformationSet, MoveRecord, SessionLog
 from quixote.verdict import QuixoteVerdict
 
 __all__ = ["Grammar", "Move", "Support", "InformationSet", "MoveRecord",
-           "SessionLog", "QuixoteVerdict"]
+           "SessionLog", "QuixoteVerdict", "certify", "three_nulls",
+           "CERTIFYING_NULL"]
