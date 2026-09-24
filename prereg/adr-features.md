@@ -306,3 +306,42 @@ exemptions apply)", and does not describe intraday treatment. That the tax falls
 on net end-of-day positions, which would exempt a flat-overnight book, is **not
 verified from a primary source**. It is **not charged**, and this is recorded as
 an open item.
+
+## Amendment 2 — 2026-09-24, before any run. The spread window widens to at most
+60 sessions, with 20 as the minimum.
+
+**What amendment 1 registered:** the spread applied on session *d* is Abdi–Ranaldo
+over the pairs in the **20 sessions before *d***.
+
+**What it becomes:** over the **most recent min(60, available) sessions strictly
+before *d*, and never fewer than 20**. Everything else is unchanged: the
+estimator, the one-cent-or-2-bps floor, the $0.005 fee, the 2× sensitivity, and
+the rule that session *d* contributes nothing to its own spread.
+
+**Why, from the known-answer test and not from the data.** `tests/test_adr_costs.py`
+measures the estimator on simulated trades where the spread is known. Over a
+20-session window at 17 bps of volatility a bar, which is about 1.5% a day:
+
+- a **10 bp** spread is recovered well: 5th–95th percentile 8.9–10.5 bps;
+- a **4 bp** spread is not: 5th–95th percentile **0.7–5.4 bps**, so a tight
+  spread is mostly noise and often lands at the floor.
+
+The estimator averages over pairs, so its sampling error falls with the square
+root of the window. Sixty sessions is three times the pairs and about **1.7×
+tighter**, which moves a 4 bp name from "mostly noise" to resolvable, at the cost
+of a slower response to a spread that changes. Sixty sessions is about a quarter
+of a year, short enough that a persistent change still shows.
+
+**Why a minimum of 20 rather than a fixed 60.** The first scored session follows
+the registered 20-session volume warm-up, so a fixed 60 would leave the first 40
+scored sessions with no spread at all. The window therefore grows from 20 to 60
+and stays there.
+
+**What this does not change.** No registered run has priced a bar under either
+rule: 7.4 has not run. The one aggregate computed under the 20-session rule is
+the mean cost rate of 4.70 bps disclosed in `data/adr_manifest.json`'s look of
+2026-09-24, which is recorded there and is not a specification's statistic.
+
+**The guard.** Per `prereg/README.md`, this amendment is added to
+`data/adr_guard.py`'s `REGISTRATION_COMMITS` in the commit that follows it, and
+nothing may run on the panel in between.
