@@ -121,7 +121,24 @@ Local: the ADR panel build and the grader. No EC2, no holdout access.
 
 ## Amendments
 
-None yet. Dated entries are appended here.
+Dated entries are appended here.
+
+**1 — 2026-09-24, before any model-backed run. A seventh refusal kind, and the
+harness gap that produced it.**
+
+The dry run of `experiments/agent_pilot.py` — scripted policies over the real
+tool surface, no model called — found that nothing latched the session after a
+`stop`. An agent could call `stop` twice and both would be logged. That is not a
+search any replicate can reproduce: trigger replay is told how many moves the
+realized search took, and a second stop makes that number a fiction.
+
+`quixote/agent_adapter.py` now latches: after a stop that fires, only `predict`
+and `submit` are taken and every other call is refused. **"What is measured" 2's
+list of refusal kinds gains a seventh, `after_stop`**, so a run that receives one
+is measured rather than counted as rule 1's blocking failure.
+
+This is what the pilot is for, and it was found before the seat was spent rather
+than after.
 
 ## Open, to fix before the first pilot run
 

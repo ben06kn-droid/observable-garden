@@ -292,3 +292,36 @@ def test_the_agent_submits_exactly_once_through_the_sandbox():
     spec, dist = sb.submission
     assert cls.contains(spec.weights)
     assert dist.mean == pytest.approx(max(e.sharpe for e in sb.transcript))
+
+
+def test_a_stop_ends_the_search():
+    """A stop that fires latches the session: a second stop would put two stops
+    in one log, and trigger replay is told how many moves the realized search
+    took. Found by the pilot's dry run, before any model-backed run."""
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("init")
+    tools.call("stop", trigger="best_so_far_above", param=-99.0)
+    assert tools.stopped
+    for name, kw in (("extend_best", {}), ("init", {}),
+                     ("stop", {"trigger": "best_so_far_above", "param": -99.0}),
+                     ("restart", {"trigger": "failures_at_least", "param": 0.0})):
+        with pytest.raises(ToolRefused, match="has stopped"):
+            tools.call(name, **kw)
+    stops = [r for r in tools.session.log.records if r.move.kind == "stop"]
+    assert len(stops) == 1
+    tools.call("predict", mean=0.1, sd=0.2)      # still allowed
+    assert tools.call("submit").ok
+
+
+def test_the_milestone_still_holds_with_the_stop_latch():
+    """The latch must not change a policy that stops once, which is every
+    scripted policy here."""
+    data, cfg, cls = _fixture(seed=2)
+    agent = QuixoteAgent(cls, policy_via_tools)
+    sb_tools = _sandbox(data, cfg)
+    agent.run(sb_tools)
+    sb_direct = _sandbox(data, cfg)
+    session = Session.on_sandbox(sb_direct, cls, name_prefix="quixote-agent")
+    policy_direct(session)
+    assert _records(agent.log) == _records(session.log)

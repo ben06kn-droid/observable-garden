@@ -31,6 +31,11 @@ call with a `keep` argument rather than two tools, because an agent that propose
 and never resolved would leave the session with a pending move and no record of
 the evaluation it caused.
 
+**A stop ends the search.** After a `stop` that fires, only `predict` and
+`submit` are taken; every other call is refused. A second stop in one log would
+make the realized move count a fiction, and trigger replay is told exactly that
+number.
+
 **A meta move without a declared trigger is refused, not logged.** `stop` and
 `restart` each take a trigger from `quixote/triggers.py` by name and parameter;
 the session stamps it *before* the move executes, so a trigger invented after
@@ -106,6 +111,12 @@ class ToolSession:
         self.short_list_cap = short_list_cap
         self.n_calls = 0
         self.submitted = False
+        # A stop ends the search. Without this latch an agent can call `stop`
+        # twice and the log carries two of them, which is not a search any
+        # replicate can reproduce: trigger replay is told how many moves the
+        # realized search took, and a second stop makes that number a fiction.
+        # Found by the pilot's dry run, before any model-backed run.
+        self.stopped = False
 
     # -- the surface ---------------------------------------------------------
 
@@ -116,6 +127,9 @@ class ToolSession:
             raise ToolRefused(f"unknown tool {name!r}; the grammar is {list(TOOLS)}")
         if self.submitted:
             raise ToolRefused("this session has submitted; no further moves are taken")
+        if self.stopped and name not in ("submit", "predict"):
+            raise ToolRefused("this session has stopped; the search is over and only "
+                              "`predict` and `submit` remain")
         self.n_calls += 1
         return getattr(self, f"_{name}")(**kw)
 
@@ -216,6 +230,7 @@ class ToolSession:
                 f"(value {value:.4f}). A meta move is taken because a declared "
                 "trigger fired, not because the agent prefers it.")
         self.session.stop(t, value, stamped_at=stamp)
+        self.stopped = True
         return ToolResult(True, f"stopped on {t.name} (value {value:.4f})",
                           {"best": self.session.best_score})
 
