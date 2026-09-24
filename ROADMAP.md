@@ -707,6 +707,32 @@ the prediction slot cannot be written after the result exists.
 
 ## 7.3 Does the gate account for the agent? (EC2, then seat)
 
+**Amendment, 2026-09-24: a 5-run pilot precedes this section, and why.**
+
+`prereg/agent-pilot.md` is registered and runs before 7.3's agent cell is
+designed. The reason is a gap in what has been established: 7.1 licensed the
+replay tier on **scripted** policies, whose every move is a function the harness
+can re-execute. No experiment has put a **model** behind the grammar, so the
+failures that stand between here and 7.3 are not statistical — an agent that
+spends its turns on refused moves, one that never calls `stop` with a firing
+trigger so there is no meta move to replay, masking that makes `pick_prior`
+unusable in practice, or a per-run cost far from the $0.268 mean every seat
+estimate below rests on.
+
+7.3's agent cell is 160 runs and a seat window. Discovering any of the above at
+that scale spends the window on a harness bug. The pilot is 5 runs and about
+$1.35, on the **ADR** panel rather than 6.5's ETF panel, because that holdout
+exists in two copies and is opened once.
+
+**What licenses the pilot.** 7.1, and only 7.1: it established that trigger
+replay is valid to certify with, which is the tier the pilot exercises.
+`gate-comparison` (7.0) licenses **nothing** here — it measures power at matched
+actual size and the tier order, and neither bears on whether a model can drive
+the grammar.
+
+**The pilot claims no verdict**, computes no out-of-sample number, and touches no
+holdout. A pilot may be re-run after a prompt amendment; 7.3 may not.
+
 **Scripted, on s0 and s3, 2,000 draws.** Faithful searchers using every
 move type, then three unfaithful ones, because the gate's validity
 depends on the rule the searcher used, not the one it declared:
