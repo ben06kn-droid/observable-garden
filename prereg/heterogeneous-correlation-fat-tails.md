@@ -434,3 +434,38 @@ checks at their own thresholds, not this p-value. **The replication decides**,
 per amendment 2(b): cell (A), anchor, seeds 410000–411999, identical settings.
 If it passes, cell (A)'s KS rejection is recorded as a family false alarm. If it
 fails, rule 1's branches apply in full.
+
+## The replication of cell (A)'s anchor, 2026-09-22
+
+Registered by amendment 2(b) and triggered by the one failed check above. Cell
+(A), anchor only, seeds **410000–411999**, 2,000 draws, identical settings, at
+commit `df161c3` on the c7a.8xlarge. Read once.
+
+**It passes.**
+
+| check | original (400000–401999) | replication (410000–411999) |
+|---|---|---|
+| rate at α = 0.05 | 5.60% (4.67–6.70) ✓ | **5.00% (4.13–6.04)** ✓ |
+| rate at α = 0.01 | 1.00% (0.65–1.54) ✓ | **0.85% (0.53–1.36)** ✓ |
+| KS | D = 0.0367, **p = 0.0090: rejects** | **D = 0.0136, p = 0.8503: does not reject** |
+
+**At the original's own locations the replication shows nothing.** ECDF minus the
+diagonal, original against replication: +0.0155 against −0.0030 at p = 0.50,
+**+0.0360 against −0.0010 at p = 0.60**, +0.0270 against +0.0045 at p = 0.70,
++0.0205 against −0.0065 at p = 0.80. The original's largest gap above the
+diagonal was +0.0367 at p = 0.606; the replication's is +0.0095, at p = 0.957.
+The original's excess mass in [0.5, 0.6) was 241 against 200 expected, with 728
+in [0.6, 1.0) against 800; the replication has **204 and 802**.
+
+**Per amendment 2(b), the original is recorded as a family false alarm.** Rule 1's
+halt, block-length investigation and SCOPE-restriction branches do **not** fire.
+The registered family rate across rule 1's nine checks is 0.3546, and the
+smallest of three KS p-values reaches 0.009 with probability about 2.7% under
+exact calibration, so a single such reading was always the likeliest explanation.
+One replication per failing check was fixed in advance, and this was it.
+
+**6.3 is therefore complete and its rules are read:** the full-class null
+survives factor-structured correlation, fat tails with clustered volatility, and
+both together, at n = 2,000 per cell. Rule 2 showed no liberal searcher in any
+cell; block lengths moved off 1 in cells (B) and (C) as they had to; guard counts
+were zero everywhere.

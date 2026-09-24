@@ -140,7 +140,7 @@ rather than in a footnote.
 | `costs-and-regime-change` | what does a PASS survive once the regime shifts? (cost half withdrawn, amendment 2) | ran 2026-09-20 |
 | `gate-comparison` | which of the three certifiers should the gate use, and in what order should 7.2 fall back? | draft, not live |
 | `fixed-sequence-replay` | what does freezing a search's meta decisions cost, and do declared triggers remove it? | live, awaiting sizing |
-| `heterogeneous-correlation-fat-tails` | does the full-class null survive factor-structured correlation and fat tails? | running (2026-09-21): cell (C) resumed on a c7a.48xlarge at `df161c3` from 800 draws run at `35a3fab`, then (A), then (B); no rule read at n = 2,000 yet — deviation 2 |
+| `heterogeneous-correlation-fat-tails` | does the full-class null survive factor-structured correlation and fat tails? | **complete, read 2026-09-21/22.** Yes, in all three cells at n = 2,000. Rule 1 held on containment everywhere; its KS check rejected once, in cell (A) (p = 0.0090), and the registered replication on 410000–411999 passed (p = 0.8503), so that is recorded as a family false alarm. Rule 2: no liberal searcher in any cell. Block lengths moved off 1 in (B) and (C); guard counts zero |
 | `bracketed-verdicts` | what does reporting two p-values cost for a decision the gate cannot replay? | draft, not live |
 | `prior-weighted-alpha` | is splitting alpha between a declared short list and the adaptive search worth the power? | draft, not live |
 | `living-verdict` | can a certification be kept under continuous review and revoked? (stub, built after the paper) | draft, not live |
