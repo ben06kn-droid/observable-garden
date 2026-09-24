@@ -125,14 +125,26 @@ None yet. Dated entries are appended here.
 
 ## Open, to fix before the first pilot run
 
-- **The code fingerprint does not yet cover these prompts.**
-  `experiments/code_state.py` pins `CODE_PATHS` and the design md5 of
-  `prereg/AGENT_PROMPTS.md`. Neither covers `prereg/AGENT_PROMPTS_REAL.md` nor
-  `experiments/real_prompts.py`, which is the code a real-data run's prompt is
-  built by. Both must be added, and the resulting change in the published
-  fingerprint recorded as a discontinuity with its date, **before** the first
-  pilot run — not after it, since the point of the fingerprint is to say which
-  code a stored run executed.
+- **~~The code fingerprint does not yet cover these prompts.~~ Done 2026-09-24,
+  before the first pilot run** (`e4d75d4`). `experiments/real_prompts.py` joined
+  `CODE_PATHS`, and the design sections of `prereg/AGENT_PROMPTS_REAL.md` joined
+  the fingerprint through their own `real_prereg_design_md5()`, kept separate so
+  the `prereg_design_md5` field already stored in every run's `config.json`
+  keeps meaning what it meant when it was written.
+
+  **The discontinuity, dated.** At HEAD `40a07ef`, with nothing else changed,
+  the fingerprint moved
+
+  | | fingerprint |
+  |---|---|
+  | before the widening | `a270169ae0a687e8` |
+  | after the widening, same HEAD | `767ba01dd661a4b4` |
+  | at the commit that introduced it (`e4d75d4`) | `e68614f41b8199c0` |
+
+  The first step is the widening alone; the second is the ordinary movement any
+  commit to a covered path causes. **A run stored before 2026-09-24 pins a
+  narrower set of inputs than one stored after it**, and no stored run is
+  retroactively re-fingerprinted.
 - **The pilot runner does not exist.** It is `experiments/`-side work: build the
   masked ADR panel, open the class, drive `quixote/agent_adapter.py` for the
   replay arm and the plain surface for control, and store the log, the refusals
