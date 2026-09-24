@@ -343,6 +343,36 @@ holds *provided* the specification class is algebraically rich enough to
 reconstruct untried candidates. This is not guaranteed for a general searcher,
 and not at all for an LLM agent.
 
+**Replaying a search's own decisions works, and freezing them does not.**
+Measured on six scripted meta-adaptive searchers, 2,000 draws each at B = 10,000
+(`fixed-sequence-replay`, 7.1). Re-executing a search on each resample with its
+**declared triggers re-evaluated** is at or below nominal everywhere tested:
+3.45–4.70% at α = 0.05 and 0.35–0.90% at 1%, under nominal as P2 predicts for a
+searcher that submits less than its class maximum. **Freezing the same decisions
+at the positions they took on the real data is liberal**: +0.0120 at 5% for the
+searchers that stop at a bar, and a mean Kolmogorov distance of **0.4483** from
+the exact policy null, against **0.0000** once the triggers are re-evaluated. So
+what a log must carry is not the sequence of moves but the *predicates behind
+them*; a sequence alone prices a search that did not happen.
+
+**The fill for a replicate that outruns its record is liberal against a stronger
+continuation.** Where a replicate runs past the realized length, the gate
+supplies the best one-step content move with the declared triggers still live.
+Against a width-2 beam that move comes out **liberal on 1,506 of 1,507 draws
+where the two differ**, and conservative against continuations it dominates. It
+moved **no verdict** at either level (type-I 0.0440 under both nulls at 5%, no
+discordant draws, McNemar p = 1.0000), so the direction is stated wherever the
+fill is used rather than corrected for. Continuations stronger than a width-2
+beam are untested.
+
+**The full-class null survives realistic feature structure.** Factor-structured
+correlation, Student-t innovations on a common GARCH path, and both together, at
+2,000 draws per cell (`heterogeneous-correlation-fat-tails`, 6.3): the anchor's
+rejection rate contains nominal at both levels in all three cells, and no
+searcher is liberal. One KS check rejected, on the factor-correlation cell, and
+its registered replication on a fresh seed block did not (p = 0.85), which is
+what a family rate of 0.3546 across nine checks predicts.
+
 **Limited by regime change.** A PASS says the in-sample Sharpe survives the
 search that produced it; it says nothing about the return process staying put.
 Measured on the 159 graded s3 submissions (`costs-and-regime-change`, 6.2): the

@@ -198,6 +198,16 @@ s0, Greedy and Adaptive, full-class null, rejection at 5% and 1%, KS.
 **Gate.** Both hold at both α. If the t/GARCH cell is liberal at 1%, the
 block-length selector is the first suspect; report the block lengths chosen.
 
+**CLOSED, read 2026-09-21/22 at n = 2,000 per cell.** The gate holds. Rule 1's
+containment held in all three cells at both levels; its KS check rejected once,
+in cell (A) at p = 0.0090, and the registered replication on seeds 410000–411999
+passed at p = 0.8503, so that is recorded as a family false alarm (the family
+rate across rule 1's nine checks is 0.3546). Rule 2 found no liberal searcher
+anywhere. Block lengths moved off 1 in cells (B) and (C), median 2 with maxima of
+52 and 55, so the selector does see the clustered volatility. Guard counts were
+zero throughout. **The full-class null survives factor-structured correlation,
+fat tails with clustered volatility, and both together.**
+
 ## 6.4 Explicit classes in `watch` (code, no runs)
 
 **Why.** `watch` refuses ExplicitClass. An agent whose tool grammar emits
@@ -570,6 +580,37 @@ holds, the agent writes a policy instead of searching in the loop. The
 fixed-sequence number is reported either way as the size of the error
 that declaring triggers removes.
 
+**CLOSED, read 2026-09-24 at 2,000 draws, B = 10,000, six searchers** (amendment
+6's set, at commit `e9168e5`; full output in
+`figures/fixed_sequence_replay_rules.txt`).
+
+**The gate holds.** Trigger replay's rejection rate is at or below nominal for
+every searcher — 3.45% to 4.70% at a nominal 5%, 0.35% to 0.90% at 1% — and no
+lower Wilson bound exceeds nominal. **In-the-loop agents are certifiable with
+triggers declared, and 7.2 builds the replay tier on them.** Rule 1's rates sit
+*under* nominal, which is what P2 predicts for a searcher submitting less than
+its class maximum; **no exactness is claimed and none is tested.**
+
+**The headline numbers.**
+- **Freezing costs +0.0120** at α = 0.05 for the three bar searchers (+0.0065 at
+  1%), taking stop-when-cleared to 5.60% against a nominal 5%.
+- **Declared triggers remove it: rule 4's mean Kolmogorov distance from the
+  policy null falls from 0.4483 (frozen) to 0.0000 (triggers).**
+- `figures/fixed_sequence_replay_ecdf.png` shows the three nulls for
+  stop-when-cleared on one draw.
+
+**The fill** is the best one-step content move over extend, swap and flip **with
+the declared triggers still evaluated at every filled step** (amendment 6). It is
+**liberal against a stronger continuation** — positive on 1,506 of 1,507 draws
+where a width-2 beam and the fill differ — and conservative against continuations
+it dominates. **No verdict moved:** type-I 0.0440 under both nulls at 5% and
+0.0090 under both at 1%, with no discordant draw at either level and McNemar
+p = 1.0000. **Strengthening the agent-path fill is therefore optional**, and
+anything stronger than a width-2 beam is untested.
+
+**Cost:** 1,720 CPU-hours, 54 h wall at 32 workers on a c7a.8xlarge, about $88,
+against the smoke's projection of 52.5 h and $86.10.
+
 ## 7.2 The replay gate — build
 
 **Tiers.** The gate uses the strongest valid test the record supports,
@@ -853,6 +894,18 @@ cited from the search already done or marked not yet searched.
 | 7 | **Pivotal interrogation** — ask the agent only at decisions where its answer could move the verdict | resolves item 1's `DEPENDS_ON_JUDGMENT` | `prereg/pivotal-interrogation.md` | no |
 
 ### What certifies
+
+**7.1 has reported (2026-09-24), so the certifying null is fixed: trigger
+replay.** Its rejection rate is at or below nominal for all six searchers at both
+levels, with rates under nominal as P2 predicts and no exactness claimed. **The
+fill is the best one-step content move over extend, swap and flip with the
+declared triggers still evaluated at every filled step.** Every verdict that used
+the fill states its measured direction: **liberal against a width-2 beam**
+(positive on 1,506 of 1,507 draws where they differ), conservative against
+continuations the fill dominates, and **no verdict moved** (type-I 0.0440 under
+both nulls at α = 0.05, no discordant draws, McNemar p = 1.0000). Continuations
+stronger than a width-2 beam are **untested**, so strengthening the agent-path
+fill is **optional**, not foreclosed.
 
 **Where twin calibration is run, it is what certifies.** Replay, the declared-
 class gate and item 1's bracket then serve as its **statistic** and its
