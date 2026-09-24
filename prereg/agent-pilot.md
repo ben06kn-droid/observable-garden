@@ -122,3 +122,23 @@ Local: the ADR panel build and the grader. No EC2, no holdout access.
 ## Amendments
 
 None yet. Dated entries are appended here.
+
+## Open, to fix before the first pilot run
+
+- **The code fingerprint does not yet cover these prompts.**
+  `experiments/code_state.py` pins `CODE_PATHS` and the design md5 of
+  `prereg/AGENT_PROMPTS.md`. Neither covers `prereg/AGENT_PROMPTS_REAL.md` nor
+  `experiments/real_prompts.py`, which is the code a real-data run's prompt is
+  built by. Both must be added, and the resulting change in the published
+  fingerprint recorded as a discontinuity with its date, **before** the first
+  pilot run — not after it, since the point of the fingerprint is to say which
+  code a stored run executed.
+- **The pilot runner does not exist.** It is `experiments/`-side work: build the
+  masked ADR panel, open the class, drive `quixote/agent_adapter.py` for the
+  replay arm and the plain surface for control, and store the log, the refusals
+  and the cost per run. Nothing about it is registered here beyond what the
+  Design and Recorded sections already fix.
+- **`searchers/meta_adaptive.py` changed on 2026-09-24** (the class filter now
+  runs before the scorer, `761e64d`), which moves the code fingerprint. It is a
+  correctness fix with the uncapped path proved unchanged, and it precedes every
+  pilot run.
