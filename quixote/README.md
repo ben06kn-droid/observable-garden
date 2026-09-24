@@ -264,9 +264,16 @@ Still waiting, and still not guessed:
 - **fidelity-driven pricing**
 - **the living verdict** (item 3), which waits until after the paper
 
-Still to come in part one, in order: the **real-data sandbox** (panel loader, no-out-of-sample variant,
-offline grading), the **consistency check**, `pick`, and the **twin generator with
-identifier masking**.
+**The real-data sandbox is built** (`environments/real_panel.py`,
+`environments/real_sandbox.py`, `experiments/grade_real.py`): both registered
+panels to their pre-registrations, a sandbox holding no out-of-sample data at
+all, and grading as a separate entry point the sandbox cannot reach. It lives in
+`environments/` rather than here, so that running an agent on real data never
+requires importing quixote.
+
+Still to come in part one, in order: the **consistency check**, `pick` with its
+statistic library and `else` branch, and the **twin generator with identifier
+masking**.
 
 ---
 
