@@ -487,3 +487,43 @@ def test_moment_scoring_matches_column_scoring_on_the_design_block():
                     assert a.actions() == b.actions(), (slow.name, kw)
                     assert a.support == b.support, (slow.name, kw)
                     assert abs(a.score - b.score) < 1e-10, (slow.name, kw, a.score - b.score)
+
+
+def test_a_capped_searcher_never_asks_the_sandbox_to_score_a_refused_support():
+    """A class-capped sandbox REFUSES a specification outside the class, so the
+    class filter has to run before the scorer, not after it.
+
+    Found by 7.0's driver: `StopWhenCleared.set_class(SubsetClass(max_size=3))`
+    on a capped sandbox raised `specification ... is outside the declared class`
+    while scoring a size-4 extension it would then have discarded.
+    """
+    from garden.spec_class import SubsetClass
+    cfg = DGPConfig(M=10, T=300, T_oos=50, K=8, s=0, rho=0.0, sigma=1.0, seed=2)
+    data = generate(cfg)
+    cls = SubsetClass(max_size=3, signed=True)
+    sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=cls)
+    s = StopWhenCleared(bar=99.0, seed=0).set_class(cls)     # a bar it never clears
+    s.run(sb)                                                # must not raise
+    spec, _ = sb.submission
+    assert cls.contains(spec.weights)
+    assert all(cls.contains(e.spec.weights) for e in sb.transcript)
+    assert max(int(np.sum(e.spec.weights != 0)) for e in sb.transcript) <= 3
+
+
+def test_uncapped_the_grammar_is_unchanged_by_the_filter():
+    """`fixed-sequence-replay` ran uncapped, so the fix above must be a no-op
+    there: every candidate, scored exactly once, in the same order."""
+    calls = []
+
+    def score(ns):
+        calls.append(tuple(ns))
+        return float(len(ns))
+
+    support = [(0, 1.0), (3, -1.0)]
+    s = StopWhenCleared(bar=1.0, seed=0)
+    assert s.spec_class is None
+    got = s._grammar_allowed(support, 6, score)
+    from searchers.meta_adaptive import MetaAdaptive
+    direct = MetaAdaptive._grammar(support, 6, lambda ns: float(len(ns)))
+    assert [(k, tuple(ns)) for _, k, ns in got] == [(k, tuple(ns)) for _, k, ns in direct]
+    assert len(calls) == len(direct)

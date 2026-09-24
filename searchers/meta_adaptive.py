@@ -150,37 +150,52 @@ class MetaAdaptive(Searcher):
     # -- the continue-move ---------------------------------------------------
 
     @staticmethod
-    def _grammar(support, K, score):
+    def _grammar(support, K, score, allow=None):
         """Every one-step move of 7.2's content grammar, scored.
 
         Returns (score, kind, new_support) triples over `extend`, `swap` and
         `flip`. `support` is a list of (feature, sign) pairs, so `flip` is a real
         move rather than a no-op -- which is why supports here carry signs even
         though the extend-only searchers never set one to -1.
+
+        `allow`, when given, is consulted **before** `score`: a refused move is
+        never scored. That ordering is not an optimisation. `score` is the
+        sandbox in a real run, and a class-capped sandbox *refuses* to evaluate a
+        specification outside the declared class -- so scoring first and filtering
+        afterwards raises rather than filters.
         """
         held = {k for k, _ in support}
         remaining = [k for k in range(K) if k not in held]
+        keep = (lambda ns: True) if allow is None else allow
         out = []
         for j in remaining:                                   # extend
             ns = support + [(j, 1.0)]
-            out.append((score(ns), "extend", ns))
+            if keep(ns):
+                out.append((score(ns), "extend", ns))
         for i in range(len(support)):                         # swap
             for j in remaining:
                 ns = support[:i] + [(j, support[i][1])] + support[i + 1:]
-                out.append((score(ns), "swap", ns))
+                if keep(ns):
+                    out.append((score(ns), "swap", ns))
         for i in range(len(support)):                         # flip
             ns = support[:i] + [(support[i][0], -support[i][1])] + support[i + 1:]
-            out.append((score(ns), "flip", ns))
+            if keep(ns):
+                out.append((score(ns), "flip", ns))
         return out
 
     def _grammar_allowed(self, support, K, score):
-        """`_grammar` filtered to the declared class. A refused move is simply
-        not a candidate, so the policy chooses among what it may actually do."""
+        """`_grammar` restricted to the declared class. A refused move is simply
+        not a candidate, so the policy chooses among what it may actually do --
+        and is not scored at all, since asking a class-capped sandbox to evaluate
+        it is an error rather than a rejected candidate.
+
+        Uncapped (`spec_class is None`, which is what `fixed-sequence-replay`
+        registered and ran) this is `_grammar` unchanged.
+        """
         self._K = K
-        cands = self._grammar(support, K, score)
         if self.spec_class is None:
-            return cands
-        return [c for c in cands if self._allowed(c[2])]
+            return self._grammar(support, K, score)
+        return self._grammar(support, K, score, allow=self._allowed)
 
     def _fill_move(self, support, K, score):
         """7.1's fill rule, as amended: the best **one-step move across the whole
