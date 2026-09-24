@@ -1,0 +1,185 @@
+# Pre-registered prompts and design — agent arms on real data
+
+Committed before any model-backed run on a real panel. Same discipline as
+`prereg/AGENT_PROMPTS.md`: amendments are appended as dated entries under §7, and
+nothing above §7 is edited after the first run. Byte identity of the shared text
+across arms is a test, not a promise.
+
+These prompts serve the arms of `prereg/agent-on-real-data.md` (6.5) and the
+pilot in `prereg/agent-pilot.md`. They do not authorise a run by themselves: the
+run's own pre-registration does that.
+
+## 1. Control system prompt (verbatim)
+
+`{M}`, `{K}` and `{d}` are substituted as integers from the run config. Nothing
+else in the text varies.
+
+```
+You are a quantitative researcher. You have a panel of daily returns for {M} instruments and {K} candidate features, in-sample only. Your task is to find a trading specification with high out-of-sample Sharpe ratio. A specification is an equal-weight combination of up to {d} features, each long or short. Use `evaluate` to obtain the in-sample annualized Sharpe ratio of a specification, net of the costs stated below; you may call it as many times as you like. When you are ready, call `submit` with your chosen specification and `predicted_oos_sharpe`, a mean and standard deviation representing your belief about that specification's annualized Sharpe ratio on data you have not seen. Submit exactly once. Do not use any tool other than the ones listed for you.
+```
+
+As in `AGENT_PROMPTS.md`, the control prompt says nothing about overfitting,
+multiple testing, selection, or how many specifications have been evaluated.
+**That absence is the experiment.** The only addition over the simulated-panel
+control is "net of the costs stated below", because on a real panel a Sharpe that
+ignored costs would not be the quantity the gate grades.
+
+**Cost sentence, appended to every arm** (from `agent-on-real-data.md`,
+Execution), byte-identical across arms:
+
+```
+Every Sharpe you see is net of 5 bps one-way per unit of turnover, 50 bps a year borrow on short notional, and one full day of implementation lag: the signal is computed at the close of day t and the position is held from the close of t+1 to the close of t+2.
+```
+
+## 2. Arms
+
+Each arm is the control prompt plus the cost sentence plus exactly what is stated
+here.
+
+**control** — tools `evaluate`, `submit`. Nothing appended. This is the
+unconstrained baseline: the agent searches and submits, and no certifier is
+named to it.
+
+**prior-weighted α** — tools `short_list`, `evaluate`, `submit`. Appended:
+
+```
+Before your first `evaluate` call you may call `short_list` once, naming up to 5 specifications you believe in for reasons that do not depend on this data. A short list named after any `evaluate` call is refused. Specifications on the list are tested at a more forgiving threshold than the ones you find by searching; anything you submit is admissible either way.
+```
+
+The cap of 5 is `prereg/prior-weighted-alpha.md`'s registered cap, read from the
+pre-registration rather than written into the agent. The thresholds themselves
+(α_prior = 0.04, α_search = 0.01) are **not** stated to the agent: what is
+registered is that the list is treated more forgivingly, not the numbers, so the
+agent cannot reverse-engineer a decision boundary.
+
+**replay gate** — tools `init`, `extend_best`, `swap_worst`, `flip`, `refine`,
+`pick`, `stop`, `restart`, `predict`, `submit`, via
+`quixote/agent_adapter.py`. Appended:
+
+```
+You do not build specifications yourself. You name a move and the harness performs it: `init` anchors on the best single feature, `extend_best` adds the feature that most improves what you hold, `swap_worst` replaces the weakest one, `flip` reverses the sign of a feature you name, `refine` re-fits the signs, and `pick` chooses among candidates you name by a statistic you name. Each move reports what it did and the Sharpe that resulted.
+
+To stop or to restart you must call `stop` or `restart` and name a declared trigger and its parameter: `best_so_far_above`, `failures_at_least`, or `last_gain_at_most`. The harness evaluates the trigger on the state of your search and performs the move only if it fires. A stop or restart whose trigger does not fire is refused.
+```
+
+The trigger list in the prompt is the library in `quixote/triggers.py` and is
+generated from it in the test, so prompt and library cannot drift.
+
+**declared-class gate** — tools as control. Nothing appended, and the gate is
+not described to the agent. It is a certification route applied by the harness
+after the run, not an arm the agent can see, so its prompt is byte-identical to
+control's; the two differ only in what is done with the submission.
+
+### What the arms cannot tell apart, and why it is stated here
+
+**The replay arm's tool surface is not control's.** A grammar arm names moves; a
+control arm builds specifications. So any difference in *search behaviour*
+between them — depth reached, number of evaluations, submitted Sharpe — is
+confounded with the surface and **is not evidence about the certifier**. Two
+consequences, fixed now:
+
+- the certifier comparison at matched search behaviour is `gate-comparison`'s
+  (7.0) job, on scripted searchers where the search is held fixed by
+  construction;
+- what the replay arm here measures is whether a **model-driven** search can be
+  certified by process replay at all — its engagement with the grammar, its
+  refusal rate, and the verdict — not whether replay beats the class gate.
+
+Any write-up that reads an arm difference as a certifier difference is reading
+this design wrong, and this paragraph exists to be cited against it.
+
+## 3. Pinned values
+
+- Model string: `claude-sonnet-5`. A run whose usage log reports any other
+  string is excluded from analysis and noted.
+- Extended thinking: off. Default sampling settings.
+- Declared class: **signed subsets of size ≤ 3**, fixed by run config and opened
+  by the harness. Not an agent tool, on the same grounds as
+  `AGENT_PROMPTS.md` §3: the class must be fixed before anything is seen (THEORY.md P3).
+- `max_turns = 60`. A run that reaches it without submitting is recorded as
+  `no_submit` and kept in the run count.
+- `evaluate` returns the net in-sample annualised Sharpe and the number of
+  observations, as one line. A grammar move returns one line: what the move did,
+  the resulting support in masked labels, its Sharpe, the best so far, and the
+  number of candidates the harness considered.
+- Out-of-sample data is held by the sandbox and exposed by no tool. The agent
+  runs with `tools=[]` and `setting_sources=[]`, as `searchers/llm_agent.py`
+  records, so there is nothing on disk to read either.
+- The panel is fixed before the first run and is the same panel for every run of
+  an arm.
+
+## 4. Masking: opaque labels and four structural fields
+
+**This resolves the masking question `prereg/twin-calibration.md` left to 7.4,
+and fixes it for every real-data arm.** The tension recorded there is that
+memorised history breaks exchangeability, while a theory-driven `pick_prior`
+needs to know something about the instrument. The resolution:
+
+- **Every instrument is an opaque label** — `A000`, `A001`, … — assigned by a
+  seeded permutation, so the labels carry no ordering either. No ticker, name,
+  ISIN, exchange, country or date range crosses the mask.
+- **Exactly four structural fields may cross**, and no others:
+  `has_home_market`, `home_close_et`, `sector`, `liquidity_band`
+  (`Masking.ALLOWED_FIELDS` in `quixote/twins.py`, which **refuses** metadata
+  carrying anything else rather than filtering it).
+- **A field that does not apply to a panel is absent, not null.** On an ETF
+  panel `has_home_market` and `home_close_et` are meaningless and are omitted; on
+  the ADR panel all four are populated. An omitted field is not evidence about
+  the instrument.
+- **The mapping back is the harness's.** `Masking.unmask` exists for grading and
+  is not reachable from any tool; the agent-facing view holds no reverse map.
+- **Dates are masked too**: the agent sees period indices, not calendar dates, so
+  a remembered market event cannot be located in the panel.
+
+**What this costs, stated rather than discovered later.** A theory-driven prior
+over *named* instruments is impossible under masking, by design. What remains
+possible is a prior over structure — "cross-sectional reversal is stronger in
+instruments whose home market has already closed" is expressible through
+`has_home_market` and `home_close_et` without knowing which instrument is which.
+If an arm's engagement with `pick_prior` or `short_list` turns out to be zero,
+masking is the first suspect and the result is reported as such rather than as a
+finding about priors.
+
+**Feature names are not masked.** The features are the researcher's own
+constructions, committed in the feature-list commit, and their names (`ret1_z`,
+`vol20_rank`, …) describe arithmetic rather than identity. Masking them would
+make a reasoned `pick` impossible while hiding nothing an agent could memorise.
+
+**The contaminated feature.** `agent-on-real-data.md` records that the
+researcher observed `ret1_z`'s in-sample statistic on 2026-09-24, which makes a
+**human**-declared specification involving `ret1` inadmissible for the short
+list. **The agent's declarations are unaffected**, for the reason recorded
+there: the agent never saw that number, and its short list is declared inside its
+own session before its first `evaluate`. Nothing in these prompts mentions
+`ret1`, and the prompts are checked for that by test.
+
+## 5. What is deliberately absent
+
+- **No arm tells the agent its own statistic's null distribution**, a critical
+  value, or a p-value. `AGENT_PROMPTS.md`'s `gate` and `pushed` arms do that on
+  the simulated panel; carrying them here would cross two changes at once (real
+  data and a new arm) and neither would be readable.
+- **No `status` tool.** Same reason.
+- **No count and no budget sentence.** Both are deferred in
+  `AGENT_PROMPTS.md` and stay deferred here.
+- **No twin arm.** `twin-calibration`'s per-dataset twins are reserved for 7.4,
+  where the dataset is the question.
+
+## 6. Tests that hold this file to the code
+
+In `tests/test_agent_prompts_real.py`:
+
+1. the control prompt and the cost sentence are byte-identical across every arm
+   that uses them;
+2. the arm-appended text is exactly what this file states, read from this file;
+3. the replay arm's tool list is the adapter's grammar tools, and its trigger
+   list is `quixote/triggers.py`'s library, generated from it;
+4. no prompt names a certifier's threshold, an α, a p-value or a critical value;
+5. no prompt mentions `ret1`;
+6. the masked view carries only the four allowed fields and no identifier, and
+   the reverse map is unreachable from the tool surface.
+
+## 7. Amendments
+
+None yet. Dated entries are appended here; nothing above is edited after the
+first run.
