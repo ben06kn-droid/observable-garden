@@ -303,3 +303,46 @@ what it means for 6.5's conditional replay arm; the specimen block is in
 
 **What the three attempts cost in total: $1.64.** The two defects they found
 would each have been discovered by 7.3's 160-run agent cell instead.
+
+## What the identity-replicate guard caught, and the fix it forced
+
+**Recorded 2026-09-24, after the third attempt and before any further real-data
+run.** This is the pilot's substantive result, and it is a result about the
+harness rather than about a certifier.
+
+**What the guard is.** Before pricing anything, `quixote/replay.py` replays the
+logged search on the **un-resampled** data and compares. If the replay does not
+reproduce the search, there is no defensible way to price it, and the run is
+flagged rather than certified.
+
+**What it caught.** All three replay-arm logs, in every attempt: realized support
+`((1,+1),(0,+1),(3,+1))` against replayed `((21,-1),(0,+1))`, with the realized
+and replayed scores differing by **7.42**. On a simulated panel the two scoring
+paths differ by float accumulation at ~1e-12 and a near-tie can flip an argmax.
+Here the gap is **three orders of magnitude larger**, and the cause is
+structural: `RealSandbox.evaluate` scores **net of costs**, costs are not linear
+in the weights, and `base_feature_columns` is therefore a **diagnostic** basis
+whose signed sums are not the statistic the search optimised. The guard was
+right; the replay was pricing a different quantity.
+
+**Why this was worth a pilot.** Nothing about it is visible on a simulated panel,
+and nothing about it would have shown up as an error — the null computed, the
+numbers looked like numbers, and only a guard comparing the replay against the
+search itself refused them.
+
+**The fix, and what it is not.** `environments/class_table.py` stores the
+declared class as a `(T, N)` table of net streams computed once on the panel.
+`evaluate` becomes a lookup; a replay resamples **rows** of the same table; a
+full-class pass takes the chunked max over the same table. The statistic is then
+the same **by construction**, and the guard passes with a score gap of exactly
+zero rather than nearly. It is not a change to any null, any rule, or any
+threshold: the same trigger-replay null is computed, on the numbers the search
+actually saw.
+
+**Cost of the fix, stated:** 3.87 GB for the ADR table and 2.81 GB for the ETF
+table at depth 3 (82,240 members), both on disk as memmaps with every member pass
+chunked, so resident memory is 149 MB and 17 MB at the registered chunk of 512.
+
+**Milestone.** The guard passes bit-identically on all three pilot replay logs,
+and a scripted policy through the tool adapter on a real panel reproduces its
+direct `Session` run. Both are tests, not claims.

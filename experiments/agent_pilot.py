@@ -34,6 +34,7 @@ from pathlib import Path
 
 import numpy as np
 
+from environments.class_table import build_class_table
 from environments.real_panel import ADR_HOME, build_adr_panel
 from environments.real_sandbox import RealSandbox
 from environments.sandbox import Distribution, Specification
@@ -110,7 +111,12 @@ def masked_panel():
             meta[ticker] = {"has_home_market": True,
                             "home_close_et": f"{hh:02d}:{mm:02d} {tzname}"}
     masking = Masking.build(list(panel.assets), meta, seed=SEED)
-    return panel, masking
+    # The declared class as stored net streams. `evaluate` becomes a lookup and
+    # the replay resamples rows of the same table, so the null prices the
+    # statistic the search optimised (`environments/class_table.py`). Built once
+    # and cached; the manifest carries the panel hash.
+    table = build_class_table(panel, SubsetClass(max_size=D, signed=True), "adr")
+    return panel, masking, table
 
 
 # -- what a run records ------------------------------------------------------
@@ -359,9 +365,9 @@ def _scripted_replay(rec, handlers):
 
 
 def run_one(arm: str, seed: int, panel, masking, index: int,
-            dry_run: bool = False) -> RunRecord:
+            dry_run: bool = False, table=None) -> RunRecord:
     cls = SubsetClass(max_size=D, signed=True)
-    sandbox = RealSandbox(panel, spec_class=cls)
+    sandbox = RealSandbox(panel, spec_class=cls, class_table=table)
     K = sandbox.num_features
     rec = RunRecord(run_id=f"pilot_{index}_{arm.replace(' ', '_')}_{seed}",
                     arm=arm, seed=seed)
@@ -382,7 +388,7 @@ def run_one(arm: str, seed: int, panel, masking, index: int,
         _drive_model(arm, rec, handlers, panel, sandbox, K)
 
     if tools is not None:
-        _certify_run(rec, tools, sandbox, cls)
+        _certify_run(rec, tools, sandbox, cls, table)
         rec.log("session_log", records=[
             {"step": r.step, "kind": r.move.kind, "support": list(r.support_after),
              "score": r.score_after, "n_candidates": r.n_candidates,
@@ -405,7 +411,7 @@ def run_one(arm: str, seed: int, panel, masking, index: int,
 CERTIFY_B = 200
 
 
-def _certify_run(rec: RunRecord, tools: ToolSession, sandbox, cls) -> None:
+def _certify_run(rec: RunRecord, tools: ToolSession, sandbox, cls, table=None) -> None:
     """Can trigger replay be computed from this run's log at all?
 
     **What it prices on this panel, stated rather than assumed.** `certify` works
@@ -420,7 +426,7 @@ def _certify_run(rec: RunRecord, tools: ToolSession, sandbox, cls) -> None:
     ann = float(np.sqrt(sandbox.periods_per_year))
     try:
         v = certify(tools.session.log, cls, base, ann, alpha=0.05, B=CERTIFY_B,
-                    seed=rec.seed)
+                    seed=rec.seed, table=table)
     except Exception as e:
         rec.certifying_null_computable = False
         rec.log("certify_error", error=f"{type(e).__name__}: {e}")
@@ -434,7 +440,15 @@ def _certify_run(rec: RunRecord, tools: ToolSession, sandbox, cls) -> None:
                    "unreplayable_decisions": list(v.unreplayable_decisions),
                    "certifying_null": v.certifying_null, "B": CERTIFY_B,
                    "reasons": list(v.reasons),
+                   "basis": ("class table (stored net streams)" if table is not None
+                             else "base_feature_columns (DIAGNOSTIC on this panel)"),
                    "basis_caveat": (
+                       "Priced from the class table: evaluate() and every replicate read "
+                       "the same stored net streams, so the null prices the statistic the "
+                       "search optimised. B is small because this asks whether the null "
+                       "is computable end to end, not what its p-value is; rule 5 forbids "
+                       "the number entering anything."
+                       if table is not None else
                        "Computed from base_feature_columns, a DIAGNOSTIC basis on this "
                        "panel: costs are not linear in the weights, so this prices a "
                        "different statistic from the net one the search optimised. A "
@@ -593,17 +607,24 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=int, default=5)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--arms", default="all", choices=("all", "replay", "control"),
+                    help="re-run only one arm's runs, keeping their registered seeds")
     ap.add_argument("--out", default=str(RUNS_ROOT))
     a = ap.parse_args(argv)
 
     seeds = [int(s) for s in np.random.default_rng(SEED).integers(0, 2**31 - 1, size=5)]
-    panel, masking = masked_panel()
+    panel, masking, table = masked_panel()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
 
+    wanted = {"all": set(ARM_PLAN),
+              "replay": {"replay gate"}, "control": {"control"}}[a.arms]
     records = []
     for i in range(min(a.runs, len(ARM_PLAN))):
-        rec = run_one(ARM_PLAN[i], seeds[i], panel, masking, i, dry_run=a.dry_run)
+        if ARM_PLAN[i] not in wanted:
+            continue
+        rec = run_one(ARM_PLAN[i], seeds[i], panel, masking, i, dry_run=a.dry_run,
+                      table=table)
         records.append(rec)
         (out / f"{rec.run_id}.json").write_text(json.dumps(rec.to_json(), indent=1,
                                                           default=str))
@@ -613,11 +634,13 @@ def main(argv=None) -> int:
 
     text = report(records, a.dry_run)
     print("\n" + text, flush=True)
-    tag = "_dry" if a.dry_run else ""
+    tag = ("_dry" if a.dry_run else "") + ("" if a.arms == "all" else f"_{a.arms}")
     (out / f"pilot_report{tag}.txt").write_text(text)
     (out / f"pilot_index{tag}.json").write_text(json.dumps(
         {"seeds": seeds, "arms": list(ARM_PLAN[:a.runs]), "model": MODEL,
-         "max_turns": MAX_TURNS, "code_state": code_state(),
+         "max_turns": MAX_TURNS, "code_state": code_state(), "arms_run": a.arms,
+         "class_table": {"path": table.path, "N": table.N, "T": table.T,
+                         "panel_hash": table.panel_hash},
          "masked_labels": masking.labels, "dry_run": a.dry_run}, indent=1, default=str))
     return 0
 

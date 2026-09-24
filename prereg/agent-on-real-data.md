@@ -283,6 +283,33 @@ the gates. Holdout host: the single fetch, the export, and grading, minutes of
 instance time. The synthetic coverage check runs prospectively on new runs with
 `M_b` stored.
 
+## The replay arm is conditional on the class table, not deferred
+
+**Recorded 2026-09-24.** The Arms table calls the replay arm "conditional: it
+runs only if 7.2 part two is built when 6.5 goes live. It is not stubbed. If
+absent, the arm is recorded as deferred." 7.2 part two **is** built, so on the
+original reading the arm simply runs.
+
+`prereg/agent-pilot.md` shows that reading is incomplete. On a **net-of-cost**
+panel — which this one is — the replay priced a statistic that was not the one
+the search optimised, and the identity-replicate guard refused all three
+replay-arm pilot runs with score gaps around 7.4. Process replay was *present*
+and *unable to certify*.
+
+**So the condition is restated, before 6.5 runs:** the replay arm runs **iff the
+declared class is tabulated for this panel** (`environments/class_table.py`), so
+that `evaluate` and every replicate read the same stored net streams. The ETF
+panel's table at depth 3 is 82,240 members and 2.81 GB, built once and chunked;
+building it is a prerequisite of the arm, not an optimisation of it.
+
+- *Table built:* the arm runs, and its verdicts price the net statistic.
+- *Table not built:* the arm is recorded as **deferred for a stated reason** —
+  the null cannot price this panel's statistic without it — and **not** as
+  deferred for absence of 7.2, which would be false.
+
+This changes no rule and no threshold. It names the thing the arm was always
+conditional on, which the pilot made visible.
+
 ## Open, to fix before live
 
 - The universe rule's volume threshold and the exact ETF list: their own commit.
