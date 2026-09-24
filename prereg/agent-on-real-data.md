@@ -121,6 +121,25 @@ commit are ancestors of HEAD and unmodified in the working tree. Holdout grading
 refuses unless, in addition, a **sealed-submissions commit**, holding every
 run's submission and verdict, is an ancestor.
 
+### One feature is contaminated for human declarations
+
+**Recorded 2026-09-24.** While the panel builder was being written, the
+researcher observed the in-sample statistics of the single-feature
+specification **`ret1_z`**: mean −8.01e-04 a day, annualised Sharpe −2.077, net
+of the registered costs. It is recorded as a look in `data/etf_manifest.json`.
+
+**Consequence.** A **human-declared** specification involving `ret1` in either
+form (`ret1_z`, `ret1_rank`) or its sign is **not oblivious** and is
+**inadmissible for the prior-weighted short list**, whose whole claim is that
+the list preceded the data. Any other human declaration touching that feature
+carries the same disclosure.
+
+**The agent's declarations are unaffected.** The agent never saw that number: it
+was printed in a build transcript the agent has no access to, and the agent's
+short list is declared inside its own session before its first `evaluate`. An
+agent that declares `ret1` on its own is oblivious in the sense the
+pre-registration means.
+
 ### Execution, registered: identical in-sample and out, and across arms
 
 | assumption | value |
