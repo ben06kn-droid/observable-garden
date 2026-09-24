@@ -62,8 +62,11 @@ def test_the_table_holds_every_member_once_in_the_engines_order(tmp_path):
     assert all(len(a) <= len(b) for a, b in zip(table.members, table.members[1:]))
 
 
-def test_a_column_is_exactly_the_panels_own_net_stream(tmp_path):
-    """Not 'to a tolerance': the table stores what the panel computes."""
+def test_a_column_is_the_panels_own_net_stream_to_within_one_ulp(tmp_path):
+    """The batched kernel and the per-member path are the same arithmetic on the
+    same elements, reduced with different pairwise blocking. The module measures
+    the gap at 7e-18 absolute and makes the table the definition; this holds it
+    to that, so a regression that changed the numbers materially would fail."""
     table, panel = _table(tmp_path)
     K = panel.features.shape[2]
     for support in (((0, 1.0),), ((1, -1.0),), ((0, 1.0), (2, -1.0))):
@@ -71,7 +74,30 @@ def test_a_column_is_exactly_the_panels_own_net_stream(tmp_path):
         for k, s in support:
             w[k] = s
         expected = panel.stream_for_scores(panel.scores_for_weights(w))
-        np.testing.assert_array_equal(table.stream(support), expected)
+        got = table.stream(support)
+        assert np.max(np.abs(got - expected)) < 1e-16
+        assert np.max(np.abs(got - expected)) <= 1e-14 * np.max(np.abs(expected))
+
+
+def test_the_kernel_is_invariant_to_the_chunk_it_was_built_in(tmp_path):
+    """Chunk invariance for n >= 2 is what lets a table be built in pieces. A
+    single-member call takes numpy's one-row path and is deliberately not part of
+    the claim, which is why a table is never built one column at a time."""
+    from environments.class_table import streams_for
+    _, panel = _table(tmp_path)
+    members = members_in_order(CLS, panel.features.shape[2])[:12]
+    whole = streams_for(panel, members)
+    pieces = np.vstack([streams_for(panel, members[i:i + 4]) for i in (0, 4, 8)])
+    np.testing.assert_array_equal(whole, pieces)
+
+
+def test_building_the_same_table_twice_gives_the_same_bytes(tmp_path):
+    """Determinism is what the guard's exactness rests on."""
+    a, panel = _table(tmp_path)
+    first = np.array(a.streams)
+    b = build_class_table(panel, CLS, "synthetic", path=tmp_path / "t.npy",
+                          rebuild=True)
+    np.testing.assert_array_equal(np.array(b.streams), first)
 
 
 def test_a_support_is_the_same_member_whatever_order_it_was_built_in(tmp_path):
@@ -99,7 +125,10 @@ def test_the_table_is_reused_only_for_the_panel_it_was_built_on(tmp_path):
 
 # -- the sandbox scores by lookup -------------------------------------------
 
-def test_evaluate_by_lookup_equals_evaluate_by_computation_bit_for_bit(tmp_path):
+def test_evaluate_by_lookup_matches_evaluate_by_computation(tmp_path):
+    """Lookup and computation agree to the one-ulp gap the kernel's docstring
+    measures, and a lookup is self-consistent: what `evaluate` returns is exactly
+    what every replicate will read, which is the property the guard needs."""
     table, panel = _table(tmp_path)
     K = panel.features.shape[2]
     plain = RealSandbox(panel, spec_class=CLS)
@@ -110,9 +139,12 @@ def test_evaluate_by_lookup_equals_evaluate_by_computation_bit_for_bit(tmp_path)
             w[k] = s
         spec = Specification(weights=w, name="x")
         a, b = plain.evaluate(spec), looked.evaluate(spec)
-        assert a.sharpe == b.sharpe and a.mean == b.mean and a.std == b.std
-        np.testing.assert_array_equal(plain.transcript[-1].return_stream,
-                                      looked.transcript[-1].return_stream)
+        assert b.sharpe == pytest.approx(a.sharpe, rel=1e-12)
+        assert np.max(np.abs(plain.transcript[-1].return_stream
+                             - looked.transcript[-1].return_stream)) < 1e-16
+        # self-consistency: the logged stream IS the table's column
+        np.testing.assert_array_equal(looked.transcript[-1].return_stream,
+                                      table.stream(support))
 
 
 # -- the milestone -----------------------------------------------------------
@@ -230,3 +262,31 @@ def test_the_scorer_refuses_a_statistic_a_table_cannot_hold(tmp_path):
     table, _ = _table(tmp_path)
     with pytest.raises(ValueError, match="no such basis"):
         table.scorer()(table.members[0], "volatility")
+
+
+def test_the_table_scores_the_sandboxs_statistic_not_the_guarded_estimator(tmp_path):
+    """The third distinct cause the pilot's guard exposed. `estimator.bootstrap.
+    sharpe` censors |Sharpe| at SHARPE_CAP = 100 annualised, which is right for a
+    simulated panel at Sharpe ~1 and wrong for the ADR panel, whose registered
+    5-minute annualisation puts the live search at 107: every good candidate came
+    back as exactly 100.0, so the replay priced a CENSORED statistic while the
+    search optimised an uncensored one."""
+    from estimator.bootstrap import SHARPE_CAP
+    from estimator.bootstrap import sharpe as guarded
+
+    table, panel = _table(tmp_path)
+    huge = np.full(500, 1.0) + np.random.default_rng(0).normal(scale=0.01, size=500)
+    ann = 138.0                                   # sqrt(19152), the ADR panel's
+    t = ClassTable(streams=huge[:, None], members=[((0, 1.0),)],
+                   index={((0, 1.0),): 0}, panel_hash="x",
+                   periods_per_year=ann ** 2)
+    raw = t.sharpe(((0, 1.0),))
+    assert raw > SHARPE_CAP                       # the sandbox would report this
+    assert guarded(huge[:, None], axis=0, annualization=ann)[0] == SHARPE_CAP
+    assert raw != SHARPE_CAP                      # the table does not censor it
+
+
+def test_a_zero_variance_stream_scores_zero_as_the_sandbox_does(tmp_path):
+    t = ClassTable(streams=np.zeros((50, 1)), members=[((0, 1.0),)],
+                   index={((0, 1.0),): 0}, panel_hash="x", periods_per_year=252)
+    assert t.sharpe(((0, 1.0),)) == 0.0

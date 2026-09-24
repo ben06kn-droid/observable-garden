@@ -346,3 +346,46 @@ chunked, so resident memory is 149 MB and 17 MB at the registered chunk of 512.
 **Milestone.** The guard passes bit-identically on all three pilot replay logs,
 and a scripted policy through the tool adapter on a real panel reproduces its
 direct `Session` run. Both are tests, not claims.
+
+## Three causes, not one: what it took to make the guard pass
+
+**Recorded 2026-09-24.** The section above named one cause. Fixing it exposed
+two more, each of which had been hidden behind the one before it. All three were
+found by the same guard, and none of them would have shown up as an error.
+
+**Cause 1 — the basis.** `base_feature_columns` is a diagnostic basis on a
+net-of-cost panel, so the replay summed columns and priced a statistic the search
+never optimised. Fixed by `environments/class_table.py`: the class is tabulated
+once and both sides read it.
+
+**Cause 2 — the policy.** `LoggedPolicy` replayed **7.1's** policy, whose every
+continuation is an `extend_best`. The pilot's agents ran
+`init → extend → extend → refine → swap_worst → swap_worst → refine → stop`.
+Replaying that as a forward selection is replaying a different search, and the
+guard was right to refuse it even after the basis was identical. Fixed by
+`LoggedPolicy._run_logged`, which replays the moves the log holds: **the declared
+triggers still decide whether to continue, stop or restart on each replicate; the
+logged move decides what the continuation is.** A log whose content moves are all
+`extend_best` still takes 7.1's registered path unchanged, so milestone 3b is
+untouched.
+
+**Cause 3 — the estimator's guards, on this panel.**
+`estimator/bootstrap.sharpe` censors `|Sharpe|` at `SHARPE_CAP = 100` annualised.
+That guard is right for a simulated panel at Sharpe ≈ 1. The ADR panel's
+registered annualisation is **5-minute bars — `periods_per_year = 19,152`** — and
+the live search reaches **Sharpe 107**, so every good candidate came back as
+exactly **100.0** and the replay priced a **censored** statistic. The table now
+scores the sandbox's own uncensored statistic.
+
+**This one is 7.4's to decide, not the pilot's.** A panel on which the registered
+annualisation puts ordinary specifications above the estimator's cap has a
+collision between two registered choices, and it is recorded here rather than
+resolved: either the ADR annualisation is reported differently, or the cap is
+raised for that panel, or the cap is accepted and every ADR figure is understood
+as censored. **Nothing in this pilot depends on which**, because the pilot prices
+nothing and claims nothing; 7.4 does, and it should settle this before it runs.
+
+**Milestone, met:** with all three fixed, the identity-replicate guard passes on
+the pilot's own move sequence with a score gap of **exactly 0.0**, and a scripted
+policy through the tool adapter on a real panel reproduces its direct `Session`
+run — both as tests (`tests/test_class_table.py`).

@@ -86,7 +86,13 @@ class LoggedPolicy:
         self._priced_steps = frozenset(i - 1 for i in self.locally_priced if i >= 1)
         self.max_features = spec_class.max_size
         self.name = "logged-policy"
-        self.budget = log.budget
+        # A log that declared no budget still needs a bound, or a replicate
+        # whose triggers never fire runs away. 7.1's own hard cap is the bound,
+        # for the reason it exists: `searchers/meta_adaptive.BUDGET = 12`, "so a
+        # replicate can never run away". A declared budget always wins.
+        from searchers.meta_adaptive import BUDGET as _DEFAULT_BUDGET
+        self.budget = log.budget if log.budget is not None else _DEFAULT_BUDGET
+        self.budget_declared = log.budget is not None
         self.triggers = [Trigger.from_record(t) for t in log.declared_triggers()]
 
     # -- the policy --------------------------------------------------------
@@ -218,13 +224,121 @@ class LoggedPolicy:
         trace.support, trace.score = tuple(best_support), best
         return trace
 
+    def content_kinds(self) -> tuple:
+        """The content moves this log actually made."""
+        return tuple(r.move.kind for r in self.log.records
+                     if not r.move.is_meta and r.move.note != "rejected")
+
+    def _run_logged(self, base: np.ndarray, annualization: float,
+                    frozen: list[str] | None = None,
+                    meta_steps: int | None = None, score_fn=None) -> ReplayTrace:
+        """Replay the moves the log actually holds, not a greedy forward selection.
+
+        `_run_meta` re-executes 7.1's policy: every continue is an `extend_best`.
+        That IS the policy for the scripted searchers `fixed-sequence-replay`
+        registered, and milestone 3b holds it equal to them replicate for
+        replicate. It is **not** the policy an agent ran: the pilot's logs
+        contain `refine` and `swap_worst`, and replaying them as extensions
+        produced a search that stopped two features early — which the
+        identity-replicate guard correctly refused, at a score gap of 7.42, even
+        after the class table had made the *basis* identical.
+
+        So a log whose content moves are not all `extend_best` is replayed move
+        by move: the declared triggers still decide **whether** to continue, stop
+        or restart on each replicate, and the logged move decides **what** the
+        continuation is. Both are functions of the data, which is what makes the
+        replay a replay.
+
+        Past the realized length the fill takes over exactly as in `_run_meta`.
+        """
+        from searchers.meta_adaptive import MetaAdaptive
+
+        g = Grammar(self.spec_class, base, annualization, score_fn=score_fn)
+        K = g.K
+        moves = [r.move for r in self.log.records
+                 if not r.move.is_meta and r.move.note != "rejected"]
+        support: tuple = ()
+        best, best_support = float("-inf"), ()
+        failures, last_gain, restarts = 0, float("inf"), 0
+        trace = ReplayTrace()
+
+        def score_list(ns):
+            return g.score(tuple(ns), self.statistic)
+
+        for step in range(self.budget):
+            filling = False
+            if frozen is not None:
+                if step >= len(frozen):
+                    break
+                action = frozen[step]
+            else:
+                state = {"step": step, "best": best, "failures": failures,
+                         "last_gain": last_gain, "budget_left": self.budget - step}
+                action = "continue"
+                for trig in self.triggers:
+                    fires, _ = trig.evaluate(state)
+                    if fires:
+                        action = trig.action
+                        break
+                filling = meta_steps is not None and step >= meta_steps
+
+            if action == "stop":
+                trace.moves.append("stop")
+                break
+            if action == "restart":
+                restarts += 1
+                new, sc, _ = g.anchor(restarts, self.statistic)
+                if new is None:
+                    trace.moves.append("stop")
+                    break
+                support = tuple(new)
+                failures, last_gain = 0, float("inf")
+                trace.moves.append("restart")
+                continue
+
+            if filling or step >= len(moves):
+                trace.filled = trace.filled or filling
+                cands = MetaAdaptive._grammar(list(support), K, score_list,
+                                              allow=lambda ns: g.contains(tuple(ns)))
+                chosen = max(cands) if cands else None
+                if chosen is None:
+                    trace.moves.append("stop")
+                    break
+                cand_score, cand_support = chosen[0], tuple(chosen[2])
+            else:
+                cand_support, cand_score, n = g.apply(support, moves[step])
+                if n == 0:
+                    trace.moves.append("stop")
+                    break
+                cand_support = tuple(cand_support)
+
+            last_gain = cand_score - best
+            support = cand_support
+            if cand_score > best:
+                best, best_support, failures = float(cand_score), cand_support, 0
+            else:
+                failures += 1
+            trace.moves.append("continue")
+            trace.supports.append(support)
+
+        trace.support, trace.score = tuple(best_support), best
+        return trace
+
     def trace(self, base: np.ndarray, annualization: float = 1.0,
               frozen: list[str] | None = None,
               meta_steps: int | None = None, score_fn=None) -> ReplayTrace:
         """`score_fn` overrides the base-column scorer, which is how a real panel
         is replayed: a class table's scorer returns the same stored net stream the
         live search was scored on (`environments/class_table.py`)."""
-        run = self._run_meta if self.log.is_meta() else self._run
+        # A log whose every content move is `extend_best` is 7.1's policy, and
+        # takes 7.1's registered path unchanged. Anything richer - an agent that
+        # swapped, flipped or refined - is replayed move by move, because
+        # replaying it as a forward selection is replaying a different search.
+        kinds = set(self.content_kinds())
+        if kinds - {"extend_best", "init"}:
+            run = self._run_logged
+        else:
+            run = self._run_meta if self.log.is_meta() else self._run
         return run(base, annualization, frozen=frozen, meta_steps=meta_steps,
                    score_fn=score_fn)
 

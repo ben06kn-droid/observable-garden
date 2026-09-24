@@ -128,9 +128,30 @@ class ClassTable:
         return self._sharpe_of(x)
 
     def _sharpe_of(self, x: np.ndarray) -> float:
-        from estimator.bootstrap import sharpe as _s
-        return float(_s(np.asarray(x, dtype=float)[:, None], axis=0,
-                        annualization=self.annualization)[0])
+        """`RealSandbox.evaluate`'s own statistic, element for element.
+
+        **Deliberately not `estimator.bootstrap.sharpe`.** That one guards: a
+        variance floor sends a degenerate column to 0, and `SHARPE_CAP` censors
+        `|Sharpe|` at 100 annualised. Those guards are right for a bootstrap over
+        a simulated panel, where Sharpes are of order 1 and a degenerate
+        resample is the thing being guarded against.
+
+        On the ADR panel they are not. Its registered annualisation is 5-minute
+        bars — `periods_per_year = 19,152`, so `sqrt` is about 138 — and the
+        live search reaches Sharpe **107**. Scoring the table through the
+        guarded estimator returned **exactly 100.0** for every good candidate,
+        so the replay priced a **censored** statistic while the search optimised
+        an uncensored one, and the identity guard failed at a gap of 7.42 for a
+        third distinct reason. Censoring the null is the same error the table was
+        built to remove, one level up.
+
+        So the table scores what the sandbox scores. Whether the ADR panel's
+        annualisation or the cap should change is 7.4's decision and is recorded
+        in `prereg/agent-pilot.md`, not settled here.
+        """
+        x = np.asarray(x, dtype=float)
+        std = float(x.std(ddof=1))
+        return float(x.mean() / std * self.annualization) if std > 0 else 0.0
 
     def scorer(self, rows=None, demeaned: bool = False):
         """A `score_fn(support, statistic)` for `quixote.grammar.Grammar`.
@@ -167,7 +188,6 @@ class ClassTable:
         single stored column, which is the same reduction the sandbox's own
         `evaluate` performs.
         """
-        from estimator.bootstrap import sharpe as _s
         best, best_j = float("-inf"), -1
         mu = self.streams.mean(axis=0) if demeaned else None
         for start in range(0, self.N, chunk):
@@ -177,11 +197,82 @@ class ClassTable:
                 block = block[rows, :]
             if demeaned:
                 block = block - np.asarray(mu[start:stop], dtype=float)
-            s = _s(block, axis=0, annualization=self.annualization)
+            # the sandbox's statistic, as `_sharpe_of` explains
+            std = block.std(axis=0, ddof=1)
+            s = np.where(std > 0, block.mean(axis=0) / np.where(std > 0, std, 1.0),
+                         0.0) * self.annualization
             j = int(np.argmax(s))
             if float(s[j]) > best:
                 best, best_j = float(s[j]), start + j
         return best, best_j
+
+
+def streams_for(panel, supports) -> np.ndarray:
+    """`(n, T)` net streams for `n` members, in ONE pass over the panel.
+
+    `RealPanel.weights_from` walks periods in a Python loop, because the book is
+    stateful: a name that is not tradable in a period keeps the weight it had,
+    and a flat-overnight panel opens and closes each session flat. Calling it
+    once per member walks that loop once per member — 13,288 x 36,404 iterations
+    for the ADR table, which measured **8.6 hours** and 6% done at half an hour.
+
+    The loop is sequential in time and **embarrassingly parallel across
+    members**, so it is walked once with the whole chunk carried through it.
+    Batched, the ADR table takes about **3 minutes** instead of 8.6 hours.
+
+    **How exactly it agrees with the per-member path, measured rather than
+    claimed.** The arithmetic is the same operations on the same elements, but a
+    row of a `(n, M)` block and a standalone `(M,)` vector are not reduced with
+    the same pairwise blocking, so the two differ by up to **7e-18 absolute** on
+    a stream of order 1e-3 — about 1e-14 relative, roughly one ulp. Two
+    consequences, both recorded rather than discovered:
+
+    - **the table is the definition** of a member's net stream once it exists.
+      `RealSandbox.evaluate` reads it, every replicate reads it, and the
+      identity-replicate guard compares table against table, so the guard's
+      agreement is exact;
+    - the kernel is **invariant to the chunk size for n >= 2** (checked in
+      `tests/test_class_table.py`), but a single-member call takes numpy's
+      one-row path and lands on the other side of that 7e-18. A table is
+      therefore built in chunks and never one column at a time.
+
+    Weights are never materialised: each period's contribution to the stream is
+    accumulated as the loop passes, so memory is the chunk's `(n, M)` state plus
+    its `(n, T)` output.
+
+    Weights are never materialised: each period's contribution to the stream is
+    accumulated as the loop passes, so memory is the chunk's `(n, M)` state plus
+    its `(n, T)` output.
+    """
+    T, M, K = panel.features.shape
+    n = len(supports)
+    Wf = np.zeros((K, n))
+    for j, support in enumerate(supports):
+        for k, sign in support:
+            Wf[k, j] = sign
+
+    out = np.empty((n, T))
+    held = np.zeros((n, M))
+    prev = np.zeros((n, M))
+    flat = bool(panel.flat_overnight)
+    for t in range(T):
+        free = panel.tradable[t]
+        if flat and panel.session_start[t]:
+            held = np.zeros((n, M))
+        target = np.where(free, (panel.features[t] @ Wf).T, 0.0)
+        if free.any():
+            target = target - target[:, free].mean(axis=1, keepdims=True) * free
+            gross = np.abs(target[:, free]).sum(axis=1, keepdims=True)
+            nz = gross[:, 0] > 0
+            target[nz] = target[nz] / gross[nz]
+        new = np.where(free, target, held)
+        if flat and panel.session_end[t]:
+            new = np.zeros((n, M))
+        out[:, t] = ((new * panel.returns[t]).sum(axis=1)
+                     - (np.abs(new - prev) * panel.cost_rate[t]).sum(axis=1)
+                     - (np.clip(-new, 0, None) * panel.borrow_rate[t]).sum(axis=1))
+        held = prev = new
+    return out
 
 
 def table_path(name: str, spec_class, K: int) -> Path:
@@ -220,11 +311,7 @@ def build_class_table(panel, spec_class, name: str, path: Path | None = None,
                                         shape=(T, N))
     for start in range(0, N, chunk):
         stop = min(start + chunk, N)
-        for j in range(start, stop):
-            w = np.zeros(K)
-            for k, s in members[j]:
-                w[k] = s
-            streams[:, j] = panel.stream_for_scores(panel.scores_for_weights(w))
+        streams[:, start:stop] = streams_for(panel, members[start:stop]).T
         streams.flush()
         if progress is not None:
             progress(stop, N)
