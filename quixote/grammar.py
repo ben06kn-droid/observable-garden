@@ -32,7 +32,7 @@ from garden.spec_class import SubsetClass
 
 Support = tuple[tuple[int, float], ...]
 
-CONTENT_KINDS = ("init", "extend_best", "swap_worst", "flip", "refine")
+CONTENT_KINDS = ("init", "extend_best", "swap_worst", "flip", "refine", "pick")
 META_KINDS = ("restart", "stop")
 MOVE_KINDS = CONTENT_KINDS + META_KINDS
 
@@ -45,14 +45,24 @@ class Move:
     statistic: str = "sharpe"
     feature: int | None = None          # `flip` names one; others do not
     note: str = ""
+    # `pick` only: the candidate features the rule ranges over, the statistic to
+    # fall back on when the premise fails on a replicate, and the choice the
+    # agent says the rule makes (checked by quixote/consistency.py)
+    among: tuple = ()
+    else_statistic: str | None = None
+    choice: int | None = None
 
     def __post_init__(self):
         if self.kind not in MOVE_KINDS:
             raise ValueError(f"unknown move {self.kind!r}; grammar is {MOVE_KINDS}")
         if self.kind == "flip" and self.feature is None:
             raise ValueError("flip names the feature to flip")
-        if self.kind != "flip" and self.feature is not None:
+        if self.kind not in ("flip", "pick") and self.feature is not None:
             raise ValueError(f"{self.kind} does not take a feature")
+        if self.kind != "pick" and (self.among or self.else_statistic or self.choice is not None):
+            raise ValueError(f"{self.kind} takes no among/else/choice; only pick does")
+        if self.kind == "pick" and not self.among:
+            raise ValueError("pick names the candidate set it ranges over")
 
     @property
     def is_meta(self) -> bool:
@@ -153,10 +163,40 @@ class Grammar:
             i = idx[0]
             ns = support[:i] + ((support[i][0], -support[i][1]),) + support[i+1:]
             out.append((self.score(ns, move.statistic), ns))
+        elif move.kind == "pick":
+            # every candidate the rule ranged over is a trial and is counted;
+            # which one it selects is `pick_choice` below
+            for _, ns in self.pick_candidates(support, move):
+                out.append((self.score(ns, "sharpe"), ns))
         elif move.kind == "refine":
             # re-score the current support under a different statistic; the
             # support does not change
             out.append((self.score(support, move.statistic), tuple(support)))
+        return out
+
+    def stream(self, support: Support) -> np.ndarray:
+        """The support's base-column stream. Statistics other than Sharpe are
+        computed from this in both the live and replay paths, so a reason means
+        the same thing in each."""
+        out = np.zeros(self.base.shape[0])
+        for k, s in support:
+            out = out + self.base[:, k] * s
+        return out
+
+    def pick_candidates(self, support: Support, move: Move) -> list:
+        """(value, support) for each candidate in `among`, by the named
+        statistic. A candidate already held is not a candidate."""
+        from quixote.statistics import evaluate as stat_of
+        held = {k for k, _ in support}
+        best_stream = self.stream(support) if support else None
+        out = []
+        for j in move.among:
+            if j in held:
+                continue
+            for sign in self.signs:
+                ns = tuple(support) + ((int(j), sign),)
+                v = stat_of(move.statistic, self.stream(ns), self.annualization, best_stream)
+                out.append((v, ns))
         return out
 
     def anchor(self, rank: int, statistic: str = "sharpe") -> tuple[Support | None, float, int]:
@@ -171,6 +211,26 @@ class Grammar:
         k = int(order[rank])
         return ((k, 1.0),), float(scores[k]), self.K
 
+    def pick_choice(self, support: Support, move: Move) -> tuple[Support | None, str]:
+        """What the declared rule selects, and under which statistic. If the
+        statistic is undefined for every candidate -- the premise failing on this
+        replicate -- the `else` statistic decides; without one the harness falls
+        back to Sharpe (ROADMAP 7.2)."""
+        import math
+
+        from quixote.statistics import better
+        cands = self.pick_candidates(support, move)
+        name = move.statistic
+        if cands and all(math.isnan(v) for v, _ in cands):
+            name = move.else_statistic or "sharpe"
+            cands = self.pick_candidates(support, Move("pick", statistic=name,
+                                                       among=move.among))
+        best = None
+        for v, ns in cands:
+            if best is None or better(name, v, best[0]):
+                best = (v, ns)
+        return (best[1] if best else None), name
+
     def apply(self, support: Support, move: Move) -> tuple[Support, float, int]:
         """Execute `move`. Returns (new support, its score, candidates considered).
 
@@ -180,7 +240,13 @@ class Grammar:
         """
         cands = self.candidates(support, move)
         if not cands:
-            return tuple(support), self.score(support, move.statistic), 0
+            stat = "sharpe" if move.kind == "pick" else move.statistic
+            return tuple(support), self.score(support, stat), 0
+        if move.kind == "pick":
+            chosen, _ = self.pick_choice(support, move)
+            if chosen is None:
+                return tuple(support), self.score(support, "sharpe"), len(cands)
+            return chosen, self.score(chosen, "sharpe"), len(cands)
         best = max(cands, key=lambda c: c[0])
         return best[1], best[0], len(cands)
 

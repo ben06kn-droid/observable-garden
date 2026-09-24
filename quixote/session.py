@@ -129,7 +129,17 @@ class Session:
             raise ValueError(
                 f"{move.kind} would leave the declared class; the harness refuses "
                 "rather than taking the run off-tier")
-        self._pending = (move, new_support, new_score, n_cand, tuple(shown))
+        # The consistency check, at the moment of the move and free: the harness
+        # computed the rule's selection in order to execute it, so comparing it
+        # with the choice the agent named costs one comparison
+        # (quixote/consistency.py). A contradicted pick is recorded as not
+        # replayable -- rejected as declared -- and the run continues.
+        consistent = True
+        if move.kind == "pick" and move.choice is not None:
+            held = {k for k, _ in self.support}
+            added = [k for k, _ in new_support if k not in held]
+            consistent = bool(added) and added[0] == move.choice
+        self._pending = (move, new_support, new_score, n_cand, tuple(shown), consistent)
         return new_support, new_score, n_cand
 
     def accept(self, trigger: str | Trigger | None = None,
@@ -138,7 +148,7 @@ class Session:
         """Commit the pending proposal and record it."""
         if self._pending is None:
             raise ValueError("nothing proposed to accept")
-        move, support, score, n_cand, shown = self._pending
+        move, support, score, n_cand, shown, consistent = self._pending
         info = InformationSet(step=self.log.n_moves, support_before=self.support,
                               score_before=self.score, shown=shown,
                               n_candidates_seen=n_cand)
@@ -152,7 +162,8 @@ class Session:
         self.log.record(MoveRecord(
             step=info.step, move=move, support_after=support, score_after=score,
             n_candidates=n_cand, information=info, timestamp=time.monotonic(),
-            trigger=name, trigger_value=trigger_value, replayable=replayable,
+            trigger=name, trigger_value=trigger_value,
+            replayable=replayable and consistent,
             trigger_params=params, trigger_stamped_at=stamped_at))
         self._pending = None
         return score
@@ -172,7 +183,7 @@ class Session:
         though the support did not move."""
         if self._pending is None:
             raise ValueError("nothing proposed to reject")
-        move, support, score, n_cand, shown = self._pending
+        move, support, score, n_cand, shown, consistent = self._pending
         info = InformationSet(step=self.log.n_moves, support_before=self.support,
                               score_before=self.score, shown=shown,
                               n_candidates_seen=n_cand)
@@ -184,7 +195,7 @@ class Session:
                                       feature=move.feature, note="rejected"),
             support_after=self.support, score_after=self.score,
             n_candidates=n_cand, information=info, timestamp=time.monotonic(),
-            trigger=name, trigger_value=trigger_value, replayable=True,
+            trigger=name, trigger_value=trigger_value, replayable=consistent,
             trigger_params=params, trigger_stamped_at=stamped_at))
         self._pending = None
 

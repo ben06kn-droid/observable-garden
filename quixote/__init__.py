@@ -28,6 +28,14 @@ conjecture that anchoring later moves on a local maximum is conservative, which
 7.3 tests and which has not reported, so a verdict that used either says it is
 unlicensed and names what would license it.
 
+**Part one is complete.** The consistency check (`quixote/consistency.py`),
+`pick` with its statistic library and `else` branch (`quixote/statistics.py`,
+the grammar's `pick` move), and the twin generator with identifier masking
+(`quixote/twins.py`) are built and tested. Two things are deliberately absent
+from them and say so: **IC**, because it needs the panel a replicate does not
+have, and **sequential twin stopping**, because Besag & Clifford's two open
+checks are unresolved.
+
 Still deliberately NOT here: the living verdict (item 3), which waits until
 after the paper.
 
@@ -41,11 +49,15 @@ adding it moves no published fingerprint; quixote runs record their own
 fingerprint instead. See `quixote/fingerprint.py`.
 """
 from quixote.certify import CERTIFYING_NULL, certify, three_nulls
+from quixote.consistency import check_picks
 from quixote.pricing import PricingOptions
+from quixote.statistics import STATISTICS
+from quixote.twins import Masking, twin_p_value, twins
 from quixote.grammar import Grammar, Move, Support
 from quixote.log import InformationSet, MoveRecord, SessionLog
 from quixote.verdict import QuixoteVerdict
 
 __all__ = ["Grammar", "Move", "Support", "InformationSet", "MoveRecord",
            "SessionLog", "QuixoteVerdict", "certify", "three_nulls",
-           "CERTIFYING_NULL", "PricingOptions"]
+           "CERTIFYING_NULL", "PricingOptions", "check_picks", "STATISTICS",
+           "twins", "twin_p_value", "Masking"]

@@ -266,6 +266,31 @@ property, pinned by test: for a continuation that is already greedy extension
 the local max *is* the logged move, so pricing such a step changes nothing —
 the same structural fact 7.1 found about the fill.
 
+**Part one's remaining items are built:**
+
+- **the consistency check** (`quixote/consistency.py`) — for every `pick`, the
+  harness compares the choice the agent names with what the declared rule
+  selects on the realized data. It is free, because the harness computed that
+  selection in order to execute it; a contradicted pick is recorded as **not
+  replayable**, which is rejected-as-declared, and the run continues. It checks
+  the choice, not the reason: an agent naming a rule it did not use, whose
+  selection coincides, passes here, and that is what 7.3's fidelity measurement
+  is for.
+- **`pick`, with its statistic library and `else` branch**
+  (`quixote/statistics.py`). The library is Sharpe, volatility, autocorrelation
+  at lags 1 and 5, and correlation with the current best — every one computable
+  from base columns alone, as the `Replayable` contract requires. **IC is
+  deliberately absent**: it needs the (T, M, K) panel, which a replicate does not
+  have, so it would be a reason that cannot be re-evaluated. A pick counts every
+  candidate it ranged over, and `pick` by Sharpe over all features **is**
+  `extend_best`, bit for bit.
+- **the twin generator and identifier masking** (`quixote/twins.py`) — joint
+  time permutation (the same permutation across names, so each period's
+  cross-section survives) and block permutation, each stating what it destroys;
+  the registered K = 19 and K = 99; the `(1 + #)/(K + 1)` rank; and masking that
+  exposes structural metadata without identity and **refuses** metadata that
+  would identify a name. **Sequential stopping is absent on purpose.**
+
 Still waiting, and still not guessed:
 
 - **the living verdict** (item 3), which waits until after the paper
