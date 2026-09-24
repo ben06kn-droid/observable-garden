@@ -258,10 +258,16 @@ freezing as liberal. Every verdict whose replicates used the fill carries its
 measured direction: liberal against a width-2 beam, no verdict moved, untested
 beyond that.
 
+**Local-max pricing and fidelity-driven pricing are built behind flags that
+default to off** (`quixote/pricing.py`). Both replace a step with the best
+admissible one-step move in every replicate, and both rest on 7.3's untested
+conjecture, so switching one on marks the verdict unlicensed. A measured
+property, pinned by test: for a continuation that is already greedy extension
+the local max *is* the logged move, so pricing such a step changes nothing —
+the same structural fact 7.1 found about the fill.
+
 Still waiting, and still not guessed:
 
-- **local-max pricing as a certifier** — 7.3's conjecture
-- **fidelity-driven pricing**
 - **the living verdict** (item 3), which waits until after the paper
 
 **The real-data sandbox is built** (`environments/real_panel.py`,

@@ -22,11 +22,14 @@ and masking exist so a run can be scored against placebo datasets.
   continuations it dominates, with no verdict moved, so every verdict whose
   replicates used it says so.
 
-Still deliberately NOT here:
+**Built but not licensed** (`quixote/pricing.py`): local-max pricing and
+fidelity-driven pricing, both behind flags that default to off. Both rest on the
+conjecture that anchoring later moves on a local maximum is conservative, which
+7.3 tests and which has not reported, so a verdict that used either says it is
+unlicensed and names what would license it.
 
-- local-max pricing as a certifier, and fidelity-driven pricing: both wait on
-  7.3's scripted runs and are built behind a flag, off by default,
-- the living verdict (item 3), which waits until after the paper.
+Still deliberately NOT here: the living verdict (item 3), which waits until
+after the paper.
 
 `Verdict` carries the fields those will populate, stubbed and marked.
 
@@ -38,10 +41,11 @@ adding it moves no published fingerprint; quixote runs record their own
 fingerprint instead. See `quixote/fingerprint.py`.
 """
 from quixote.certify import CERTIFYING_NULL, certify, three_nulls
+from quixote.pricing import PricingOptions
 from quixote.grammar import Grammar, Move, Support
 from quixote.log import InformationSet, MoveRecord, SessionLog
 from quixote.verdict import QuixoteVerdict
 
 __all__ = ["Grammar", "Move", "Support", "InformationSet", "MoveRecord",
            "SessionLog", "QuixoteVerdict", "certify", "three_nulls",
-           "CERTIFYING_NULL"]
+           "CERTIFYING_NULL", "PricingOptions"]

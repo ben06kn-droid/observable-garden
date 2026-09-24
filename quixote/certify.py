@@ -32,6 +32,8 @@ import numpy as np
 
 from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
 from estimator.trigger_replay import ReplayNulls
+from quixote.pricing import DEFAULT as NO_PRICING
+from quixote.pricing import PricingOptions, steps_to_price
 from quixote.replay import LoggedPolicy, identity_check
 from quixote.verdict import QuixoteVerdict
 
@@ -54,7 +56,8 @@ NO_FILL_NOTE = ("The fill was never used: no replicate ran past the realized "
 
 def three_nulls(log, spec_class, base: np.ndarray, annualization: float = 1.0,
                 B: int = 10_000, block_length: int | None = None,
-                seed: int | None = None) -> tuple[ReplayNulls, np.ndarray]:
+                seed: int | None = None,
+                pricing: PricingOptions = NO_PRICING) -> tuple[ReplayNulls, np.ndarray]:
     """Nulls 1-3 for a logged search, plus the per-replicate engagement flag.
 
     The resampling is `estimator.trigger_replay.replay_nulls`', replicate for
@@ -63,7 +66,8 @@ def three_nulls(log, spec_class, base: np.ndarray, annualization: float = 1.0,
     `tests/test_quixote_certify.py` holds the two equal. It is repeated here only
     because `replay_nulls` returns scores and this needs the engagement flag too.
     """
-    policy = LoggedPolicy(log, spec_class)
+    priced, _ = steps_to_price(log, pricing)
+    policy = LoggedPolicy(log, spec_class, locally_priced=priced)
     base = np.asarray(base, dtype=float)
     T = base.shape[0]
     S0 = base - base.mean(axis=0, keepdims=True)
@@ -86,7 +90,8 @@ def three_nulls(log, spec_class, base: np.ndarray, annualization: float = 1.0,
 
 def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
             alpha: float = 0.05, B: int = 10_000, block_length: int | None = None,
-            seed: int | None = None, p_declared_class: float | None = None) -> QuixoteVerdict:
+            seed: int | None = None, p_declared_class: float | None = None,
+            pricing: PricingOptions = NO_PRICING) -> QuixoteVerdict:
     """Price a logged search against the trigger-replay null.
 
     A run whose replay disagrees with itself on the un-resampled data is
@@ -102,7 +107,9 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
                      "Not priced: the certifying null would be pricing a search that did "
                      "not run."])
 
-    nulls, engaged = three_nulls(log, spec_class, base, annualization, B, block_length, seed)
+    priced, pricing_reasons = steps_to_price(log, pricing)
+    nulls, engaged = three_nulls(log, spec_class, base, annualization, B, block_length,
+                                 seed, pricing=pricing)
     p_trigger = nulls.p_value("trigger")
     n_eng = int(engaged.sum())
 
@@ -124,6 +131,8 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         realized_score=float(nulls.realized_score),
         fill_engaged=n_eng,
         fill_replicates=B,
+        locally_priced_steps=tuple(sorted(priced)),
+        pricing_licensed=False if priced else None,
     )
     v.reasons.append(
         f"Certified against {CERTIFYING_NULL}: p = {p_trigger:.4f} against alpha = {alpha}. "
@@ -136,5 +145,6 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         f"Reported beside it: fixed-sequence replay p = {v.p_frozen:.4f} (the bracket's "
         f"lower end) and policy replay p = {v.p_policy:.4f} (exact for a scripted policy, "
         "with no agent counterpart).")
+    v.reasons.extend(pricing_reasons)
     v.reasons.append(guard.reason())
     return v

@@ -48,6 +48,11 @@ class ReplayTrace:
     # quixote.certify reports as engagement, and the condition under which a
     # verdict carries the fill's measured direction
     filled: bool = False
+    # steps replaced by the best admissible move under local-max or
+    # fidelity-driven pricing; zero unless one of those flags is on
+    locally_priced: int = 0
+    # the support after each step, so a priced step's choice can be audited
+    supports: list = field(default_factory=list)
 
     @property
     def n_moves(self) -> int:
@@ -65,10 +70,20 @@ class LoggedPolicy:
     the one that was logged.
     """
 
-    def __init__(self, log: SessionLog, spec_class, statistic: str = "sharpe"):
+    def __init__(self, log: SessionLog, spec_class, statistic: str = "sharpe",
+                 locally_priced: frozenset = frozenset()):
         self.log = log
         self.spec_class = spec_class
         self.statistic = statistic
+        # Steps that take the best admissible one-step move in every replicate
+        # instead of the logged continuation (quixote/pricing.py). Empty by
+        # default: nothing is priced this way until 7.3 licenses it.
+        #
+        # `locally_priced` holds LOG RECORD indices; record 0 is the anchor, and
+        # the replay loop's step s is record s + 1. The conversion happens here so
+        # a caller never has to know it.
+        self.locally_priced = frozenset(locally_priced)
+        self._priced_steps = frozenset(i - 1 for i in self.locally_priced if i >= 1)
         self.max_features = spec_class.max_size
         self.name = "logged-policy"
         self.budget = log.budget
@@ -168,8 +183,9 @@ class LoggedPolicy:
                 trace.moves.append("restart")
                 continue
 
-            if filling:
-                trace.filled = True
+            if filling or step in self._priced_steps:
+                trace.filled = trace.filled or filling
+                trace.locally_priced += int(step in self._priced_steps)
                 cands = MetaAdaptive._grammar(support, K, score_list)
                 chosen = max(cands) if cands else None
                 cand_score, cand_support = (chosen[0], chosen[2]) if chosen else (None, None)
@@ -186,6 +202,7 @@ class LoggedPolicy:
             else:
                 failures += 1
             trace.moves.append("continue")
+            trace.supports.append(tuple(support))
 
         trace.support, trace.score = tuple(best_support), best
         return trace

@@ -51,6 +51,12 @@ class QuixoteVerdict:
     fill_engaged: int | None = None              # replicates that used the fill
     fill_replicates: int | None = None
 
+    # -- local-max and fidelity-driven pricing (quixote/pricing.py) ---------
+    # Empty unless a flag is on, and a flag being on makes the verdict
+    # unlicensed: 7.3 has not tested the conjecture both rules rest on.
+    locally_priced_steps: tuple = ()
+    pricing_licensed: bool | None = None
+
     # -- provenance --------------------------------------------------------
     n_moves: int = 0
     n_candidates: int = 0
