@@ -487,6 +487,13 @@ size measured, and the fidelity measurement in 7.3.
 
 ## 7.0 gate-comparison — which test should certify? (EC2, first)
 
+**Status 2026-09-24: live.** The launch gate is closed (prereg amendment 3): arm D
+reported, and process replay is sized by 7.1 at ~62 ms per replicate for one null.
+The driver is written and tested (`experiments/gate_comparison.py`, `6a89aae`). What
+runs next is 7.0's own four-point scaling curve and an end-to-end smoke on the
+registered cost-only block 980000–980999, which set the worker count and decide
+B against amendment 7's $150 threshold; no registered draw is computed before then.
+
 Unregistered scouting (2026-09-19, scripted greedy, K=40, d=3 signed,
 T=5,000, oracle 1.0, n=120–300, bar priced once per configuration; null
 rates came in at 4–9%, so direction only):
@@ -965,7 +972,7 @@ EC2, at the measured two-null rate where it applies:
 | 6.3, three cells | measured 244 s/cell at 16 workers | 15.0 h remaining | ~$25 |
 | 7.1 | **not sized**; B re-executions per draw | — | — |
 | 7.0 declared-class half | measured 75.03 s/draw | 5.2 h | $8.6 |
-| 7.0 process-replay half | **not sized** | — | — |
+| 7.0 process-replay half | sized by 7.1 at ~62 ms/replicate, one null; 7.0's own curve sets workers and B | pending its smoke | threshold $150, fallback B = 1,000 |
 | item 4's experiment | **not sized**; per-block moments change the shape | — | — |
 
 Seat, **sized from 661 stored runs at $0.268 mean per run** (median $0.220, 90th

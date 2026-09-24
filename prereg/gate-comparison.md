@@ -1,12 +1,21 @@
 # gate-comparison (7.0): which test should certify?
 
-**DRAFT — committed but not live.** It is in the tree so it cannot be lost, it
-has not been reviewed, and it authorises nothing. 7.0 does not run until it has
-been read and the launch decision is taken, which waits on `calibration-at-1pct`
-arm D: arm D's rule 4 decomposition splits the class gate's conservatism into
-confinement and sub-maximal search, and the matched-class design below rests on
-which of the two dominates. Code: `experiments/gate_comparison.py`, not yet
-written.
+**LIVE from 2026-09-24.** The paragraph below is the original draft notice,
+kept as written. Both conditions it names are now met — `calibration-at-1pct`
+arm D reported and is folded in as amendment 1, and process replay is sized
+(amendment 3) — so the launch decision is taken and this file authorises the
+run. The driver is written (`experiments/gate_comparison.py`, `6a89aae`) and
+its scaling curve and smoke run on the registered cost-only block
+980000–980999 before any registered draw. **No 7.0 draw has been computed**,
+and all nine amendments precede both the code and the data.
+
+> **DRAFT — committed but not live.** It is in the tree so it cannot be lost,
+> it has not been reviewed, and it authorises nothing. 7.0 does not run until
+> it has been read and the launch decision is taken, which waits on
+> `calibration-at-1pct` arm D: arm D's rule 4 decomposition splits the class
+> gate's conservatism into confinement and sub-maximal search, and the
+> matched-class design below rests on which of the two dominates. Code:
+> `experiments/gate_comparison.py`, not yet written.
 
 ## Question
 
