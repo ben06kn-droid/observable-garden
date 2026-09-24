@@ -113,14 +113,14 @@ def test_a_non_member_is_refused_rather_than_approximated(tmp_path):
 
 def test_the_table_is_reused_only_for_the_panel_it_was_built_on(tmp_path):
     table, panel = _table(tmp_path)
-    first = np.array(table.streams[:, 0])           # a COPY: the memmap is the file,
+    first = np.array(table.streams[0])           # a COPY: the memmap is the file,
     again = build_class_table(panel, CLS, "synthetic", path=tmp_path / "t.npy")
     assert again.panel_hash == table.panel_hash     # and a rebuild rewrites the file
-    np.testing.assert_array_equal(again.streams[:, 0], first)
+    np.testing.assert_array_equal(again.streams[0], first)
     other = _panel(seed=99)
     rebuilt = build_class_table(other, CLS, "synthetic", path=tmp_path / "t.npy")
     assert rebuilt.panel_hash != table.panel_hash
-    assert not np.array_equal(np.array(rebuilt.streams[:, 0]), first)
+    assert not np.array_equal(np.array(rebuilt.streams[0]), first)
 
 
 # -- the sandbox scores by lookup -------------------------------------------
@@ -277,7 +277,7 @@ def test_the_table_scores_the_sandboxs_statistic_not_the_guarded_estimator(tmp_p
     table, panel = _table(tmp_path)
     huge = np.full(500, 1.0) + np.random.default_rng(0).normal(scale=0.01, size=500)
     ann = 138.0                                   # sqrt(19152), the ADR panel's
-    t = ClassTable(streams=huge[:, None], members=[((0, 1.0),)],
+    t = ClassTable(streams=huge[None, :], members=[((0, 1.0),)],
                    index={((0, 1.0),): 0}, panel_hash="x",
                    periods_per_year=ann ** 2)
     raw = t.sharpe(((0, 1.0),))
@@ -287,6 +287,6 @@ def test_the_table_scores_the_sandboxs_statistic_not_the_guarded_estimator(tmp_p
 
 
 def test_a_zero_variance_stream_scores_zero_as_the_sandbox_does(tmp_path):
-    t = ClassTable(streams=np.zeros((50, 1)), members=[((0, 1.0),)],
+    t = ClassTable(streams=np.zeros((1, 50)), members=[((0, 1.0),)],
                    index={((0, 1.0),): 0}, panel_hash="x", periods_per_year=252)
     assert t.sharpe(((0, 1.0),)) == 0.0

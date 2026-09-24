@@ -389,3 +389,56 @@ nothing and claims nothing; 7.4 does, and it should settle this before it runs.
 the pilot's own move sequence with a score gap of **exactly 0.0**, and a scripted
 policy through the tool adapter on a real panel reproduces its direct `Session`
 run — both as tests (`tests/test_class_table.py`).
+
+## Attempt 4: the replay arm re-run after the fix, and what is left
+
+**2026-09-24.** Only the three replay-arm runs were re-run, on their registered
+seeds and the same prompts, against the tabulated class
+(`runs/agent_pilot/pilot_report_attempt4_priced.txt`). Rule 1 holds: no refusals
+of any kind.
+
+**One run certified, two did not, and the difference is not the harness.**
+
+| run | declared stop trigger | verdict |
+|---|---|---|
+| pilot_3 | `last_gain > 0.0` | **CERTIFIED**, p = 0.0050 at B = 200 |
+| pilot_2 | `best_so_far > 100` | UNDECIDABLE on the guard |
+| pilot_4 | `best_so_far > 100` | UNDECIDABLE on the guard |
+
+pilot_3's rule describes its search: it stops when a move gains nothing, which is
+what it did, so replaying the rule reproduces the run and the guard passes with a
+score gap of **exactly 0.0**.
+
+pilot_2 and pilot_4 declared `best_so_far > 100`. Their best passed 100 at the
+**second move** (106.98) and both kept searching to the tenth. Replayed as a
+rule — which is what a declared trigger is — that predicate stops the search
+eight moves early, so the replay is not the search and the guard refuses it. The
+remaining score gap is 0.44, the difference between what the search reached and
+what its own stated rule would have reached.
+
+**This is the gate working, not failing.** The trigger was declared at the moment
+of stopping rather than before searching, so it is a description offered
+afterwards, not a commitment the search was run under. Nothing distinguishes
+those two in a log unless the harness makes it so.
+
+**The design decision this raises, registered as open rather than taken here:**
+
+- **(a) declare triggers before searching**, as `pick_prior`, `short_list` and
+  `declare_budget` already must be, with `SessionLog.refuse_if_late` refusing a
+  late one. A stop would then have to name a trigger already on record. This
+  makes every agent log replayable by construction and narrows what an agent may
+  do.
+- **(b) allow late declaration and price it as unreplayable** — the bracket
+  (`prereg/bracketed-verdicts.md`), with the run dropping to the class tier.
+  This keeps the agent free and makes the cost explicit in the verdict.
+
+**7.2 or 7.3 chooses; this pilot does not**, and neither option is implied by
+anything measured here. What the pilot establishes is that the choice exists and
+that it is load-bearing: **two of three agent runs declared a stop rule their own
+search does not satisfy.** With n = 3, that frequency is a signal to design
+against, not a rate.
+
+**Picks: still 0 of 3.** Amendment 3 of `AGENT_PROMPTS_REAL.md` registers the
+reasoned-pick arm for 7.3's fidelity cell in response.
+
+**Cost: $0.094 per run, $0.28 for the three. Four attempts in total: $1.92.**

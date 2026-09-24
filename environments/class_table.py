@@ -10,7 +10,7 @@ replayed score gaps around 7.4, three orders of magnitude past float accumulatio
 
 The fix is to stop reconstructing the statistic and store it. Every member of the
 declared class gets its net stream computed **once** on the panel, into a
-`(T, N)` table. Then:
+`(N, T)` table, member-major. Then:
 
 - `RealSandbox.evaluate` scores by **lookup** in the table;
 - a replay scores a candidate by **resampling rows** of the same table;
@@ -82,8 +82,15 @@ def _panel_hash(panel) -> str:
 
 @dataclass
 class ClassTable:
-    """`(T, N)` net-of-cost streams, one column per declared-class member."""
-    streams: np.ndarray                     # memmap or array, (T, N)
+    """`(N, T)` net-of-cost streams, one **row** per declared-class member.
+
+    Member-major, not period-major. A replay reads one member's whole stream at a
+    time, and in a `(T, N)` layout those elements are `N * 8` bytes apart, so a
+    single read of the ADR table touched a page per element and a 200-replicate
+    certification ran for a quarter of an hour without finishing. Transposed, a
+    member is one contiguous run of `T` doubles.
+    """
+    streams: np.ndarray                     # memmap or array, (N, T)
     members: list
     index: dict                             # canonical support -> column
     panel_hash: str
@@ -92,11 +99,11 @@ class ClassTable:
 
     @property
     def T(self) -> int:
-        return int(self.streams.shape[0])
+        return int(self.streams.shape[1])
 
     @property
     def N(self) -> int:
-        return int(self.streams.shape[1])
+        return int(self.streams.shape[0])
 
     @property
     def annualization(self) -> float:
@@ -109,8 +116,8 @@ class ClassTable:
         return self.index[key]
 
     def stream(self, support, rows=None) -> np.ndarray:
-        col = self.streams[:, self.column(support)]
-        return np.asarray(col if rows is None else col[rows], dtype=float)
+        row = self.streams[self.column(support)]
+        return np.asarray(row if rows is None else row[rows], dtype=float)
 
     # -- the one statistic -------------------------------------------------
 
@@ -124,7 +131,7 @@ class ClassTable:
         """
         x = self.stream(support, rows)
         if demeaned:
-            x = x - float(self.streams[:, self.column(support)].mean())
+            x = x - float(self.streams[self.column(support)].mean())
         return self._sharpe_of(x)
 
     def _sharpe_of(self, x: np.ndarray) -> float:
@@ -189,17 +196,16 @@ class ClassTable:
         `evaluate` performs.
         """
         best, best_j = float("-inf"), -1
-        mu = self.streams.mean(axis=0) if demeaned else None
         for start in range(0, self.N, chunk):
             stop = min(start + chunk, self.N)
-            block = np.asarray(self.streams[:, start:stop], dtype=float)
-            if rows is not None:
-                block = block[rows, :]
+            block = np.asarray(self.streams[start:stop], dtype=float)   # (chunk, T)
             if demeaned:
-                block = block - np.asarray(mu[start:stop], dtype=float)
+                block = block - block.mean(axis=1, keepdims=True)
+            if rows is not None:
+                block = block[:, rows]
             # the sandbox's statistic, as `_sharpe_of` explains
-            std = block.std(axis=0, ddof=1)
-            s = np.where(std > 0, block.mean(axis=0) / np.where(std > 0, std, 1.0),
+            std = block.std(axis=1, ddof=1)
+            s = np.where(std > 0, block.mean(axis=1) / np.where(std > 0, std, 1.0),
                          0.0) * self.annualization
             j = int(np.argmax(s))
             if float(s[j]) > best:
@@ -299,7 +305,7 @@ def build_class_table(panel, spec_class, name: str, path: Path | None = None,
 
     if path.exists() and manifest_path.exists() and not rebuild:
         man = json.loads(manifest_path.read_text())
-        if (man.get("panel_hash") == ph and man.get("shape") == [T, N]
+        if (man.get("panel_hash") == ph and man.get("shape") == [N, T]
                 and man.get("class") == spec_class.name):
             streams = np.lib.format.open_memmap(path, mode="r")
             return ClassTable(streams=streams, members=members, index=index,
@@ -308,10 +314,10 @@ def build_class_table(panel, spec_class, name: str, path: Path | None = None,
                               path=str(path))
 
     streams = np.lib.format.open_memmap(path, mode="w+", dtype=np.float64,
-                                        shape=(T, N))
+                                        shape=(N, T))
     for start in range(0, N, chunk):
         stop = min(start + chunk, N)
-        streams[:, start:stop] = streams_for(panel, members[start:stop]).T
+        streams[start:stop] = streams_for(panel, members[start:stop])
         streams.flush()
         if progress is not None:
             progress(stop, N)
@@ -320,7 +326,7 @@ def build_class_table(panel, spec_class, name: str, path: Path | None = None,
          "panel_hash": ph, "periods_per_year": float(panel.periods_per_year),
          "dtype": "float64", "bytes": int(T * N * 8),
          "sha256_first_mb": hashlib.sha256(
-             np.ascontiguousarray(streams[:, :min(N, 64)]).tobytes()[:1 << 20]
+             np.ascontiguousarray(streams[:min(N, 64)]).tobytes()[:1 << 20]
          ).hexdigest()[:16]}, indent=1))
     streams.flush()
     return ClassTable(streams=np.lib.format.open_memmap(path, mode="r"),
