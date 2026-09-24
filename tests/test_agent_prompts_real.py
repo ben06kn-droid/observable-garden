@@ -66,7 +66,9 @@ def test_the_short_list_cap_is_the_registered_five():
 # 3. the replay arm's tools and triggers come from the code
 
 def test_the_replay_arms_tools_are_the_adapters_grammar():
-    assert TOOLS_FOR["replay gate"] == CONTENT_TOOLS + META_TOOLS + ("predict", "submit")
+    assert TOOLS_FOR["replay gate"] == ("pick_prior",) + CONTENT_TOOLS + META_TOOLS + (
+        "predict", "submit")
+    assert "`pick_prior`" in read_prompts()["replay_suffix"]
     for name in TOOLS_FOR["replay gate"]:
         assert name in TOOLS, name
     suffix = read_prompts()["replay_suffix"]

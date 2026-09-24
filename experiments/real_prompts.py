@@ -28,7 +28,8 @@ TOOLS_FOR = {
     "control": ("evaluate", "submit"),
     "declared-class gate": ("evaluate", "submit"),
     "prior-weighted": ("short_list", "evaluate", "submit"),
-    "replay gate": CONTENT_TOOLS + META_TOOLS + ("predict", "submit"),
+    # `pick_prior` by amendment 1 of AGENT_PROMPTS_REAL.md, before any run.
+    "replay gate": ("pick_prior",) + CONTENT_TOOLS + META_TOOLS + ("predict", "submit"),
 }
 
 

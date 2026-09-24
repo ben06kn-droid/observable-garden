@@ -52,14 +52,16 @@ pre-registration rather than written into the agent. The thresholds themselves
 registered is that the list is treated more forgivingly, not the numbers, so the
 agent cannot reverse-engineer a decision boundary.
 
-**replay gate** — tools `init`, `extend_best`, `swap_worst`, `flip`, `refine`,
-`pick`, `stop`, `restart`, `predict`, `submit`, via
-`quixote/agent_adapter.py`. Appended:
+**replay gate** — tools `pick_prior`, `init`, `extend_best`, `swap_worst`,
+`flip`, `refine`, `pick`, `stop`, `restart`, `predict`, `submit`, via
+`quixote/agent_adapter.py`. `pick_prior` is there by amendment 1. Appended:
 
 ```
 You do not build specifications yourself. You name a move and the harness performs it: `init` anchors on the best single feature, `extend_best` adds the feature that most improves what you hold, `swap_worst` replaces the weakest one, `flip` reverses the sign of a feature you name, `refine` re-fits the signs, and `pick` chooses among candidates you name by a statistic you name. Each move reports what it did and the Sharpe that resulted.
 
 To stop or to restart you must call `stop` or `restart` and name a declared trigger and its parameter: `best_so_far_above`, `failures_at_least`, or `last_gain_at_most`. The harness evaluates the trigger on the state of your search and performs the move only if it fires. A stop or restart whose trigger does not fire is refused.
+
+Before your first move you may call `pick_prior` once, naming one specification you believe in for reasons that do not depend on this data, with your reason. A `pick_prior` named after any move is refused.
 ```
 
 The trigger list in the prompt is the library in `quixote/triggers.py` and is
@@ -181,5 +183,24 @@ In `tests/test_agent_prompts_real.py`:
 
 ## 7. Amendments
 
-None yet. Dated entries are appended here; nothing above is edited after the
-first run.
+Dated entries are appended here; nothing above is edited after the first run.
+
+**1 — 2026-09-24, before any model-backed run on any real panel. `pick_prior`
+joins the replay arm.**
+
+`prereg/agent-pilot.md` measures "how many runs use `pick_prior`", and §2's
+replay-arm tool list did not contain it, so that measurement had no tool to
+read. The tool exists in `quixote/agent_adapter.py` and the session already
+refuses a late declaration; only the arm's list and its prompt sentence were
+missing. Both are added above, before any run, and the design md5 moves with
+them — which is why this is done now rather than after.
+
+**What `pick_prior` can and cannot test on the ADR panel, recorded so a zero is
+not over-read.** §4 says that if declaration usage is zero, masking is the first
+suspect. That is right for a panel whose instruments the agent can name. On the
+**ADR panel it does not apply**: a specification is a combination of *features*,
+no tool exposes an asset label or a calendar date, and the feature names are
+arithmetic (`ret1_home_open`, `rel3_home_closed`). So masking constrains nothing
+an agent could act on there, and a zero on that panel is evidence about the
+prompt or the model, **not** about masking. On a panel where instruments are
+nameable, §4's reading stands unchanged.
