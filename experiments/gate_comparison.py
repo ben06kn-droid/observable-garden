@@ -160,27 +160,36 @@ def holdout_p(stream: np.ndarray, B: int, annualization: float, seed: int) -> fl
     return _mc_p(null, observed)
 
 
-def holdout_certify(name: str, data, cfg, frac: float, B: int, seed: int) -> float:
+def holdout_certify(name: str, data, cfg, frac: float, B: int,
+                    seed: int) -> tuple[float, float, float]:
     """Search the first `frac` of the in-sample periods, test once on the rest.
 
     The searcher is re-run on the slice; no search happens on the holdout part
     and nothing is re-selected there (amendment 8). An empty submission scores
     1.0 rather than undefined.
+
+    Returns (p, search seconds, test seconds). The two are timed apart because
+    only the test scales with B, and a projection that scaled the search with it
+    too would misreport the cost amendment 7's threshold is read against.
     """
     cut = int(round(T * frac))
     cls = MATCHED[name][0]
     ann = float(np.sqrt(cfg.periods_per_year))
+    t0 = time.time()
     search_data = dataclasses.replace(data, x_in=data.x_in[:cut], r_in=data.r_in[:cut])
     sb = Sandbox(search_data, periods_per_year=cfg.periods_per_year, spec_class=cls)
     build(name, seed).run(sb)
+    t_search = time.time() - t0
     if sb.submission is None:
-        return 1.0
+        return 1.0, t_search, 0.0
     spec = sb.submission[0]
+    t0 = time.time()
     test_data = dataclasses.replace(data, x_in=data.x_in[cut:], r_in=data.r_in[cut:])
     tester = Sandbox(test_data, periods_per_year=cfg.periods_per_year, spec_class=cls)
     tester.evaluate(spec)                      # exactly one test on the holdout slice
     assert len(tester.transcript) == 1
-    return holdout_p(tester.transcript[0].return_stream, B, ann, seed + 11)
+    p = holdout_p(tester.transcript[0].return_stream, B, ann, seed + 11)
+    return p, t_search, time.time() - t0
 
 
 def oos_sharpes(data, cfg, weights: np.ndarray) -> tuple[float, float]:
@@ -255,11 +264,13 @@ def run_draw(cell: str, seed: int, B: int) -> dict:
         # 2-3. holdouts
         for frac, key in HOLDOUTS:
             if key not in certifiers:
-                row[f"p_{key}"], row[f"seconds_{key}"] = None, 0.0
+                row[f"p_{key}"] = None
+                row[f"seconds_{key}_search"] = row[f"seconds_{key}_test"] = 0.0
                 continue
-            t0 = time.time()
-            row[f"p_{key}"] = holdout_certify(name, data, cfg, frac, B, seed)
-            row[f"seconds_{key}"] = time.time() - t0
+            p, t_search, t_test = holdout_certify(name, data, cfg, frac, B, seed)
+            row[f"p_{key}"] = p
+            row[f"seconds_{key}_search"] = t_search
+            row[f"seconds_{key}_test"] = t_test
 
         # 4. process replay, full sample
         if "replay" in certifiers:
@@ -317,7 +328,6 @@ def cost_report(data: dict, full_draws: int = N_DRAWS, B_full: int = B_DEFAULT) 
     `prereg/README.md` requires of a smoke or a scaling curve."""
     rows, s = data["rows"], data["settings"]
     secs, g = data["seconds"], data["git_at_launch"]
-    scale = B_full / s["B"]
     L = ["gate-comparison (7.0) — COST ONLY", "=" * 78,
          f"{len(rows)} draws from seed {s['seed0']}, cell {data['cell']}, "
          f"B={s['B']:,}, workers={s['workers']}",
@@ -325,33 +335,51 @@ def cost_report(data: dict, full_draws: int = N_DRAWS, B_full: int = B_DEFAULT) 
          + (" (tracked changes)" if g.get("dirty") else ""), "",
          f"per draw   mean {secs.mean():8.2f}s   median {np.median(secs):8.2f}s"
          f"   max {secs.max():8.2f}s", "",
-         "where it goes (mean seconds per draw, summed over searchers)", "-" * 78,
-         f"  {'class nulls (shared, 2 per draw)':<40}"
-         f"{np.mean([r['_draw']['seconds_class_nulls'] for r in rows]):10.2f}"]
-    for part, label in (("seconds_search", "search"),
-                        ("seconds_replay", "process replay"),
-                        ("seconds_holdout_70_30", "holdout 70/30 (search + test)"),
-                        ("seconds_holdout_50_50", "holdout 50/50 (search + test)")):
-        tot = np.mean([sum(r[n][part] for n in MEMBERS) for r in rows])
-        L.append(f"  {label:<40}{tot:10.2f}")
+         "where it goes (mean seconds per draw, summed over searchers)", "-" * 78]
+
+    def per_draw(part: str) -> float:
+        return float(np.mean([sum(r[n][part] for n in MEMBERS) for r in rows]))
+
+    shared_null = float(np.mean([r["_draw"]["seconds_class_nulls"] for r in rows]))
+    scales_with_B = {"class nulls (shared, 2 per draw)": shared_null,
+                     "process replay": per_draw("seconds_replay"),
+                     "holdout 70/30 test": per_draw("seconds_holdout_70_30_test"),
+                     "holdout 50/50 test": per_draw("seconds_holdout_50_50_test")}
+    fixed = {"search (full sample)": per_draw("seconds_search"),
+             "holdout 70/30 search": per_draw("seconds_holdout_70_30_search"),
+             "holdout 50/50 search": per_draw("seconds_holdout_50_50_search")}
+    for label, v in scales_with_B.items():
+        L.append(f"  {label:<40}{v:10.2f}   scales with B")
+    for label, v in fixed.items():
+        L.append(f"  {label:<40}{v:10.2f}   fixed in B")
     L += ["", "guards and selector (reported, not gated)", "-" * 78,
           f"  variance floor binds {int(data['floor'].sum())}   "
           f"sharpe cap binds {int(data['cap'].sum())}",
           f"  block length: median {int(np.median(data['block_length']))}, "
           f"max {int(data['block_length'].max())}", ""]
 
-    cpu_h = secs.mean() * scale * full_draws / 3600
+    def projection(B_target: int) -> float:
+        """CPU-hours per cell, scaling only what B actually drives."""
+        per = sum(fixed.values()) + sum(scales_with_B.values()) * B_target / s["B"]
+        return per * full_draws / 3600
+
     L += ["PROJECTION to the registered design (amendment 7's $150 threshold)", "-" * 78,
-          f"  at B={B_full:,}, {full_draws:,} draws: {cpu_h:,.1f} CPU-hours per cell"]
+          f"  measured at B={s['B']:,}; only the bootstrap parts are scaled, since the",
+          "  searches do not depend on B"]
+    for B_target in (B_full, B_FALLBACK):
+        cpu_h = projection(B_target)
+        line = f"  B={B_target:>6,}: {cpu_h:>9,.1f} CPU-hours per cell"
+        if s["workers"]:
+            wall = cpu_h / s["workers"]
+            both = 2 * wall * PRICE_PER_HOUR
+            line += (f", {wall:>7,.2f} h wall at {s['workers']} workers, "
+                     f"${both:,.2f} for both cells")
+        L.append(line)
     if s["workers"]:
-        wall = cpu_h / s["workers"]
-        per_cell = wall * PRICE_PER_HOUR
-        both = 2 * per_cell
-        L += [f"  at {s['workers']} workers: {wall:,.2f} h wall, ${per_cell:,.2f} per cell",
-              f"  both cells (s0 + s3): {2 * wall:,.2f} h wall, ${both:,.2f}",
-              f"  threshold $150 -> runs at B={B_full:,}" if both <= 150 else
-              f"  threshold $150 exceeded -> registered fallback B={B_FALLBACK:,} "
-              f"(projected ${both * B_FALLBACK / B_full:,.2f})"]
+        both_full = 2 * projection(B_full) / s["workers"] * PRICE_PER_HOUR
+        L.append(f"  -> runs at B={B_full:,}" if both_full <= 150 else
+                 f"  -> $150 threshold exceeded at B={B_full:,}; the registered "
+                 f"fallback is B={B_FALLBACK:,}")
     return "\n".join(L) + "\n"
 
 
@@ -376,7 +404,10 @@ def main() -> None:
     data = run(a.cell, a.smoke or N_DRAWS, seed0, a.B, a.workers, a.checkpoint_dir)
     text = cost_report(data)
     print(text, flush=True)
-    tag = f"_{a.cell}" + (f"_smoke{a.smoke}" if a.smoke else
+    # The worker count is in the filename because a scaling curve is four smokes
+    # at four worker counts, and 7.1's runs would otherwise have overwritten one
+    # another.
+    tag = f"_{a.cell}" + (f"_smoke{a.smoke}_w{a.workers or 'auto'}" if a.smoke else
                           ("_replication" if a.replication else ""))
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
