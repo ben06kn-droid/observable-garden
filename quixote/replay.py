@@ -93,8 +93,8 @@ class LoggedPolicy:
 
     def _run(self, base: np.ndarray, annualization: float,
              frozen: list[str] | None = None,
-             meta_steps: int | None = None) -> ReplayTrace:
-        g = Grammar(self.spec_class, base, annualization)
+             meta_steps: int | None = None, score_fn=None) -> ReplayTrace:
+        g = Grammar(self.spec_class, base, annualization, score_fn=score_fn)
         support: tuple = ()
         score = float("-inf")
         trace = ReplayTrace()
@@ -132,14 +132,14 @@ class LoggedPolicy:
 
     def _run_meta(self, base: np.ndarray, annualization: float,
                   frozen: list[str] | None = None,
-                  meta_steps: int | None = None) -> ReplayTrace:
+                  meta_steps: int | None = None, score_fn=None) -> ReplayTrace:
         """The logged meta-adaptive policy on `base`. `frozen` freezes each
         step's action at the realized one (null 1); `meta_steps` re-evaluates the
         declared triggers for that many steps and fills past them (null 2);
         neither re-evaluates them throughout (null 3)."""
         from searchers.meta_adaptive import MetaAdaptive   # 7.1's scripted fill only
 
-        g = Grammar(self.spec_class, base, annualization)
+        g = Grammar(self.spec_class, base, annualization, score_fn=score_fn)
         K = g.K
         support, best, _ = g.anchor(0, self.statistic)
         support = list(support)
@@ -186,7 +186,18 @@ class LoggedPolicy:
             if filling or step in self._priced_steps:
                 trace.filled = trace.filled or filling
                 trace.locally_priced += int(step in self._priced_steps)
-                cands = MetaAdaptive._grammar(support, K, score_list)
+                # The fill is 7.1's, uncapped, when the scorer is the built-in
+                # base-column one: `fixed-sequence-replay` registered and ran it
+                # that way, and milestone 3b holds this equal to the scripted
+                # searcher's own nulls, replicate for replicate.
+                #
+                # With a supplied scorer it MUST be capped to the class. A class
+                # table has no column for a non-member, so an uncapped fill would
+                # ask for a price that does not exist. That is the capped variant
+                # 7.1 amendment 4's licence-transfer argument covers, and it is
+                # the only setting in which the two fills can differ.
+                allow = None if score_fn is None else (lambda ns: g.contains(tuple(ns)))
+                cands = MetaAdaptive._grammar(support, K, score_list, allow=allow)
                 chosen = max(cands) if cands else None
                 cand_score, cand_support = (chosen[0], chosen[2]) if chosen else (None, None)
             else:
@@ -209,9 +220,13 @@ class LoggedPolicy:
 
     def trace(self, base: np.ndarray, annualization: float = 1.0,
               frozen: list[str] | None = None,
-              meta_steps: int | None = None) -> ReplayTrace:
+              meta_steps: int | None = None, score_fn=None) -> ReplayTrace:
+        """`score_fn` overrides the base-column scorer, which is how a real panel
+        is replayed: a class table's scorer returns the same stored net stream the
+        live search was scored on (`environments/class_table.py`)."""
         run = self._run_meta if self.log.is_meta() else self._run
-        return run(base, annualization, frozen=frozen, meta_steps=meta_steps)
+        return run(base, annualization, frozen=frozen, meta_steps=meta_steps,
+                   score_fn=score_fn)
 
     def replay(self, base_columns: np.ndarray, annualization: float = 1.0) -> float:
         """Full policy replay: triggers re-evaluated on this replicate."""
@@ -290,7 +305,7 @@ class IdentityCheck:
 
 
 def identity_check(log: SessionLog, spec_class, base: np.ndarray,
-                   annualization: float = 1.0) -> IdentityCheck:
+                   annualization: float = 1.0, score_fn=None) -> IdentityCheck:
     """Replay `log` on `base` itself -- no resampling -- and compare.
 
     The realized submission is the best accepted support: the last record whose
@@ -303,7 +318,7 @@ def identity_check(log: SessionLog, spec_class, base: np.ndarray,
              if not r.move.is_meta and r.move.note != "rejected"]
     realized_support = taken[-1].support_after if taken else ()
     realized_score = taken[-1].score_after if taken else float("-inf")
-    t = LoggedPolicy(log, spec_class).trace(base, annualization)
+    t = LoggedPolicy(log, spec_class).trace(base, annualization, score_fn=score_fn)
     same_support = tuple(t.support) == tuple(realized_support)
     if log.is_meta():
         realized_actions, replayed_actions = tuple(log.actions()), tuple(t.moves)

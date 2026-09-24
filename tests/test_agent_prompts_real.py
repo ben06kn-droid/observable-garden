@@ -219,3 +219,28 @@ def test_every_registered_refusal_kind_is_produced_by_some_real_refusal():
     assert set(samples) == set(REFUSAL_KINDS)
     for kind, message in samples.items():
         assert classify_refusal(message) == kind, (kind, message)
+
+
+def test_the_reasoned_pick_arm_asks_for_a_pick_rather_than_permitting_one():
+    """AGENT_PROMPTS_REAL.md amendment 3: 7.3's fidelity measurement has no unit
+    of analysis without picks, and the pilot recorded 0 picks in 5 runs of the
+    arm that merely permits them."""
+    p = read_prompts()
+    plain = system_prompt_for("replay gate", M, K, D)
+    asked = system_prompt_for("replay gate (reasoned pick)", M, K, D)
+    assert asked == plain + "\n\n" + p["reasoned_pick_sentence"]
+    assert "At least once" in p["reasoned_pick_sentence"]
+    assert "`pick`" in p["reasoned_pick_sentence"]
+    # it asks for a statistic and a reason, and names neither for the agent
+    assert "name the statistic" in p["reasoned_pick_sentence"]
+    assert "why that statistic" in p["reasoned_pick_sentence"]
+    from quixote.statistics import STATISTICS
+    assert not any(f"`{s}`" in p["reasoned_pick_sentence"] for s in STATISTICS)
+    assert TOOLS_FOR["replay gate (reasoned pick)"] == TOOLS_FOR["replay gate"]
+
+
+def test_the_plain_replay_arm_is_unchanged_by_the_new_one():
+    """Both readings stay available: an arm that asks for a move is not the arm
+    that permits one, so the pilot's numbers do not transfer."""
+    suffix = read_prompts()["replay_suffix"]
+    assert "At least once" not in suffix

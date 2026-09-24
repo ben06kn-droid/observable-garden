@@ -733,6 +733,22 @@ the grammar.
 **The pilot claims no verdict**, computes no out-of-sample number, and touches no
 holdout. A pilot may be re-run after a prompt amendment; 7.3 may not.
 
+**Amendment, 2026-09-24: 7.3's fidelity cell runs the reasoned-pick arm.**
+
+The fidelity measurement below re-presents a **single decision** ~20 times with
+resampled numbers and records how often the declared rule predicts the choice.
+Its unit of analysis is a `pick`. The pilot recorded **0 picks in 5 runs** once
+the harness allowed them and the prompt named the statistic library
+(`prereg/agent-pilot.md`, Reading): the replay arm's prompt *permits* a reasoned
+choice, it does not *ask* for one.
+
+So `prereg/AGENT_PROMPTS_REAL.md` amendment 3 registers a fourth arm, **replay
+gate (reasoned pick)**, whose prompt asks for at least one `pick` with a named
+statistic and a stated reason, naming no statistic in particular. **7.3's
+fidelity cell runs that arm**, and a 7.3 that reports fidelity from any other arm
+has to say why. Registered before 7.3 is written, so the requirement precedes the
+design rather than arriving after an empty cell.
+
 **Scripted, on s0 and s3, 2,000 draws.** Faithful searchers using every
 move type, then three unfaithful ones, because the gate's validity
 depends on the rule the searcher used, not the one it declared:

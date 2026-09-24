@@ -20,7 +20,8 @@ from quixote.triggers import PREDICATES
 
 PREREG = Path(__file__).resolve().parent.parent / "prereg" / "AGENT_PROMPTS_REAL.md"
 
-ARMS = ("control", "declared-class gate", "prior-weighted", "replay gate")
+ARMS = ("control", "declared-class gate", "prior-weighted", "replay gate",
+        "replay gate (reasoned pick)")
 
 # §2, pinned: which tools each arm gets. The replay arm's list is the adapter's
 # own grammar, so a move added there cannot be missing here.
@@ -30,6 +31,10 @@ TOOLS_FOR = {
     "prior-weighted": ("short_list", "evaluate", "submit"),
     # `pick_prior` by amendment 1 of AGENT_PROMPTS_REAL.md, before any run.
     "replay gate": ("pick_prior",) + CONTENT_TOOLS + META_TOOLS + ("predict", "submit"),
+    # amendment 3: the same tools; the difference is that the prompt ASKS for a
+    # reasoned pick, because 7.3's fidelity measurement has no unit without one.
+    "replay gate (reasoned pick)": ("pick_prior",) + CONTENT_TOOLS + META_TOOLS
+    + ("predict", "submit"),
 }
 
 
@@ -38,12 +43,14 @@ def read_prompts(path: Path = PREREG) -> dict:
     appended block, all read from the pre-registration."""
     text = path.read_text()
     blocks = [b.strip() for b in re.findall(r"```\n(.*?)\n```", text, re.S)]
-    if len(blocks) != 4:
+    if len(blocks) != 5:
         raise ValueError(
-            f"expected exactly four fenced blocks in {path.name} (control prompt, "
-            f"cost sentence, prior-weighted suffix, replay suffix), found {len(blocks)}")
+            f"expected exactly five fenced blocks in {path.name} (control prompt, "
+            "cost sentence, prior-weighted suffix, replay suffix, reasoned-pick "
+            f"sentence), found {len(blocks)}")
     return {"control": blocks[0], "cost": blocks[1],
-            "prior_weighted_suffix": blocks[2], "replay_suffix": blocks[3]}
+            "prior_weighted_suffix": blocks[2], "replay_suffix": blocks[3],
+            "reasoned_pick_sentence": blocks[4]}
 
 
 def build_prompt(control: str, M: int, K: int, d: int) -> str:
@@ -71,6 +78,9 @@ def system_prompt_for(arm: str, M: int, K: int, d: int,
         return base + "\n\n" + prompts["prior_weighted_suffix"]
     if arm == "replay gate":
         return base + "\n\n" + prompts["replay_suffix"]
+    if arm == "replay gate (reasoned pick)":
+        return (base + "\n\n" + prompts["replay_suffix"] + "\n\n"
+                + prompts["reasoned_pick_sentence"])
     return base
 
 

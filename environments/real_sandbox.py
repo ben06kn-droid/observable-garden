@@ -31,10 +31,21 @@ from environments.sandbox import Distribution, EvalResult, LogEntry, Specificati
 class RealSandbox:
     """`panel` is in-sample only. There is no out-of-sample attribute."""
 
-    def __init__(self, panel: RealPanel, spec_class=None):
+    def __init__(self, panel: RealPanel, spec_class=None, class_table=None):
+        """`class_table` makes `evaluate` a LOOKUP rather than a computation.
+
+        A table holds every declared-class member's net stream, computed once by
+        this same panel (`environments/class_table.py`). With one supplied, the
+        live search and every bootstrap replicate read the same stored numbers,
+        so the replay prices the statistic the search optimised **by
+        construction**. Without one, `evaluate` computes the stream as before and
+        a base-column replay prices something else — which is what the agent
+        pilot's identity guard caught.
+        """
         self.panel = panel
         self.periods_per_year = panel.periods_per_year
         self.spec_class = spec_class
+        self.class_table = class_table
         self._log: list[LogEntry] = []
         self._submission: tuple[Specification, Distribution] | None = None
 
@@ -57,7 +68,12 @@ class RealSandbox:
         if self.spec_class is not None and not self.spec_class.contains(spec.weights):
             raise ValueError(f"specification {spec.name!r} is outside the declared class "
                              f"{self.spec_class.name}")
-        R = self.panel.stream_for_scores(self.panel.scores_for_weights(spec.weights))
+        if self.class_table is not None:
+            support = tuple((int(k), float(spec.weights[k]))
+                            for k in np.nonzero(spec.weights)[0])
+            R = self.class_table.stream(support)
+        else:
+            R = self.panel.stream_for_scores(self.panel.scores_for_weights(spec.weights))
         mean, std = float(R.mean()), float(R.std(ddof=1))
         sharpe = mean / std * np.sqrt(self.periods_per_year) if std > 0 else 0.0
         call_index = len(self._log)

@@ -57,7 +57,8 @@ NO_FILL_NOTE = ("The fill was never used: no replicate ran past the realized "
 def three_nulls(log, spec_class, base: np.ndarray, annualization: float = 1.0,
                 B: int = 10_000, block_length: int | None = None,
                 seed: int | None = None,
-                pricing: PricingOptions = NO_PRICING) -> tuple[ReplayNulls, np.ndarray]:
+                pricing: PricingOptions = NO_PRICING,
+                table=None) -> tuple[ReplayNulls, np.ndarray]:
     """Nulls 1-3 for a logged search, plus the per-replicate engagement flag.
 
     The resampling is `estimator.trigger_replay.replay_nulls`', replicate for
@@ -73,16 +74,28 @@ def three_nulls(log, spec_class, base: np.ndarray, annualization: float = 1.0,
     S0 = base - base.mean(axis=0, keepdims=True)
     L = int(select_block_length(S0)) if block_length is None else int(block_length)
     rng = np.random.default_rng(seed)
-    realized = policy.trace(base, annualization)
+
+    # With a class table the resampling is over ROWS of the table, and every
+    # score - realized and replicate alike - is a lookup into the stored
+    # net-of-cost streams (`environments/class_table.py`). Without one the
+    # replicate is a resampled base matrix, which is the simulated-panel path and
+    # is unchanged.
+    def scorers(rows):
+        return None if table is None else table.scorer(rows, demeaned=True)
+
+    realized = policy.trace(base, annualization,
+                            score_fn=None if table is None else table.scorer(None))
     acts, n = realized.actions(), realized.n_moves
     n1, n2, n3 = np.empty(B), np.empty(B), np.empty(B)
     engaged = np.zeros(B, dtype=bool)
     for b in range(B):
-        R = S0[stationary_bootstrap_indices(T, L, rng), :]
-        n1[b] = policy.trace(R, annualization, frozen=acts).score
-        t2 = policy.trace(R, annualization, meta_steps=n)
+        idx = stationary_bootstrap_indices(T, L, rng)
+        R = S0[idx, :]
+        sf = scorers(idx)
+        n1[b] = policy.trace(R, annualization, frozen=acts, score_fn=sf).score
+        t2 = policy.trace(R, annualization, meta_steps=n, score_fn=sf)
         n2[b], engaged[b] = t2.score, bool(t2.filled)
-        n3[b] = policy.trace(R, annualization).score
+        n3[b] = policy.trace(R, annualization, score_fn=sf).score
     return ReplayNulls(fixed_sequence=n1, trigger=n2, policy=n3, block_length=L, B=B,
                        realized_score=realized.score,
                        realized_actions=tuple(acts)), engaged
@@ -91,14 +104,15 @@ def three_nulls(log, spec_class, base: np.ndarray, annualization: float = 1.0,
 def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
             alpha: float = 0.05, B: int = 10_000, block_length: int | None = None,
             seed: int | None = None, p_declared_class: float | None = None,
-            pricing: PricingOptions = NO_PRICING) -> QuixoteVerdict:
+            pricing: PricingOptions = NO_PRICING, table=None) -> QuixoteVerdict:
     """Price a logged search against the trigger-replay null.
 
     A run whose replay disagrees with itself on the un-resampled data is
     **flagged and not priced** (the identity guard), because there is no
     defensible way to price a search whose own replay is not that search.
     """
-    guard = identity_check(log, spec_class, base, annualization)
+    guard = identity_check(log, spec_class, base, annualization,
+                           score_fn=None if table is None else table.scorer(None))
     if not guard.agrees:
         return QuixoteVerdict(
             status="UNDECIDABLE", alpha=alpha,
@@ -109,7 +123,7 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
 
     priced, pricing_reasons = steps_to_price(log, pricing)
     nulls, engaged = three_nulls(log, spec_class, base, annualization, B, block_length,
-                                 seed, pricing=pricing)
+                                 seed, pricing=pricing, table=table)
     p_trigger = nulls.p_value("trigger")
     n_eng = int(engaged.sum())
 

@@ -69,6 +69,14 @@ The statistic a `pick` names must be one of `sharpe`, `volatility`, `autocorr_1`
 The trigger list in the prompt is the library in `quixote/triggers.py` and is
 generated from it in the test, so prompt and library cannot drift.
 
+**replay gate (reasoned pick)** — tools as the replay gate. Added by amendment 3
+for 7.3's fidelity measurement, which has no data without picks. Appended after
+the replay block:
+
+```
+At least once during your search, use `pick`: name the candidate features you are choosing between, name the statistic that decides among them, and state in one sentence why that statistic is the right one for that choice. The harness will perform the rule you named and tell you whether the feature you expected is the one it selected.
+```
+
 **declared-class gate** — tools as control. Nothing appended, and the gate is
 not described to the agent. It is a certification route applied by the harness
 after the run, not an arm the agent can see, so its prompt is byte-identical to
@@ -221,3 +229,31 @@ The block above now names the five statistics of `quixote/statistics.py`, exactl
 it already names the three triggers, and a test generates the list from the module so
 the two cannot drift. **IC stays absent**, as `quixote/statistics.py` records: it needs
 the panel a replicate does not have.
+
+
+**3 — 2026-09-24, before any 7.3 run. A fourth arm, because fidelity has no data
+without picks.**
+
+`prereg/agent-pilot.md`'s reading records that **`pick` was used in 0 of 5 runs**
+once the harness allowed it and the prompt named the statistic library. The
+replay arm's prompt *permits* a reasoned choice; it does not *ask* for one, and
+five runs chose simpler moves.
+
+ROADMAP 7.3's fidelity measurement re-presents a **single decision** to the agent
+about twenty times with resampled numbers and records how often the declared rule
+predicts the choice. Its unit of analysis is a `pick`. With no picks there is
+nothing to re-present, so 7.3's agent cell would measure fidelity on an empty
+sample.
+
+**The arm above is registered now**, before 7.3 is written, so that the
+requirement precedes the design rather than being added once the cell comes back
+empty. Its sentence asks for one `pick` with a named statistic and a stated
+reason; it names no statistic in particular, so which rule the agent chooses is
+still the agent's. **7.3's fidelity cell runs this arm**, and a 7.3 that reports
+fidelity from any other arm has to say why.
+
+**What it costs, recorded:** an arm that asks for a move is not the arm that
+merely permits one, so the pilot's engagement numbers do not transfer to it, and
+a `pick` made because the prompt asked is weaker evidence about what an agent
+would do unprompted than one made freely. Both readings are available, because
+the plain replay arm stays in the file unchanged.
