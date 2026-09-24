@@ -410,3 +410,31 @@ decides whether the registered design runs at B = 10,000 or at a reduced B, by t
 same rule `fixed-sequence-replay` amendment 7 used: **the projection is compared
 against a threshold fixed before it is measured, and that threshold is $150**,
 set here, with a reduced B = 1,000 as the registered fallback.
+
+**8 — 2026-09-24, before any code and before any draw. The holdout certifier's
+test is specified.**
+
+The Design section says "holdout 70/30 — search on the first 3,500 periods, one
+test at alpha on the last 1,500" and never says what that test is. Writing the
+driver would have chosen it silently, so it is fixed here.
+
+**The test.** On the holdout slice, the submitted specification's return stream is
+tested one-sided against a zero-mean null by the **stationary block bootstrap**,
+with the block length chosen by Politis–White on the holdout slice itself:
+
+    p = (1 + #{null Sharpe >= observed Sharpe}) / (B + 1)
+
+with **B = 10,000**, the same B and the same `(1 + #)/(B + 1)` form the rest of
+the gate uses. The statistic is the annualised Sharpe of that one stream, not a
+maximum over anything: the holdout tier's claim is that the slice is independent
+of the search, so no multiplicity correction belongs in it.
+
+**Why not a t-test.** A t-test on the holdout mean assumes i.i.d. returns. The
+block bootstrap is what every other null in this repository uses, and using it
+here keeps the three certifiers' p-values comparable objects rather than three
+different kinds of number. Its cost is negligible: one stream, no class.
+
+**One test, and it is the submitted specification's.** No search happens on the
+holdout slice and nothing is re-selected there. For a searcher whose submission
+is empty — nothing cleared its own rule — the holdout p-value is recorded as 1.0
+rather than undefined.
