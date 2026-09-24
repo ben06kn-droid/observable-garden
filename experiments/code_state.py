@@ -18,6 +18,20 @@ file, because section 6 is the amendment log: it records decisions but changes
 no prompt, tool, or pinned value, so appending an amendment must not invalidate
 a batch that is mid-flight. Sections 1-5 are exactly the part a run reads.
 
+**Coverage discontinuity, 2026-09-24.** Two inputs were added: the path
+`experiments/real_prompts.py` and the design sections of
+`prereg/AGENT_PROMPTS_REAL.md`. Both determine what a real-data run does -- the
+second IS that run's prompt -- and neither was covered before, so a run stored
+before this date pins a narrower set of inputs than one stored after it.
+
+At HEAD `40a07ef`, with nothing else changed, the fingerprint moved
+
+    a270169ae0a687e8  ->  the value this module now returns
+
+and the change is entirely the widening. It was made **before the first
+model-backed real-data run** (`prereg/agent-pilot.md`), not after, because a
+fingerprint's only purpose is to say which code a stored run executed.
+
     python -m experiments.code_state --field fingerprint
 """
 from __future__ import annotations
@@ -52,11 +66,23 @@ CODE_PATHS = (
     "experiments/code_state.py",
     "experiments/worker_rows.py",
     "experiments/run_arms.sh",
+    # Added 2026-09-24, before the first real-data run: this is the code a
+    # real-data run's PROMPT is built by, which is as much a determinant of a
+    # run's behaviour as the harness that executes it. See "Coverage
+    # discontinuity" in this module's docstring.
+    "experiments/real_prompts.py",
     "pyproject.toml",
 )
 
 PREREG_FILE = ROOT / "prereg" / "AGENT_PROMPTS.md"
 AMENDMENTS_HEADING = "## 6. Amendments"
+
+# The real-data arms' pre-registration, added at the same date and for the same
+# reason. Its amendment log is section 7 rather than 6; the heading travels with
+# the file so appending an amendment cannot invalidate a run mid-flight, exactly
+# as for the file above.
+REAL_PREREG_FILE = ROOT / "prereg" / "AGENT_PROMPTS_REAL.md"
+REAL_AMENDMENTS_HEADING = "## 7. Amendments"
 
 
 def _git(*args: str) -> str:
@@ -82,11 +108,32 @@ def prereg_design_md5() -> str:
     return hashlib.md5(design.encode()).hexdigest()
 
 
+def real_prereg_design_md5() -> str:
+    """The same, for `prereg/AGENT_PROMPTS_REAL.md`.
+
+    Kept as a second function rather than folded into the one above, so the
+    `prereg_design_md5` field stored in every existing run's config.json keeps
+    meaning exactly what it meant when it was written: the design md5 of the
+    simulated-panel prompts. The fingerprint carries both.
+    """
+    try:
+        text = REAL_PREREG_FILE.read_text()
+    except OSError:
+        return "missing"
+    return hashlib.md5(text.split(REAL_AMENDMENTS_HEADING)[0].encode()).hexdigest()
+
+
 def dirty_paths() -> list[str]:
     """Tracked modifications plus untracked files, over the code paths and the
     pre-registration. The prereg is watched here even though only its design
     sections feed the fingerprint: an uncommitted edit to it is worth seeing."""
-    out = _git("status", "--porcelain", "--", *CODE_PATHS, "prereg").strip()
+    out = _git("status", "--porcelain", "--", *CODE_PATHS, "prereg")
+    # NOT `out.strip()`: porcelain's status field is two columns, so an unstaged
+    # modification begins with a SPACE (" M path"). Stripping the whole output
+    # ate that space on the first line only, and `line[3:]` then cut the first
+    # character off that path -- "xperiments/code_state.py". A mangled path in a
+    # stored run's provenance is worse than none, so the strip is per line and
+    # on the right only.
     return sorted(line[3:].strip() for line in out.splitlines() if line.strip())
 
 
@@ -120,6 +167,7 @@ def code_fingerprint(paths=None) -> str:
             h.update(hashlib.sha256(f.read_bytes()).hexdigest().encode())
             h.update(b"\n")
     h.update(f"prereg-design:{prereg_design_md5()}\n".encode())
+    h.update(f"real-prereg-design:{real_prereg_design_md5()}\n".encode())
     return h.hexdigest()[:16]
 
 
@@ -127,6 +175,7 @@ def code_state() -> dict:
     d = dirty_paths()
     return {"head": head_sha(), "fingerprint": code_fingerprint(),
             "prereg_design_md5": prereg_design_md5(),
+            "real_prereg_design_md5": real_prereg_design_md5(),
             "dirty": bool(d), "dirty_paths": d}
 
 
@@ -134,7 +183,8 @@ def main(argv=None) -> int:
     import argparse
     import json
     ap = argparse.ArgumentParser()
-    ap.add_argument("--field", choices=("fingerprint", "head", "prereg_design_md5", "json"),
+    ap.add_argument("--field", choices=("fingerprint", "head", "prereg_design_md5",
+                                       "real_prereg_design_md5", "json"),
                     default="json")
     a = ap.parse_args(argv)
     s = code_state()

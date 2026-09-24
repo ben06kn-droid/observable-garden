@@ -117,3 +117,39 @@ def test_an_untracked_harness_module_still_moves_it(tmp_path):
     before = _fingerprint(root)
     (root / "garden" / "new_engine.py").write_text("# new\n")
     assert _fingerprint(root) != before
+
+
+def test_the_fingerprint_covers_the_real_data_prompts_and_their_reader():
+    """Added 2026-09-24, before the first model-backed real-data run: the file a
+    real-data run's prompt is BUILT by, and the pre-registration that prompt is
+    read from, both determine what the run does."""
+    from experiments import code_state as cs
+    assert "experiments/real_prompts.py" in cs.CODE_PATHS
+    assert cs.REAL_PREREG_FILE.name == "AGENT_PROMPTS_REAL.md"
+    assert cs.real_prereg_design_md5() not in ("missing", cs.prereg_design_md5())
+    assert "real_prereg_design_md5" in cs.code_state()
+
+
+def test_appending_an_amendment_to_either_prereg_moves_no_fingerprint(tmp_path):
+    """Both files' amendment logs are excluded, for the reason the module gives:
+    an amendment records a decision and changes no prompt, tool or pinned value,
+    so writing one down must not invalidate a batch mid-flight."""
+    from experiments import code_state as cs
+    for path, heading in ((cs.PREREG_FILE, cs.AMENDMENTS_HEADING),
+                          (cs.REAL_PREREG_FILE, cs.REAL_AMENDMENTS_HEADING)):
+        text = path.read_text()
+        assert heading in text, path.name
+        design, _, _ = text.partition(heading)
+        assert heading not in design
+
+
+def test_dirty_paths_does_not_eat_the_first_paths_first_character():
+    """Regression: porcelain's status field is two columns, so an unstaged
+    modification starts with a space. Stripping the whole output removed it and
+    line[3:] then cut into the path itself."""
+    from experiments import code_state as cs
+    lines = [" M experiments/code_state.py", "?? prereg/new.md", " D garden/x.py"]
+    got = sorted(line[3:].strip() for line in "\n".join(lines).splitlines() if line.strip())
+    assert got == ["experiments/code_state.py", "garden/x.py", "prereg/new.md"]
+    for p in cs.dirty_paths():
+        assert (cs.ROOT / p).exists() or p.endswith((".pyc",)), p
