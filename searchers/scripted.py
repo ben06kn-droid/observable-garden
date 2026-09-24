@@ -355,3 +355,65 @@ class SignedAdaptive(Searcher):
         took does not change *which* feature seeds the next round."""
         sr = np.abs(sharpe(base_columns, axis=0, annualization=annualization))
         return frozenset({int(np.argmax(sr))})
+
+
+class BudgetedRandom(Searcher):
+    """Draws a fixed budget of members uniformly from the declared class, scores
+    each, and submits the best seen.
+
+    Specified in `prereg/gate-comparison.md` amendment 5. It exists because 7.0
+    needs searchers that genuinely submit **below** their class maximum: arm D
+    measured sub-maximal greedy search as costing 0.0001 in mean Sharpe, so an
+    efficient searcher leaves replay almost nothing to recover. Here the slack is
+    set by the budget and is tunable by construction.
+
+    Two properties the certifier comparison needs:
+
+    - **capped to the declared class by construction.** It samples members *of*
+      the class, so it can reach nothing outside it. No `set_class` call is
+      needed and none is possible.
+    - **replayable.** The sample is drawn from a generator seeded by the
+      searcher's seed, so a bootstrap replicate re-executes the *same* sample of
+      members: the budget is a property of the searcher, not of the data. That is
+      what `Replayable` requires, and it is why this searcher can be priced by
+      process replay at all.
+    """
+    name = "budgeted-random"
+
+    def __init__(self, budget: int = 100, max_size: int = 3, signed: bool = True,
+                 seed: int = 0):
+        super().__init__(seed=seed)
+        self.budget = int(budget)
+        self.max_size = int(max_size)
+        self.signed = bool(signed)
+
+    # -- the sample, a function of the seed and K alone ---------------------
+
+    def _sample(self, K: int) -> list[list[tuple[int, float]]]:
+        rng = np.random.default_rng(self.seed)
+        signs = (1.0, -1.0) if self.signed else (1.0,)
+        out = []
+        for _ in range(self.budget):
+            m = int(rng.integers(1, self.max_size + 1))
+            feats = rng.choice(K, size=m, replace=False)
+            out.append([(int(j), float(signs[rng.integers(len(signs))])) for j in feats])
+        return out
+
+    def run(self, sandbox: Sandbox) -> None:
+        K = sandbox.num_features
+        best = None
+        for i, support in enumerate(self._sample(K)):
+            spec = Specification(weights=_signed_sum(K, support),
+                                 name=f"budgeted_random_{i}")
+            result = sandbox.evaluate(spec)
+            if best is None or result.sharpe > best[1].sharpe:
+                best = (spec, result)
+        sandbox.submit(best[0], Distribution.degenerate(best[1].sharpe))
+
+    def replay(self, base_columns: np.ndarray, annualization: float = 1.0) -> float:
+        K = base_columns.shape[1]
+        best = float("-inf")
+        for support in self._sample(K):
+            stream = sum(base_columns[:, k] * s for k, s in support)
+            best = max(best, _column_sharpe(stream, annualization))
+        return best
