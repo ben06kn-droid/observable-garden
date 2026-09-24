@@ -438,3 +438,37 @@ different kinds of number. Its cost is negligible: one stream, no class.
 holdout slice and nothing is re-selected there. For a searcher whose submission
 is empty — nothing cleared its own rule — the holdout p-value is recorded as 1.0
 rather than undefined.
+
+**9 — 2026-09-24, before any code and before any draw. Rule 5's readout is
+corrected to the quantity it is supposed to be comparable to.**
+
+Rule 5 says "the change in **PASS rate** on s3 under the `S[0]` sign flip, per
+certifier". That quantity cannot move. The Design section puts the flip **in the
+out-of-sample panel** with the submission held fixed, and every certifier's
+p-value is computed on in-sample data alone, so the flip leaves every PASS
+decision bit-identical by construction. Read literally, rule 5 measures zero and
+proves nothing.
+
+The Design section already names the right object — it cites 6.2's erosion "from
++0.46 to +0.08 in **median gross OOS Sharpe**" — and `costs-and-regime-change`
+rule 1 defines that object as the **PASS − FAIL gap**. Writing the driver would
+have had to pick one silently, so it is fixed here.
+
+**Rule 5 is replaced.**
+
+5. **The regime-shift cell (secondary, no halt).** Per certifier, the
+   **PASS − FAIL gap in median gross OOS Sharpe** on s3, unshifted and under the
+   `S[0]` sign flip, with a paired bootstrap interval over draws on the change in
+   that gap. The flip is constructed algebraically as in
+   `experiments/costs_and_regime_change.py` — `beta_full[S[0]] *= -1` on the
+   out-of-sample panel with the realised noise held — so the two experiments'
+   numbers are the same object on the same DGP.
+   - *A certifier that degrades less* is evidence for it on robustness grounds
+     and is reported alongside its power, not instead of it.
+   - *All degrade alike:* the shift does not separate them, reported as such.
+   - **Recorded, not a branch:** the PASS rate is invariant under this flip by
+     construction. It is reported once as invariant rather than as a result, and
+     any non-zero change in it is a bug in the driver, not a finding.
+
+Rules 1–4 are unaffected. This amendment changes a readout, not a decision: rule
+5 halts nothing and licenses nothing either way.
