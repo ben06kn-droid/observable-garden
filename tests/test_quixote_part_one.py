@@ -228,7 +228,12 @@ def test_masking_refuses_metadata_that_would_identify_a_name():
 def test_sequential_stopping_is_absent_on_purpose():
     """`prereg/twin-calibration.md`: every certification runs the full K until
     Besag & Clifford's two open checks are resolved."""
-    import quixote.twins as tw
+    import importlib
+    import sys
+    importlib.import_module("quixote.twins")
+    # `quixote/__init__.py` re-exports the `twins` FUNCTION, which shadows the
+    # submodule attribute, so the module is reached through sys.modules.
+    tw = sys.modules["quixote.twins"]
     src = " ".join(__import__("pathlib").Path(tw.__file__).read_text().lower().split())
     assert "sequential stopping is deliberately absent" in src
     assert not hasattr(tw, "sequential_twin_p_value")
