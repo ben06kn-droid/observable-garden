@@ -185,7 +185,17 @@ class Grammar:
 
     def pick_candidates(self, support: Support, move: Move) -> list:
         """(value, support) for each candidate in `among`, by the named
-        statistic. A candidate already held is not a candidate."""
+        statistic. A candidate already held is not a candidate, and **a candidate
+        outside the declared class is not a candidate either**.
+
+        The class check comes before the statistic, not after. `extend_best`
+        already returns nothing at a full support; `pick` did not, so at a full
+        support every candidate it built was one feature too large and the
+        harness asked the sandbox to score a specification the class forbids.
+        The sandbox refused — correctly — and the agent's `pick` could never
+        succeed. Found by the second attempt of `prereg/agent-pilot.md`, where
+        every replay-arm run spent a turn on exactly that refusal.
+        """
         from quixote.statistics import evaluate as stat_of
         held = {k for k, _ in support}
         best_stream = self.stream(support) if support else None
@@ -195,6 +205,8 @@ class Grammar:
                 continue
             for sign in self.signs:
                 ns = tuple(support) + ((int(j), sign),)
+                if not self.contains(ns):
+                    continue
                 v = stat_of(move.statistic, self.stream(ns), self.annualization, best_stream)
                 out.append((v, ns))
         return out

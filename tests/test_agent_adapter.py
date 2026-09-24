@@ -325,3 +325,22 @@ def test_the_milestone_still_holds_with_the_stop_latch():
     session = Session.on_sandbox(sb_direct, cls, name_prefix="quixote-agent")
     policy_direct(session)
     assert _records(agent.log) == _records(session.log)
+
+
+def test_the_identity_guard_names_the_cause_it_measured():
+    """The guard's message used to assert float accumulation (~1e-12) whichever
+    way it failed. On a net-of-cost panel the two paths differ structurally,
+    because the base-column basis is not one the class is linear in, and a
+    message that blamed float noise would send a reader to the wrong bug."""
+    from quixote.replay import IdentityCheck
+    small = IdentityCheck(agrees=False, realized_support=((0, 1.0),),
+                          replayed_support=((1, 1.0),), realized_score=1.0,
+                          replayed_score=1.0 + 1e-13, n_moves_realized=2,
+                          n_moves_replayed=2)
+    assert "float accumulation" in small.reason() and "STRUCTURAL" not in small.reason()
+    big = IdentityCheck(agrees=False, realized_support=((0, 1.0),),
+                        replayed_support=((1, 1.0),), realized_score=1.0,
+                        replayed_score=9.0, n_moves_realized=2, n_moves_replayed=2)
+    assert "STRUCTURAL" in big.reason()
+    assert "not one the class is linear in" in big.reason()
+    assert "8.000e+00" in big.reason()

@@ -237,3 +237,33 @@ def test_sequential_stopping_is_absent_on_purpose():
     src = " ".join(__import__("pathlib").Path(tw.__file__).read_text().lower().split())
     assert "sequential stopping is deliberately absent" in src
     assert not hasattr(tw, "sequential_twin_p_value")
+
+
+def test_a_pick_at_a_full_support_yields_no_candidate_rather_than_an_illegal_one():
+    """`extend_best` returns nothing at a full support; `pick` built candidates
+    one feature too large and asked the sandbox to score them, which the class
+    forbids. Found by the agent pilot: every replay-arm run spent a turn on that
+    refusal, so `pick` could never succeed."""
+    sb, cls, base, ann = _fixture()
+    g = Grammar(cls, base, ann)
+    full = ((0, 1.0), (1, 1.0), (2, 1.0))
+    assert len(full) == cls.max_size
+    assert g.pick_candidates(full, Move("pick", statistic="sharpe", among=(3, 4, 5))) == []
+    _, _, n = g.apply(full, Move("pick", statistic="sharpe", among=(3, 4, 5)))
+    assert n == 0
+    # and below the cap it still ranges over everything it may reach
+    assert len(g.pick_candidates(((0, 1.0),), Move("pick", statistic="sharpe",
+                                                    among=(3, 4, 5)))) == 3
+
+
+def test_a_pick_never_asks_a_class_capped_sandbox_for_an_illegal_specification():
+    sb, cls, base, ann = _fixture()
+    capped = Sandbox(sb._data, periods_per_year=252, spec_class=cls)
+    sess = Session.on_sandbox(capped, cls)
+    for _ in range(3):
+        sess.propose(Move("extend_best"))
+        sess.accept()
+    support, score, n = sess.propose(Move("pick", statistic="sharpe", among=(4, 5, 6)))
+    assert n == 0                                  # no candidate, no refusal
+    sess.cancel()
+    assert all(cls.contains(e.spec.weights) for e in capped.transcript)

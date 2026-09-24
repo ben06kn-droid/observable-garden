@@ -140,6 +140,40 @@ is measured rather than counted as rule 1's blocking failure.
 This is what the pilot is for, and it was found before the seat was spent rather
 than after.
 
+**2 — 2026-09-24, after the first pilot attempt failed rule 1 and before the
+re-run. Argument validation is a refusal kind, and the prompt was missing the
+statistic library.**
+
+The first attempt (5 runs, $0.60, report kept at
+`runs/agent_pilot/pilot_report_attempt1_FAILED.txt`) **failed rule 1** with three
+unregistered refusals:
+
+| run | refusal |
+|---|---|
+| pilot_0 control | `feature 22 is outside 0..21` |
+| pilot_1 control | `feature 22 is outside 0..21` |
+| pilot_4 replay | `unknown statistic 'in-sample Sharpe with [1+,0+,x]'` |
+
+Neither is a harness defect in the sense rule 1 imagined. Both are the harness
+**correctly** refusing a malformed argument, and the registered list of six kinds
+simply did not anticipate argument validation at all. The fix is therefore to the
+registration, not to the code, and it is recorded here rather than made silently:
+
+- **`malformed_arguments`** joins the list as an eighth kind: an argument the
+  harness cannot interpret — a feature index out of range, a repeated feature,
+  a sign that is not ±1, a statistic outside the committed library.
+
+**Separately, and this one is a prompt fault.** The replay arm's prompt names the
+trigger library explicitly but says only "a statistic you name" for `pick`, so an
+agent had no way to know what the statistics are and supplied prose. Rule 2's
+branch applies — the prompt is the suspect, not the model — so
+`AGENT_PROMPTS_REAL.md` amendment 2 names the library, and the pilot is re-run.
+**`pick` was attempted once in five runs and never succeeded**, so the first
+attempt measured nothing about picks.
+
+The re-run is a re-run, not a second pilot: the first attempt's report is kept,
+its failure is reported, and both are read together.
+
 ## Open, to fix before the first pilot run
 
 - **~~The code fingerprint does not yet cover these prompts.~~ Done 2026-09-24,
@@ -171,3 +205,49 @@ than after.
   runs before the scorer, `761e64d`), which moves the code fingerprint. It is a
   correctness fix with the uncapped path proved unchanged, and it precedes every
   pilot run.
+
+
+**3 — 2026-09-24, after the second attempt and before the third. `pick` could
+not succeed at a full support, and the certifying null cannot price an agent run
+on this panel.**
+
+The second attempt (report kept at `runs/agent_pilot/pilot_report_attempt2.txt`)
+**passed rule 1** — every refusal was a registered kind — and still exposed two
+things rule 1 could not catch, because a registered refusal is a measurement
+rather than a failure.
+
+**(i) A defect: `pick` at a full support.** All three replay-arm runs spent a turn
+on `outside_class`, and the specification names in those refusals were the
+harness's own. `Grammar.pick_candidates` built candidates one feature larger than
+the support with no class check, so at a support of size 3 every candidate was
+size 4 and the sandbox refused — correctly. `extend_best` has had that guard all
+along; `pick` did not. **`pick` therefore could not succeed in any pilot run, and
+"picks accepted vs contradicted" measured nothing in either attempt.** Fixed in
+`quixote/grammar.py`, with two tests, and the pilot is run a third time so that
+measurement is not vacuous.
+
+**(ii) A finding, not a defect: the certifying null is computable but not
+priceable on a net-of-cost panel.** All three replay-arm logs replayed without
+error, and all three verdicts came back **UNDECIDABLE** on the identity-replicate
+guard, with realized-against-replayed score gaps around **7.4** — three orders of
+magnitude beyond float accumulation. The cause is structural and is recorded in
+`environments/real_sandbox.py` already: `base_feature_columns` is a **diagnostic**
+basis, the sandbox scores **net of costs**, and costs are not linear in the
+weights, so the replay is not pricing the statistic the search optimised. The
+guard is right to refuse.
+
+**What that means for what is registered elsewhere**, stated here and not
+quietly:
+
+- **`prereg/agent-on-real-data.md`'s replay arm is conditional** on 7.2 part two
+  existing when 6.5 goes live. It exists — and this pilot shows that on a
+  net-of-cost real panel it cannot price a run as built. Either the replay path
+  gains a cost-aware basis, or 6.5 records the replay arm as deferred for this
+  reason rather than for absence.
+- **7.3's agent cell** runs on the simulated panel, where the two paths agree to
+  ~1e-12, so this does not touch it.
+- The guard's message no longer asserts float accumulation whichever way it
+  fails: it reports the measured gap and names the structural cause when the gap
+  is too large to be float noise.
+
+No number from any attempt enters a verdict; rule 5 stands.

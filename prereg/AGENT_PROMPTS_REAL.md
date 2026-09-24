@@ -62,6 +62,8 @@ You do not build specifications yourself. You name a move and the harness perfor
 To stop or to restart you must call `stop` or `restart` and name a declared trigger and its parameter: `best_so_far_above`, `failures_at_least`, or `last_gain_at_most`. The harness evaluates the trigger on the state of your search and performs the move only if it fires. A stop or restart whose trigger does not fire is refused.
 
 Before your first move you may call `pick_prior` once, naming one specification you believe in for reasons that do not depend on this data, with your reason. A `pick_prior` named after any move is refused.
+
+The statistic a `pick` names must be one of `sharpe`, `volatility`, `autocorr_1`, `autocorr_5`, or `corr_with_best`. Anything else is refused.
 ```
 
 The trigger list in the prompt is the library in `quixote/triggers.py` and is
@@ -204,3 +206,18 @@ arithmetic (`ret1_home_open`, `rel3_home_closed`). So masking constrains nothing
 an agent could act on there, and a zero on that panel is evidence about the
 prompt or the model, **not** about masking. On a panel where instruments are
 nameable, §4's reading stands unchanged.
+
+
+**2 — 2026-09-24, after the first pilot attempt and before its re-run. The
+`pick` statistic library is named in the prompt.**
+
+§2's replay block names the trigger library explicitly but said only "a statistic
+you name" for `pick`. An agent in the first pilot attempt supplied prose — "in-sample
+Sharpe with [1+,0+,x]" — and the harness refused it, so `pick` was attempted once in
+five runs and never succeeded. That is `prereg/agent-pilot.md` rule 2's branch: the
+prompt is the suspect, not the model.
+
+The block above now names the five statistics of `quixote/statistics.py`, exactly as
+it already names the three triggers, and a test generates the list from the module so
+the two cannot drift. **IC stays absent**, as `quixote/statistics.py` records: it needs
+the panel a replicate does not have.

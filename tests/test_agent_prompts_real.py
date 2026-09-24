@@ -189,3 +189,33 @@ def test_feature_names_are_deliberately_not_masked_and_the_file_says_why():
     text = _flat(PREREG.read_text())
     assert "**Feature names are not masked.**" in text
     assert "describe arithmetic rather than identity" in text
+
+
+def test_the_picks_statistic_library_in_the_prompt_is_generated_from_the_module():
+    """AGENT_PROMPTS_REAL.md amendment 2: the block names the five statistics of
+    quixote/statistics.py, as it already names the three triggers, and the two
+    cannot drift. IC stays absent - it needs the panel a replicate lacks."""
+    from quixote.statistics import STATISTICS
+    suffix = read_prompts()["replay_suffix"]
+    named = set(re.findall(r"`([a-z_0-9]+)`", suffix))
+    assert set(STATISTICS) <= named, set(STATISTICS) - named
+    assert "`ic`" not in suffix
+
+
+def test_every_registered_refusal_kind_is_produced_by_some_real_refusal():
+    """agent-pilot.md's list of refusal kinds is what rule 1 reads against, so a
+    kind that no refusal can produce would make the rule unfalsifiable."""
+    from experiments.agent_pilot import REFUSAL_KINDS, classify_refusal
+    samples = {
+        "unknown_tool": "unknown tool 'evaluate'; the grammar is [...]",
+        "trigger_did_not_fire": "stop refused: best_so_far > bar does not fire",
+        "unknown_trigger": "unknown trigger 'soon'; the library is [...]",
+        "after_submit": "this session has submitted; no further moves are taken",
+        "after_stop": "this session has stopped; the search is over",
+        "outside_class": "specification 'x' is outside the declared class",
+        "declaration_after_evaluation": "refuses a budget declared after the first move",
+        "malformed_arguments": "feature 22 is outside 0..21",
+    }
+    assert set(samples) == set(REFUSAL_KINDS)
+    for kind, message in samples.items():
+        assert classify_refusal(message) == kind, (kind, message)

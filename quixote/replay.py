@@ -268,11 +268,25 @@ class IdentityCheck:
         seq = ("" if self.realized_actions == self.replayed_actions else
                f" The meta decisions differ too: replayed {list(self.replayed_actions)} "
                f"against realized {list(self.realized_actions)}.")
+        # The cause is NOT assumed. On a simulated panel the two paths differ by
+        # float accumulation and a near-tie flips an argmax. On a panel whose
+        # sandbox scores NET OF COSTS, they differ structurally, because the
+        # base-column basis is not one the class is linear in
+        # (`environments/real_sandbox.py`). The measured gap tells them apart, so
+        # it is reported instead of a story being told about it.
+        gap = self.score_gap
+        cause = ("a difference of float accumulation between the two scoring paths, "
+                 "which has flipped an argmax on a near-tie"
+                 if gap < 1e-6 else
+                 "a STRUCTURAL difference between the two scoring paths, far too large "
+                 "to be float accumulation: the replay basis is not the statistic the "
+                 "search optimised. On a net-of-cost panel that is expected, since the "
+                 "base-column basis is not one the class is linear in")
         return ("Identity-replicate guard: FAIL. Replaying the un-resampled data "
                 f"gives support {self.replayed_support} against the realized "
-                f"{self.realized_support}.{seq} The two scoring paths differ at ~1e-12 "
-                "and that has flipped an argmax, so every later move priced a "
-                "search that did not run. This run is flagged and not priced.")
+                f"{self.realized_support}.{seq} The realized and replayed scores "
+                f"differ by {gap:.3e}, which is {cause}. Every later move would price "
+                "a search that did not run, so this run is flagged and not priced.")
 
 
 def identity_check(log: SessionLog, spec_class, base: np.ndarray,

@@ -56,7 +56,8 @@ RUNS_ROOT = Path(__file__).resolve().parent.parent / "runs" / "agent_pilot"
 # outside this set is rule 1's blocking failure, not a data point.
 REFUSAL_KINDS = ("unknown_tool", "trigger_did_not_fire", "unknown_trigger",
                  "declaration_after_evaluation", "outside_class", "after_submit",
-                 "after_stop")          # amendment 1, found by the dry run
+                 "after_stop",          # amendment 1, found by the dry run
+                 "malformed_arguments")  # amendment 2, found by attempt 1
 
 
 def classify_refusal(message: str) -> str:
@@ -75,6 +76,11 @@ def classify_refusal(message: str) -> str:
         return "after_stop"
     if "outside the declared class" in m or "leave the declared class" in m:
         return "outside_class"
+    # amendment 2: an argument the harness cannot interpret. The harness is
+    # refusing correctly; the registered list simply had no kind for it.
+    if ("is outside 0.." in m or "unknown statistic" in m or "at most once" in m
+            or "signs are +1 or -1" in m or "same length" in m):
+        return "malformed_arguments"
     if "refuses" in m and ("late" in m or "after" in m):
         return "declaration_after_evaluation"
     if "already" in m and ("evaluat" in m or "move" in m):
@@ -128,6 +134,8 @@ class RunRecord:
     submitted_sharpe: float | None = None
     prior_pick: dict | None = None
     prediction: dict | None = None
+    certifying_null_computable: bool | None = None
+    verdict: dict | None = None
     usd: float | None = None
     usage: dict | None = None
     models_seen: list = field(default_factory=list)
@@ -374,6 +382,7 @@ def run_one(arm: str, seed: int, panel, masking, index: int,
         _drive_model(arm, rec, handlers, panel, sandbox, K)
 
     if tools is not None:
+        _certify_run(rec, tools, sandbox, cls)
         rec.log("session_log", records=[
             {"step": r.step, "kind": r.move.kind, "support": list(r.support_after),
              "score": r.score_after, "n_candidates": r.n_candidates,
@@ -388,6 +397,49 @@ def run_one(arm: str, seed: int, panel, masking, index: int,
                                          default=float("nan")))
     rec.log("end", submitted=rec.submitted, engagement=rec.engagement)
     return rec
+
+
+# agent-pilot.md, "What is measured" 6. B is small on purpose: this asks whether
+# the null is COMPUTABLE from an agent's log end to end, not what its p-value is,
+# and rule 5 forbids the number entering anything.
+CERTIFY_B = 200
+
+
+def _certify_run(rec: RunRecord, tools: ToolSession, sandbox, cls) -> None:
+    """Can trigger replay be computed from this run's log at all?
+
+    **What it prices on this panel, stated rather than assumed.** `certify` works
+    from `base_feature_columns`, which `environments/real_sandbox.py` documents as
+    a **diagnostic** basis and not one the class is linear in: costs are not
+    linear in the weights, so the replayed statistic is not the net statistic the
+    search actually optimised. The verdict below is therefore a **specimen of the
+    machinery**, not a certification of this run, and says so in its own reasons.
+    """
+    from quixote.certify import certify
+    base = sandbox.base_feature_columns()
+    ann = float(np.sqrt(sandbox.periods_per_year))
+    try:
+        v = certify(tools.session.log, cls, base, ann, alpha=0.05, B=CERTIFY_B,
+                    seed=rec.seed)
+    except Exception as e:
+        rec.certifying_null_computable = False
+        rec.log("certify_error", error=f"{type(e).__name__}: {e}")
+        return
+    rec.certifying_null_computable = True
+    rec.verdict = {"status": v.status, "alpha": v.alpha, "p_certifying": v.p_certifying,
+                   "p_frozen": v.p_frozen, "p_policy": v.p_policy,
+                   "realized_score": v.realized_score, "n_moves": v.n_moves,
+                   "n_candidates": v.n_candidates, "fill_engaged": v.fill_engaged,
+                   "fill_replicates": v.fill_replicates,
+                   "unreplayable_decisions": list(v.unreplayable_decisions),
+                   "certifying_null": v.certifying_null, "B": CERTIFY_B,
+                   "reasons": list(v.reasons),
+                   "basis_caveat": (
+                       "Computed from base_feature_columns, a DIAGNOSTIC basis on this "
+                       "panel: costs are not linear in the weights, so this prices a "
+                       "different statistic from the net one the search optimised. A "
+                       "specimen of the machinery, not a certification of this run.")}
+    rec.log("verdict", **{k: v for k, v in rec.verdict.items() if k != "reasons"})
 
 
 def _drive_model(arm, rec, handlers, panel, sandbox, K) -> None:
@@ -439,6 +491,12 @@ def _drive_model(arm, rec, handlers, panel, sandbox, K) -> None:
 
 
 # -- the report --------------------------------------------------------------
+
+def _num(x) -> str:
+    """An UNDECIDABLE verdict prices nothing, so its p-values are absent rather
+    than zero, and the report must say absent."""
+    return "not priced" if x is None else f"{x:.4f}"
+
 
 def report(records: list[RunRecord], dry_run: bool) -> str:
     L = ["agent-pilot — HARNESS SHAKE-OUT AND ENGAGEMENT ONLY. NO VERDICT CLAIM.",
@@ -496,6 +554,29 @@ def report(records: list[RunRecord], dry_run: bool) -> str:
           f"{sum(1 for r in records if r.arm != 'control')} replay-arm runs",
           "  (AGENT_PROMPTS_REAL.md amendment 1: on the ADR panel a zero here is NOT",
           "   evidence about masking — no tool exposes an asset label or a date)"]
+
+    replay = [r for r in records if r.arm != "control"]
+    L += ["", "CERTIFYING NULL — computable from the log, end to end?", "-" * 78]
+    for r in replay:
+        L.append(f"  {r.run_id}: "
+                 + {True: "yes", False: "NO", None: "not attempted"}[r.certifying_null_computable])
+    specimen = next((r for r in replay if r.verdict), None)
+    if specimen:
+        v = specimen.verdict
+        L += ["", f"SPECIMEN VERDICT BLOCK — {specimen.run_id}", "-" * 78,
+              f"  status            {v['status']}   (alpha {v['alpha']})",
+              f"  certifying null   {v['certifying_null']}",
+              f"  p_certifying      {_num(v['p_certifying'])}   at B = {v['B']}",
+              f"  p_frozen          {_num(v['p_frozen'])}   (fixed-sequence replay, the "
+              "bracket's liberal end)",
+              f"  p_policy          {_num(v['p_policy'])}",
+              f"  realized score    {_num(v['realized_score'])}",
+              f"  moves             {v['n_moves']}   candidates {v['n_candidates']}",
+              f"  fill engaged      {v['fill_engaged']} of {v['fill_replicates']} replicates",
+              f"  unreplayable      {v['unreplayable_decisions'] or 'none'}",
+              "  CAVEAT: " + v["basis_caveat"]]
+        for reason in v["reasons"]:
+            L.append(f"    - {reason}")
 
     costs = [r.usd for r in records if r.usd is not None]
     if costs:
