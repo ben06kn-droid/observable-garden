@@ -24,9 +24,10 @@ amendment 1)
   the position and is not re-traded;
 - the overnight-gap feature is missing on each name's ex-dividend dates, and on
   UL's 2025-12-08 and 2025-12-09;
-- costs: Abdi-Ranaldo on 5-minute bars over the 20 sessions before the one being
-  priced, floored at max(one cent, 2 bps), plus $0.005 a share a side, so a held
-  name pays at least two half-spreads a day;
+- costs: Abdi-Ranaldo on 5-minute bars over the most recent min(60, available)
+  sessions before the one being priced and never fewer than 20 (amendment 2),
+  floored at max(one cent, 2 bps), plus $0.005 a share a side, so a held name
+  pays at least two half-spreads a day;
 - no feature is built unless the registration commits are ancestors of HEAD
   (`data/adr_guard.py`).
 
@@ -52,7 +53,9 @@ ETF_COST_BPS = 5.0          # one-way, per unit turnover
 ETF_BORROW_BPS_YR = 50.0
 ETF_DAYS = 252
 ADR_FEE_PER_SHARE = 0.005
-ADR_SPREAD_SESSIONS = 20    # amendment 1 A1: the 20 sessions before the one priced
+ADR_SPREAD_MIN = 20         # amendment 2: never fewer than 20 prior sessions
+ADR_SPREAD_MAX = 60         # amendment 2: and never more than 60
+ADR_SPREAD_SESSIONS = ADR_SPREAD_MAX
 ADR_BARS_PER_YEAR = 252 * 76
 
 
@@ -407,10 +410,13 @@ def build_adr_panel(raw=None, names=None, require_guard: bool = True) -> RealPan
             cont = dt.datetime.combine(day, dt.time(hh, mm), tz).astimezone(et)
             trans_end = cont + dt.timedelta(minutes=5 * n_trans)
 
-            # spread for this session: Abdi-Ranaldo over the 20 sessions before it
-            lo_s = max(0, si - ADR_SPREAD_SESSIONS)
+            # spread for this session: Abdi-Ranaldo over the most recent
+            # min(60, available) sessions strictly before it, never fewer than 20
+            # (amendment 2). Session si itself never contributes.
+            lo_s = max(0, si - ADR_SPREAD_MAX)
+            enough = (si - lo_s) >= ADR_SPREAD_MIN
             s_hat = abdi_ranaldo(hi_by_session[lo_s:si], lo_by_session[lo_s:si],
-                                 cl_by_session[lo_s:si]) if si > lo_s else float("nan")
+                                 cl_by_session[lo_s:si]) if enough else float("nan")
             ref_close = prev_close if prev_close else float(d["c"][idx[0]])
             s_hat = floored(0.0 if not np.isfinite(s_hat) else s_hat, ref_close)
             fee = ADR_FEE_PER_SHARE / ref_close
@@ -515,5 +521,5 @@ def build_adr_panel(raw=None, names=None, require_guard: bool = True) -> RealPan
         meta={"sessions": sessions[20:], "bars_per_session": nb,
               "prereg": "prereg/adr-features.md (amendment 1)",
               "traded_window": "09:35-15:50 bar starts, first and last regular bars dropped",
-              "spread_sessions": ADR_SPREAD_SESSIONS, "fee_per_share": ADR_FEE_PER_SHARE,
+              "spread_sessions_min": ADR_SPREAD_MIN, "spread_sessions_max": ADR_SPREAD_MAX, "fee_per_share": ADR_FEE_PER_SHARE,
               "ex_dates": {k: sorted(v) for k, v in ex.items()}})

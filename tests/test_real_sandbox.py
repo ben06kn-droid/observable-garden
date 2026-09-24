@@ -16,7 +16,8 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 
-from environments.real_panel import (ADR_HOME, ADR_SPREAD_SESSIONS, ETF_BORROW_BPS_YR,  # noqa: E402
+from environments.real_panel import (ADR_HOME, ADR_SPREAD_MAX, ADR_SPREAD_MIN,  # noqa: E402
+                                     ETF_BORROW_BPS_YR,
                                      ETF_COST_BPS, build_adr_panel, build_etf_panel)
 from environments.real_sandbox import RealSandbox  # noqa: E402
 from environments.sandbox import Distribution, Sandbox, Specification  # noqa: E402
@@ -250,16 +251,18 @@ def test_adr_gap_feature_is_missing_on_ex_dates_including_ULs_two(adr):
 
 @have_adr
 def test_adr_costs_use_the_registered_estimator_window_and_floor(adr):
-    """`prereg/adr-features.md` amendment 1 A1/A2: Abdi-Ranaldo on 5-minute bars
-    over the 20 sessions before the one priced, floored at max(one cent, 2 bps),
-    plus $0.005 a share. The estimator's own known-answer test is
+    """`prereg/adr-features.md` amendment 1 A1/A2 as amended by amendment 2:
+    Abdi-Ranaldo on 5-minute bars over the most recent min(60, available)
+    sessions before the one priced and never fewer than 20, floored at max(one
+    cent, 2 bps), plus $0.005 a share. The estimator's own known-answer test is
     tests/test_adr_costs.py; this checks the panel uses it as registered."""
     from data.adr_costs import FLOOR_BPS
-    assert ADR_SPREAD_SESSIONS == 20
+    assert (ADR_SPREAD_MIN, ADR_SPREAD_MAX) == (20, 60)
     assert np.all(adr.cost_rate > 0)
     assert np.all(adr.cost_rate >= FLOOR_BPS * 1e-4 / 2)     # at least half the floor
     assert adr.meta["fee_per_share"] == 0.005
-    assert adr.meta["spread_sessions"] == 20
+    assert adr.meta["spread_sessions_min"] == 20
+    assert adr.meta["spread_sessions_max"] == 60
 
 
 @have_adr

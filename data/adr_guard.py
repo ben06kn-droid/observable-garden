@@ -34,6 +34,8 @@ REGISTRATION_COMMITS = (
     ("feature list", "2fd2decb9b382aee41f05398b5bae22eaae81234"),
     ("feature amendment 1: costs and corporate actions",
      "897d5de9f8875af28a810d1328cd085ccc466dcd"),
+    ("feature amendment 2: the spread window becomes min 20, up to 60 sessions",
+     "4288a97b456092a3ed49ec85848ad34114ae3546"),
 )
 
 REGISTRATION_PATHS = ("prereg/adr-features.md", "prereg/adr-universe.md")
