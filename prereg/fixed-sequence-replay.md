@@ -657,3 +657,81 @@ follow from the box:
 
 The registered seeds, B = 10,000, the six searchers and every rule are
 unchanged.
+
+## The rules, read once at n = 2,000, 2026-09-24
+
+2,000 draws on the registered seeds 300000–301999, B = 10,000, six searchers, at
+commit `e9168e5` with a clean tree, on the c7a.8xlarge. Read once from
+`figures/fixed_sequence_replay_data.pkl` by `experiments/fsr_read.py`; the full
+output is `figures/fixed_sequence_replay_rules.txt`.
+
+**Engagement** (amendment 6's readout): the fill acts on 35.3% of replicates for
+the three stop-at-the-bar searchers, 32.2% for second-best, 29.7% for
+extend-while-improving and 3.0% for random-extend. Draws where it never acts:
+493–496 of 2,000 for the bar searchers, 954 for second-best, 1,067 for
+extend-while-improving, 0 for random-extend.
+
+**Rule 1 — trigger replay is valid. It PASSES for every searcher at both levels.**
+No lower Wilson bound exceeds nominal.
+
+| searcher | rate at 0.05 (interval) | rate at 0.01 |
+|---|---|---|
+| stop-when-cleared | 4.40% (3.59–5.39) | 0.90% (0.57–1.42) |
+| extend-while-improving | 4.70% (3.86–5.72) | 0.90% |
+| cleared-restart | 4.40% | 0.90% |
+| lookahead | 4.40% | 0.90% |
+| random-extend | 3.45% (2.74–4.34) | 0.35% |
+| second-best | 4.15% (3.36–5.12) | 0.70% |
+
+**So the registered gate holds: in-the-loop agents are certifiable with triggers
+declared, and 7.2 builds the replay tier on declared triggers.**
+
+**Rule 2 — the frozen-decision error, liberal as predicted**, for five of six.
+Null 1's rejection rate minus null 3's, at α = 0.05 and 0.01: stop-when-cleared,
+cleared-restart and lookahead **+0.0120 / +0.0065**; second-best
+**+0.0145 / +0.0060**; extend-while-improving **+0.0100 / +0.0035**. Freezing
+takes stop-when-cleared to 5.60% at a nominal 5%. **Random-extend is the
+exception at −0.0005 / +0.0010**: its realized search stops at a median length of
+2, so the frozen sequence binds on almost every replicate rather than on the few
+that would have run longer, and there is little for freezing to get wrong.
+
+**Rule 3 (amendment 6) — null 2 against null 3, content only.** Every predicted
+direction is confirmed.
+
+| searcher | read? | zero-distance draws | median signed | positive / non-zero | branch |
+|---|---|---|---|---|---|
+| **lookahead** | read, predicted liberal | 493 (24.6%) | **+0.0009** | **1,506 / 1,507** | **confirmed liberal** |
+| **random-extend** | read, predicted conservative | 0 (0.0%) | −0.0271 | 0 / 2,000 | confirmed conservative |
+| **second-best** | read, predicted conservative | 954 (47.7%) | −0.0678 | 0 / 1,046 | confirmed conservative |
+| stop-when-cleared | reported | 1,749 (87.5%) | +0.0000 | 45 / 251 | conservative |
+| cleared-restart | reported | 1,750 (87.5%) | +0.0000 | 45 / 250 | conservative |
+| extend-while-improving | reported | 1,567 (78.3%) | +0.0000 | 52 / 433 | conservative |
+
+**The fill is liberal against a stronger continuation.** A width-2 beam finishes
+above the fill's best single step on 1,506 of 1,507 draws where they differ at
+all. Against continuations the fill dominates, it is conservative, as predicted.
+
+**Size readout — the liberality moves no verdict at n = 2,000.** Lookahead's
+type-I rate is **0.0440 under null 2 and 0.0440 under null 3** at α = 0.05, and
+**0.0090 and 0.0090** at α = 0.01. There are **no discordant draws at either
+level**: not one draw rejects under the fill and not under the policy. The paired
+exact McNemar test gives p = 1.0000, so the inflation is **not detectable**.
+
+**Consequence, per amendment 6: strengthening the agent-path fill is OPTIONAL.**
+7.2 part two may build the fill as registered, and must state wherever it is
+used that the fill's direction against a stronger continuation is liberal, with
+the measurement above: a median signed distance of +0.0009 and an inflation of
++0.0000 at both levels on 2,000 draws. A stronger continuation than a width-2
+beam is untested, so this bounds what was measured, not what is possible.
+
+**Rule 4 — freezing is far the larger error, and declared triggers remove almost
+all of it.** Mean Kolmogorov distance from null 3: null 1 gives 0.4483
+(stop-when-cleared), 0.4391 (cleared-restart), 0.4495 (lookahead), 0.0508
+(second-best), 0.0375 (extend-while-improving) and 0.0163 (random-extend), while
+null 2 gives 0.0000, 0.0000, 0.0009, 0.0640, 0.0000 and 0.0236 respectively. For
+the three bar searchers the frozen null sits a **0.44 sup-norm** away from the
+policy and the trigger null is indistinguishable from it.
+
+**Cost.** 3,096 s per draw, **1,720 CPU-hours** over 2,000 draws, 54 hours wall at
+32 workers, about **$88** at $1.64/h. The smoke projected 52.5 hours and $86.10;
+amendment 7's rule was applied to that projection and passed.
