@@ -52,6 +52,42 @@ request parameters, download date, adjustment method, tzdata and calendar
 versions, and a hash, row count and first/last date for the fetch and for each
 derived file. Raw series stay out of git.
 
+### The holdout's two copies, and how it is opened
+
+**Primary copy: the holdout host's volume**, `/home/ubuntu/etf/data/raw/etf/holdout`
+on the c7a.8xlarge `i-0886a189b85d4d051`. 40 CSVs, one per panel ticker,
+2023-01-01 to 2025-12-31, `date,adjclose,volume`. Its content hashes, which any
+restored copy must reproduce:
+
+- sorted file list: `385a11f0f29371de85f552350b4277498a48e39bbeff27440fa92b9cbf46e28d`
+- contents (SHA-256 over the sorted per-file SHA-256 lines):
+  **`8d92a7b2f527dd619a3944fb248bccc769e26ad99b38d1336fef34dffab031c8`**
+
+Reproduce it with `cd <dir> && sha256sum $(ls -1 | sort) | sha256sum`.
+
+**Second copy: a symmetric-encrypted archive on the agent machine**,
+`~/Desktop/etf_holdout_2023_2025.tar.gz.enc`, 398,896 bytes, SHA-256
+**`4fcaf8cbad3e003c4a82b98eaca005b41333e3e455ffea9490858f3a86093494`**. Made with
+`openssl enc -aes-256-cbc -pbkdf2`. **Its passphrase is held by the author alone.
+It is not on this machine, not in this repository, and not available to any agent
+session.** The plaintext was never written to the instance: the archive was piped
+over ssh and encrypted locally.
+
+Decryption, for the record and not to be run by any agent session:
+
+    openssl enc -d -aes-256-cbc -pbkdf2 -in etf_holdout_2023_2025.tar.gz.enc | tar xzf -
+
+**How the holdout is opened, at 6.9 and nowhere earlier.** Decrypt to a temporary
+directory **on a machine where no agent session is running**, grade the sealed
+submissions there, and delete the plaintext when grading ends. The encrypted
+archive and the host's copy are what persist.
+
+**Enforced, not merely stated** (`data/etf_loader.py`, tests in
+`tests/test_etf_loader.py`): the loader refuses any path whose suffix is `.enc`,
+`.gpg` or `.asc`, refuses any path under `~/Desktop`, and refuses outright — not
+filters — any file containing a row on or after 2023-01-01. `.gitignore` also
+refuses those suffixes and a `Desktop/` path, so a sealed copy cannot be staged.
+
 **Survivorship, noted.** The universe is "ETFs with continuous daily history
 from 2005-01-01 through the end of the holdout", fixed by a rule and committed
 in its own commit before any download (ROADMAP 6.5). That conditions on survival
