@@ -277,3 +277,136 @@ certifier, whose validity is asymptotic — **7.0 cannot rule out replay rejecti
 at 5.5%**, and rule 4's tier order must not be read as saying it did.
 
 Rule 1, the anchor's exactness rule, is unchanged.
+
+**3 — 2026-09-24, before any code and before any draw. The launch gate is
+satisfied.**
+
+This file's opening says 7.0 does not run until two things happen. Both have.
+
+- **Arm D reported**, and its decomposition is folded in as amendment 1: the
+  slack replay could recover is 0.117 for confinement against 0.0001 for
+  sub-maximal search, which is why rule 3 moved to searchers that genuinely
+  submit below their class maximum.
+- **Process replay is sized.** `fixed-sequence-replay` measured it at **187 ms
+  per replicate for three nulls**, single-core, across six searchers with the
+  moment scorer (`searchers/meta_adaptive.py`, `scoring = "moments"`), against
+  1,791 ms for the column path. **7.0 prices one replay null per draw, not
+  three**, so the per-replicate cost here is about a third of that, and its
+  scaling behaviour is measured: per-draw CPU rose only from 152 s to 167 s
+  between 1 and 32 workers at B = 500, so this workload is compute-bound and
+  nearly free of contention.
+
+The unsized component that gated the launch is therefore no longer unsized.
+7.0's own scaling curve and smoke still run first (amendment 7), because the
+standing rule is about a change of workload shape, and 7.0's shape is not 7.1's.
+
+**4 — 2026-09-24, before any draw. Rules 1 and 2 get a replication branch, on
+6.3's pattern.**
+
+**The precedent.** `heterogeneous-correlation-fat-tails` (6.3) read exactly these
+rules on three cells at n = 2,000 and hit the problem this branch exists for: rule
+1's containment held everywhere, and its **KS check rejected once**, in cell (A)
+at p = 0.0090. The registered replication on a fresh seed block passed at
+p = 0.8503, so the original was recorded as a family false alarm and no halt or
+restriction fired. 6.3's registered family rate across rule 1's nine checks was
+0.3546 — more likely than not that something fails somewhere when nothing is
+wrong.
+
+7.0 has more checks than 6.3, not fewer: rule 1 makes 3 (containment at two
+levels plus KS) and rule 2 makes **2 per searcher per certifier**. With seven
+searchers (five efficient, `StopWhenCleared`, `BudgetedRandom` at three budgets)
+and four certifiers this is dozens of one-sided checks, so a first failure is
+close to expected.
+
+**The branch, fixed now.** The first failure of any check in rule 1 or rule 2
+triggers **one** replication of **that searcher, that certifier and that level
+only**, on a fresh seed block, at identical settings. Nothing else is rerun and
+no parameter is changed.
+
+- **Replication seed block: 210000–211999**, registered now, used by no other
+  pre-registration.
+- **If the replication passes:** the original is recorded as a family false
+  alarm, both rates reported side by side, and the halt or exclusion branch does
+  **not** fire.
+- **If the replication fails too:** confirmed, and the rule's branch applies in
+  full — rule 1's halt, or rule 2's exclusion of that certifier from the tier
+  order.
+- **One replication per failing check**, so this cannot become resampling until a
+  pass appears. Two independent failures of an exactly-calibrated check occur
+  with probability at most 0.05² = 0.0025.
+
+Rules 3, 4 and 5 are unaffected: none halts, so a false alarm in them costs a
+sentence rather than a decision.
+
+**5 — 2026-09-24, before any draw. `BudgetedRandom` is specified.**
+
+Amendment 1 added it as "to be written". It is now written
+(`searchers/scripted.py`, `BudgetedRandom`) and specified here:
+
+- it draws a fixed budget of members **uniformly from the declared class**, scores
+  each, and submits the best seen;
+- **budgets 25, 100 and 400**, fixed before the run, giving three known slack
+  levels;
+- it is **capped to the declared class** by construction, since it samples from
+  that class and can reach nothing outside it;
+- its sampling is seeded by the draw, so a replicate re-executes the same sample:
+  the budget is a property of the searcher, not of the data.
+
+**Rule 3 is read on `StopWhenCleared` and on `BudgetedRandom` at each budget**, as
+amendment 1 already directs; the efficient searchers appear in the same table and
+are not what the rule is read on.
+
+**6 — 2026-09-24, before any draw. What 7.0 no longer decides.**
+
+`fixed-sequence-replay` reported on 2026-09-24 and **fixed the certifying null:
+trigger replay**. Its rejection rate was at or below nominal for all six
+registered searchers (3.45–4.70% at a nominal 5%), so the replay tier is valid to
+certify with, and 7.2 part two builds it
+(`quixote/certify.py`). **7.0 does not reopen that.** To be explicit about the
+division of labour:
+
+| question | answered by | status |
+|---|---|---|
+| is trigger replay valid as a certifier? | 7.1, rule 1 | **closed: yes, at or below nominal** |
+| is the fill's direction liberal, and does it move a verdict? | 7.1, rule 3 and its size readout | **closed: liberal against a width-2 beam, no verdict moved** |
+| how much power does each certifier have at matched actual size? | **7.0, rule 3** | open |
+| which tier order should 7.2 present? | **7.0, rule 4** | open |
+| what does each certifier cover — which searches can it price at all? | **7.0, rule 4's coverage reading** | open |
+
+**Rule 4's third branch is replaced.** It read: "Replay ties the class gate on the
+slack searchers too … Phase 7 does **not** reduce to the holdout fallback on this
+outcome." The wording still invited reading a tie as a change of certifier. It
+now reads:
+
+> *Replay ties the class gate on the slack searchers too:* **replay's power
+> advantage is unmeasured on slack searchers at this sample size**, and that is
+> what is reported. It is **not** a change of certifier: 7.1 established
+> validity, and replay's coverage claim — that it prices searches whose class
+> cannot be enumerated at all — is not a power claim and is not tested by this
+> rule. The tier order is then presented on coverage grounds, with the power
+> comparison reported as inconclusive and its interval given.
+
+**7 — 2026-09-24, before any draw. Cost and instance.**
+
+**Instance: the c7a.48xlarge**, as ROADMAP's Compute section records for 7.1, with
+the on-instance self-stop installed before anything launches.
+
+**The worker count is not assumed.** ROADMAP's 16-worker optimum was measured on
+the one-null class bootstrap at 32 vCPU; 7.0 adds a replay certifier per draw and
+runs on a 192-vCPU box, so the shape and the machine both differ.
+**7.0's own four-point scaling curve sets it**, and the run uses the count with
+the best measured throughput.
+
+**Smoke and scaling seed block: 980000–980999**, registered now and dedicated.
+**7.1 holds 970000–970999** and this experiment does not touch it. Per
+`prereg/README.md`, these reports print **cost only** — wall time, per-draw
+seconds, memory, guard counts — and no rejection rate, p-value or distance.
+
+**Cost, from what is measured.** The class null is 75.03 s per draw at 16 workers
+on the 32-vCPU box; the replay certifier is about 62 ms per replicate for one null
+at B = 10,000, so roughly 620 s per draw single-core before contention. The full
+4,000 draws are therefore dominated by replay, and the scaling curve's projection
+decides whether the registered design runs at B = 10,000 or at a reduced B, by the
+same rule `fixed-sequence-replay` amendment 7 used: **the projection is compared
+against a threshold fixed before it is measured, and that threshold is $150**,
+set here, with a reduced B = 1,000 as the registered fallback.
