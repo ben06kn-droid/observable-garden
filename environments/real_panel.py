@@ -68,6 +68,12 @@ class RealPanel:
     assets: list[str]
     feature_names: list[str]
     features: np.ndarray
+    # What a weight formed at the close of period t EARNS -- not period t's own
+    # return. Each panel shifts to its own registered timing: the ETF panel by
+    # two days ("signal at close t, held close t+1 to close t+2") and the ADR
+    # panel by one bar ("signal at the close of bar b, position held over bar
+    # b+1"). The ADR shift was missing until 2026-09-24 and that was a
+    # look-ahead leak; see the note at its construction.
     returns: np.ndarray
     tradable: np.ndarray
     periods_per_year: float

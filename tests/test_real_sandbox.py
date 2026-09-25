@@ -217,7 +217,14 @@ def test_adr_missing_bars_hold_the_position_and_return_zero(adr):
     re-traded in that bar.'"""
     missing = ~adr.present          # a bar with no data, not a TRANSITION bar
     assert missing.any(), "this fixture has no missing bar to test"
-    assert np.all(adr.returns[missing] == 0.0)
+    # `returns[t]` is what a weight formed at the close of bar t EARNS, which by
+    # section 4 is bar t+1's return ("signal at the close of bar b, position held
+    # over bar b+1"). So a missing bar's zero return appears one row EARLIER than
+    # the missing bar itself: the row whose weight would have earned it.
+    earns_a_missing_bar = np.zeros_like(missing)
+    earns_a_missing_bar[:-1] = missing[1:]
+    assert np.all(adr.returns[earns_a_missing_bar] == 0.0)
+    assert not np.all(adr.tradable[missing])        # and it is not re-traded
     assert not np.any(adr.tradable[missing])
     w = np.zeros(len(adr.feature_names)); w[0] = 1.0
     wt = adr.weights_from(adr.scores_for_weights(w))
