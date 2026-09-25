@@ -53,6 +53,26 @@ def test_the_builder_takes_X_and_has_nowhere_to_put_returns():
         orientation_table(_panel(), returns=np.zeros((300, 8)))
 
 
+def test_the_builder_has_no_alpha_or_threshold_parameter():
+    """`prereg/agent-cell.md` amendment 2. The table cannot carry a decision
+    threshold, because there is no input through which one could arrive - the
+    same enforcement-by-signature the returns get.
+
+    `CORR_THRESHOLD` is the format's own cutoff for which pairs are worth
+    listing: a module constant, identical on every panel, deciding nothing about
+    any specification.
+    """
+    import inspect
+    names = " ".join(inspect.signature(orientation_table).parameters).lower()
+    for word in ("alpha", "threshold", "level", "critical", "cut", "p_value"):
+        assert word not in names, word
+    for kw in ({"alpha": 0.05}, {"threshold": 0.01}, {"critical_value": 1.2}):
+        with pytest.raises(TypeError):
+            orientation_table(_panel(), **kw)
+    from quixote.orientation import CORR_THRESHOLD as C
+    assert isinstance(C, float) and C == 0.5
+
+
 def test_a_poisoned_returns_array_is_never_touched():
     """The central test. If any statistic in the table reached for returns, this
     would raise from inside the builder."""
@@ -67,7 +87,8 @@ def test_a_poisoned_returns_array_is_never_touched():
 def test_the_table_carries_none_of_the_excluded_quantities():
     table = orientation_table(_panel())
     keys = {k for r in table["per_feature"] for k in r}
-    assert keys == {"label", "volatility", "autocorr_1", "autocorr_5", "turnover"}
+    assert keys == {"label", "excess_kurtosis", "autocorr_1", "autocorr_5",
+                    "turnover"}
     blob = " ".join(str(table)).lower()
     for forbidden in ("sharpe", "ic", "return", "spread", "cost", "date", "price"):
         assert forbidden not in {k.lower() for k in keys}, forbidden
@@ -102,7 +123,7 @@ def test_near_duplicate_pairs_are_delivered_and_the_rest_are_summarised():
 def test_every_number_is_rounded_to_two_places():
     table = orientation_table(_panel())
     for r in table["per_feature"]:
-        for k in ("volatility", "autocorr_1", "autocorr_5", "turnover"):
+        for k in ("excess_kurtosis", "autocorr_1", "autocorr_5", "turnover"):
             assert r[k] == round(r[k], 2), (r["label"], k)
 
 
@@ -124,10 +145,12 @@ def test_the_statistics_are_the_registered_four():
     to be deliberate."""
     X = _panel(T=120, M=5, K=3, seed=3)
     table = orientation_table(X)
-    vol = np.nanmean(np.nanstd(X, axis=1, ddof=0), axis=0)
+    flat = X.reshape(-1, X.shape[2])
+    d = flat - flat.mean(axis=0)
+    kurt = (d ** 4).mean(axis=0) / (d ** 2).mean(axis=0) ** 2 - 3.0
     turn = np.nanmean(np.abs(np.diff(X, axis=0)), axis=(0, 1))
     for k, row in enumerate(table["per_feature"]):
-        assert row["volatility"] == round(float(vol[k]), 2)
+        assert row["excess_kurtosis"] == round(float(kurt[k]), 2)
         assert row["turnover"] == round(float(turn[k]), 2)
     # autocorrelation: per name over time, averaged over names
     a, b = X[1:], X[:-1]
@@ -144,7 +167,7 @@ def test_a_degenerate_feature_does_not_break_the_table():
     X[:, :, 2] = 0.0
     table = orientation_table(X)
     row = next(r for r in table["per_feature"] if r["label"] == "F02")
-    assert row["volatility"] == 0.0 and row["turnover"] == 0.0
+    assert row["excess_kurtosis"] == 0.0 and row["turnover"] == 0.0
     assert np.isfinite(row["autocorr_1"])
 
 
@@ -159,7 +182,7 @@ def test_the_delivered_table_is_hashed_for_the_run_config():
 def test_the_rendered_form_is_what_a_prompt_can_carry():
     text = render(orientation_table(_panel()))
     assert "features." in text and "Every other pair is below that threshold." in text
-    assert "vol " in text and "turnover " in text
+    assert "kurtosis " in text and "turnover " in text
     for forbidden in ("sharpe", "return", "price", "date"):
         assert forbidden not in text.lower()
 

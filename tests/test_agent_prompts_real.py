@@ -117,10 +117,15 @@ def test_no_prompt_names_a_threshold_a_p_value_or_a_critical_value():
     value or a p-value.
 
     The bare-number half of the check is applied to the prompt MINUS the
-    delivered orientation table: that table is two-decimal feature statistics,
-    so a volatility of 0.05 or an autocorrelation of 0.01 is arithmetic about
-    features and not a threshold. The word half applies to everything, because
-    no table has any reason to say "alpha" or "critical value".
+    delivered orientation table, and the reason is structural rather than
+    convenient: `orientation_table(X, labels, seed)` has **no alpha and no
+    threshold among its inputs**, so the table cannot carry one — an
+    autocorrelation of 0.01 or a kurtosis of -0.05 in it is arithmetic about
+    features. `tests/test_orientation.py` asserts that signature. What the
+    numeric check therefore guards is **authored text**, where a threshold could
+    be written down by hand, and the word half — "alpha", "critical value",
+    "p-value" — still applies to everything, because no table has a reason to
+    say those.
     """
     words = ("alpha", "α", "p-value", "p value", "critical value",
              "null distribution", "significance")

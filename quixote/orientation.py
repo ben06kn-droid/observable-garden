@@ -11,10 +11,14 @@ it. `SCOPE.md`'s obliviousness condition asks that the candidate menu `C(ω)` be
 randomness", and spells out what is allowed: "A trial count, subset sizes, and an
 independently-seeded PRNG are allowed; realized Sharpe values feeding back into
 which columns appear next are not." A menu chosen as a function of `T(X)` and the
-agent's prior is measurable w.r.t. `σ(X, prior)`. The gate's nulls hold `X` fixed
-and resample the return-driven part, so such a menu is fixed across replicates —
-which is exactly the fixed-menu case White's theorem covers. Under `s0`, where
-returns are independent of `X` by construction, it is oblivious unconditionally.
+agent's prior is measurable w.r.t. `σ(X, prior)`.
+
+The block bootstrap resamples **streams in time**, so `X` moves with the
+replicate and is not held fixed. The correct statement is therefore that the menu
+is **computed once from the realized `X` and is constant across replicates, never
+recomputed inside one** — which is exactly the fixed-menu case White's theorem
+covers. Under `s0`, where returns are independent of `X` by construction, the
+menu is oblivious unconditionally as well.
 
 **Enforced, not asserted.** `orientation_table` takes `X` and nothing else: there
 is no parameter through which a return could arrive.
@@ -32,7 +36,9 @@ is taken over.
   list of pairs with `|corr| >= 0.5` plus a note that every other pair is below
   it — which keeps the ETF panel's z/rank near-duplicates visible at a fraction
   of the tokens the full 780-pair matrix would cost;
-- per-feature cross-sectional volatility, pooled, 2dp;
+- per-feature **excess kurtosis**, pooled, 2dp — the fourth moment, because
+  cross-sectional z-scoring pins the first two and a volatility line would read
+  1.00 for every feature; a rank feature sits at **-1.20** by construction;
 - per-feature autocorrelation at lags 1 and 5, 2dp;
 - per-feature turnover of a unit position path, `mean |x_t - x_{t-1}|`, because
   costs are charged on turnover and turnover is an X-only quantity.
@@ -82,13 +88,29 @@ def _correlations(X: np.ndarray) -> np.ndarray:
     return C
 
 
-def _cross_sectional_vol(X: np.ndarray) -> np.ndarray:
-    """Mean over periods of the cross-sectional sd. On a panel whose features are
-    cross-sectionally z-scored this is 1.0 by construction for every feature; it
-    is reported anyway, because a table that silently dropped a line where it
-    happened to be uninformative would not be the same table on every panel."""
-    X = np.asarray(X, dtype=float)
-    return np.nanmean(np.nanstd(X, axis=1, ddof=0), axis=0)
+def _excess_kurtosis(X: np.ndarray) -> np.ndarray:
+    """Per feature, pooled over the panel: `m4 / m2^2 - 3`.
+
+    **The fourth moment is the first one that survives the feature
+    construction.** Both panels z-score cross-sectionally, which pins the first
+    two moments by construction — a cross-sectional sd line would read 1.00 for
+    every feature and say nothing — and a cross-sectional mean is pinned at
+    zero. The fourth is where features start to differ: a rank feature mapped
+    uniformly to [-1, 1] is uniform, whose excess kurtosis is exactly **-1.20**
+    (-6/5), while a z-scored raw signal keeps whatever tail its construction
+    gave it.
+
+    Pooled over every (period, name) observation, as the correlations are, so
+    the two lines of the table describe the same pooled distribution.
+    """
+    flat = _pooled(X)
+    mu = flat.mean(axis=0)
+    d = flat - mu
+    m2 = (d ** 2).mean(axis=0)
+    m4 = (d ** 4).mean(axis=0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        k = np.where(m2 > 0, m4 / np.where(m2 > 0, m2 ** 2, 1.0) - 3.0, 0.0)
+    return np.nan_to_num(k)
 
 
 def _autocorr(X: np.ndarray, lag: int) -> np.ndarray:
@@ -125,6 +147,13 @@ def orientation_table(X: np.ndarray, labels=None, seed: int | None = None) -> di
     `labels` are the masked feature labels; `seed` shuffles the delivered order so
     that a feature's position carries nothing. Both default to a plain ordering
     for tests that do not care.
+
+    **No alpha and no decision threshold is an input.** Nothing a certifier uses
+    to decide can reach the table, because there is no parameter through which it
+    could arrive — the same enforcement-by-signature the returns get.
+    `CORR_THRESHOLD` is the format's own cutoff for which pairs are worth listing,
+    fixed in this module and identical on every panel; it decides nothing about
+    any specification.
     """
     X = np.asarray(X, dtype=float)
     K = X.shape[2]
@@ -135,8 +164,8 @@ def orientation_table(X: np.ndarray, labels=None, seed: int | None = None) -> di
     order = (np.random.default_rng(seed).permutation(K) if seed is not None
              else np.arange(K))
     C = _correlations(X)
-    vol, ac1, ac5, turn = (_cross_sectional_vol(X), _autocorr(X, 1),
-                           _autocorr(X, 5), _turnover(X))
+    kurt, ac1, ac5, turn = (_excess_kurtosis(X), _autocorr(X, 1),
+                            _autocorr(X, 5), _turnover(X))
 
     pairs = []
     for i in range(K):
@@ -151,7 +180,7 @@ def orientation_table(X: np.ndarray, labels=None, seed: int | None = None) -> di
     for pos, k in enumerate(order):
         per_feature.append({
             "label": labels[pos],
-            "volatility": round(float(vol[k]), DP),
+            "excess_kurtosis": round(float(kurt[k]), DP),
             "autocorr_1": round(float(ac1[k]), DP),
             "autocorr_5": round(float(ac5[k]), DP),
             "turnover": round(float(turn[k]), DP),
@@ -186,8 +215,10 @@ def render(table: dict) -> str:
     else:
         L.append(f"No pair of features has |correlation| >= "
                  f"{table['correlation_threshold']}; every pair is below it.")
-    L.append("Per feature — volatility, autocorrelation at lags 1 and 5, turnover:")
+    L.append("Per feature — excess kurtosis, autocorrelation at lags 1 and 5, "
+             "turnover:")
     for r in table["per_feature"]:
-        L.append(f"  {r['label']}: vol {r['volatility']:.2f}, ac1 {r['autocorr_1']:+.2f}, "
-                 f"ac5 {r['autocorr_5']:+.2f}, turnover {r['turnover']:.2f}")
+        L.append(f"  {r['label']}: kurtosis {r['excess_kurtosis']:+.2f}, "
+                 f"ac1 {r['autocorr_1']:+.2f}, ac5 {r['autocorr_5']:+.2f}, "
+                 f"turnover {r['turnover']:.2f}")
     return "\n".join(L)
