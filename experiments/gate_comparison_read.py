@@ -190,15 +190,16 @@ def read(s0: dict, s3: dict, replication: dict | None = None) -> str:
         L.append(f"    {label:<16} mean lift over the slack searchers {lift:+.4f}")
     if order:
         best = order[0][1]
+        best_key = next(k for k, lab in CERTIFIERS if lab == best)
         paired = {}
         for key, label in CERTIFIERS:
             if survivors[key] and label != best:
                 d = []
                 for name in SLACK:
-                    if key.replace("p_", "") not in MATCHED[name][2]:
+                    if (key.replace("p_", "") not in MATCHED[name][2]
+                            or best_key.replace("p_", "") not in MATCHED[name][2]):
                         continue
-                    a = (np.asarray(s3[name]["p_replay" if best == "process replay"
-                                              else "p_class"], dtype=float) < 0.05)
+                    a = (np.asarray(s3[name][best_key], dtype=float) < 0.05)
                     b = (np.asarray(s3[name][key], dtype=float) < 0.05)
                     d.append(a.astype(float) - b.astype(float))
                 if d:
@@ -208,11 +209,25 @@ def read(s0: dict, s3: dict, replication: dict | None = None) -> str:
             L.append(f"    {best} minus {label}: {m:+.4f} ({lo:+.4f}, {hi:+.4f})"
                      + ("  — interval straddles 0, so UNMEASURED at this n"
                         if lo <= 0 <= hi else ""))
+        straddles = [lab for lab, (m, lo, hi) in paired.items() if lo <= 0 <= hi]
         L += ["", f"  branch: leader on the slack searchers is {best}."]
-        L += ["  Amendment 6's wording applies where the interval straddles zero:",
-              "  replay's power advantage is UNMEASURED at this sample size. That is",
-              "  not a change of certifier — 7.1 established validity, and replay's",
-              "  coverage claim is not a power claim and is not tested by this rule."]
+        if best == "process replay" and not straddles:
+            L += ["  Replay leads on the slack searchers: 7.2 builds replay, class,",
+                  "  holdout in that order, and the class tier is documented as",
+                  "  sufficient wherever the searcher is efficient and its class is",
+                  "  declarable."]
+        elif straddles:
+            L += [f"  The interval straddles zero against: {straddles}.",
+                  "  Amendment 6's wording applies: replay's power advantage is",
+                  "  UNMEASURED on slack searchers at this sample size. That is NOT a",
+                  "  change of certifier — 7.1 established validity, and replay's",
+                  "  coverage claim is not a power claim and is not tested by this",
+                  "  rule. The tier order is presented on coverage grounds, with the",
+                  "  power comparison reported as inconclusive and its interval given."]
+        else:
+            L += [f"  {best} leads outright on the slack searchers, which the design",
+                  "  did not predict. Investigated before write-up, per rule 4's",
+                  "  fourth branch."]
     L.append("")
 
     # -- rule 5 --------------------------------------------------------------
@@ -236,11 +251,20 @@ def read(s0: dict, s3: dict, replication: dict | None = None) -> str:
             rows.append(float(np.mean(gaps)) if gaps else float("nan"))
         L.append(f"    {label:<16} unshifted {rows[0]:+.4f}   flipped {rows[1]:+.4f}   "
                  f"change {rows[1] - rows[0]:+.4f}")
-    inv = all(np.array_equal(np.asarray(s3[n]["p_class"]), np.asarray(s3[n]["p_class"]))
-              for n in SLACK)
+    # The invariance is structural, so what is checked is that the two things it
+    # rests on are true of the stored data: the flip actually moved the OOS
+    # numbers, and there is exactly ONE p-value per certifier per draw, so no
+    # second PASS decision exists for the flip to move.
+    moved = any(not np.array_equal(np.asarray(s3[n]["oos_unshifted"]),
+                                   np.asarray(s3[n]["oos_flipped"])) for n in SLACK)
+    single = all(np.asarray(s3[n][k]).ndim == 1 for n in SLACK for k, _ in CERTIFIERS)
     L += ["", "  PASS rate under the flip: INVARIANT by construction — the flip touches",
-          "  the out-of-sample panel only and every p-value is in-sample. Recorded as",
-          f"  invariance rather than as a result (checked: {inv}).", ""]
+          "  the out-of-sample panel only and every p-value is in-sample, so no PASS",
+          "  decision can move. Recorded as invariance, not as a result.",
+          f"    the flip did move the OOS numbers: {moved}",
+          f"    one p-value per certifier per draw, so one PASS decision: {single}",
+          "    (amendment 9: a non-zero change in the PASS rate would be a driver bug)",
+          ""]
 
     return "\n".join(L) + "\n"
 
