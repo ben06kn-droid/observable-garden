@@ -277,3 +277,56 @@ reading and the 17:30-local correction. **0a5a15a** carries the rest: two
 `TRANSITION` bars for XAMS, XPAR and XETR, and the post-auction phases. The
 pushed history was not rewritten; the download manifest records all three
 hashes.
+
+
+## Deviation — 2026-09-25: three builder defects against this registration, and
+## a look at the corrected panel
+
+**Found by the six cost diagnostics of 2026-09-24**
+(`experiments/adr_cost_diagnostics.py`, report at
+`figures/adr_cost_diagnostics.txt`, both runs recorded as looks in
+`data/adr_manifest.json`). They were asked for to decide whether the cost model
+needed amending. It does not; the builder did.
+
+**1. Look-ahead.** Section 4 registers "signal at the close of bar *b*, position
+held over bar *b*+1". `environments/real_panel.build_adr_panel` never shifted:
+`returns[t]` was bar *t*'s own return and the features at row *t* come from that
+same bar's close, so a specification loading `+ret1` earned the return of the bar
+its signal was computed from. The ETF panel shifts explicitly for its own
+registered timing; this one did not. **This is a defect against the
+registration, not a change of design.** Corrected: `EARN[:-1] = R[1:]`.
+
+How it showed: the class maximum lost everything under one extra bar of lag
+(107.4 → −2.9, and the same member → −97.4, a collapse with a sign flip), and the
+**placebo controls scored higher than the treated panel** (123.0 against 107.4) —
+an effect with nothing to do with a home market.
+
+**2. Wrong class depth.** Section 3 registers **signed subsets of size ≤ 2 over
+K = 22, 968 members**. The class table and the agent pilot used depth 3, which is
+the ETF panel's class. Corrected.
+
+**3. Invented control boundary.** Section 2 registers that controls take XAMS's
+boundary as a pseudo-close. The builder had been given a rule of the
+researcher's own — a name with no home market treated as never closed, making its
+`*_home_closed` features identically zero. Corrected to the registered rule.
+
+**Consequence for `prereg/agent-pilot.md` attempts 1–4.** Every number in them
+was taken on the leaked panel, including the Sharpe of 107 and pilot_3's
+CERTIFIED verdict. **None of it transfers.** Those attempts stand as a record of
+the harness being exercised, which is what the pilot was for, and as nothing
+else.
+
+**A look, and what it costs.** The corrected panel's class maximum has been
+observed: **gross +0.59, net −2.64**, gap-based rather than `ret1`-based, with
+costs 5.5× the gross edge and no net-positive member in the registered class.
+**Any human-declared short list on this panel is therefore not oblivious and is
+inadmissible**, on the same grounds as the `ret1_z` look recorded in
+`prereg/agent-on-real-data.md`. An agent that never saw these numbers is
+unaffected.
+
+**Closing the gap that let three defects through.** All three sat behind tests
+that cite pre-registration lines in their docstrings but assert behaviour rather
+than the registered constants. `tests/test_prereg_conformance.py` now parses the
+constants out of these files — the shift, the class depth, K, the session bounds,
+the control-boundary rule, the spread window, the floor and the fee — and asserts
+the builder uses exactly those.
