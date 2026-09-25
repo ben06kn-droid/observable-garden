@@ -18,6 +18,8 @@ cannot disagree with what ran.
 | `pick` | choose among named candidates by a named statistic, with an `else` |
 | `stop` | end the search, on a **declared trigger** |
 | `restart` | abandon the support for the next anchor, on a declared trigger |
+| `declare_triggers` | fix the stopping policy before anything is evaluated |
+| `change_trigger` | change it later: logged, timestamped, and priced |
 | `pick_prior` | name a specification before anything is evaluated |
 | `short_list` | declare up to `cap` specifications before anything is evaluated |
 | `declare_budget` | fix the step budget before anything is evaluated |
@@ -35,6 +37,15 @@ the evaluation it caused.
 `submit` are taken; every other call is refused. A second stop in one log would
 make the realized move count a fiction, and trigger replay is told exactly that
 number.
+
+**Triggers are declared before the first evaluation.** `stop` and `restart` may
+only fire a predicate already on record, because a trigger named at the moment of
+stopping is a description offered afterwards rather than a commitment the search
+ran under — the agent pilot found two runs of three whose stated rule would have
+ended their own search eight moves early. Changing one mid-search is **allowed**
+and is a data-dependent decision: `change_trigger` logs it with its timestamp,
+the trigger in force before it still replays, and every move after it is recorded
+as not replayable, which is what puts the run in the bracket.
 
 **A meta move without a declared trigger is refused, not logged.** `stop` and
 `restart` each take a trigger from `quixote/triggers.py` by name and parameter;
@@ -65,7 +76,8 @@ from quixote.triggers import PREDICATES, Trigger
 # cannot be called: `ToolSession.call` refuses rather than guessing.
 CONTENT_TOOLS = ("init", "extend_best", "swap_worst", "flip", "refine", "pick")
 META_TOOLS = ("stop", "restart")
-SLOT_TOOLS = ("pick_prior", "short_list", "declare_budget", "predict", "submit")
+SLOT_TOOLS = ("declare_triggers", "change_trigger", "pick_prior", "short_list",
+              "declare_budget", "predict", "submit")
 TOOLS = CONTENT_TOOLS + META_TOOLS + SLOT_TOOLS
 
 # A content move may be kept or discarded; a meta move may not, since it is the
@@ -255,6 +267,37 @@ class ToolSession:
                            "best": self.session.best_score})
 
     # -- declaration slots ---------------------------------------------------
+
+    def _declare_triggers(self, triggers) -> ToolResult:
+        """Fix the stopping policy, before any evaluation."""
+        built = []
+        for t in triggers:
+            kind = t["trigger"] if isinstance(t, dict) else t[0]
+            param = float(t["param"] if isinstance(t, dict) else t[1])
+            action = (t.get("action", "stop") if isinstance(t, dict)
+                      else (t[2] if len(t) > 2 else "stop"))
+            if kind not in PREDICATES:
+                raise ToolRefused(f"unknown trigger {kind!r}; the library is "
+                                  f"{list(PREDICATES)}")
+            built.append(Trigger(kind=kind, param=param, action=action))
+        self.session.declare_triggers(built)
+        return ToolResult(True, "declared: "
+                          + ", ".join(f"{t.name} -> {t.action}" for t in built))
+
+    def _change_trigger(self, trigger: str, param: float, action: str = "stop",
+                        reason: str = "") -> ToolResult:
+        """Change the stopping policy mid-search. Logged, timestamped, and every
+        move from here on is priced as not replayable."""
+        if trigger not in PREDICATES:
+            raise ToolRefused(f"unknown trigger {trigger!r}; the library is "
+                              f"{list(PREDICATES)}")
+        t = Trigger(kind=trigger, param=float(param), action=action)
+        self.session.change_trigger(t, reason=reason)
+        return ToolResult(True,
+                          f"changed to {t.name}. Recorded with its timestamp; from "
+                          "here the run is priced as not replayable and reported "
+                          "in the bracket.",
+                          {"triggers_changed": True})
 
     def _pick_prior(self, support, reason: str = "") -> ToolResult:
         """Name a specification before anything has been evaluated."""

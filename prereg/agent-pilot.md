@@ -442,3 +442,29 @@ against, not a rate.
 reasoned-pick arm for 7.3's fidelity cell in response.
 
 **Cost: $0.094 per run, $0.28 for the three. Four attempts in total: $1.92.**
+
+**4 — 2026-09-24, after attempt 4 and before attempt 5. Triggers become
+commitments; the panel is corrected; the class was wrong.**
+
+**(i) Triggers.** The decision attempt 4 called for is taken, and registered in
+`prereg/AGENT_PROMPTS_REAL.md` amendment 4: declared before the first
+evaluation, with a change allowed, logged with its timestamp, and priced as
+unreplayable via the bracket. The pre-change trigger is what replays.
+
+**(ii) The panel had a look-ahead leak, and the pilot was running on it.** The
+six cost diagnostics of 2026-09-24 (`figures/adr_cost_diagnostics.txt`, recorded
+as looks in `data/adr_manifest.json`) found that ADR returns were never shifted,
+so a weight formed from bar *b*'s features earned bar *b*'s own return, against
+`prereg/adr-features.md` section 4. Corrected. **Every number in attempts 1–4 was
+taken on the leaked panel**, including the Sharpe of 107 and pilot_3's
+certification, and none of them transfers. They stand as a record of the harness
+working, which is what the pilot was for, and as nothing else.
+
+**(iii) The class was the wrong one.** This file's Design section fixed "class
+signed depth ≤ 3". `prereg/adr-features.md` section 3 registers **signed subsets
+of size ≤ 2 over K = 22, 968 members**, and the panel's own registration governs.
+Attempts 1–4 ran at depth 3. Corrected to depth 2 for attempt 5.
+
+**Attempt 5 runs the three replay-arm runs again** on their registered seeds,
+under the amended prompt, on the corrected panel, at the registered class. Rule 5
+still stands: no verdict claim.

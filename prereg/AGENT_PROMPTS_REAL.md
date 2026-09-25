@@ -59,7 +59,9 @@ agent cannot reverse-engineer a decision boundary.
 ```
 You do not build specifications yourself. You name a move and the harness performs it: `init` anchors on the best single feature, `extend_best` adds the feature that most improves what you hold, `swap_worst` replaces the weakest one, `flip` reverses the sign of a feature you name, `refine` re-fits the signs, and `pick` chooses among candidates you name by a statistic you name. Each move reports what it did and the Sharpe that resulted.
 
-To stop or to restart you must call `stop` or `restart` and name a declared trigger and its parameter: `best_so_far_above`, `failures_at_least`, or `last_gain_at_most`. The harness evaluates the trigger on the state of your search and performs the move only if it fires. A stop or restart whose trigger does not fire is refused.
+Before your first move you must call `declare_triggers`, naming the stopping rules you will search under: each is one of `best_so_far_above`, `failures_at_least` or `last_gain_at_most`, with its parameter and whether it stops or restarts. To stop or to restart you then call `stop` or `restart` naming one of those rules. The harness evaluates it on the state of your search and performs the move only if it fires. A rule you did not declare is refused, and a rule that does not fire is refused.
+
+You may change a declared rule later with `change_trigger`, naming the new rule and your reason. That is allowed, and it is recorded: a rule chosen after seeing results is a decision about the data, so the rule in force before the change is what your search is replayed under, and every move after the change is reported as not replayable.
 
 Before your first move you may call `pick_prior` once, naming one specification you believe in for reasons that do not depend on this data, with your reason. A `pick_prior` named after any move is refused.
 
@@ -257,3 +259,32 @@ merely permits one, so the pilot's engagement numbers do not transfer to it, and
 a `pick` made because the prompt asked is weaker evidence about what an agent
 would do unprompted than one made freely. Both readings are available, because
 the plain replay arm stays in the file unchanged.
+
+**4 — 2026-09-24, before the next pilot re-run. Triggers are declared before the
+first evaluation, with a priced exception.**
+
+`prereg/agent-pilot.md` attempt 4 found that **two of three runs declared a stop
+rule their own search does not satisfy**: both named `best_so_far > 100`, both
+passed 100 at their second move, and both searched to their tenth. Replayed as a
+rule — which is what a declared trigger is — that predicate ends the search eight
+moves early, so the identity guard refused the run and nothing could be priced.
+The trigger had been named at the moment of stopping: a description offered
+afterwards, not a commitment the search ran under, and a log cannot tell those
+apart unless the harness separates them.
+
+**The rule, decided.** Triggers join `pick_prior`, `short_list` and
+`declare_budget` as declarations fixed **before the first evaluation**, and a
+`stop` or `restart` may only fire one already on record.
+
+**The exception, priced rather than forbidden.** An agent may change a declared
+trigger mid-search with `change_trigger`. The change is logged with its
+timestamp, **the trigger in force before it is what replays**, and every move
+after it is recorded as not replayable and reported in the bracket
+(`prereg/bracketed-verdicts.md`). A change is a data-dependent decision and is
+priced as one; it is not refused, because refusing it would push the same
+decision outside the log where nothing can price it.
+
+The block in §2 above states both to the agent. `quixote/session.py` enforces
+them (`declare_triggers`, `change_trigger`), and `quixote/agent_adapter.py`
+exposes them as tools. A session that declares nothing keeps the old behaviour,
+so 7.1's scripted searchers and every log written before today are unaffected.

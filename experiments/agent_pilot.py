@@ -143,6 +143,8 @@ class RunRecord:
     submitted_sharpe: float | None = None
     prior_pick: dict | None = None
     prediction: dict | None = None
+    triggers_changed: bool = False
+    triggers_predeclared: list = field(default_factory=list)
     certifying_null_computable: bool | None = None
     verdict: dict | None = None
     usd: float | None = None
@@ -311,6 +313,22 @@ def replay_tools(tools: ToolSession, rec: RunRecord, K: int):
             rec.triggers_fired[name] = rec.triggers_fired.get(name, 0) + 1
         return out
 
+    @tool("declare_triggers", "Fix the stopping rules you will search under, before "
+                              "your first move.", {"triggers": list})
+    async def declare_triggers(args):
+        return _call("declare_triggers", triggers=args.get("triggers", []))
+
+    @tool("change_trigger", "Change a declared stopping rule. Logged, and the rest "
+                            "of the run is priced as not replayable.",
+          {"trigger": str, "param": float, "action": str, "reason": str})
+    async def change_trigger(args):
+        out = _call("change_trigger", trigger=str(args.get("trigger", "")),
+                    param=float(args.get("param", 0.0)),
+                    action=str(args.get("action", "stop")),
+                    reason=str(args.get("reason", "")))
+        rec.triggers_changed = bool(tools.session.log.trigger_changes)
+        return out
+
     @tool("pick_prior", "Name one specification before your first move, with your "
                         "reason.", {"features": list[int], "signs": list[int], "reason": str})
     async def pick_prior(args):
@@ -340,7 +358,8 @@ def replay_tools(tools: ToolSession, rec: RunRecord, K: int):
             rec.submitted_sharpe = float(score)
         return out
 
-    return made + [flip, pick, stop, restart, pick_prior, predict, submit]
+    return made + [declare_triggers, change_trigger, flip, pick, stop,
+                   restart, pick_prior, predict, submit]
 
 
 # -- one run -----------------------------------------------------------------
@@ -358,6 +377,9 @@ def _scripted_replay(rec, handlers):
     that does not fire, a stop that does, and a submission. It deliberately
     exercises a refusal."""
     by = {h.name: h for h in handlers}
+    asyncio.run(by["declare_triggers"].handler(
+        {"triggers": [{"trigger": "best_so_far_above", "param": -99.0,
+                       "action": "stop"}]}))
     asyncio.run(by["pick_prior"].handler({"features": [1], "signs": [1],
                                           "reason": "dry run"}))
     asyncio.run(by["init"].handler({}))
@@ -391,6 +413,8 @@ def run_one(arm: str, seed: int, panel, masking, index: int,
         _drive_model(arm, rec, handlers, panel, sandbox, K)
 
     if tools is not None:
+        rec.triggers_predeclared = [dict(t) for t in tools.session.log.declared_trigger_records]
+        rec.triggers_changed = bool(tools.session.log.trigger_changes)
         _certify_run(rec, tools, sandbox, cls, table)
         rec.log("session_log", records=[
             {"step": r.step, "kind": r.move.kind, "support": list(r.support_after),
@@ -555,6 +579,14 @@ def report(records: list[RunRecord], dry_run: bool) -> str:
         parts = [f"{k} {r.triggers_fired.get(k, 0)}/{v}"
                  for k, v in sorted(r.triggers_declared.items())]
         L.append(f"  {r.run_id}: " + ", ".join(parts))
+    L += ["", "TRIGGERS DECLARED UP FRONT, AND CHANGES", "-" * 78]
+    for r in records:
+        if r.arm == "control":
+            continue
+        decl = ", ".join(f"{t['kind']}({t['param']:g})->{t['action']}"
+                         for t in r.triggers_predeclared) or "none declared"
+        L.append(f"  {r.run_id}: {decl}"
+                 + ("   CHANGED (priced as unreplayable)" if r.triggers_changed else ""))
     L += ["", "PICKS: accepted vs contradicted (rejected as declared)", "-" * 78]
     for r in records:
         L.append(f"  {r.run_id}: {r.picks_accepted} accepted, "

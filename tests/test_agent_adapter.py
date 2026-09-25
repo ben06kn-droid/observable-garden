@@ -151,7 +151,8 @@ def test_the_tool_list_is_the_grammar_plus_the_declaration_slots():
     assert CONTENT_TOOLS == CONTENT_KINDS
     assert META_TOOLS == ("stop", "restart")
     assert set(TOOLS) == set(CONTENT_TOOLS) | set(META_TOOLS) | {
-        "pick_prior", "short_list", "declare_budget", "predict", "submit"}
+        "declare_triggers", "change_trigger", "pick_prior", "short_list",
+        "declare_budget", "predict", "submit"}
 
 
 def test_an_unknown_tool_is_refused_with_the_list():
@@ -344,3 +345,79 @@ def test_the_identity_guard_names_the_cause_it_measured():
     assert "STRUCTURAL" in big.reason()
     assert "not one the class is linear in" in big.reason()
     assert "8.000e+00" in big.reason()
+
+
+
+# -- triggers are commitments, not descriptions ------------------------------
+
+def test_a_stop_may_only_fire_a_trigger_that_was_declared_up_front():
+    """The pilot found two runs of three declaring a stop rule their own search
+    does not satisfy. A declared trigger is a commitment the search runs under,
+    so a stop must name one already on record."""
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("declare_triggers",
+               triggers=[{"trigger": "last_gain_at_most", "param": 0.0}])
+    tools.call("init")
+    tools.call("extend_best")
+    tools.call("extend_best")          # until a gain of 0 is actually reached
+    with pytest.raises(ValueError, match="not declared before the first evaluation"):
+        tools.call("stop", trigger="best_so_far_above", param=-99.0)
+    # the declared one still has to FIRE; being declared is necessary, not enough
+    assert tools.session.info_state()["last_gain"] is not None
+
+
+def test_triggers_declared_after_the_first_evaluation_are_refused():
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("init")
+    with pytest.raises(ValueError):
+        tools.call("declare_triggers",
+                   triggers=[{"trigger": "last_gain_at_most", "param": 0.0}])
+
+
+def test_a_session_that_declared_nothing_is_the_pre_amendment_path():
+    """Scripted searchers and logs written before the slot existed are
+    untouched: their policy IS code, so declaration and use coincide."""
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("init")
+    assert tools.call("stop", trigger="best_so_far_above", param=-99.0).ok
+
+
+def test_changing_a_trigger_is_allowed_logged_and_priced():
+    """The licensed exception: allowed, timestamped, and every move after it is
+    not replayable, which is what puts the run in the bracket."""
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("declare_triggers",
+               triggers=[{"trigger": "last_gain_at_most", "param": 0.0}])
+    tools.call("init")
+    before = tools.call("extend_best")
+    assert tools.session.log.records[-1].replayable          # still a commitment
+    res = tools.call("change_trigger", trigger="best_so_far_above", param=-99.0,
+                     reason="the bar turned out to be the wrong shape")
+    assert res.ok and res.state["triggers_changed"]
+    change = tools.session.log.trigger_changes[0]
+    assert change["reason"].startswith("the bar")
+    assert change["timestamp"] > 0 and change["at_step"] == 2
+    tools.call("extend_best")
+    assert not tools.session.log.records[-1].replayable      # priced from here on
+    assert tools.call("stop", trigger="best_so_far_above", param=-99.0).ok
+    assert not tools.session.log.records[-1].replayable
+    assert [r.move.kind for r in tools.session.log.unreplayable()] == ["extend_best", "stop"]
+
+
+def test_the_pre_change_trigger_is_what_replays():
+    """'The pre-change trigger replays; the change is a data-dependent
+    decision.' The log keeps both, so a replay can take the first and the
+    verdict can price the rest."""
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("declare_triggers",
+               triggers=[{"trigger": "last_gain_at_most", "param": 0.25}])
+    first = list(tools.session.log.declared_trigger_records)
+    tools.call("init")
+    tools.call("change_trigger", trigger="last_gain_at_most", param=0.9)
+    assert first == [{"kind": "last_gain_at_most", "param": 0.25, "action": "stop"}]
+    assert tools.session.log.trigger_changes[0]["trigger"]["param"] == 0.9

@@ -12,21 +12,25 @@ RULE 1 — harness integrity (the only blocking rule)
 ENGAGEMENT, per run
 ------------------------------------------------------------------------------
   run                               arm           calls  moves   engag  sub       $
-  pilot_0_control_796462667         control           4      4    1.00  yes       -
-  pilot_1_control_141586427         control           4      4    1.00  yes       -
-  pilot_2_replay_gate_150079791     replay gate       6      5    0.83  yes       -
+  pilot_0_control_796462667         control           4      3    0.75  yes       -
+  pilot_1_control_141586427         control           4      3    0.75  yes       -
+  pilot_2_replay_gate_150079791     replay gate       7      6    0.86  yes       -
 
 MOVES BY TYPE
 ------------------------------------------------------------------------------
-  pilot_0_control_796462667: evaluate 3, submit 1
-  pilot_1_control_141586427: evaluate 3, submit 1
-  pilot_2_replay_gate_150079791: extend_best 1, init 1, pick_prior 1, stop 1, submit 1
+  pilot_0_control_796462667: evaluate 2, submit 1
+  pilot_1_control_141586427: evaluate 2, submit 1
+  pilot_2_replay_gate_150079791: declare_triggers 1, extend_best 1, init 1, pick_prior 1, stop 1, submit 1
 
 TRIGGERS: declared vs fired
 ------------------------------------------------------------------------------
   pilot_0_control_796462667: none declared
   pilot_1_control_141586427: none declared
   pilot_2_replay_gate_150079791: best_so_far_above 1/2
+
+TRIGGERS DECLARED UP FRONT, AND CHANGES
+------------------------------------------------------------------------------
+  pilot_2_replay_gate_150079791: best_so_far_above(-99)->stop
 
 PICKS: accepted vs contradicted (rejected as declared)
 ------------------------------------------------------------------------------
@@ -36,7 +40,7 @@ PICKS: accepted vs contradicted (rejected as declared)
 
 REFUSALS by kind
 ------------------------------------------------------------------------------
-  trigger_did_not_fire 1
+  outside_class 2, trigger_did_not_fire 1
 
 DECLARATIONS
 ------------------------------------------------------------------------------
@@ -59,6 +63,6 @@ SPECIMEN VERDICT BLOCK — pilot_2_replay_gate_150079791
   moves             3   candidates 86
   fill engaged      None of None replicates
   unreplayable      none
-  CAVEAT: Computed from base_feature_columns, a DIAGNOSTIC basis on this panel: costs are not linear in the weights, so this prices a different statistic from the net one the search optimised. A specimen of the machinery, not a certification of this run.
-    - Identity-replicate guard: FAIL. Replaying the un-resampled data gives support ((21, -1.0), (0, 1.0)) against the realized ((1, 1.0), (0, 1.0)). The two scoring paths differ at ~1e-12 and that has flipped an argmax, so every later move priced a search that did not run. This run is flagged and not priced.
+  CAVEAT: Priced from the class table: evaluate() and every replicate read the same stored net streams, so the null prices the statistic the search optimised. B is small because this asks whether the null is computable end to end, not what its p-value is; rule 5 forbids the number entering anything.
+    - Identity-replicate guard: FAIL. Replaying the un-resampled data gives support ((16, -1.0),) against the realized ((16, -1.0), (17, -1.0)). The realized and replayed scores differ by 2.011e+00, which is a STRUCTURAL difference between the two scoring paths, far too large to be float accumulation: the replay basis is not the statistic the search optimised. On a net-of-cost panel that is expected, since the base-column basis is not one the class is linear in. Every later move would price a search that did not run, so this run is flagged and not priced.
     - Not priced: the certifying null would be pricing a search that did not run.
