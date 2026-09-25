@@ -219,6 +219,8 @@ def test_every_registered_refusal_kind_is_produced_by_some_real_refusal():
                                "declared before the first evaluation"),
         "trigger_is_firing": ("your declared rule last_gain > 0.0 has fired "
                               "(value 0.0000). It licenses a stop."),
+        "inapplicable_move": ("flip is not defined in this state: feature 6 is not in "
+                              "the support [0, 2], so there is no sign to reverse"),
     }
     assert set(samples) == set(REFUSAL_KINDS)
     for kind, message in samples.items():

@@ -383,43 +383,88 @@ class IdentityCheck:
     # on the same support
     realized_actions: tuple = ()
     replayed_actions: tuple = ()
+    # What this check IS, and what it ran on. The reason is stated from these,
+    # never inferred from the size of the gap: a large gap on a table basis and a
+    # large gap on a column basis mean different things, and the check knows
+    # which it used.
+    check: str = "integrity"          # "integrity" | "commitment"
+    basis: str = "base columns"       # "class table" when a scorer was supplied
 
     @property
     def score_gap(self) -> float:
         return abs(self.realized_score - self.replayed_score)
 
     def reason(self) -> str:
+        what = {"integrity": ("Integrity check (fixed-sequence replay: the realized "
+                              "meta decisions with the logged content moves)"),
+                "commitment": ("Commitment check (the search replayed under the rule "
+                               "it committed to)")}[self.check]
         if self.agrees:
-            return (f"Identity-replicate guard: PASS. The base-column replay "
-                    f"reproduces the realized support; scores differ by "
-                    f"{self.score_gap:.2e}, which is float accumulation and not "
-                    "a different search.")
+            return (f"{what}: PASS on the {self.basis}. The replay reproduces the "
+                    f"realized support and score; they differ by {self.score_gap:.2e}.")
         seq = ("" if self.realized_actions == self.replayed_actions else
                f" The meta decisions differ too: replayed {list(self.replayed_actions)} "
                f"against realized {list(self.realized_actions)}.")
-        # The cause is NOT assumed. On a simulated panel the two paths differ by
-        # float accumulation and a near-tie flips an argmax. On a panel whose
-        # sandbox scores NET OF COSTS, they differ structurally, because the
-        # base-column basis is not one the class is linear in
-        # (`environments/real_sandbox.py`). The measured gap tells them apart, so
-        # it is reported instead of a story being told about it.
-        gap = self.score_gap
-        cause = ("a difference of float accumulation between the two scoring paths, "
-                 "which has flipped an argmax on a near-tie"
-                 if gap < 1e-6 else
-                 "a STRUCTURAL difference between the two scoring paths, far too large "
-                 "to be float accumulation: the replay basis is not the statistic the "
-                 "search optimised. On a net-of-cost panel that is expected, since the "
-                 "base-column basis is not one the class is linear in")
-        return ("Identity-replicate guard: FAIL. Replaying the un-resampled data "
-                f"gives support {self.replayed_support} against the realized "
-                f"{self.realized_support}.{seq} The realized and replayed scores "
-                f"differ by {gap:.3e}, which is {cause}. Every later move would price "
-                "a search that did not run, so this run is flagged and not priced.")
+        if self.check == "integrity":
+            cause = (
+                "This is a STRUCTURAL failure. The realized meta decisions were held "
+                f"fixed and the logged content moves re-executed on the {self.basis}, "
+                "so nothing about the agent's rules is involved: either the basis is "
+                "not the one the search was scored on, or the replay engine does not "
+                "re-execute what the log holds. The run is not priced.")
+        else:
+            cause = (
+                f"Replayed on the {self.basis} under the committed rule. The search "
+                "that ran is not the search that rule describes; where a trigger "
+                "change is logged this is expected and is priced in the bracket, and "
+                "where none is logged the run is not priced.")
+        return (f"{what}: FAIL. Replaying gives support {self.replayed_support} against "
+                f"the realized {self.realized_support}.{seq} The realized and replayed "
+                f"scores differ by {self.score_gap:.3e}. {cause}")
+
+
+def integrity_check(log: SessionLog, spec_class, base: np.ndarray,
+                    annualization: float = 1.0, score_fn=None) -> IdentityCheck:
+    """**Does the engine reproduce the log at all?**
+
+    Fixed-sequence replay on the UN-resampled data: the realized meta decisions
+    are held at what the log says they were, the logged content moves are
+    re-executed, and the result must be the realized support, score and action
+    sequence.
+
+    **This must hold on every run**, with or without a trigger change, because it
+    involves no rule of the agent's: it asks only whether the basis and the
+    engine reproduce what the harness itself recorded. Until 2026-09-25 the
+    `certify` path skipped it whenever a change was logged, so a basis or engine
+    defect was invisible on any run with one -- the ETF panel's best-against-last
+    bug would have been undetectable on all three ADR runs.
+    """
+    return _compare(log, spec_class, base, annualization, score_fn,
+                    check="integrity", frozen=list(log.actions()))
+
+
+def commitment_check(log: SessionLog, spec_class, base: np.ndarray,
+                     annualization: float = 1.0, score_fn=None) -> IdentityCheck:
+    """**Did the search follow the rule it committed to?**
+
+    The declared triggers are re-evaluated at every step, as a replicate does.
+    A run that changed a trigger is expected to fail here, and that failure is
+    what the bracket prices; a run that changed nothing and still fails did not
+    search under its own declaration.
+    """
+    return _compare(log, spec_class, base, annualization, score_fn,
+                    check="commitment", frozen=None)
 
 
 def identity_check(log: SessionLog, spec_class, base: np.ndarray,
                    annualization: float = 1.0, score_fn=None) -> IdentityCheck:
+    """The commitment check, under its historical name."""
+    return commitment_check(log, spec_class, base, annualization, score_fn)
+
+
+def _compare(log: SessionLog, spec_class, base: np.ndarray,
+             annualization: float, score_fn, check: str,
+             frozen: list[str] | None) -> IdentityCheck:
     """Replay `log` on `base` itself -- no resampling -- and compare.
 
     The realized submission is the best accepted support: the last record whose
@@ -445,7 +490,8 @@ def identity_check(log: SessionLog, spec_class, base: np.ndarray,
             best_i = i
     realized_support = taken[best_i].support_after if taken else ()
     realized_score = taken[best_i].score_after if taken else float("-inf")
-    t = LoggedPolicy(log, spec_class).trace(base, annualization, score_fn=score_fn)
+    t = LoggedPolicy(log, spec_class).trace(base, annualization,
+                                           frozen=frozen, score_fn=score_fn)
     same_support = tuple(t.support) == tuple(realized_support)
     if log.is_meta():
         realized_actions, replayed_actions = tuple(log.actions()), tuple(t.moves)
@@ -458,6 +504,8 @@ def identity_check(log: SessionLog, spec_class, base: np.ndarray,
         n_real = len(taken)
         n_rep = sum(1 for m in t.moves if m == "accept")
     return IdentityCheck(
+        check=check,
+        basis="class table" if score_fn is not None else "base columns",
         agrees=agrees,
         realized_support=tuple(realized_support), replayed_support=tuple(t.support),
         realized_score=float(realized_score), replayed_score=float(t.score),

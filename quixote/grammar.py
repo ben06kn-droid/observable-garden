@@ -133,6 +133,52 @@ class Grammar:
 
     # -- moves -------------------------------------------------------------
 
+    # Every move's precondition, in one place, each mapped to the refusal kind
+    # it belongs to. Three different facts about a run, so three kinds:
+    #
+    #   outside_class      the DECLARED CLASS forbids it - an extension past
+    #                      max_size, a flip in an unsigned class
+    #   inapplicable_move  well-formed arguments, nothing to do with the class,
+    #                      the move is simply undefined in this state - a flip on
+    #                      a feature the support does not hold, a swap with
+    #                      nothing to swap, a refine with nothing to re-fit
+    #
+    # `malformed_arguments` never appears here: it is settled by `Move`'s own
+    # validation before a state is consulted at all.
+    def precondition(self, support: Support, move: Move):
+        """`(kind, reason)` if this move is undefined here, else None."""
+        held = {k for k, _ in support}
+        if move.kind in ("init", "extend_best"):
+            if len(support) >= self.max_size:
+                return ("outside_class",
+                        f"the support holds {len(support)} features and the declared "
+                        f"class allows at most {self.max_size}")
+            if len(held) >= self.K:
+                return ("inapplicable_move", "every feature is already held")
+        elif move.kind == "swap_worst":
+            if not support:
+                return ("inapplicable_move",
+                        "the support is empty, so there is nothing to swap out")
+            if len(held) >= self.K:
+                return ("inapplicable_move",
+                        "every feature is already held, so there is nothing to swap in")
+        elif move.kind == "flip":
+            if len(self.signs) == 1:
+                return ("outside_class",
+                        "the declared class is unsigned, so it holds no negative sign")
+            if move.feature not in held:
+                return ("inapplicable_move",
+                        f"feature {move.feature} is not in the support {sorted(held)}, "
+                        "so there is no sign to reverse")
+        elif move.kind == "refine":
+            if not support:
+                return ("inapplicable_move",
+                        "the support is empty, so there are no signs to re-fit")
+        elif move.kind == "pick":
+            if all(j in held for j in move.among):
+                return ("inapplicable_move", "every candidate named is already held")
+        return None
+
     def candidates(self, support: Support, move: Move) -> list[tuple[float, Support]]:
         """Every support this move could produce, scored. Enumeration order is
         feature-ascending then sign (+1, -1), fixed so that a tie resolves the
@@ -159,7 +205,13 @@ class Grammar:
                 return []                      # unsigned class: nothing to flip
             idx = [i for i, (k, _) in enumerate(support) if k == move.feature]
             if not idx:
-                raise ValueError(f"cannot flip feature {move.feature}: not in the support")
+                # Inapplicable, not an error. A REPLAY reaches supports the
+                # realized search did not, so a logged `flip` can land on a state
+                # that does not hold the feature; raising there made the whole
+                # certification uncomputable, which is how ADR pilot runs 3 and 4
+                # came back "computable: NO" while run 2, whose flips happened to
+                # land, came back yes.
+                return []
             i = idx[0]
             ns = support[:i] + ((support[i][0], -support[i][1]),) + support[i+1:]
             out.append((self.score(ns, move.statistic), ns))
@@ -170,7 +222,9 @@ class Grammar:
                 out.append((self.score(ns, "sharpe"), ns))
         elif move.kind == "refine":
             # re-score the current support under a different statistic; the
-            # support does not change
+            # support does not change. Nothing to re-fit on an empty support.
+            if not support:
+                return []
             out.append((self.score(support, move.statistic), tuple(support)))
         return out
 

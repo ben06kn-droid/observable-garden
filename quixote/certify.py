@@ -34,7 +34,8 @@ from estimator.bootstrap import select_block_length, stationary_bootstrap_indice
 from estimator.trigger_replay import ReplayNulls
 from quixote.pricing import DEFAULT as NO_PRICING
 from quixote.pricing import PricingOptions, steps_to_price
-from quixote.replay import LoggedPolicy, identity_check
+from quixote.replay import (LoggedPolicy, commitment_check,
+                            integrity_check)
 from quixote.verdict import DEPENDS_ON_JUDGMENT, QuixoteVerdict
 
 CERTIFYING_NULL = "trigger replay (fixed-sequence-replay, read 2026-09-24)"
@@ -111,8 +112,26 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
     **flagged and not priced** (the identity guard), because there is no
     defensible way to price a search whose own replay is not that search.
     """
-    guard = identity_check(log, spec_class, base, annualization,
-                           score_fn=None if table is None else table.scorer(None))
+    score_fn = None if table is None else table.scorer(None)
+
+    # INTEGRITY FIRST, on every run, changes or not. It holds the realized meta
+    # decisions fixed and re-executes the logged content moves, so no rule of the
+    # agent's is involved: it asks only whether the basis and the engine
+    # reproduce what the harness recorded. Until 2026-09-25 the trigger-change
+    # branch below priced `three_nulls` with no such check, so a basis or engine
+    # defect was invisible on any run with a change.
+    integrity = integrity_check(log, spec_class, base, annualization, score_fn=score_fn)
+    if not integrity.agrees:
+        return QuixoteVerdict(
+            status="UNDECIDABLE", alpha=alpha,
+            n_moves=log.n_moves, n_candidates=log.total_candidates(),
+            contradicted_picks=len(log.contradicted_picks()),
+            reasons=[integrity.reason(),
+                     "Not priced, and no other branch is taken: a run whose own log "
+                     "cannot be re-executed is not a run any null can price, whatever "
+                     "else it logged."])
+
+    guard = commitment_check(log, spec_class, base, annualization, score_fn=score_fn)
     if not guard.agrees:
         # A run that CHANGED a declared trigger is expected to diverge here, and
         # that is what the bracket is for rather than a reason to refuse. The
@@ -143,6 +162,7 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
                                 + ("the declared-class p-value" if p_declared_class
                                    is not None else "not computed")))
             v.reasons += [
+                integrity.reason(),
                 guard.reason(),
                 f"{len(changes)} declared trigger change(s) are logged, so the replay "
                 "under the committed rule is EXPECTED to diverge from the realized "
@@ -186,6 +206,7 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         locally_priced_steps=tuple(sorted(priced)),
         pricing_licensed=False if priced else None,
     )
+    v.reasons.append(integrity.reason())
     v.reasons.append(
         f"Certified against {CERTIFYING_NULL}: p = {p_trigger:.4f} against alpha = {alpha}. "
         "7.1 measured this null at or below nominal for all six registered searchers "

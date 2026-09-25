@@ -221,13 +221,16 @@ def test_a_declaration_after_the_first_evaluation_is_refused():
 
 
 def test_a_move_outside_the_declared_class_is_refused_by_the_harness():
+    """An extension at a full support is forbidden by the CLASS (max_size), not
+    undefined by the state, so it is `outside_class` and not
+    `inapplicable_move`. The audit maps each precondition to its kind."""
     data, cfg, cls = _fixture()
     tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
     tools.call("init")
     tools.call("extend_best")
     tools.call("extend_best")               # support is now full at max_size 3
-    res = tools.call("extend_best")
-    assert not res.ok and res.state["n_candidates"] == 0
+    with pytest.raises(ToolRefused, match="would leave the declared class"):
+        tools.call("extend_best")
     assert all(len(r.support_after) <= 3 for r in tools.session.log.records)
 
 
@@ -330,27 +333,42 @@ def test_the_milestone_still_holds_with_the_stop_latch():
     assert _records(agent.log) == _records(session.log)
 
 
-def test_the_identity_guard_names_the_cause_it_measured():
-    """The guard's message used to assert float accumulation (~1e-12) whichever
-    way it failed. On a net-of-cost panel the two paths differ structurally,
-    because the base-column basis is not one the class is linear in, and a
-    message that blamed float noise would send a reader to the wrong bug."""
+def test_the_guard_states_its_cause_from_what_it_knows_not_from_the_gap():
+    """Decided 2026-09-25. The message used to infer the cause from the SIZE of
+    the gap - "too large to be float accumulation, so the basis is wrong" - which
+    was a guess, and a wrong one whenever the basis was a class table. It now
+    says which check ran and on which basis, both of which it knows."""
     from quixote.replay import IdentityCheck
-    small = IdentityCheck(agrees=False, realized_support=((0, 1.0),),
-                          replayed_support=((1, 1.0),), realized_score=1.0,
-                          replayed_score=1.0 + 1e-13, n_moves_realized=2,
-                          n_moves_replayed=2)
-    assert "float accumulation" in small.reason() and "STRUCTURAL" not in small.reason()
-    big = IdentityCheck(agrees=False, realized_support=((0, 1.0),),
-                        replayed_support=((1, 1.0),), realized_score=1.0,
-                        replayed_score=9.0, n_moves_realized=2, n_moves_replayed=2)
-    assert "STRUCTURAL" in big.reason()
-    assert "not one the class is linear in" in big.reason()
-    assert "8.000e+00" in big.reason()
+    for gap in (1e-13, 9.0):
+        integrity = IdentityCheck(agrees=False, realized_support=((0, 1.0),),
+                                  replayed_support=((1, 1.0),), realized_score=1.0,
+                                  replayed_score=1.0 + gap, n_moves_realized=2,
+                                  n_moves_replayed=2, check="integrity",
+                                  basis="class table")
+        r = integrity.reason()
+        assert "Integrity check" in r and "class table" in r and "STRUCTURAL" in r
+        assert "float accumulation" not in r      # never inferred from the gap
+        commitment = IdentityCheck(agrees=False, realized_support=((0, 1.0),),
+                                   replayed_support=((1, 1.0),), realized_score=1.0,
+                                   replayed_score=1.0 + gap, n_moves_realized=2,
+                                   n_moves_replayed=2, check="commitment",
+                                   basis="base columns")
+        r2 = commitment.reason()
+        assert "Commitment check" in r2 and "base columns" in r2
+        assert "committed to" in r2 and "bracket" in r2
 
 
+def test_a_passing_guard_names_the_basis_it_actually_used():
+    """The PASS text said "the base-column replay" even when a class table had
+    been supplied, which is the same guess in the other direction."""
+    from quixote.replay import IdentityCheck
+    ok = IdentityCheck(agrees=True, realized_support=((0, 1.0),),
+                       replayed_support=((0, 1.0),), realized_score=1.0,
+                       replayed_score=1.0, n_moves_realized=1, n_moves_replayed=1,
+                       check="integrity", basis="class table")
+    assert "PASS on the class table" in ok.reason()
+    assert "base-column" not in ok.reason()
 
-# -- triggers are commitments, not descriptions ------------------------------
 
 def test_a_stop_may_only_fire_a_trigger_that_was_declared_up_front():
     """The pilot found two runs of three declaring a stop rule their own search
@@ -493,3 +511,62 @@ def test_the_declaration_replays_and_the_change_lives_beside_it():
         {"kind": "best_so_far_above", "param": -99.0, "action": "stop"}]
     # the live search runs under the change; the replay under the declaration
     assert [t.name for t, _ in tools.session.fired_triggers()] == ["best_so_far > bar"]
+
+
+def test_a_move_undefined_in_this_state_is_refused_as_inapplicable():
+    """Amendment 8. Well-formed arguments, nothing outside the class, but the
+    move has no meaning in the current state. Distinct from malformed_arguments
+    and from outside_class, because the three are different facts about a run."""
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    with pytest.raises(ToolRefused, match="is not defined in this state"):
+        tools.call("refine")                          # empty support
+    with pytest.raises(ToolRefused, match="is not defined in this state"):
+        tools.call("swap_worst")                      # nothing to swap out
+    tools.call("init")
+    # this fixture's class is UNSIGNED, so a flip is a class matter, not a state
+    # one, whichever feature is named
+    with pytest.raises(ToolRefused, match="would leave the declared class"):
+        tools.call("flip", feature=tools.session.support[0][0])
+
+
+def test_every_move_kinds_precondition_is_registered_in_one_place():
+    """The audit: each content move names the state it requires, and the grammar
+    is the single place that says so."""
+    from quixote.grammar import CONTENT_KINDS, Grammar, Move
+    data, cfg, cls = _fixture()
+    g = Grammar(cls, _sandbox(data, cfg).base_feature_columns(), 1.0)
+    empty = ()
+    full = tuple((j, 1.0) for j in range(cls.max_size))
+    assert g.precondition(empty, Move("init")) is None
+    assert g.precondition(full, Move("extend_best"))[0] == "outside_class"
+    assert g.precondition(empty, Move("swap_worst"))[0] == "inapplicable_move"
+    assert g.precondition(empty, Move("refine"))[0] == "inapplicable_move"
+    assert g.precondition(full, Move("refine")) is None
+    assert g.precondition(empty, Move("flip", feature=0))[0] == "outside_class"
+    assert g.precondition(full, Move("init"))[0] == "outside_class"
+    from garden.spec_class import SubsetClass
+    signed = Grammar(SubsetClass(max_size=3, signed=True), g.base, 1.0)
+    assert signed.precondition(empty, Move("flip", feature=0))[0] == "inapplicable_move"
+    assert signed.precondition(full, Move("flip", feature=0)) is None
+    assert g.precondition(full, Move("pick", statistic="sharpe",
+                                     among=tuple(range(cls.max_size))))[0] == (
+        "inapplicable_move")
+    # and every content kind is covered by the audit
+    for kind in CONTENT_KINDS:
+        mv = Move(kind, feature=0) if kind == "flip" else (
+            Move(kind, among=(0, 1)) if kind == "pick" else Move(kind))
+        g.precondition(empty, mv)          # no KeyError: every kind is handled
+
+
+def test_an_inapplicable_logged_move_stops_a_replay_instead_of_raising():
+    """ADR pilot runs 3 and 4 read 'computable: NO' because a logged `flip`
+    landed, in the REPLAY, on a support that did not hold the feature, and the
+    grammar raised. A replay reaches states the realized search did not; an
+    inapplicable move there yields no candidates and ends the replay."""
+    from quixote.grammar import Grammar, Move
+    data, cfg, cls = _fixture()
+    g = Grammar(cls, _sandbox(data, cfg).base_feature_columns(), 1.0)
+    assert g.candidates(((0, 1.0),), Move("flip", feature=5)) == []
+    support, score, n = g.apply(((0, 1.0),), Move("flip", feature=5))
+    assert n == 0

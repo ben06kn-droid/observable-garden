@@ -665,3 +665,76 @@ not about these ETFs**, and the holdout was not opened at any point.
 each caught by the same identity guard: the replay basis, the replayed policy,
 the censored statistic, and best-against-last. That is the pilot pattern earning
 its keep.
+
+**8 — 2026-09-25. An eleventh refusal kind, `no_submit` as an outcome, the guard
+split in two, and how the runs are recorded.**
+
+**(i) `inapplicable_move`, and the audit behind it.** A move can fail for three
+different reasons and they are three different facts about a run:
+`malformed_arguments` is an agent that cannot count, **`inapplicable_move` is an
+agent that has lost track of its own state**, and `outside_class` is an agent
+reaching outside its declared class. The third existed; the second did not.
+
+`Grammar.precondition` now holds every move's state precondition in one place and
+maps each to its kind:
+
+| move | precondition | kind when it fails |
+|---|---|---|
+| `init`, `extend_best` | support below `max_size` | **outside_class** — the class is what forbids it |
+| `init`, `extend_best` | some feature unheld | `inapplicable_move` |
+| `swap_worst` | support non-empty, some feature unheld | `inapplicable_move` |
+| `flip` | the class is signed | **outside_class** |
+| `flip` | the named feature is held | `inapplicable_move` |
+| `refine` | support non-empty | `inapplicable_move` |
+| `pick` | some candidate not already held | `inapplicable_move` |
+
+`malformed_arguments` never appears in that table: `Move`'s own validation
+settles it before any state is consulted.
+
+**Why ADR runs 3 and 4 read "computable: NO" while run 2 read yes.** All three
+logged trigger changes, so the change was not the discriminator. Runs 3 and 4
+each logged a `flip` that, **at the corresponding step of the replay**, landed on
+a support that did not hold the feature — the replay diverges from the realized
+search, so it reaches states the search never did. `Grammar.candidates` **raised**
+there, the exception propagated out of `certify`, and the runner recorded the
+null as uncomputable. Run 2's flips happened to land on supports that held their
+feature. A logged move that is inapplicable in a replayed state now yields **no
+candidates**, which ends that replay cleanly, instead of raising.
+
+**(ii) `no_submit` is an outcome, not an error.** A run that reaches `max_turns`
+without submitting is recorded as `no_submit` and **kept in the run count**,
+exactly as `prereg/AGENT_PROMPTS.md` §3 records it for the synthetic harness. The
+**`no_submit` rate per arm** joins the readouts. **No budget change**, and
+prompts are unchanged. Noted with it: under decision (b) a `trigger_is_firing`
+refusal **consumes a turn by design** — the harness holding an agent to its own
+declared rule costs turns out of the same budget.
+
+**(iii) The identity guard splits in two.**
+
+- **INTEGRITY** — fixed-sequence replay on the un-resampled data: the realized
+  meta decisions held fixed, the logged content moves re-executed, reproducing
+  the realized support, score and actions. **It must hold on every run, trigger
+  changes or not**, because no rule of the agent's is involved: it asks only
+  whether the basis and the engine reproduce what the harness recorded. Failure
+  is **UNDECIDABLE**, structural, whatever else is logged.
+- **COMMITMENT** — the search replayed under the rule it committed to. Failure
+  **with changes logged** is `DEPENDS_ON_JUDGMENT`, as amendment 6 registered.
+
+The defect this fixes: `certify`'s trigger-change branch priced `three_nulls`
+**with no integrity check at all**, so a basis or engine bug was invisible on any
+run with a change. Every ADR run logged one, so **the ETF panel's
+best-against-last bug would have been undetectable there**.
+
+`IdentityCheck.reason()` now states its cause from **what it knows** — which
+check ran, which basis it ran on — and never from the size of the gap. The old
+text inferred "too large to be float accumulation, therefore the basis is wrong",
+which was a guess and a wrong one whenever the basis was a class table; the PASS
+text called every basis "base-column" even when a table was supplied.
+
+**(iv) How the runs are recorded.** Each pilot run records the **credential** that
+paid for it — `seat` or `api` — in its index. The ADR seat runs live in
+`runs/agent_pilot_seat/` with `credential = seat`; the ETF run is recorded as an
+attempt alongside the ADR attempts. **Still open:** an `endpoint` field carrying
+the served-model assertion. §3 pins the model string and every run checks it, but
+nothing yet records *which endpoint answered*, and the field is present as `null`
+until it does.

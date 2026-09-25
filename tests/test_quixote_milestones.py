@@ -195,7 +195,8 @@ def test_the_identity_guard_catches_a_disagreeing_replay():
     c = identity_check(s.log, cls, sb.base_feature_columns(),
                        float(np.sqrt(cfg.periods_per_year)))
     assert not c.agrees
-    assert "flagged and not priced" in c.reason()
+    assert "not priced" in c.reason()
+    assert "Commitment check" in c.reason()
 
 
 def test_the_guard_fires_rarely_enough_to_be_usable():

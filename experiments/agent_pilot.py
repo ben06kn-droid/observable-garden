@@ -66,7 +66,8 @@ REFUSAL_KINDS = ("unknown_tool", "trigger_did_not_fire", "unknown_trigger",
                  "after_stop",          # amendment 1, found by the dry run
                  "malformed_arguments",  # amendment 2, found by attempt 1
                  "undeclared_trigger",   # amendment 5, the new rule firing
-                 "trigger_is_firing")    # amendment 6, decision (b)
+                 "trigger_is_firing",    # amendment 6, decision (b)
+                 "inapplicable_move")    # amendment 8: well formed, undefined here
 
 
 def classify_refusal(message: str) -> str:
@@ -90,6 +91,9 @@ def classify_refusal(message: str) -> str:
     # amendment 6, decision (b): a content move while a declared rule is firing.
     if "has fired" in m:
         return "trigger_is_firing"
+    # amendment 8: well-formed arguments, move undefined in this state.
+    if "is not defined in this state" in m:
+        return "inapplicable_move"
     if "outside the declared class" in m or "leave the declared class" in m:
         return "outside_class"
     # amendment 2: an argument the harness cannot interpret. The harness is
@@ -170,6 +174,8 @@ class RunRecord:
     triggers_predeclared: list = field(default_factory=list)
     certifying_null_computable: bool | None = None
     verdict: dict | None = None
+    no_submit: bool = False
+    credential: str = "unknown"
     usd: float | None = None
     usage: dict | None = None
     models_seen: list = field(default_factory=list)
@@ -451,7 +457,10 @@ def run_one(arm: str, seed: int, panel, masking, index: int,
     elif rec.submitted and sandbox.submission is not None:
         rec.submitted_sharpe = float(max((e.sharpe for e in sandbox.transcript),
                                          default=float("nan")))
-    rec.log("end", submitted=rec.submitted, engagement=rec.engagement)
+    if not rec.submitted:
+        rec.no_submit = True
+    rec.log("end", submitted=rec.submitted, engagement=rec.engagement,
+            no_submit=rec.no_submit)
     return rec
 
 
@@ -544,8 +553,20 @@ def _drive_model(arm, rec, handlers, panel, sandbox, K) -> None:
                         rec.usd = getattr(msg, "total_cost_usd", None)
                         rec.usage = dict(getattr(msg, "usage", {}) or {})
                         if getattr(msg, "is_error", False):
-                            rec.error = str(getattr(msg, "subtype", "error"))
-                            rec.log("result_error", detail=rec.error)
+                            detail = str(getattr(msg, "subtype", "error"))
+                            # A run that reaches max_turns without submitting is
+                            # `no_submit`: a recorded OUTCOME kept in the run
+                            # count, exactly as the synthetic harness records it
+                            # (AGENT_PROMPTS.md section 3), not an error. Under
+                            # decision (b) a `trigger_is_firing` refusal consumes
+                            # a turn by design, so the turn budget is spent on
+                            # the harness holding the agent to its own rule.
+                            if "max_turns" in detail:
+                                rec.no_submit = True
+                                rec.log("no_submit", detail=detail)
+                            else:
+                                rec.error = detail
+                                rec.log("result_error", detail=detail)
 
     try:
         asyncio.run(go())
@@ -614,7 +635,17 @@ def report(records: list[RunRecord], dry_run: bool) -> str:
     for r in records:
         L.append(f"  {r.run_id}: {r.picks_accepted} accepted, "
                  f"{r.picks_contradicted} contradicted")
-    L += ["", "REFUSALS by kind", "-" * 78]
+    L += ["", "NO_SUBMIT — reached max_turns without submitting (a recorded outcome,",
+          "            kept in the run count, not an error)", "-" * 78]
+    for arm in sorted({r.arm for r in records}):
+        rows = [r for r in records if r.arm == arm]
+        k = sum(1 for r in rows if r.no_submit)
+        L.append(f"  {arm:<14} {k} of {len(rows)}"
+                 + (f"   ({', '.join(r.run_id for r in rows if r.no_submit)})" if k else ""))
+    L += ["  Under decision (b) a trigger_is_firing refusal consumes a turn by design:",
+          "  the harness holding an agent to its own declared rule costs turns, and",
+          "  the turn budget is unchanged.", "",
+          "REFUSALS by kind", "-" * 78]
     kinds: dict = {}
     for r in records:
         for x in r.refusals:
@@ -666,6 +697,8 @@ def main(argv=None) -> int:
     ap.add_argument("--runs", type=int, default=5)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--panel", default="adr", choices=("adr", "etf"))
+    ap.add_argument("--credential", default="api", choices=("api", "seat"),
+                    help="which credential paid for the run; recorded in the index")
     ap.add_argument("--arms", default="all", choices=("all", "replay", "control"),
                     help="re-run only one arm's runs, keeping their registered seeds")
     ap.add_argument("--out", default=str(RUNS_ROOT))
@@ -687,6 +720,7 @@ def main(argv=None) -> int:
             continue
         rec = run_one(ARM_PLAN[i], seeds[i], panel, masking, i, dry_run=a.dry_run,
                       table=table, panel_name=a.panel)
+        rec.credential = a.credential
         records.append(rec)
         (out / f"{rec.run_id}.json").write_text(json.dumps(rec.to_json(), indent=1,
                                                           default=str))
@@ -702,7 +736,11 @@ def main(argv=None) -> int:
     (out / f"pilot_index{tag}.json").write_text(json.dumps(
         {"seeds": seeds, "arms": list(ARM_PLAN[:a.runs]), "model": MODEL,
          "max_turns": MAX_TURNS, "code_state": code_state(), "arms_run": a.arms,
-         "panel": a.panel, "depth": DEPTH[a.panel],
+         "panel": a.panel, "depth": DEPTH[a.panel], "credential": a.credential,
+         # Open: the endpoint actually served, asserted rather than assumed.
+         # AGENT_PROMPTS_REAL.md section 3 pins the model string and every run
+         # checks it, but nothing yet records WHICH endpoint answered.
+         "endpoint": None,
          "class_table": {"path": table.path, "N": table.N, "T": table.T,
                          "panel_hash": table.panel_hash},
          "masked_labels": masking.labels, "dry_run": a.dry_run}, indent=1, default=str))

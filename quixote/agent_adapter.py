@@ -33,6 +33,13 @@ call with a `keep` argument rather than two tools, because an agent that propose
 and never resolved would leave the session with a pending move and no record of
 the evaluation it caused.
 
+**A move undefined in the current state is refused as inapplicable.** `flip` on a
+feature the support does not hold, `swap_worst` with nothing to swap, `refine`
+with nothing to re-fit, an extension at a full support: the arguments are well
+formed and nothing leaves the declared class, so the refusal is neither
+`malformed_arguments` nor `outside_class`. `Grammar.precondition` holds every
+such rule in one place.
+
 **A stop ends the search.** After a `stop` that fires, only `predict` and
 `submit` are taken; every other call is refused. A second stop in one log would
 make the realized move count a fiction, and trigger replay is told exactly that
@@ -167,6 +174,16 @@ class ToolSession:
         (decision (b)): the harness announces the rule and waits for the agent to
         stop or to change it.
         """
+        pre = self.session.grammar.precondition(self.session.support, move)
+        if pre is not None:
+            kind, why = pre
+            if kind == "outside_class":
+                raise ToolRefused(
+                    f"{move.kind} would leave the declared class: {why}.")
+            raise ToolRefused(
+                f"{move.kind} is not defined in this state: {why}. The arguments are "
+                "well formed and nothing is outside the declared class; the move has "
+                "no meaning here.")
         try:
             support, score, n_cand = self.session.propose(move)
         except TriggerFired as e:

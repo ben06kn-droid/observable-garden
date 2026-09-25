@@ -323,3 +323,34 @@ def test_the_guard_compares_the_best_pair_on_both_sides(tmp_path):
     guard = identity_check(sess.log, CLS, base, ann, score_fn=table.scorer(None))
     assert guard.realized_support == tuple(best_support)
     assert guard.realized_score == pytest.approx(best_score, rel=1e-12)
+
+
+def test_integrity_is_checked_on_every_run_even_when_a_trigger_changed(tmp_path):
+    """Decided 2026-09-25. The trigger-change branch used to price three_nulls
+    with no integrity check at all, so a basis or engine defect was invisible on
+    any run with a change - the ETF panel's best-against-last bug would have been
+    undetectable on all three ADR runs, every one of which logged one."""
+    from quixote.certify import certify
+    from quixote.triggers import Trigger
+
+    table, panel = _table(tmp_path)
+    sb = RealSandbox(panel, spec_class=CLS, class_table=table)
+    sess = Session.on_sandbox(sb, CLS, name_prefix="t")
+    sess.declare_triggers([Trigger("best_so_far_above", 1e9, "stop")])
+    sess.propose(Move("init"))
+    sess.accept()
+    sess.change_trigger(Trigger("best_so_far_above", -99.0, "stop"), reason="too high")
+    base = sb.base_feature_columns()
+    ann = float(np.sqrt(panel.periods_per_year))
+
+    # with the right basis the integrity check passes and the change is bracketed
+    v = certify(sess.log, CLS, base, ann, B=20, seed=0, table=table)
+    assert v.status in ("CERTIFIED", "FAIL", "DEPENDS_ON_JUDGMENT")
+    assert any("Integrity check" in r and "PASS" in r for r in v.reasons)
+
+    # with the WRONG basis - no table, so base columns on a net-of-cost panel -
+    # integrity fails and the run is refused, change or no change
+    v2 = certify(sess.log, CLS, base, ann, B=20, seed=0, table=None)
+    assert v2.status == "UNDECIDABLE"
+    assert any("Integrity check" in r and "STRUCTURAL" in r for r in v2.reasons)
+    assert v2.p_frozen is None                 # nothing was priced
