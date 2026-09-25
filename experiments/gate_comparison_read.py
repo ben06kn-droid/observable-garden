@@ -71,6 +71,27 @@ def paired_bootstrap(diff: np.ndarray, B: int = 10_000, seed: int = 0) -> tuple:
                              float(np.quantile(boot, 0.975)))
 
 
+def matched_power(p_s0, p_s3, target: float) -> tuple[float, float]:
+    """(threshold, s3 PASS rate) at MATCHED ACTUAL type-I.
+
+    Rule 3 is read "at their measured s0 rates, not at nominal alpha". So the
+    threshold is the `target` empirical quantile of the certifier's own s0
+    p-values — by construction its actual size on s0 is `target` — and the power
+    is the share of s3 draws below that threshold.
+
+    A certifier whose p-values are granular (the declared-class null is, at
+    B = 10,000 with most mass at 1.0) may not attain the target exactly; the
+    threshold used is reported beside the power so the reader can see it.
+    """
+    a = np.asarray(p_s0, dtype=float)
+    b = np.asarray(p_s3, dtype=float)
+    a, b = a[np.isfinite(a)], b[np.isfinite(b)]
+    if a.size == 0 or b.size == 0:
+        return float("nan"), float("nan")
+    t = float(np.quantile(a, target))
+    return t, float(np.mean(b <= t))
+
+
 def read(s0: dict, s3: dict, replication: dict | None = None) -> str:
     L: list[str] = []
     n = s0["settings"]["draws"]
@@ -153,18 +174,23 @@ def read(s0: dict, s3: dict, replication: dict | None = None) -> str:
 
     # -- rule 3 --------------------------------------------------------------
     L += ["RULE 3 — power at matched ACTUAL type-I, on the slack searchers",
-          "         (amendment 1; ranks, does not gate)", "-" * 78,
-          f"    {'searcher':<22}{'certifier':<16}{'s0 rate':>9}{'s3 PASS':>9}"
-          f"{'lift':>8}"]
+          "         (amendment 1; ranks, does not gate)",
+          "         Each certifier's threshold is CALIBRATED on s0 so that its",
+          "         actual size is the target, then s3 PASS is read at that",
+          "         threshold. Comparing at nominal alpha would credit a",
+          "         certifier with power that is really the class gate's unused",
+          "         size (the rule's own words).", "-" * 78,
+          f"    {'searcher':<22}{'certifier':<16}{'nominal':>9}{'t(5%)':>9}"
+          f"{'PASS@5%':>9}{'PASS@1%':>9}"]
     for name in list(SLACK) + [m for m in MEMBERS if m not in SLACK]:
-        tag = "  (slack)" if name in SLACK else ""
+        tag = " (slack)" if name in SLACK else ""
         for key, label in CERTIFIERS:
             if key.replace("p_", "") not in MATCHED[name][2]:
                 continue
-            (s0_rate, _, _), _ = _rate(s0[name][key], 0.05)
-            (s3_rate, _, _), _ = _rate(s3[name][key], 0.05)
-            L.append(f"    {name + tag:<22}{label:<16}{s0_rate:>9.4f}{s3_rate:>9.4f}"
-                     f"{s3_rate - s0_rate:>8.4f}")
+            (nominal, _, _), _ = _rate(s0[name][key], 0.05)
+            row = [matched_power(s0[name][key], s3[name][key], t) for t in (0.05, 0.01)]
+            L.append(f"    {name + tag:<22}{label:<16}{nominal:>9.4f}"
+                     f"{row[0][0]:>9.4f}{row[0][1]:>9.4f}{row[1][1]:>9.4f}")
     L += ["", "  Read on the slack searchers. The efficient searchers are in the table",
           "  and are NOT what the rule is read on: amendment 1's decomposition says",
           "  they leave almost no slack for replay to recover.", ""]
@@ -180,14 +206,12 @@ def read(s0: dict, s3: dict, replication: dict | None = None) -> str:
         for name in SLACK:
             if key.replace("p_", "") not in MATCHED[name][2]:
                 continue
-            (s0_rate, _, _), _ = _rate(s0[name][key], 0.05)
-            (s3_rate, _, _), _ = _rate(s3[name][key], 0.05)
-            lifts.append(s3_rate - s0_rate)
+            lifts.append(matched_power(s0[name][key], s3[name][key], 0.05)[1])
         if lifts:
             order.append((float(np.mean(lifts)), label))
     order.sort(reverse=True)
-    for lift, label in order:
-        L.append(f"    {label:<16} mean lift over the slack searchers {lift:+.4f}")
+    for power, label in order:
+        L.append(f"    {label:<16} mean PASS at matched 5% actual size: {power:.4f}")
     if order:
         best = order[0][1]
         best_key = next(k for k, lab in CERTIFIERS if lab == best)
@@ -199,8 +223,10 @@ def read(s0: dict, s3: dict, replication: dict | None = None) -> str:
                     if (key.replace("p_", "") not in MATCHED[name][2]
                             or best_key.replace("p_", "") not in MATCHED[name][2]):
                         continue
-                    a = (np.asarray(s3[name][best_key], dtype=float) < 0.05)
-                    b = (np.asarray(s3[name][key], dtype=float) < 0.05)
+                    ta = matched_power(s0[name][best_key], s3[name][best_key], 0.05)[0]
+                    tb = matched_power(s0[name][key], s3[name][key], 0.05)[0]
+                    a = (np.asarray(s3[name][best_key], dtype=float) <= ta)
+                    b = (np.asarray(s3[name][key], dtype=float) <= tb)
                     d.append(a.astype(float) - b.astype(float))
                 if d:
                     m, (lo, hi) = paired_bootstrap(np.concatenate(d))
