@@ -239,8 +239,14 @@ class Session:
         # The consistency check, at the moment of the move and free: the harness
         # computed the rule's selection in order to execute it, so comparing it
         # with the choice the agent named costs one comparison
-        # (quixote/consistency.py). A contradicted pick is recorded as not
-        # replayable -- rejected as declared -- and the run continues.
+        # (quixote/consistency.py).
+        #
+        # **Harness execution means the rule decides.** What runs is the rule's
+        # selection, so a replicate re-derives it and the move is REPLAYABLE. The
+        # contradiction is a fact about the agent's STATEMENT, recorded on the
+        # record and reported in the verdict; it is not a reason to call a move
+        # the harness itself computed unreplayable (decided 2026-09-25, inverting
+        # the earlier flag).
         consistent = True
         if move.kind == "pick" and move.choice is not None:
             held = {k for k, _ in self.support}
@@ -270,7 +276,8 @@ class Session:
             step=info.step, move=move, support_after=support, score_after=score,
             n_candidates=n_cand, information=info, timestamp=time.monotonic(),
             trigger=name, trigger_value=trigger_value,
-            replayable=replayable and consistent and not self.triggers_changed,
+            replayable=replayable and not self.triggers_changed,
+            contradicted=not consistent,
             trigger_params=params, trigger_stamped_at=stamped_at))
         self._pending = None
         return score
@@ -302,7 +309,8 @@ class Session:
                                       feature=move.feature, note="rejected"),
             support_after=self.support, score_after=self.score,
             n_candidates=n_cand, information=info, timestamp=time.monotonic(),
-            trigger=name, trigger_value=trigger_value, replayable=consistent,
+            trigger=name, trigger_value=trigger_value,
+            replayable=not self.triggers_changed, contradicted=not consistent,
             trigger_params=params, trigger_stamped_at=stamped_at))
         self._pending = None
 

@@ -34,6 +34,10 @@ class QuixoteVerdict:
     p_upper: float | None = None
     bracket_source: str = "unbuilt: 7.2 part two, pending 7.1 and 7.3"
     responsible_decision: str | None = None     # named when DEPENDS_ON_JUDGMENT
+    # Picks whose named choice was not their rule's. The harness ran the rule, so
+    # these are REPLAYABLE and do not bracket the run; they are reported because
+    # the gap between a stated rule and the one in use is what 7.3 measures.
+    contradicted_picks: int = 0
 
     # -- item 6: bits ------------------------------------------------------
     # Descriptive. Never enters the correction. Computed from the null-max MEAN,

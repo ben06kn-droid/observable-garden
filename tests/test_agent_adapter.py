@@ -257,7 +257,7 @@ def test_a_discarded_proposal_is_recorded_as_computed_and_not_taken():
     assert rec.support_after == tools.session.support           # support did not move
 
 
-def test_a_contradicted_pick_is_reported_to_the_agent_as_rejected_as_declared():
+def test_a_contradicted_pick_runs_the_rule_and_says_so_to_the_agent():
     data, cfg, cls = _fixture()
     tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
     from quixote.grammar import Grammar
@@ -266,8 +266,10 @@ def test_a_contradicted_pick_is_reported_to_the_agent_as_rejected_as_declared():
     wrong = next(j for j in (0, 1, 2) if j != chosen[0][0])
     res = tools.call("pick", among=[0, 1, 2], choice=wrong)
     assert res.ok                                   # the run continues
-    assert "rejected as declared" in res.state["consistency"]
-    assert not tools.session.log.records[-1].replayable
+    assert "contradicted" in res.state["consistency"]
+    assert "performed your RULE" in res.state["consistency"]
+    rec = tools.session.log.records[-1]
+    assert rec.replayable and rec.contradicted      # the rule decided, so it replays
 
 
 def test_the_submission_is_the_best_pair_after_a_restart():

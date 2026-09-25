@@ -4,6 +4,13 @@ ROADMAP 7.2: "For every `pick`, the harness confirms the agent's choice is what
 the declared rule selects on the realized data. A pick that contradicts its rule
 is rejected as declared and priced locally."
 
+**Amended 2026-09-25.** The harness executes the RULE, so what ran is the rule's
+selection and a replicate re-derives it: the move is **replayable**. What is
+contradicted is the agent's *statement* about its own choice, which is a fact
+about the agent and is recorded as `MoveRecord.contradicted` and reported in the
+verdict. Marking a move the harness itself computed "unreplayable" would put a
+deterministic step into the bracket for something the step did not do.
+
 It is **free**, because the harness executes the move: the rule's selection is
 computed anyway, so comparing it with the choice the agent names costs one
 comparison. A contradicted pick is not an error and does not stop the run; it is
@@ -43,9 +50,9 @@ class PickCheck:
                     f"{self.rule_choice}, which is what the agent named. Consistent.")
         return (f"step {self.step}: pick declared {self.declared_statistic}, whose rule selects "
                 f"feature {self.rule_choice} on the realized data, but the agent named "
-                f"{self.agent_choice}. REJECTED AS DECLARED: the step is recorded as not "
-                "replayable, and is priced locally only where that pricing is enabled and "
-                "licensed.")
+                f"{self.agent_choice}. CONTRADICTED: the harness executed the RULE, so the "
+                "move is replayable and the run is not bracketed for it; what is recorded "
+                "is that the agent's stated choice was not its rule's.")
 
 
 def _added(before, after) -> int | None:

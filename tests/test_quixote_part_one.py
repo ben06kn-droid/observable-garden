@@ -122,10 +122,12 @@ def test_a_consistent_pick_is_recorded_replayable():
     assert contradicted_steps(checks) == frozenset()
 
 
-def test_a_pick_that_contradicts_its_rule_is_rejected_as_declared():
-    """ROADMAP 7.2: 'A pick that contradicts its rule is rejected as declared and
-    priced locally.' Rejected as declared means not replayable; the pricing is
-    separate and, until 7.3, off."""
+def test_a_pick_that_contradicts_its_rule_runs_the_rule_and_stays_replayable():
+    """Amended 2026-09-25: harness execution means the RULE decides.
+
+    What runs is the rule's selection, so a replicate re-derives it and the move
+    is replayable. The contradiction is a fact about the agent's statement, and
+    is recorded as such."""
     sb, cls, base, ann = _fixture()
     sess = Session.on_sandbox(sb, cls)
     g = Grammar(cls, base, ann)
@@ -134,11 +136,15 @@ def test_a_pick_that_contradicts_its_rule_is_rejected_as_declared():
     sess.propose(Move("pick", statistic="sharpe", among=(0, 1, 2), choice=wrong))
     sess.accept()
     rec = sess.log.records[-1]
-    assert not rec.replayable                            # rejected as declared
-    assert rec.support_after[0][0] == rule_choice[0][0]  # the harness still ran the rule
+    assert rec.support_after[0][0] == rule_choice[0][0]  # the harness ran the RULE
+    assert rec.replayable                                # so a replicate re-derives it
+    assert rec.contradicted                              # and the disagreement is logged
+    assert sess.log.contradicted_picks() == [rec]
+    assert sess.log.unreplayable() == []                 # not bracketed for this
     checks = check_picks(sess.log, cls, base, ann)
     assert not checks[0].agrees
-    assert "REJECTED AS DECLARED" in checks[0].reason()
+    assert "CONTRADICTED" in checks[0].reason()
+    assert "the move is replayable" in checks[0].reason()
     assert contradicted_steps(checks) == frozenset({0})
 
 

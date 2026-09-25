@@ -58,6 +58,12 @@ class MoveRecord:
     # action), and when it was stamped -- before the move it justified executed
     trigger_params: dict | None = None
     trigger_stamped_at: float | None = None
+    # A `pick` whose named choice is not what its declared rule selects. The
+    # HARNESS executed the rule, so the move itself is replayable -- a replicate
+    # re-derives the same selection from the same rule. What is contradicted is
+    # the agent's STATEMENT about its own choice, which is a fact about the
+    # agent, not about the move (decided 2026-09-25).
+    contradicted: bool = False
 
 
 @dataclass
@@ -133,6 +139,11 @@ class SessionLog:
     def unreplayable(self) -> list[MoveRecord]:
         """The decisions item 1's bracket is about."""
         return [r for r in self.records if not r.replayable]
+
+    def contradicted_picks(self) -> list[MoveRecord]:
+        """Picks whose named choice is not what their rule selected. Reported,
+        and NOT unreplayable: the harness ran the rule."""
+        return [r for r in self.records if r.contradicted]
 
     def total_candidates(self) -> int:
         """Trials actually offered to the agent by the harness. This is a count

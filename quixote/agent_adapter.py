@@ -220,8 +220,11 @@ class ToolSession:
                     else_statistic=else_statistic)
         res = self._move(move, keep)
         rec = self.session.log.records[-1] if self.session.log.records else None
-        if rec is not None and not rec.replayable:
-            res.state["consistency"] = "rejected as declared: the choice is not what the rule selects"
+        if rec is not None and rec.contradicted:
+            res.state["consistency"] = (
+                "contradicted: the harness performed your RULE's selection, which is not "
+                "the feature you named. The move stands and is replayable; the "
+                "disagreement is recorded.")
         return res
 
     # -- meta moves ----------------------------------------------------------

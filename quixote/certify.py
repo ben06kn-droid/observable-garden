@@ -132,6 +132,7 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
                 n_moves=log.n_moves, n_candidates=log.total_candidates(),
                 realized_score=float(nulls.realized_score),
                 unreplayable_decisions=tuple(r.move.kind for r in log.unreplayable()),
+                contradicted_picks=len(log.contradicted_picks()),
                 responsible_decision=(
                     f"change_trigger at step {first['at_step']} to "
                     f"{first['trigger']['kind']}({first['trigger']['param']:g}) -> "
@@ -181,6 +182,7 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         realized_score=float(nulls.realized_score),
         fill_engaged=n_eng,
         fill_replicates=B,
+        contradicted_picks=len(log.contradicted_picks()),
         locally_priced_steps=tuple(sorted(priced)),
         pricing_licensed=False if priced else None,
     )

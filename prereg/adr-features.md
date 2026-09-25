@@ -443,3 +443,28 @@ after seeing one fail is not done inside this one.
 of 2.0, which the panel does not deliver; that gap between the assumed reference
 and the measured maximum is reported with the results rather than being used to
 re-tune anything.
+
+## Amendment 4 — 2026-09-25, before any run. Three behavioural readouts
+
+§9's readouts are extended, for the agent arms only, with what the ADR pilot
+showed decision (b) produces. **Per run:**
+
+1. **trigger changes** — how many times the agent replaced a declared stopping
+   rule. Each one puts everything after it in the bracket
+   (`prereg/AGENT_PROMPTS_REAL.md` amendment 4), so this is also the rate at
+   which runs become `DEPENDS_ON_JUDGMENT` rather than certified or failed.
+2. **`trigger_is_firing` refusals** — content moves the harness declined because
+   a declared rule was firing. It measures how often an agent tries to search
+   past its own stated rule.
+3. **engagement** — accepted moves over tool calls, as `fixed-sequence-replay`
+   defines it for its searchers.
+
+All three are **descriptive and gate nothing**, like the rest of §9's counts.
+They matter here because amendment 3 expects no certifications on this panel: if
+the verdicts are uninformative by construction, what the agent *does* is what the
+experiment observes.
+
+**No cap on `change_trigger` is registered**, and that is deliberate. The pilot
+saw every run change a rule, one fifteen times, but n = 3 and this panel has no
+edge to stop at; a cap set from that would be set from noise. The decision waits
+on 7.3's agent cell, which records the same three readouts.

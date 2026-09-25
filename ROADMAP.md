@@ -658,6 +658,17 @@ agent's choice is what the declared rule selects on the realized data. A
 pick that contradicts its rule is rejected as declared and priced
 locally.
 
+> **Amended 2026-09-25.** Inverted, because harness execution means the rule
+> decides. What runs is the **rule's** selection, so a replicate re-derives it
+> and the move is **replayable**; it is not priced locally and does not bracket
+> the run. What is recorded is that the agent's stated choice was not its rule's
+> (`MoveRecord.contradicted`, reported in the verdict as `contradicted_picks`).
+> Treating a step the harness itself computed as unreplayable would put a
+> deterministic move into the bracket for something the move did not do. The gap
+> between a stated rule and the one in use is real and is what 7.3's fidelity
+> cell measures; it is an observation about the agent, not a defect in the
+> move.
+
 **Local pricing.** A rejected pick, or any step the agent cannot state as
 a rule, is replaced in each replicate by the best of its admissible
 alternatives at that step; the rest of the sequence replays normally.
@@ -732,6 +743,22 @@ the grammar.
 
 **The pilot claims no verdict**, computes no out-of-sample number, and touches no
 holdout. A pilot may be re-run after a prompt amendment; 7.3 may not.
+
+**Amendment, 2026-09-25: three behavioural readouts, registered for the agent
+cell.** From the ADR pilot under decision (b) — a declared trigger suspends the
+search until the agent resolves it — the agent cell records **per run**:
+
+1. **trigger changes**, the count of `change_trigger` calls;
+2. **`trigger_is_firing` refusals**, the count of content moves the harness
+   declined because a declared rule was firing;
+3. **engagement**, accepted moves over tool calls, as `fixed-sequence-replay`
+   defines it.
+
+The pilot's numbers, at n = 3 and quoted as pilot numbers: every run changed a
+trigger, one of them fifteen times; 26 `trigger_is_firing` refusals in a single
+attempt; engagement 0.71-0.74 against ~0.9 before (b). **No cap is placed on
+`change_trigger`**, deliberately: a cap chosen now would be chosen from three
+runs. Whether one is needed, and where, waits on this measurement.
 
 **Amendment, 2026-09-24: 7.3's fidelity cell runs the reasoned-pick arm.**
 
