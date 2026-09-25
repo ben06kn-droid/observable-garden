@@ -744,6 +744,14 @@ the grammar.
 **The pilot claims no verdict**, computes no out-of-sample number, and touches no
 holdout. A pilot may be re-run after a prompt amendment; 7.3 may not.
 
+**Amendment, 2026-09-25: an orientation arm.** Before its first `evaluate` the
+agent is handed a summary of the feature panel's structure and nothing about
+returns; the table is a function of `X` alone, so a menu chosen from it is
+data-oblivious in `SCOPE.md`'s sense and every null stays valid. Registered in
+full, committed-not-live, in `prereg/agent-cell.md`, with a `rho = 0` placebo
+cell that bounds how much of any effect is priming by the paragraph rather than
+information in the table.
+
 **Amendment, 2026-09-25: three behavioural readouts, registered for the agent
 cell.** From the ADR pilot under decision (b) — a declared trigger suspends the
 search until the agent resolves it — the agent cell records **per run**:

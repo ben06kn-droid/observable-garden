@@ -14,8 +14,21 @@ from quixote.twins import Masking
 M, K, D = 40, 40, 3
 
 
+def _orientation_table() -> str:
+    """A table built from a feature matrix alone, as the arm requires."""
+    import numpy as np
+
+    from quixote.orientation import orientation_table, render
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(200, 6, 4))
+    X[:, :, 1] = X[:, :, 0] * 0.9 + rng.normal(size=(200, 6)) * 0.2
+    return render(orientation_table(X, labels=[f"A{i:03d}" for i in range(4)], seed=1))
+
+
 def _all_prompts():
-    return {arm: system_prompt_for(arm, M, K, D) for arm in ARMS}
+    return {arm: system_prompt_for(arm, M, K, D,
+                                   orientation_table=_orientation_table())
+            for arm in ARMS}
 
 
 # 1. the shared text is byte-identical across arms
@@ -101,13 +114,25 @@ def test_the_control_arm_cannot_reach_a_grammar_tool():
 def test_no_prompt_names_a_threshold_a_p_value_or_a_critical_value():
     """§2: the thresholds are not stated to the agent, so it cannot
     reverse-engineer a decision boundary. §5: no arm is told a null, a critical
-    value or a p-value."""
-    forbidden = ("0.05", "0.04", "0.01", "alpha", "α", "p-value", "p value",
-                 "critical value", "null distribution", "significance")
+    value or a p-value.
+
+    The bare-number half of the check is applied to the prompt MINUS the
+    delivered orientation table: that table is two-decimal feature statistics,
+    so a volatility of 0.05 or an autocorrelation of 0.01 is arithmetic about
+    features and not a threshold. The word half applies to everything, because
+    no table has any reason to say "alpha" or "critical value".
+    """
+    words = ("alpha", "α", "p-value", "p value", "critical value",
+             "null distribution", "significance")
+    numbers = ("0.05", "0.04", "0.01")
+    table = _orientation_table()
     for arm, prompt in _all_prompts().items():
         low = prompt.lower()
-        for word in forbidden:
+        for word in words:
             assert word.lower() not in low, (arm, word)
+        without_table = low.replace(table.lower(), "")
+        for number in numbers:
+            assert number not in without_table, (arm, number)
 
 
 def test_no_prompt_mentions_the_contaminated_feature():
@@ -250,3 +275,48 @@ def test_the_plain_replay_arm_is_unchanged_by_the_new_one():
     that permits one, so the pilot's numbers do not transfer."""
     suffix = read_prompts()["replay_suffix"]
     assert "At least once" not in suffix
+
+
+# -- the orientation arm (prereg/agent-cell.md, AGENT_PROMPTS_REAL amendment 6) --
+
+def test_the_orientation_arm_is_the_replay_arm_plus_one_paragraph():
+    """Byte identity of the shared text, which is what section 2 requires: the
+    orientation arm is the replay-gate arm plus the paragraph, nothing else."""
+    p = read_prompts()
+    plain = system_prompt_for("replay gate", M, K, D)
+    oriented = system_prompt_for("orientation", M, K, D,
+                                 orientation_table=_orientation_table())
+    assert oriented.startswith(plain + "\n\n")
+    tail = oriented[len(plain) + 2:]
+    assert tail == p["orientation_paragraph"].replace("{orientation_table}",
+                                                      _orientation_table())
+
+
+def test_the_orientation_prompt_refuses_to_build_without_a_table():
+    with pytest.raises(ValueError, match="carries a table"):
+        system_prompt_for("orientation", M, K, D)
+
+
+def test_the_paragraph_states_what_the_table_is_and_recommends_nothing():
+    """It says features only, no information about returns, nothing about what
+    predicts; it does not suggest the summary is useful, recommend a use, or
+    name a feature. The arm is about whether the agent finds a use."""
+    para = read_prompts()["orientation_paragraph"]
+    low = para.lower()
+    assert "features only" in low or "describes the features only" in low
+    assert "no information about returns" in low
+    assert "nothing in it says which features predict anything" in low
+    assert "not an evaluation" in low          # costs no budget, is not a trial
+    for nudge in ("you should", "we recommend", "useful features", "look for",
+                  "focus on", "the best"):
+        assert nudge not in low, nudge
+
+
+def test_the_orientation_arm_changes_what_is_told_not_what_can_be_done():
+    assert TOOLS_FOR["orientation"] == TOOLS_FOR["replay gate"]
+
+
+def test_the_delivered_table_carries_no_return_derived_quantity():
+    text = _orientation_table()
+    for forbidden in ("sharpe", "return", "price", "spread", "cost", "date", "ic "):
+        assert forbidden not in text.lower(), forbidden

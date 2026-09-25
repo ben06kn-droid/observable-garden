@@ -310,6 +310,43 @@ building it is a prerequisite of the arm, not an optimisation of it.
 This changes no rule and no threshold. It names the thing the arm was always
 conditional on, which the pilot made visible.
 
+## Amendment — 2026-09-25, committed not live. A fourth arm: orientation
+
+Registered in full in `prereg/agent-cell.md`; what this file fixes is its place
+in 6.5 and what is read from it here.
+
+**The arm.** The replay-gate arm, plus one paragraph delivering a summary of the
+**feature panel's structure and nothing about returns**
+(`prereg/AGENT_PROMPTS_REAL.md` amendment 6). The table is a function of the
+feature matrix alone, so a menu chosen from it is data-oblivious in `SCOPE.md`'s
+sense and every null this file uses stays valid; the argument and its enforcement
+are in `agent-cell.md`.
+
+**Orientation costs no evaluation budget and is not a trial.** It changes what
+the agent is told before it starts, not what it may do: the tool list is the
+replay-gate arm's, unchanged.
+
+**Readouts for this arm**, beside the existing ones. Predicted directions, each
+with its opposite:
+
+| readout | predicted | if it goes the other way |
+|---|---|---|
+| z/rank near-duplicate pairs evaluated (both members hit) | **fewer** | orientation did not help the agent see the duplicates, and the table's clearest content went unused |
+| moves to `submit` | **fewer** | the table lengthened the search rather than focusing it |
+| `pick_prior` use | **more** | structure alone does not support a prior, which `agent-cell.md`'s masking note already allows for |
+| trigger changes | **fewer** | the agent's stopping rule is no better chosen for knowing the map |
+| accepted picks | **more** | the agent still names choices its own rule does not make |
+
+**The registered failure mode.** Stated confidence rises with **no change in the
+deflation gap** — the agent feels it understands the data. That is orientation
+making the agent *worse calibrated while looking better behaved*, and it is named
+here in advance so it cannot be written up as a success.
+
+**The haircut regression is reported for this arm beside the others.**
+
+**Nothing runs on this amendment.** The arm is committed-not-live with the rest
+of `agent-cell.md`, and 6.5's own launch decision is unchanged by it.
+
 ## Open, to fix before live
 
 - The universe rule's volume threshold and the exact ETF list: their own commit.

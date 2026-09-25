@@ -21,7 +21,7 @@ from quixote.triggers import PREDICATES
 PREREG = Path(__file__).resolve().parent.parent / "prereg" / "AGENT_PROMPTS_REAL.md"
 
 ARMS = ("control", "declared-class gate", "prior-weighted", "replay gate",
-        "replay gate (reasoned pick)")
+        "replay gate (reasoned pick)", "orientation")
 
 # §2, pinned: which tools each arm gets. The replay arm's list is the adapter's
 # own grammar, so a move added there cannot be missing here.
@@ -35,6 +35,10 @@ TOOLS_FOR = {
     # reasoned pick, because 7.3's fidelity measurement has no unit without one.
     "replay gate (reasoned pick)": ("pick_prior",) + CONTENT_TOOLS + META_TOOLS
     + ("predict", "submit"),
+    # amendment 6: the same tools again. Orientation changes what the agent is
+    # TOLD before it starts, not what it can do.
+    "orientation": ("pick_prior",) + CONTENT_TOOLS + META_TOOLS
+    + ("predict", "submit"),
 }
 
 
@@ -43,14 +47,13 @@ def read_prompts(path: Path = PREREG) -> dict:
     appended block, all read from the pre-registration."""
     text = path.read_text()
     blocks = [b.strip() for b in re.findall(r"```\n(.*?)\n```", text, re.S)]
-    if len(blocks) != 5:
+    names = ("control", "cost", "prior_weighted_suffix", "replay_suffix",
+             "reasoned_pick_sentence", "orientation_paragraph")
+    if len(blocks) != len(names):
         raise ValueError(
-            f"expected exactly five fenced blocks in {path.name} (control prompt, "
-            "cost sentence, prior-weighted suffix, replay suffix, reasoned-pick "
-            f"sentence), found {len(blocks)}")
-    return {"control": blocks[0], "cost": blocks[1],
-            "prior_weighted_suffix": blocks[2], "replay_suffix": blocks[3],
-            "reasoned_pick_sentence": blocks[4]}
+            f"expected exactly {len(names)} fenced blocks in {path.name} "
+            f"({', '.join(names)}), found {len(blocks)}")
+    return dict(zip(names, blocks))
 
 
 def build_prompt(control: str, M: int, K: int, d: int) -> str:
@@ -63,7 +66,8 @@ def build_prompt(control: str, M: int, K: int, d: int) -> str:
 
 
 def system_prompt_for(arm: str, M: int, K: int, d: int,
-                      prompts: dict | None = None) -> str:
+                      prompts: dict | None = None,
+                      orientation_table: str | None = None) -> str:
     """Control prompt + cost sentence + exactly what the arm adds (§2).
 
     `declared-class gate` adds nothing: §2 records that the gate is applied by
@@ -81,6 +85,15 @@ def system_prompt_for(arm: str, M: int, K: int, d: int,
     if arm == "replay gate (reasoned pick)":
         return (base + "\n\n" + prompts["replay_suffix"] + "\n\n"
                 + prompts["reasoned_pick_sentence"])
+    if arm == "orientation":
+        if orientation_table is None:
+            raise ValueError(
+                "the orientation arm's prompt carries a table; pass the rendered "
+                "table from quixote.orientation, which is built from the feature "
+                "matrix alone (prereg/agent-cell.md)")
+        return (base + "\n\n" + prompts["replay_suffix"] + "\n\n"
+                + prompts["orientation_paragraph"].replace("{orientation_table}",
+                                                           orientation_table))
     return base
 
 

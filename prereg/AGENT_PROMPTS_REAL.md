@@ -81,6 +81,16 @@ the replay block:
 At least once during your search, use `pick`: name the candidate features you are choosing between, name the statistic that decides among them, and state in one sentence why that statistic is the right one for that choice. The harness will perform the rule you named and tell you whether the feature you expected is the one it selected.
 ```
 
+**orientation** — tools as the replay gate. Added by amendment 6 for
+`prereg/agent-cell.md`'s orientation arm. The replay block, then this paragraph,
+which is delivered with the table already substituted into it:
+
+```
+Before you begin, here is a summary of the structure of the features you will be working with. It describes the features only: it contains no information about returns, and nothing in it says which features predict anything. Reading it costs you nothing — it is not an evaluation, it does not count against anything, and no part of your search has started yet. Take as long over it as you find useful.
+
+{orientation_table}
+```
+
 **declared-class gate** — tools as control. Nothing appended, and the gate is
 not described to the agent. It is a certification route applied by the harness
 after the run, not an arm the agent can see, so its prompt is byte-identical to
@@ -311,3 +321,33 @@ The alternative was to enforce the rule outright, performing the move the trigge
 licenses. That makes every log replayable by construction and takes the decision
 away from the agent, which is the thing this experiment is trying to observe. It
 is recorded here as the option not taken.
+
+**6 — 2026-09-25, committed not live. The orientation paragraph.**
+
+`prereg/agent-cell.md` registers an **orientation arm**: before its first
+`evaluate` the agent is handed a summary of the **feature panel's structure and
+nothing about returns**, and the question is whether an agent that knows the map
+searches better without the gate's false-certification rate moving.
+
+The paragraph is registered verbatim in §2 above. `{orientation_table}` is
+substituted with the rendered table from `quixote/orientation.py`, whose builder
+takes the feature matrix and has **no parameter through which a return could
+arrive**; the delivered table is hashed per run and the hash is stored in the run
+config.
+
+**The shared text is byte-identical to the replay-gate arm's**, as §2 requires,
+and that identity is a test: the orientation arm is the replay-gate arm plus this
+paragraph, nothing else.
+
+**What the paragraph claims, and why each clause is there.** It says the summary
+is about features only, that it contains no information about returns, and that
+nothing in it says which features predict anything — three statements the
+X-only construction makes true, so the agent is not being asked to take anything
+on trust that is not enforced in code. It says reading costs nothing, because
+orientation consumes no evaluation budget and is not a trial. It does **not**
+suggest the summary is useful, recommend a way to use it, or name any feature:
+the arm is about whether the agent finds a use, not about being told one.
+
+**Nothing runs on this amendment.** `prereg/agent-cell.md` is committed-not-live,
+and its cell 2 exists precisely to measure how much of any effect is the
+paragraph rather than the table.
