@@ -430,8 +430,21 @@ def identity_check(log: SessionLog, spec_class, base: np.ndarray,
     """
     taken = [r for r in log.records
              if not r.move.is_meta and r.move.note != "rejected"]
-    realized_support = taken[-1].support_after if taken else ()
-    realized_score = taken[-1].score_after if taken else float("-inf")
+    # The BEST accepted pair, not the last one. `Session.submission()` submits
+    # the best support and its score, and a replay returns the same; comparing
+    # the log's LAST support against the replay's BEST compares two different
+    # objects, and any search whose final move did not improve fails the guard
+    # for that reason alone. The ETF pilot's first run is the case: its last
+    # `extend_best` lost 0.0092, so its last support was never its submission.
+    #
+    # First attainment wins, because `Session` replaces the best only on a strict
+    # improvement.
+    best_i = None
+    for i, r in enumerate(taken):
+        if best_i is None or r.score_after > taken[best_i].score_after:
+            best_i = i
+    realized_support = taken[best_i].support_after if taken else ()
+    realized_score = taken[best_i].score_after if taken else float("-inf")
     t = LoggedPolicy(log, spec_class).trace(base, annualization, score_fn=score_fn)
     same_support = tuple(t.support) == tuple(realized_support)
     if log.is_meta():

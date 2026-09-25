@@ -290,3 +290,36 @@ def test_a_zero_variance_stream_scores_zero_as_the_sandbox_does(tmp_path):
     t = ClassTable(streams=np.zeros((1, 50)), members=[((0, 1.0),)],
                    index={((0, 1.0),): 0}, panel_hash="x", periods_per_year=252)
     assert t.sharpe(((0, 1.0),)) == 0.0
+
+
+def test_the_guard_compares_the_best_pair_on_both_sides(tmp_path):
+    """A search whose LAST move did not improve still submits its best. The guard
+    used to compare the log's last support against the replay's best, so such a
+    run failed for that reason alone - which is how the ETF pilot's first run
+    came back UNDECIDABLE with a gap of 0.0092, the size of its final losing
+    move."""
+    from quixote.replay import identity_check
+    table, panel = _table(tmp_path)
+    sb = RealSandbox(panel, spec_class=CLS, class_table=table)
+    sess = Session.on_sandbox(sb, CLS, name_prefix="t")
+    sess.propose(Move("init"))
+    sess.accept()
+    sess.propose(Move("extend_best"))
+    sess.accept()
+    best_support, best_score = sess.submission()
+
+    # a deliberately worsening move, accepted: the last support is not the best.
+    # A flip always has a candidate, where an extension at a full support does
+    # not (this class is depth 2).
+    held = sess.support[0][0]
+    sess.propose(Move("flip", feature=held))
+    sess.accept()
+    assert sess.support != best_support
+    assert sess.score < best_score
+    assert sess.submission() == (best_support, best_score)
+
+    base = sb.base_feature_columns()
+    ann = float(np.sqrt(panel.periods_per_year))
+    guard = identity_check(sess.log, CLS, base, ann, score_fn=table.scorer(None))
+    assert guard.realized_support == tuple(best_support)
+    assert guard.realized_score == pytest.approx(best_score, rel=1e-12)

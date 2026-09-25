@@ -577,3 +577,34 @@ its own declared rule selects. 0 accepted, 3 contradicted across the attempts.
 With n this small it is a signal to design 7.3's fidelity cell around, not a rate.
 
 **Cost of the pilot so far: about $4.50 across eight attempts.**
+
+**7 — 2026-09-25, before it runs. An ETF pilot, on the same pattern.**
+
+The ADR pilot shook out the harness on a 968-member class and a panel with no
+edge. The ETF panel differs in both respects — **signed subsets of size ≤ 3 over
+K = 40, 82,240 members** (`prereg/agent-on-real-data.md`, Features and class) —
+and the class table at that size is the case
+`environments/class_table.py` was written to handle but has not yet been run on.
+
+**Design, identical in shape to the ADR pilot:** 5 runs, **2 control and 3 replay
+gate**, prompts from `prereg/AGENT_PROMPTS_REAL.md` as amended, `claude-sonnet-5`,
+thinking off, `max_turns = 60`. Seeds: the first 5 draws of
+`default_rng(20260925)`, recorded in the run index.
+
+**In-sample only.** The ETF panel's in-sample export ends 2022-12-31 and
+`data/etf_loader.py`'s refusals stand. **The holdout is not opened**, not read,
+and not graded: it exists in two copies, one of them an encrypted archive whose
+passphrase is not on this machine, and a pilot is the wrong reason to spend a
+one-shot resource.
+
+**Purpose: a harness shake-out on the depth-3 tabulated class.** What it measures
+is what the ADR pilot measured — engagement, refusals by kind, trigger
+declarations and changes, picks accepted against contradicted, whether the
+certifying null is computable — plus the one thing the ADR panel could not
+exercise: a class table two orders of magnitude larger, at 2.81 GB.
+
+**No verdict claim.** Rule 5 applies unchanged: nothing from this pilot enters a
+verdict, a headline or a figure, and any number quoted elsewhere is quoted as a
+pilot number with n = 5 beside it. In particular, **a CERTIFIED verdict here is
+not evidence of an edge in these ETFs** — it is evidence that the machinery
+produced a verdict.

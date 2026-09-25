@@ -47,11 +47,14 @@ from quixote.twins import Masking
 
 MODEL = "claude-sonnet-5"          # AGENT_PROMPTS_REAL.md §3, pinned
 MAX_TURNS = 60
-# The ADR panel's registered class is signed subsets of size <= 2 over K = 22
-# (prereg/adr-features.md section 3). Attempts 1-4 ran at depth 3, which is the
-# ETF panel's class; recorded in prereg/agent-pilot.md amendment 4.
-D = 2
+# Each panel's registered class. The ADR panel is signed subsets of size <= 2
+# over K = 22 (prereg/adr-features.md section 3); the ETF panel is depth 3 over
+# K = 40, 82,240 members (prereg/agent-on-real-data.md). Attempts 1-4 ran the ADR
+# panel at depth 3 by mistake; recorded in prereg/agent-pilot.md amendment 4.
+DEPTH = {"adr": 2, "etf": 3}
+D = DEPTH["adr"]
 SEED = 20260924                    # agent-pilot.md: the first 5 draws
+SEED_ETF = 20260925                # amendment 7, the ETF pilot's own block
 ARM_PLAN = ("control", "control", "replay gate", "replay gate", "replay gate")
 SERVER_NAME = "garden_pilot"
 RUNS_ROOT = Path(__file__).resolve().parent.parent / "runs" / "agent_pilot"
@@ -103,7 +106,7 @@ def classify_refusal(message: str) -> str:
 
 # -- the panel, masked -------------------------------------------------------
 
-def masked_panel():
+def masked_panel(which: str = "adr"):
     """The ADR panel with its instruments masked per `AGENT_PROMPTS_REAL.md` §4.
 
     Two of the four allowed fields are populated from `ADR_HOME`, which is the
@@ -115,6 +118,17 @@ def masked_panel():
     date at all. It is applied anyway, so the agent-facing metadata and the
     grading map are the same objects they will be on a panel where it bites.
     """
+    if which == "etf":
+        # In-sample export only: the holdout is not opened by a pilot
+        # (amendment 7). ETF tickers are maskable but carry no home market, so
+        # only the two fields that apply cross (AGENT_PROMPTS_REAL.md section 4:
+        # a field that does not apply is absent, not null).
+        from environments.real_panel import build_etf_panel
+        panel = build_etf_panel()
+        masking = Masking.build(list(panel.assets), {}, seed=SEED_ETF)
+        table = build_class_table(panel, SubsetClass(max_size=DEPTH["etf"], signed=True),
+                                  "etf")
+        return panel, masking, table
     panel = build_adr_panel()
     meta = {}
     for ticker in panel.assets:
@@ -399,11 +413,11 @@ def _scripted_replay(rec, handlers):
 
 
 def run_one(arm: str, seed: int, panel, masking, index: int,
-            dry_run: bool = False, table=None) -> RunRecord:
-    cls = SubsetClass(max_size=D, signed=True)
+            dry_run: bool = False, table=None, panel_name: str = "adr") -> RunRecord:
+    cls = SubsetClass(max_size=DEPTH[panel_name], signed=True)
     sandbox = RealSandbox(panel, spec_class=cls, class_table=table)
     K = sandbox.num_features
-    rec = RunRecord(run_id=f"pilot_{index}_{arm.replace(' ', '_')}_{seed}",
+    rec = RunRecord(run_id=f"pilot_{panel_name}_{index}_{arm.replace(' ', '_')}_{seed}",
                     arm=arm, seed=seed)
     rec.log("start", arm=arm, seed=seed, K=K, M=sandbox.num_assets,
             T=sandbox.num_periods, masked_labels=sorted(masking.labels.values()))
@@ -651,13 +665,17 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=int, default=5)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--panel", default="adr", choices=("adr", "etf"))
     ap.add_argument("--arms", default="all", choices=("all", "replay", "control"),
                     help="re-run only one arm's runs, keeping their registered seeds")
     ap.add_argument("--out", default=str(RUNS_ROOT))
     a = ap.parse_args(argv)
 
-    seeds = [int(s) for s in np.random.default_rng(SEED).integers(0, 2**31 - 1, size=5)]
-    panel, masking, table = masked_panel()
+    global D
+    D = DEPTH[a.panel]
+    seeds = [int(s) for s in np.random.default_rng(
+        SEED_ETF if a.panel == "etf" else SEED).integers(0, 2**31 - 1, size=5)]
+    panel, masking, table = masked_panel(a.panel)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -668,7 +686,7 @@ def main(argv=None) -> int:
         if ARM_PLAN[i] not in wanted:
             continue
         rec = run_one(ARM_PLAN[i], seeds[i], panel, masking, i, dry_run=a.dry_run,
-                      table=table)
+                      table=table, panel_name=a.panel)
         records.append(rec)
         (out / f"{rec.run_id}.json").write_text(json.dumps(rec.to_json(), indent=1,
                                                           default=str))
@@ -678,11 +696,13 @@ def main(argv=None) -> int:
 
     text = report(records, a.dry_run)
     print("\n" + text, flush=True)
-    tag = ("_dry" if a.dry_run else "") + ("" if a.arms == "all" else f"_{a.arms}")
+    tag = (f"_{a.panel}" + ("_dry" if a.dry_run else "")
+           + ("" if a.arms == "all" else f"_{a.arms}"))
     (out / f"pilot_report{tag}.txt").write_text(text)
     (out / f"pilot_index{tag}.json").write_text(json.dumps(
         {"seeds": seeds, "arms": list(ARM_PLAN[:a.runs]), "model": MODEL,
          "max_turns": MAX_TURNS, "code_state": code_state(), "arms_run": a.arms,
+         "panel": a.panel, "depth": DEPTH[a.panel],
          "class_table": {"path": table.path, "N": table.N, "T": table.T,
                          "panel_hash": table.panel_hash},
          "masked_labels": masking.labels, "dry_run": a.dry_run}, indent=1, default=str))
