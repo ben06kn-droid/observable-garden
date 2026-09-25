@@ -132,6 +132,7 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
                      "else it logged."])
 
     guard = commitment_check(log, spec_class, base, annualization, score_fn=score_fn)
+    changes = list(getattr(log, "trigger_changes", ()) or ())
     if not guard.agrees:
         # A run that CHANGED a declared trigger is expected to diverge here, and
         # that is what the bracket is for rather than a reason to refuse. The
@@ -139,7 +140,6 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         # the search after the change is a decision the null cannot price: the
         # verdict is DEPENDS_ON_JUDGMENT, naming the change, with the
         # fixed-sequence null reported as the bracket's liberal end.
-        changes = list(getattr(log, "trigger_changes", ()) or ())
         if changes:
             nulls, _ = three_nulls(log, spec_class, base, annualization, B,
                                    block_length, seed, pricing=pricing, table=table)
@@ -150,7 +150,9 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
                 p_upper=p_declared_class,
                 n_moves=log.n_moves, n_candidates=log.total_candidates(),
                 realized_score=float(nulls.realized_score),
-                unreplayable_decisions=tuple(r.move.kind for r in log.unreplayable()),
+                unreplayable_decisions=tuple(
+                    r.move.kind for r in log.records
+                    if r.step >= first["at_step"] or not r.replayable),
                 contradicted_picks=len(log.contradicted_picks()),
                 responsible_decision=(
                     f"change_trigger at step {first['at_step']} to "
@@ -207,6 +209,13 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         pricing_licensed=False if priced else None,
     )
     v.reasons.append(integrity.reason())
+    if changes:
+        v.reasons.append(
+            f"{len(changes)} declared trigger change(s) are logged, and the commitment "
+            "check PASSES: the rule the search committed to reproduces the search that "
+            "ran, so the changes NEVER BOUND. Nothing is bracketed and no move is "
+            "recorded unreplayable for them. A change is priced when it costs "
+            "something, and this one did not.")
     v.reasons.append(
         f"Certified against {CERTIFYING_NULL}: p = {p_trigger:.4f} against alpha = {alpha}. "
         "7.1 measured this null at or below nominal for all six registered searchers "

@@ -418,11 +418,15 @@ def test_changing_a_trigger_is_allowed_logged_and_priced():
     change = tools.session.log.trigger_changes[0]
     assert change["reason"].startswith("the bar")
     assert change["timestamp"] > 0 and change["at_step"] == 1
+    assert all(r.replayable for r in tools.session.log.records)   # the log tags nothing
     with pytest.raises(ToolRefused, match="has fired"):
         tools.call("extend_best")                # the NEW rule fires at once
     assert tools.call("stop", trigger="best_so_far_above", param=-99.0).ok
-    assert not tools.session.log.records[-1].replayable       # priced from here on
-    assert [r.move.kind for r in tools.session.log.unreplayable()] == ["stop"]
+    # The LOG records the change as a fact and tags nothing: whether the change
+    # cost anything is the commitment check's to measure and the verdict's to
+    # price (seat run pilot_adr_2).
+    assert all(r.replayable for r in tools.session.log.records)
+    assert tools.session.log.trigger_changes
 
 
 def test_the_pre_change_trigger_is_what_replays():
@@ -480,7 +484,17 @@ def test_changing_the_rule_is_the_other_way_out_and_is_priced():
                reason="the bar was set far too low")
     res = tools.call("extend_best")            # now allowed
     assert res.ok
-    assert not tools.session.log.records[-1].replayable     # and priced
+    # This change BOUND: the committed rule stops the search at the init, so the
+    # commitment check will fail and the verdict brackets from the change onward.
+    # The log records the change; the verdict prices it.
+    assert tools.session.log.trigger_changes[0]["at_step"] == 1
+    from quixote.certify import certify
+    sb = tools.session.sandbox
+    v = certify(tools.session.log, cls, sb.base_feature_columns(),
+                float(np.sqrt(cfg.periods_per_year)), B=20, seed=0)
+    assert v.status == "DEPENDS_ON_JUDGMENT"
+    assert v.unreplayable_decisions                       # the post-change moves
+    assert "change_trigger at step 1" in v.responsible_decision
 
 
 def test_a_session_with_no_declared_trigger_is_never_interrupted():
@@ -570,3 +584,50 @@ def test_an_inapplicable_logged_move_stops_a_replay_instead_of_raising():
     assert g.candidates(((0, 1.0),), Move("flip", feature=5)) == []
     support, score, n = g.apply(((0, 1.0),), Move("flip", feature=5))
     assert n == 0
+
+
+def test_the_commitment_check_replays_the_COMMITTED_rule_not_the_active_one():
+    """Asserted, not read off the code. After a change the session searches under
+    the new rule (`active_trigger_records`) while the commitment check must
+    replay the rule the search committed to (`log.declared_triggers()`)."""
+    from quixote.replay import LoggedPolicy
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("declare_triggers",
+               triggers=[{"trigger": "last_gain_at_most", "param": 0.25}])
+    tools.call("init")
+    tools.call("change_trigger", trigger="last_gain_at_most", param=0.99,
+               reason="widened")
+    committed = [{"kind": "last_gain_at_most", "param": 0.25, "action": "stop"}]
+    assert tools.session.log.declared_triggers() == committed
+    assert tools.session.active_trigger_records == [
+        {"kind": "last_gain_at_most", "param": 0.99, "action": "stop"}]
+    # the object the commitment check replays under is built from the COMMITTED set
+    pol = LoggedPolicy(tools.session.log, cls)
+    assert [t.as_record() for t in pol.triggers] == committed
+
+
+def test_changes_that_never_bound_do_not_bracket_the_run():
+    """Seat run pilot_adr_2: five changes logged, the COMMITMENT check passing at
+    a gap of 0.0, and 27 moves tagged unreplayable anyway. The log cannot know
+    whether a change bound - that is exactly what the commitment check measures -
+    so the tagging moved to the verdict."""
+    from quixote.certify import certify
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("declare_triggers",
+               triggers=[{"trigger": "best_so_far_above", "param": 1e9}])
+    tools.call("init")
+    # a change to another rule that also never fires: the search is unaffected
+    tools.call("change_trigger", trigger="best_so_far_above", param=2e9,
+               reason="still unreachable")
+    tools.call("extend_best")
+    assert tools.session.log.trigger_changes
+    assert all(r.replayable for r in tools.session.log.records)
+
+    sb = tools.session.sandbox
+    v = certify(tools.session.log, cls, sb.base_feature_columns(),
+                float(np.sqrt(cfg.periods_per_year)), B=20, seed=0)
+    assert v.status in ("CERTIFIED", "FAIL")            # not bracketed
+    assert v.unreplayable_decisions == ()
+    assert any("NEVER BOUND" in r for r in v.reasons)

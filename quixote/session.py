@@ -127,12 +127,15 @@ class Session:
     def change_trigger(self, trigger, reason: str = "") -> None:
         """Replace the declared stopping policy mid-search.
 
-        **Allowed, logged, and priced.** The change is a decision taken after
-        seeing results, so it is data-dependent by construction: the trigger in
-        force before it replays as a rule, and every move from here on is
-        recorded as **not replayable**, which is what puts the run in item 1's
-        bracket (`prereg/bracketed-verdicts.md`). Nothing is refused and nothing
-        is hidden; the cost appears in the verdict.
+        **Allowed, logged, and priced — but priced by the VERDICT, not here.**
+        The change is a decision taken after seeing results, so the trigger in
+        force before it is what replays. Whether that costs anything depends on
+        whether the change **bound**: if the committed rule reproduces the
+        realized search, the change changed nothing and there is nothing to
+        bracket. The log cannot know that — the commitment check measures it —
+        so the log records the change as a fact and `quixote/certify.py` decides
+        what it costs (seat run `pilot_adr_2`: five changes, commitment passing
+        at a gap of 0.0, and 27 moves tagged unreplayable for nothing).
         """
         rec = trigger.as_record() if isinstance(trigger, Trigger) else dict(trigger)
         Trigger.from_record(rec)
@@ -276,7 +279,7 @@ class Session:
             step=info.step, move=move, support_after=support, score_after=score,
             n_candidates=n_cand, information=info, timestamp=time.monotonic(),
             trigger=name, trigger_value=trigger_value,
-            replayable=replayable and not self.triggers_changed,
+            replayable=replayable,
             contradicted=not consistent,
             trigger_params=params, trigger_stamped_at=stamped_at))
         self._pending = None
@@ -310,7 +313,7 @@ class Session:
             support_after=self.support, score_after=self.score,
             n_candidates=n_cand, information=info, timestamp=time.monotonic(),
             trigger=name, trigger_value=trigger_value,
-            replayable=not self.triggers_changed, contradicted=not consistent,
+            replayable=True, contradicted=not consistent,
             trigger_params=params, trigger_stamped_at=stamped_at))
         self._pending = None
 
@@ -324,7 +327,6 @@ class Session:
         stamped_at = time.monotonic() if stamped_at is None else stamped_at
         self._require_declared(trigger, "stop")
         name, params = _trigger_fields(trigger)
-        replayable = replayable and not self.triggers_changed
         info = InformationSet(step=self.log.n_moves, support_before=self.support,
                               score_before=self.score)
         self.log.record(MoveRecord(

@@ -48,6 +48,19 @@ class ReplayTrace:
     # quixote.certify reports as engagement, and the condition under which a
     # verdict carries the fill's measured direction
     filled: bool = False
+    # Does `moves` include the anchor as its first entry? `_run` and `_run_logged`
+    # take the anchor inside their loop and record it; `_run_meta` anchors before
+    # its loop and does not. `SessionLog.actions()` excludes the anchor, so a
+    # comparison has to know which convention the trace uses rather than guess
+    # from its length.
+    anchored: bool = False
+    # Which runner produced this trace. `_run` is 7.1's plain forward selection
+    # and speaks a DIFFERENT action vocabulary from a session log: it says "stop"
+    # where it declines an extension, while `SessionLog.actions()` calls any
+    # proposed extension "continue" whether it was taken or not. Comparing those
+    # two directly is comparing different events, so the action comparison is
+    # made only where both sides speak the same vocabulary.
+    path: str = "run"
     # steps replaced by the best admissible move under local-max or
     # fidelity-driven pricing; zero unless one of those flags is on
     locally_priced: int = 0
@@ -132,6 +145,7 @@ class LoggedPolicy:
                 break
 
         trace.support, trace.score = support, score
+        trace.anchored, trace.path = True, "run"
         return trace
 
     # -- the interface estimator/trigger_replay consumes -------------------
@@ -222,6 +236,7 @@ class LoggedPolicy:
             trace.supports.append(tuple(support))
 
         trace.support, trace.score = tuple(best_support), best
+        trace.path = "run_meta"   # anchored before the loop, so moves exclude it
         return trace
 
     def content_kinds(self) -> tuple:
@@ -231,7 +246,8 @@ class LoggedPolicy:
 
     def _run_logged(self, base: np.ndarray, annualization: float,
                     frozen: list[str] | None = None,
-                    meta_steps: int | None = None, score_fn=None) -> ReplayTrace:
+                    meta_steps: int | None = None, score_fn=None,
+                    cap_to_log: bool = False) -> ReplayTrace:
         """Replay the moves the log actually holds, not a greedy forward selection.
 
         `_run_meta` re-executes 7.1's policy: every continue is an `extend_best`.
@@ -265,7 +281,15 @@ class LoggedPolicy:
         def score_list(ns):
             return g.score(tuple(ns), self.statistic)
 
-        for step in range(self.budget):
+        # `cap_to_log` bounds the replay at the number of moves the log holds.
+        # The commitment check asks whether the search followed its rule WHILE IT
+        # RAN: a rule that fires earlier than the log stopped is divergence, but
+        # a rule that would have kept going is not something the log contradicts,
+        # because an agent may submit at any time. Past the logged moves an
+        # uncapped replay takes the fill, which belongs to the bootstrap null and
+        # not to a comparison on un-resampled data.
+        limit = min(self.budget, len(moves)) if cap_to_log else self.budget
+        for step in range(limit):
             filling = False
             if frozen is not None:
                 if step >= len(frozen):
@@ -322,23 +346,44 @@ class LoggedPolicy:
             trace.supports.append(support)
 
         trace.support, trace.score = tuple(best_support), best
+        trace.anchored, trace.path = True, "run_logged"
         return trace
 
+    def _runner(self):
+        """(runner, anchored, name). One place decides which replay a log takes, so a
+        caller building a `frozen` sequence can align it with that runner's step
+        convention instead of guessing."""
+        kinds = set(self.content_kinds())
+        meta_kinds = {r.move.kind for r in self.log.records if r.move.is_meta}
+        declared = bool(getattr(self.log, "declared_trigger_records", ()))
+        if declared or (kinds - {"extend_best", "init"}):
+            return self._run_logged, True, "run_logged"
+        if self.log.is_meta():
+            return self._run_meta, False, "run_meta"
+        if "restart" in meta_kinds:
+            return self._run_logged, True, "run_logged"
+        return self._run, True, "run"
+
+    def frozen_actions(self) -> list[str]:
+        """The realized action sequence, in the step convention of the runner
+        this log will take. `SessionLog.actions()` excludes the anchor; a runner
+        that takes the anchor inside its loop needs an entry for it, and passing
+        the un-aligned list froze the replay one step short of the log."""
+        acts = list(self.log.actions())
+        return (["continue"] + acts) if self._runner()[1] else acts
+
     def trace(self, base: np.ndarray, annualization: float = 1.0,
-              frozen: list[str] | None = None,
-              meta_steps: int | None = None, score_fn=None) -> ReplayTrace:
+              frozen: list[str] | None = None, meta_steps: int | None = None,
+              score_fn=None, cap_to_log: bool = False) -> ReplayTrace:
         """`score_fn` overrides the base-column scorer, which is how a real panel
         is replayed: a class table's scorer returns the same stored net stream the
         live search was scored on (`environments/class_table.py`)."""
-        # A log whose every content move is `extend_best` is 7.1's policy, and
-        # takes 7.1's registered path unchanged. Anything richer - an agent that
-        # swapped, flipped or refined - is replayed move by move, because
-        # replaying it as a forward selection is replaying a different search.
-        kinds = set(self.content_kinds())
-        if kinds - {"extend_best", "init"}:
-            run = self._run_logged
-        else:
-            run = self._run_meta if self.log.is_meta() else self._run
+        run, _, name = self._runner()
+        # by NAME: `self._run_logged is self._run_logged` is False, because each
+        # attribute access builds a fresh bound method
+        if cap_to_log and name == "run_logged":
+            return run(base, annualization, frozen=frozen, meta_steps=meta_steps,
+                       score_fn=score_fn, cap_to_log=True)
         return run(base, annualization, frozen=frozen, meta_steps=meta_steps,
                    score_fn=score_fn)
 
@@ -388,6 +433,7 @@ class IdentityCheck:
     # large gap on a column basis mean different things, and the check knows
     # which it used.
     check: str = "integrity"          # "integrity" | "commitment"
+    compared_actions: bool = True
     basis: str = "base columns"       # "class table" when a scorer was supplied
 
     @property
@@ -401,7 +447,10 @@ class IdentityCheck:
                                "it committed to)")}[self.check]
         if self.agrees:
             return (f"{what}: PASS on the {self.basis}. The replay reproduces the "
-                    f"realized support and score; they differ by {self.score_gap:.2e}.")
+                    f"realized support and score; they differ by {self.score_gap:.2e}."
+                    + ("" if self.compared_actions else
+                       " Actions were not compared: this log is a plain forward "
+                       "selection, whose replay speaks a different action vocabulary."))
         seq = ("" if self.realized_actions == self.replayed_actions else
                f" The meta decisions differ too: replayed {list(self.replayed_actions)} "
                f"against realized {list(self.realized_actions)}.")
@@ -440,7 +489,8 @@ def integrity_check(log: SessionLog, spec_class, base: np.ndarray,
     bug would have been undetectable on all three ADR runs.
     """
     return _compare(log, spec_class, base, annualization, score_fn,
-                    check="integrity", frozen=list(log.actions()))
+                    check="integrity",
+                    frozen=LoggedPolicy(log, spec_class).frozen_actions())
 
 
 def commitment_check(log: SessionLog, spec_class, base: np.ndarray,
@@ -453,7 +503,7 @@ def commitment_check(log: SessionLog, spec_class, base: np.ndarray,
     search under its own declaration.
     """
     return _compare(log, spec_class, base, annualization, score_fn,
-                    check="commitment", frozen=None)
+                    check="commitment", frozen=None, cap_to_log=True)
 
 
 def identity_check(log: SessionLog, spec_class, base: np.ndarray,
@@ -464,7 +514,7 @@ def identity_check(log: SessionLog, spec_class, base: np.ndarray,
 
 def _compare(log: SessionLog, spec_class, base: np.ndarray,
              annualization: float, score_fn, check: str,
-             frozen: list[str] | None) -> IdentityCheck:
+             frozen: list[str] | None, cap_to_log: bool = False) -> IdentityCheck:
     """Replay `log` on `base` itself -- no resampling -- and compare.
 
     The realized submission is the best accepted support: the last record whose
@@ -490,21 +540,46 @@ def _compare(log: SessionLog, spec_class, base: np.ndarray,
             best_i = i
     realized_support = taken[best_i].support_after if taken else ()
     realized_score = taken[best_i].score_after if taken else float("-inf")
-    t = LoggedPolicy(log, spec_class).trace(base, annualization,
-                                           frozen=frozen, score_fn=score_fn)
+    t = LoggedPolicy(log, spec_class).trace(base, annualization, frozen=frozen,
+                                           score_fn=score_fn, cap_to_log=cap_to_log)
     same_support = tuple(t.support) == tuple(realized_support)
-    if log.is_meta():
-        realized_actions, replayed_actions = tuple(log.actions()), tuple(t.moves)
-        agrees = same_support and realized_actions == replayed_actions
-        n_real = sum(1 for a in realized_actions if a == "continue")
-        n_rep = sum(1 for a in replayed_actions if a == "continue")
-    else:
-        realized_actions = replayed_actions = ()
-        agrees = same_support
-        n_real = len(taken)
-        n_rep = sum(1 for m in t.moves if m == "accept")
+
+    # The ACTION SEQUENCE is compared on every log, not only on a budgeted one.
+    # A search that stopped in a different place is a different search even when
+    # it happens to submit the same pair, and until 2026-09-25 an agent log -
+    # which declares no budget, so `is_meta()` is False - skipped this
+    # comparison entirely.
+    #
+    # `_run` says "accept" where a log says "continue"; the vocabularies are
+    # normalised rather than one of them being taken as canonical.
+    def norm(seq):
+        out = ["continue" if a == "accept" else a for a in seq]
+        # A log ends with an explicit `stop` record; a replay that runs out of
+        # support or budget simply ends. Both mean "the search stopped here", so
+        # a single TRAILING stop is dropped from each side. A stop anywhere else
+        # is a real difference and survives: it is a replay that stopped early.
+        if out and out[-1] == "stop":
+            out.pop()
+        return tuple(out)
+
+    # `log.actions()` excludes the anchor; a trace that recorded one drops it.
+    replayed = list(t.moves)[1:] if t.anchored else list(t.moves)
+    # Recorded RAW, compared NORMALISED: the record keeps the stop the log
+    # holds (milestone 3c reads it), while the comparison treats "ended here"
+    # and "stopped here" as the same stopping point.
+    realized_actions, replayed_actions = tuple(log.actions()), tuple(replayed)
+    # Compared where the two sides share a vocabulary: an agent log (`run_logged`)
+    # and a meta log (`run_meta`). A plain forward-selection log replayed by 7.1's
+    # `_run` is compared on support and score alone, and that is stated rather
+    # than silently skipped.
+    compare_actions = t.path in ("run_logged", "run_meta")
+    agrees = same_support and (not compare_actions
+                               or norm(realized_actions) == norm(replayed_actions))
+    n_real = sum(1 for a in realized_actions if a == "continue")
+    n_rep = sum(1 for a in replayed_actions if a == "continue")
     return IdentityCheck(
         check=check,
+        compared_actions=compare_actions,
         basis="class table" if score_fn is not None else "base columns",
         agrees=agrees,
         realized_support=tuple(realized_support), replayed_support=tuple(t.support),
