@@ -608,3 +608,60 @@ verdict, a headline or a figure, and any number quoted elsewhere is quoted as a
 pilot number with n = 5 beside it. In particular, **a CERTIFIED verdict here is
 not evidence of an edge in these ETFs** — it is evidence that the machinery
 produced a verdict.
+
+## Reading — the ETF pilot, 2026-09-25
+
+**No verdict claim.** n = 5. Every number is a pilot number.
+Reports: `runs/agent_pilot/pilot_report_etf_attempt1.txt` and
+`..._attempt2_priced.txt`.
+
+**The depth-3 tabulated class, which is what this pilot was for.** 82,240
+members × 4,276 rows = **2.81 GB, built in 131 s**, and every certification read
+from it. That is the figure `environments/class_table.py` projected, now
+measured.
+
+**Rule 1 holds**; every refusal one of the ten registered kinds (3
+`trigger_is_firing`, 2 `malformed_arguments`, 1 `after_stop`). All five runs
+submitted.
+
+| run | arm | calls | moves | engagement | $ |
+|---|---|---|---|---|---|
+| etf_0 | control | 109 | 108 | 0.99 | 0.224 |
+| etf_1 | control | 146 | 145 | 0.99 | 0.321 |
+| etf_2 | replay | 9 | 7 | 0.78 | 0.068 |
+| etf_3 | replay | 8 | 7 | 0.88 | 0.059 |
+| etf_4 | replay | 8 | 7 | 0.88 | 0.060 |
+
+**All three replay runs declared a stopping policy up front and none changed
+it** — unlike the ADR panel, where every run changed one, often repeatedly. The
+difference between the panels is the obvious candidate and n = 3 a side is not
+enough to say so; it is recorded as something for 7.3's agent cell to settle
+with its registered readouts.
+
+**A fourth harness defect, found the same way.** All three replay runs first came
+back UNDECIDABLE with a gap of **0.0092**, the exact size of etf_2's final,
+losing `extend_best`. `identity_check` compared the log's **last** accepted
+support against the replay's **best**: `Session.submission()` submits the best
+pair and a replay returns the best pair, so any search whose last move did not
+improve failed the guard for that reason alone. Both sides now take the best
+pair, first attainment winning, as `Session` does.
+
+**With that fixed the specimen prices end to end on a real panel:**
+
+```
+status        FAIL   (alpha 0.05)
+certifying    trigger replay (fixed-sequence-replay, read 2026-09-24)
+p_certifying  1.0000   at B = 200     p_frozen 1.0000   p_policy 1.0000
+realized      0.3159    moves 23   candidates 1298
+fill engaged  0 of 200 replicates
+guard         PASS — scores differ by 0.00e+00
+```
+
+FAIL is the honest outcome: the submission does not beat the null of its own
+search. **A CERTIFIED verdict here would have been evidence about the machinery,
+not about these ETFs**, and the holdout was not opened at any point.
+
+**Four defects across the two pilots**, each invisible on a simulated panel and
+each caught by the same identity guard: the replay basis, the replayed policy,
+the censored statistic, and best-against-last. That is the pilot pattern earning
+its keep.
