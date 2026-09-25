@@ -527,3 +527,53 @@ the others rather than counted as a defect.
 
 **Attempt 6** re-runs the three replay-arm runs on the corrected panel, at the
 registered depth-2 class, under the amended prompt. Rule 5 still stands.
+
+## Attempts 6-8, and the bracket doing its job
+
+**2026-09-25**, three replay-arm runs each, corrected panel, registered depth-2
+class, decision (b) live. Reports at `runs/agent_pilot/pilot_report_attempt*.txt`.
+
+**Rule 1 holds throughout**: every refusal is one of the ten registered kinds.
+
+**What decision (b) changed, measured.** Agents now declare a stopping policy
+before searching, and the harness suspends the search whenever one of their rules
+fires. They use the escape constantly: across attempts 6-8 **every run changed a
+declared trigger**, one of them fifteen times, and `trigger_is_firing` was the
+most common refusal (26 in attempt 6). Engagement fell from ~0.9 to **0.71-0.74**,
+because a refused move is a call that is not a move, and cost rose to about
+**$0.25-0.34 a run**. So the priced exception is not an exception in practice: on
+this panel it is the normal path.
+
+**Two defects the attempts found and fixed, in the same pattern as before.**
+Attempt 6's guard refused all three runs because `change_trigger` had
+**overwritten** the declaration, so the replay ran under the rule the search
+escaped to rather than the one it committed to. `declared_triggers()` now returns
+the pre-change declaration and `active_trigger_records` is what the live search
+runs under — which is exactly what amendment 4 registered and what the code had
+not been doing.
+
+**And then the bracket, working.** With that fixed, a run that changed its rule is
+no longer refused. The certifying null cannot price it, which is what item 1's
+bracket is for, so `certify` returns **DEPENDS_ON_JUDGMENT**, names the change as
+the responsible decision, lists the post-change moves as unreplayable, and reports
+the fixed-sequence null as the bracket's liberal end. The specimen:
+
+```
+status            DEPENDS_ON_JUDGMENT   (alpha 0.05)
+p_frozen          1.0000   (fixed-sequence replay, the bracket's liberal end)
+realized score    -2.6422
+moves             27        candidates 898
+unreplayable      16 moves, from the first change onward
+responsible       change_trigger at step N to <rule>: <the agent's reason>
+```
+
+**The realized score is −2.64, which is the class maximum**: on the corrected
+panel the agent found the best member there is, and the best member loses money.
+That is the panel, not the agent.
+
+**Picks, finally exercised.** Attempts 6-8 produced the first `pick`s on agent
+data — and **every one was contradicted**: the choice the agent named is not what
+its own declared rule selects. 0 accepted, 3 contradicted across the attempts.
+With n this small it is a signal to design 7.3's fidelity cell around, not a rate.
+
+**Cost of the pilot so far: about $4.50 across eight attempts.**

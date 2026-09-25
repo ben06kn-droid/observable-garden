@@ -338,3 +338,33 @@ iid Gaussian returns, which 6.3 cell (B) is in the middle of stressing. And the
 dominance is over the span of the *base columns*, so a grammar producing
 non-linear functions of them (moving averages, thresholds) is not covered — the
 same limitation that made `non-additive-scoring` a separate experiment.
+
+
+## A lower-frequency ADR panel, as a separate experiment
+
+**Logged 2026-09-25, with the look that motivates it disclosed.**
+
+7.4 runs on the registered 5-minute panel and stays there. On that panel, after
+the look-ahead defect was corrected
+(`prereg/adr-universe.md`, deviation of 2026-09-25), the declared class has **no
+net-positive member**: the maximum is gross +0.59 and **net −2.64**, with costs
+5.5× the gross edge, turnover of the whole book roughly once a bar, and the cost
+concentrated in the low-priced names where the $0.005-a-share fee dominates the
+spread.
+
+That is a statement about the frequency, not about the mechanism. The
+home-close boundary that 7.4 is built around does not need five-minute bars to
+exist, and at 30-minute or hourly bars the same book turns over 6-12 times less
+often while the boundary effect, if there is one, is unchanged.
+
+**The experiment, if it is ever run:** the same names, the same benchmark map,
+the same boundary rule and the same cost model, on 30-minute or hourly bars, with
+its own pre-registration, its own universe and feature commits, and its own
+preflight. It is **not** an amendment to 7.4 and must not be run as one: choosing
+a frequency after seeing that another frequency failed is a search over
+frequencies, and a pre-registration written afterwards has to say so and price it.
+
+**Disclosed as its motivation:** the numbers above were seen by the researcher on
+2026-09-24 (recorded in `data/adr_manifest.json` under `looks`). Any such
+experiment therefore begins with one frequency already known to fail, which is a
+fact about its provenance that belongs in its first paragraph.

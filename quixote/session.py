@@ -136,16 +136,34 @@ class Session:
         """
         rec = trigger.as_record() if isinstance(trigger, Trigger) else dict(trigger)
         Trigger.from_record(rec)
+        # `declared_trigger_records` is NOT touched: it is the pre-change
+        # declaration, and the pre-change trigger is what replays. The change
+        # lives beside it, and `active_trigger_records` is what the live search
+        # runs under.
         self.log.trigger_changes = self.log.trigger_changes + (
             {"trigger": rec, "reason": reason, "at_step": self.log.n_moves,
              "timestamp": time.monotonic()},)
-        self.log.declared_trigger_records = tuple(
-            [r for r in self.log.declared_trigger_records
-             if r.get("action") != rec.get("action")] + [rec])
 
     @property
     def triggers_changed(self) -> bool:
         return bool(self.log.trigger_changes)
+
+    @property
+    def active_trigger_records(self) -> list:
+        """What the search is running under NOW: the declaration, with each
+        change applied over the action it replaces.
+
+        Distinct from `log.declared_triggers()`, which is the pre-change
+        declaration and is what a replay re-evaluates. Keeping the two apart is
+        the whole content of the priced exception: the run is replayed under the
+        rule it committed to, and everything after a change is bracketed.
+        """
+        active = {r.get("action", "stop"): dict(r)
+                  for r in self.log.declared_trigger_records}
+        for ch in self.log.trigger_changes:
+            rec = dict(ch["trigger"])
+            active[rec.get("action", "stop")] = rec
+        return list(active.values())
 
     def fired_triggers(self) -> list:
         """Every declared trigger that fires on the current information set.
@@ -159,7 +177,7 @@ class Session:
         """
         state = self.info_state()
         out = []
-        for rec in self.log.declared_trigger_records:
+        for rec in self.active_trigger_records:
             trig = Trigger.from_record(rec)
             fires, value = trig.evaluate(state)
             if fires:
@@ -347,7 +365,7 @@ class Session:
         """
         if not self.log.declared_trigger_records or not isinstance(trigger, Trigger):
             return
-        if trigger.as_record() not in list(self.log.declared_trigger_records):
+        if trigger.as_record() not in self.active_trigger_records:
             raise ValueError(
                 f"{kind} names {trigger.name!r}, which was not declared before the "
                 "first evaluation. Declare it up front, or call change_trigger, "

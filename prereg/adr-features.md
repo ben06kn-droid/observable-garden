@@ -398,3 +398,48 @@ than the registered constants. `tests/test_prereg_conformance.py` now parses the
 constants out of these files — the shift, the class depth, K, the session bounds,
 the control-boundary rule, the spread window, the floor and the fee — and asserts
 the builder uses exactly those.
+
+
+## Amendment 3 — 2026-09-25, before any 7.4 run. The expected outcome, stated in
+## advance
+
+7.4 stays on the 5-minute panel as registered. What has changed is that the
+panel's corrected class maximum is now known (deviation above): **gross +0.59,
+net −2.64, no net-positive member of the declared class.** Writing down what that
+implies *before* the run is the point of this amendment — an experiment whose
+expected verdicts are known should say so first, not discover it and then explain
+it.
+
+**Expected outcome: FAIL or INADMISSIBLE throughout.** Every certification route
+prices a submission against a null; on a panel where the best member of the
+declared class loses money net of costs, no submission should certify. **A
+CERTIFIED verdict on this panel is therefore a red flag, not a result**, and the
+first thing to check is whether the look-ahead defect has returned
+(`tests/test_prereg_conformance.py` is the standing check).
+
+**What the experiment is still for.** None of its value was in finding an edge:
+
+1. **Behavioural readouts.** Do agents claim an edge on a panel that has none?
+   What do they submit, what do they predict out of sample (`predict`), and how
+   far is the predicted Sharpe from the realized one — the deflation gap — when
+   the true answer is "nothing here"? This is the cleanest possible setting for
+   that question, because the correct answer is known.
+2. **Trigger and pick behaviour**, as `prereg/agent-pilot.md` measures it:
+   declaration, changes, the bracket rate, and whether a declared `pick` rule
+   predicts the choice.
+3. **The placebo comparison**, treated against controls, which is unaffected by
+   the absence of an edge: it asks whether the boundary structure separates them
+   at all.
+4. **The falsification checks** already registered in §9, which are counts rather
+   than estimates and do not need a positive edge to be informative.
+
+**What is NOT licensed by this amendment.** Changing the frequency, the cost
+model, the class or the universe in response to the class maximum being negative.
+A lower-frequency variant is logged in `OPEN_QUESTIONS.md` as a **separate**
+experiment with its own pre-registration, precisely so that choosing a frequency
+after seeing one fail is not done inside this one.
+
+**The preflight in §8 stands as written.** It was computed at a reference Sharpe
+of 2.0, which the panel does not deliver; that gap between the assumed reference
+and the measured maximum is reported with the results rather than being used to
+re-tune anything.

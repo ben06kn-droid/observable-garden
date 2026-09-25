@@ -470,3 +470,24 @@ def test_a_session_with_no_declared_trigger_is_never_interrupted():
     for _ in range(3):
         assert tools.call("extend_best").ok or True
     assert tools.session.fired_triggers() == []
+
+
+def test_the_declaration_replays_and_the_change_lives_beside_it():
+    """'The pre-change trigger replays; the change is a data-dependent
+    decision.' `log.declared_triggers()` must therefore keep the ORIGINAL rule:
+    attempt 6 failed the identity guard on all three runs because the change had
+    overwritten it, so the replay ran under a rule the search never committed
+    to."""
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("declare_triggers",
+               triggers=[{"trigger": "best_so_far_above", "param": 1e9}])
+    tools.call("init")
+    tools.call("change_trigger", trigger="best_so_far_above", param=-99.0,
+               reason="too high")
+    assert tools.session.log.declared_triggers() == [
+        {"kind": "best_so_far_above", "param": 1e9, "action": "stop"}]
+    assert tools.session.active_trigger_records == [
+        {"kind": "best_so_far_above", "param": -99.0, "action": "stop"}]
+    # the live search runs under the change; the replay under the declaration
+    assert [t.name for t, _ in tools.session.fired_triggers()] == ["best_so_far > bar"]

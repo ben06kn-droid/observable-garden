@@ -35,7 +35,7 @@ from estimator.trigger_replay import ReplayNulls
 from quixote.pricing import DEFAULT as NO_PRICING
 from quixote.pricing import PricingOptions, steps_to_price
 from quixote.replay import LoggedPolicy, identity_check
-from quixote.verdict import QuixoteVerdict
+from quixote.verdict import DEPENDS_ON_JUDGMENT, QuixoteVerdict
 
 CERTIFYING_NULL = "trigger replay (fixed-sequence-replay, read 2026-09-24)"
 
@@ -114,6 +114,42 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
     guard = identity_check(log, spec_class, base, annualization,
                            score_fn=None if table is None else table.scorer(None))
     if not guard.agrees:
+        # A run that CHANGED a declared trigger is expected to diverge here, and
+        # that is what the bracket is for rather than a reason to refuse. The
+        # pre-change rule is what replays (`quixote/session.change_trigger`), so
+        # the search after the change is a decision the null cannot price: the
+        # verdict is DEPENDS_ON_JUDGMENT, naming the change, with the
+        # fixed-sequence null reported as the bracket's liberal end.
+        changes = list(getattr(log, "trigger_changes", ()) or ())
+        if changes:
+            nulls, _ = three_nulls(log, spec_class, base, annualization, B,
+                                   block_length, seed, pricing=pricing, table=table)
+            first = changes[0]
+            v = QuixoteVerdict(
+                status=DEPENDS_ON_JUDGMENT, alpha=alpha,
+                p_frozen=nulls.p_value("fixed_sequence"),
+                p_upper=p_declared_class,
+                n_moves=log.n_moves, n_candidates=log.total_candidates(),
+                realized_score=float(nulls.realized_score),
+                unreplayable_decisions=tuple(r.move.kind for r in log.unreplayable()),
+                responsible_decision=(
+                    f"change_trigger at step {first['at_step']} to "
+                    f"{first['trigger']['kind']}({first['trigger']['param']:g}) -> "
+                    f"{first['trigger'].get('action', 'stop')}"
+                    + (f": {first['reason']}" if first.get("reason") else "")),
+                bracket_source=("lower end: fixed-sequence replay under the rule the "
+                                "search committed to; upper end: "
+                                + ("the declared-class p-value" if p_declared_class
+                                   is not None else "not computed")))
+            v.reasons += [
+                guard.reason(),
+                f"{len(changes)} declared trigger change(s) are logged, so the replay "
+                "under the committed rule is EXPECTED to diverge from the realized "
+                "search. That divergence is priced in the bracket rather than "
+                "refused: the run is DEPENDS_ON_JUDGMENT and names the change.",
+                "The change is a decision taken after seeing results. Nothing here "
+                "says it was a bad one; it says the certifying null cannot price it."]
+            return v
         return QuixoteVerdict(
             status="UNDECIDABLE", alpha=alpha,
             n_moves=log.n_moves, n_candidates=log.total_candidates(),
