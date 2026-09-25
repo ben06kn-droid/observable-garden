@@ -86,6 +86,50 @@ class Session:
                 raise ValueError("short list names a specification outside the declared class")
         self.log.short_list = supports
 
+    def declare_triggers(self, triggers) -> None:
+        """The stopping policy, fixed before the first evaluation.
+
+        A declared trigger is a **commitment the search runs under**, which is
+        what makes replaying it a replay. Declared at the moment of stopping it
+        is a description offered afterwards, and the two are indistinguishable in
+        a log unless the harness separates them: the agent pilot found two runs
+        of three whose stated stop rule, applied as a rule, would have ended
+        their search eight moves early (`prereg/agent-pilot.md`).
+
+        Refused after the first evaluation, on the same grounds as the short list
+        and the prior pick. `change_trigger` is the licensed way to change one.
+        """
+        self.log.refuse_if_late("triggers")
+        recs = []
+        for t in triggers:
+            rec = t.as_record() if isinstance(t, Trigger) else dict(t)
+            Trigger.from_record(rec)                     # refuse an unknown one now
+            recs.append(rec)
+        self.log.declared_trigger_records = tuple(recs)
+
+    def change_trigger(self, trigger, reason: str = "") -> None:
+        """Replace the declared stopping policy mid-search.
+
+        **Allowed, logged, and priced.** The change is a decision taken after
+        seeing results, so it is data-dependent by construction: the trigger in
+        force before it replays as a rule, and every move from here on is
+        recorded as **not replayable**, which is what puts the run in item 1's
+        bracket (`prereg/bracketed-verdicts.md`). Nothing is refused and nothing
+        is hidden; the cost appears in the verdict.
+        """
+        rec = trigger.as_record() if isinstance(trigger, Trigger) else dict(trigger)
+        Trigger.from_record(rec)
+        self.log.trigger_changes = self.log.trigger_changes + (
+            {"trigger": rec, "reason": reason, "at_step": self.log.n_moves,
+             "timestamp": time.monotonic()},)
+        self.log.declared_trigger_records = tuple(
+            [r for r in self.log.declared_trigger_records
+             if r.get("action") != rec.get("action")] + [rec])
+
+    @property
+    def triggers_changed(self) -> bool:
+        return bool(self.log.trigger_changes)
+
     def declare_budget(self, budget: int) -> None:
         """The step budget of a meta-adaptive session. Declared before any
         evaluation: a budget chosen after seeing results is itself a meta
@@ -163,7 +207,7 @@ class Session:
             step=info.step, move=move, support_after=support, score_after=score,
             n_candidates=n_cand, information=info, timestamp=time.monotonic(),
             trigger=name, trigger_value=trigger_value,
-            replayable=replayable and consistent,
+            replayable=replayable and consistent and not self.triggers_changed,
             trigger_params=params, trigger_stamped_at=stamped_at))
         self._pending = None
         return score
@@ -207,7 +251,9 @@ class Session:
         if self._pending is not None:
             raise ValueError("resolve the pending proposal before stopping")
         stamped_at = time.monotonic() if stamped_at is None else stamped_at
+        self._require_declared(trigger, "stop")
         name, params = _trigger_fields(trigger)
+        replayable = replayable and not self.triggers_changed
         info = InformationSet(step=self.log.n_moves, support_before=self.support,
                               score_before=self.score)
         self.log.record(MoveRecord(
@@ -227,6 +273,7 @@ class Session:
         scripted searchers do. Returns whether the restart happened."""
         if self._pending is not None:
             raise ValueError("resolve the pending proposal before restarting")
+        self._require_declared(trigger, "restart")
         rank = self.n_restarts + 1
         new_support, new_score, n_cand = self.grammar.anchor(rank, statistic)
         if new_support is None:
@@ -245,6 +292,22 @@ class Session:
             trigger_value=trigger_value, trigger_params=params,
             trigger_stamped_at=stamped_at))
         return True
+
+    def _require_declared(self, trigger, kind: str) -> None:
+        """A meta move may only fire a trigger that was declared up front.
+
+        The harness's own conditions (`exhausted`) are not declarations and pass
+        through. A session that declared nothing is the pre-amendment path and is
+        left alone, so scripted searchers and older logs are unaffected.
+        """
+        if not self.log.declared_trigger_records or not isinstance(trigger, Trigger):
+            return
+        if trigger.as_record() not in list(self.log.declared_trigger_records):
+            raise ValueError(
+                f"{kind} names {trigger.name!r}, which was not declared before the "
+                "first evaluation. Declare it up front, or call change_trigger, "
+                "which logs the change and prices the rest of the run as "
+                "unreplayable.")
 
     # -- the prediction slot ----------------------------------------------
 

@@ -294,10 +294,13 @@ ADR_HOME = {
     "TTE": ("XPAR", "Europe/Paris", (17, 30), 2), "SHEL": ("XLON", "Europe/London", (16, 30), 2),
     "BP": ("XLON", "Europe/London", (16, 30), 2), "RIO": ("XLON", "Europe/London", (16, 30), 2),
 }
+# The placebo controls' benchmarks, from the same registered table. They are not
+# in ADR_TREATED and are never searched; they exist for the placebo comparison.
+ADR_CONTROL_BENCH = {"ARM": "SOXX", "NXPI": "SOXX", "SPOT": "XLC"}
 ADR_BENCH = {"ASML": "SOXX", "SAP": "XLK", "STM": "SOXX", "NOK": "XLK", "ERIC": "XLK",
              "LOGI": "XLK", "NVS": "XLV", "AZN": "XLV", "SNY": "XLV", "NVO": "XLV",
              "HSBC": "XLF", "BCS": "XLF", "UL": "XLP", "DEO": "XLP", "TTE": "XLE",
-             "SHEL": "XLE", "BP": "XLE", "RIO": "XLB"}
+             "SHEL": "XLE", "BP": "XLE", "RIO": "XLB", **ADR_CONTROL_BENCH}
 ADR_TREATED = list(ADR_HOME)
 ADR_EXTRA_EXCLUSIONS = {"UL": ["2025-12-08", "2025-12-09"]}   # amendment 1 A4
 ADR_BASE = ["ret1", "ret3", "ret6", "ret12", "rel1", "rel3", "rel6", "rel12",
@@ -392,7 +395,14 @@ def build_adr_panel(raw=None, names=None, require_guard: bool = True) -> RealPan
     for mi, tk in enumerate(names):
         d = per_name[tk]
         bench = per_name[ADR_BENCH[tk]]
-        mic, tzname, (hh, mm), n_trans = ADR_HOME[tk]
+        # The placebo controls have no home market, and the pre-registration says
+        # what to do about it: "Controls take XAMS's boundary (11:30 ET, 12:30 ET
+        # in clock-mismatch weeks) as a pseudo-close, so every specification is
+        # defined on them and every home-close prediction can fail there"
+        # (prereg/adr-features.md section 2). Amsterdam's own entry supplies it,
+        # so the clock-mismatch weeks follow from the same zoneinfo conversion
+        # rather than being written down twice.
+        mic, tzname, (hh, mm), n_trans = ADR_HOME.get(tk, ADR_HOME["ASML"])
         tz, et = ZoneInfo(tzname), ZoneInfo("America/New_York")
 
         def bar_start_for(day, g):
@@ -484,6 +494,20 @@ def build_adr_panel(raw=None, names=None, require_guard: bool = True) -> RealPan
                     base_cols["vwap_dist"][t_row, mi] = np.log(price / (vw_num / vw_den))
             prev_close = float(d["c"][idx[-1]]) if idx else prev_close
 
+    # THE REGISTERED EXECUTION: "Signal at the close of bar b, position held over
+    # bar b+1" (prereg/adr-features.md section 4). R[t] is bar t's OWN return, so
+    # the weight formed from features at row t must earn R[t+1], exactly as the
+    # ETF panel shifts `earn[:-2] = r[2:]` for its own registered timing.
+    #
+    # Without this shift a specification loading +ret1 earned the return of the
+    # very bar its signal was computed from. That is a look-ahead leak, and it is
+    # what the six cost diagnostics of 2026-09-24 found: the class maximum lost
+    # its whole edge under one extra bar of lag (107.4 -> -2.9, the same member
+    # -97.4), and the placebo controls scored HIGHER than the treated panel.
+    # The last row has no successor and is dropped by `keep`.
+    EARN = np.zeros_like(R)
+    EARN[:-1] = R[1:]
+
     # relative volume: this bar against the same bar-of-day over the previous 20
     # sessions; the warm-up is dropped below rather than filled
     nb = len(traded)
@@ -513,7 +537,7 @@ def build_adr_panel(raw=None, names=None, require_guard: bool = True) -> RealPan
     keep = slice(warm, T)
     return RealPanel(
         name="adr-5min", assets=names, feature_names=names_out,
-        features=F[keep], returns=R[keep], tradable=TRADE[keep], present=PRESENT[keep],
+        features=F[keep], returns=EARN[keep], tradable=TRADE[keep], present=PRESENT[keep],
         periods_per_year=float(ADR_BARS_PER_YEAR),
         cost_rate=COST[keep], borrow_rate=np.zeros((T, M))[keep],
         session_start=start_flag[keep], session_end=end_flag[keep],

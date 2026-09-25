@@ -67,6 +67,15 @@ class SessionLog:
     prior_pick: dict | None = None
     short_list: tuple | None = None
     prediction: dict | None = None
+    # The stopping policy, declared before the first evaluation like every other
+    # declaration slot, and the log of any later change to it. A trigger named
+    # only at the moment of stopping is a description offered afterwards, not a
+    # commitment the search ran under: the agent pilot found two runs of three
+    # declaring a stop rule their own search does not satisfy
+    # (`prereg/agent-pilot.md`). A change is allowed and is a data-dependent
+    # decision, so it is logged with its timestamp and priced as unreplayable.
+    declared_trigger_records: tuple = ()
+    trigger_changes: tuple = ()
     opened_at: float = field(default_factory=time.monotonic)
     first_evaluation_at: float | None = None
     # the step budget a meta-adaptive session runs under; None for a plain search
@@ -95,8 +104,16 @@ class SessionLog:
         return self.budget is not None
 
     def declared_triggers(self) -> list[dict]:
-        """Every distinct trigger the session stamped, in order of first use.
-        Together they are the declared policy a replay re-evaluates."""
+        """The stopping policy a replay re-evaluates.
+
+        The pre-declared set when there is one, which is the registered path.
+        A session that declared none falls back to the triggers it stamped in
+        use, which is what `fixed-sequence-replay`'s scripted searchers do --
+        their policy IS code, so the two coincide -- and what agent logs written
+        before the declaration slot existed hold.
+        """
+        if self.declared_trigger_records:
+            return [dict(t) for t in self.declared_trigger_records]
         out = []
         for r in self.records:
             if r.trigger_params is not None and r.trigger_params not in out:

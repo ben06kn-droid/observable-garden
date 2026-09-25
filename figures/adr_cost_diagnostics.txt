@@ -1,0 +1,89 @@
+ADR cost diagnostics — LOOKS AT REAL IN-SAMPLE DATA, recorded in the manifest
+==============================================================================
+panel (36404, 18, 22), periods_per_year 19,152, annualisation 138.4
+class subsets:max_size=2,signs=both: 968 members
+
+THE PANEL WAS CORRECTED BEFORE THESE NUMBERS WERE TAKEN. The first run of
+these diagnostics found a look-ahead leak: ADR returns were not shifted, so a
+weight formed from bar b's features earned bar b's OWN return, against
+prereg/adr-features.md section 4 ('signal at the close of bar b, position held
+over bar b+1'). Everything below is on the corrected panel.
+
+1. GROSS vs NET
+------------------------------------------------------------------------------
+  class max            -gap_home_open
+    gross Sharpe     0.593   net Sharpe    -2.642   cost drag    3.235 (545.5%)
+    per bar: gross +2.147e-06  cost 1.175e-05  borrow 0.000e+00  net -9.606e-06
+    turnover per bar 0.0360 (gross 1 book)
+  pilot_3 submission   +ret1_home_closed +ret1_home_open +ret3_home_closed
+    gross Sharpe    -7.406   net Sharpe   -93.587   cost drag   86.181 (1163.7%)
+    per bar: gross -4.012e-05  cost 4.911e-04  borrow 0.000e+00  net -5.312e-04
+    turnover per bar 1.2294 (gross 1 book)
+
+2. PER-NAME P&L OF THE CLASS MAX, AND THE SPREAD EACH NAME PAYS
+------------------------------------------------------------------------------
+  registered floor: max(estimate, 0.01 / price, 2.0 bps); cost_rate = spread/2 + fee
+  name     gross P&L       cost         net  turnover  cost bps  at floor?
+  ASML        0.0132     0.0136     -0.0004      93.8      1.07         0%
+  SAP         0.0098     0.0118     -0.0020      89.1      1.24         0%
+  STM        -0.0486     0.0364     -0.0850     110.3      3.59         0%
+  NOK         0.0373     0.1084     -0.0711      72.0     18.58         0%
+  ERIC       -0.0009     0.0586     -0.0594      53.2     11.52         0%
+  LOGI        0.0189     0.0091      0.0098      58.1      1.53         0%
+  NVS         0.0011     0.0067     -0.0056      47.7      1.39         0%
+  AZN         0.0010     0.0093     -0.0083      67.7      1.31         0%
+  SNY         0.0270     0.0158      0.0112      66.8      2.21         0%
+  NVO        -0.0179     0.0208     -0.0387      94.0      1.99         0%
+  HSBC        0.0017     0.0109     -0.0091      62.0      1.73         0%
+  BCS         0.0337     0.0437     -0.0100      80.8      4.88         0%
+  UL          0.0041     0.0118     -0.0077      67.0      1.76         0%
+  DEO        -0.0235     0.0136     -0.0371      76.9      1.74         0%
+  TTE         0.0208     0.0125      0.0083      67.9      1.83         0%
+  SHEL       -0.0026     0.0099     -0.0125      58.9      1.69         0%
+  BP         -0.0072     0.0217     -0.0289      73.8      2.91         0%
+  RIO         0.0104     0.0134     -0.0031      72.1      1.80         0%
+  names whose cost sits at the floor for most bars: none
+
+3. WHAT THE TOP MEMBERS USE
+------------------------------------------------------------------------------
+     -2.642  -gap_home_open
+     -3.812  +gap_home_open
+     -4.653  -gap_home_open -gap_home_closed
+     -5.283  +gap_home_open +gap_home_closed
+     -6.073  -gap_home_open +gap_home_closed
+     -6.862  -gap_home_closed
+     -7.155  +gap_home_closed
+     -7.179  +gap_home_open -gap_home_closed
+  feature usage across the top 20:
+      9x  -gap_home_open
+      8x  +gap_home_open
+      3x  -gap_home_closed
+      3x  +gap_home_closed
+      3x  +ret12_home_open
+      3x  -rel12_home_open
+      2x  -ret12_home_open
+      2x  +vwap_dist_home_open
+      2x  -vwap_dist_home_closed
+      1x  -vwap_dist_home_open
+
+4. THE SAME STATISTIC WITH THE SIGNAL LAGGED ONE EXTRA BAR
+------------------------------------------------------------------------------
+  class max unlagged    -2.642   lagged    -3.216   (122% retained)
+  the SAME member lagged:    -3.216
+  lagged argmax: -gap_home_open
+
+5. THE CLASS MAX ON THE PLACEBO CONTROL PANEL
+------------------------------------------------------------------------------
+  controls ['ARM', 'NXPI', 'SPOT']: (36404, 3, 22)
+  class max    -0.187   against    -2.642 on the treated panel
+  +gap_home_open +gap_home_closed
+  NOTE: the controls take XAMS's boundary as a pseudo-close, which is what
+  prereg/adr-features.md section 2 registers. prereg/adr-universe.md records
+  the placebo limitation: all three controls are technology names.
+
+6. THE CLASS MAX AT 2x AND 4x SPREAD
+------------------------------------------------------------------------------
+  2x: class max    -5.783   (219% of 1x)   -gap_home_open
+  4x: class max   -11.426   (432% of 1x)   -gap_home_open
+
+total 91s

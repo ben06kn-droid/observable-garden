@@ -47,7 +47,10 @@ from quixote.twins import Masking
 
 MODEL = "claude-sonnet-5"          # AGENT_PROMPTS_REAL.md §3, pinned
 MAX_TURNS = 60
-D = 3
+# The ADR panel's registered class is signed subsets of size <= 2 over K = 22
+# (prereg/adr-features.md section 3). Attempts 1-4 ran at depth 3, which is the
+# ETF panel's class; recorded in prereg/agent-pilot.md amendment 4.
+D = 2
 SEED = 20260924                    # agent-pilot.md: the first 5 draws
 ARM_PLAN = ("control", "control", "replay gate", "replay gate", "replay gate")
 SERVER_NAME = "garden_pilot"
