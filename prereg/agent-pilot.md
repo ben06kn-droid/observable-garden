@@ -512,3 +512,18 @@ claim from any of it.
 not what its declared rule selects, and the harness recorded it as *rejected as
 declared* and carried on. The consistency check has now fired once on agent data,
 which it had not in any earlier attempt.
+
+**6 — 2026-09-25. Decision (b), and a tenth refusal kind.**
+
+Amendment 5 left the choice open between enforcing a declared trigger and
+checking it. **(b), check and refuse to continue, is decided** and registered in
+`prereg/AGENT_PROMPTS_REAL.md` amendment 5: before every content move the harness
+evaluates the declared rules, and a firing rule suspends the search until the
+agent stops or calls `change_trigger`.
+
+The refusal it produces is the tenth registered kind, **`trigger_is_firing`**. It
+is the harness holding an agent to a rule the agent chose, so it is measured like
+the others rather than counted as a defect.
+
+**Attempt 6** re-runs the three replay-arm runs on the corrected panel, at the
+registered depth-2 class, under the amended prompt. Rule 5 still stands.

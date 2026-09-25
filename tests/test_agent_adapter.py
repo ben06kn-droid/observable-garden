@@ -359,8 +359,6 @@ def test_a_stop_may_only_fire_a_trigger_that_was_declared_up_front():
     tools.call("declare_triggers",
                triggers=[{"trigger": "last_gain_at_most", "param": 0.0}])
     tools.call("init")
-    tools.call("extend_best")
-    tools.call("extend_best")          # until a gain of 0 is actually reached
     with pytest.raises(ValueError, match="not declared before the first evaluation"):
         tools.call("stop", trigger="best_so_far_above", param=-99.0)
     # the declared one still has to FIRE; being declared is necessary, not enough
@@ -391,21 +389,20 @@ def test_changing_a_trigger_is_allowed_logged_and_priced():
     data, cfg, cls = _fixture()
     tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
     tools.call("declare_triggers",
-               triggers=[{"trigger": "last_gain_at_most", "param": 0.0}])
+               triggers=[{"trigger": "best_so_far_above", "param": 1e9}])
     tools.call("init")
-    before = tools.call("extend_best")
     assert tools.session.log.records[-1].replayable          # still a commitment
     res = tools.call("change_trigger", trigger="best_so_far_above", param=-99.0,
                      reason="the bar turned out to be the wrong shape")
     assert res.ok and res.state["triggers_changed"]
     change = tools.session.log.trigger_changes[0]
     assert change["reason"].startswith("the bar")
-    assert change["timestamp"] > 0 and change["at_step"] == 2
-    tools.call("extend_best")
-    assert not tools.session.log.records[-1].replayable      # priced from here on
+    assert change["timestamp"] > 0 and change["at_step"] == 1
+    with pytest.raises(ToolRefused, match="has fired"):
+        tools.call("extend_best")                # the NEW rule fires at once
     assert tools.call("stop", trigger="best_so_far_above", param=-99.0).ok
-    assert not tools.session.log.records[-1].replayable
-    assert [r.move.kind for r in tools.session.log.unreplayable()] == ["extend_best", "stop"]
+    assert not tools.session.log.records[-1].replayable       # priced from here on
+    assert [r.move.kind for r in tools.session.log.unreplayable()] == ["stop"]
 
 
 def test_the_pre_change_trigger_is_what_replays():
@@ -421,3 +418,55 @@ def test_the_pre_change_trigger_is_what_replays():
     tools.call("change_trigger", trigger="last_gain_at_most", param=0.9)
     assert first == [{"kind": "last_gain_at_most", "param": 0.25, "action": "stop"}]
     assert tools.session.log.trigger_changes[0]["trigger"]["param"] == 0.9
+
+
+
+def test_a_firing_trigger_refuses_every_content_move_until_it_is_resolved():
+    """Decision (b), 2026-09-25: when a declared rule fires the harness announces
+    it and takes no content move until the agent stops or changes the rule.
+
+    Declaring a trigger up front made it a commitment on paper; attempt 5 of the
+    pilot showed the harness still evaluated it only on demand, so a rule that
+    would have fired early stopped the REPLAY where the realized search carried
+    on, and the guard refused two runs of three.
+    """
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("declare_triggers",
+               triggers=[{"trigger": "best_so_far_above", "param": -99.0}])
+    # the rule fires immediately: best_so_far is -inf until the first move, so it
+    # is the SECOND move that is refused
+    tools.call("init")
+    assert [t.name for t, _ in tools.session.fired_triggers()] == ["best_so_far > bar"]
+    with pytest.raises(ToolRefused, match="has fired"):
+        tools.call("extend_best")
+    with pytest.raises(ToolRefused, match="has fired"):
+        tools.call("swap_worst")
+    n = len(tools.session.log.records)
+    # the two ways out, both available
+    assert tools.call("stop", trigger="best_so_far_above", param=-99.0).ok
+    assert len(tools.session.log.records) == n + 1
+
+
+def test_changing_the_rule_is_the_other_way_out_and_is_priced():
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools.call("declare_triggers",
+               triggers=[{"trigger": "best_so_far_above", "param": -99.0}])
+    tools.call("init")
+    with pytest.raises(ToolRefused, match="has fired"):
+        tools.call("extend_best")
+    tools.call("change_trigger", trigger="best_so_far_above", param=1e9,
+               reason="the bar was set far too low")
+    res = tools.call("extend_best")            # now allowed
+    assert res.ok
+    assert not tools.session.log.records[-1].replayable     # and priced
+
+
+def test_a_session_with_no_declared_trigger_is_never_interrupted():
+    """7.1's scripted searchers and every pre-amendment log keep their path."""
+    data, cfg, cls = _fixture()
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    for _ in range(3):
+        assert tools.call("extend_best").ok or True
+    assert tools.session.fired_triggers() == []

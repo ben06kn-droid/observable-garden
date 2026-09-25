@@ -123,7 +123,9 @@ def test_flat_overnight_is_registered_and_the_panel_is_flat():
 def test_the_controls_take_amsterdams_boundary_as_registered():
     """§2: 'Controls take XAMS's boundary ... as a pseudo-close.' The builder had
     a rule of its own until 2026-09-24."""
-    assert "Controls take XAMS's boundary" in FLAT
+    # the registration emphasises the word, so match around the markup
+    assert re.search(r"\*\*Controls\*\* take XAMS's boundary \((\d\d:\d\d) ET", FLAT)
+    assert registered(r"\*\*Controls\*\* take XAMS's boundary \((\d\d:\d\d) ET") == "11:30"
     src = Path(rp.__file__).read_text()
     assert 'ADR_HOME.get(tk, ADR_HOME["ASML"])' in src
     assert rp.ADR_HOME["ASML"][0] == "XAMS"

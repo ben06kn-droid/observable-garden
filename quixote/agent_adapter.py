@@ -69,7 +69,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from quixote.grammar import Move
-from quixote.session import Session
+from quixote.session import Session, TriggerFired
 from quixote.triggers import PREDICATES, Trigger
 
 # The tools, in the order the pre-registration lists them. A name absent here
@@ -161,8 +161,16 @@ class ToolSession:
 
     def _move(self, move: Move, keep: bool, trigger=None) -> ToolResult:
         """Propose, then accept or reject. Both outcomes are recorded: the
-        candidates were evaluated either way, so both count toward breadth."""
-        support, score, n_cand = self.session.propose(move)
+        candidates were evaluated either way, so both count toward breadth.
+
+        A content move is refused outright while a declared trigger is firing
+        (decision (b)): the harness announces the rule and waits for the agent to
+        stop or to change it.
+        """
+        try:
+            support, score, n_cand = self.session.propose(move)
+        except TriggerFired as e:
+            raise ToolRefused(str(e)) from None
         if n_cand == 0:
             self.session.cancel()
             return ToolResult(False, f"{move.kind}: no candidate inside the class",

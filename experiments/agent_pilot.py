@@ -62,7 +62,8 @@ REFUSAL_KINDS = ("unknown_tool", "trigger_did_not_fire", "unknown_trigger",
                  "declaration_after_evaluation", "outside_class", "after_submit",
                  "after_stop",          # amendment 1, found by the dry run
                  "malformed_arguments",  # amendment 2, found by attempt 1
-                 "undeclared_trigger")   # amendment 5, the new rule firing
+                 "undeclared_trigger",   # amendment 5, the new rule firing
+                 "trigger_is_firing")    # amendment 6, decision (b)
 
 
 def classify_refusal(message: str) -> str:
@@ -83,6 +84,9 @@ def classify_refusal(message: str) -> str:
     # or declared for the other action. The rule working, not a defect.
     if "not declared before the first evaluation" in m:
         return "undeclared_trigger"
+    # amendment 6, decision (b): a content move while a declared rule is firing.
+    if "has fired" in m:
+        return "trigger_is_firing"
     if "outside the declared class" in m or "leave the declared class" in m:
         return "outside_class"
     # amendment 2: an argument the harness cannot interpret. The harness is

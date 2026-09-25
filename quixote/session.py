@@ -18,6 +18,23 @@ from quixote.log import InformationSet, MoveRecord, SessionLog
 from quixote.triggers import Trigger
 
 
+class TriggerFired(Exception):
+    """A declared trigger fires on the current state, so no content move is
+    taken until the agent stops or changes it (decision (b), 2026-09-25).
+
+    Not an error: it is the harness holding the agent to a rule the agent chose,
+    and it carries the trigger and the value so the agent can act on it.
+    """
+
+    def __init__(self, trigger, value: float):
+        self.trigger, self.value = trigger, float(value)
+        super().__init__(
+            f"your declared rule {trigger.name} has fired (value {value:.4f}). "
+            f"It licenses a {trigger.action}. Take that move, or call "
+            "change_trigger to search under a different rule -- which is logged "
+            "and prices the rest of the run as unreplayable.")
+
+
 class Session:
     def __init__(self, spec_class, base: np.ndarray, annualization: float = 1.0,
                  score_fn=None):
@@ -130,6 +147,25 @@ class Session:
     def triggers_changed(self) -> bool:
         return bool(self.log.trigger_changes)
 
+    def fired_triggers(self) -> list:
+        """Every declared trigger that fires on the current information set.
+
+        A declared trigger is a commitment, so the harness **checks it before
+        every content move** rather than only when the agent asks. Attempt 5 of
+        `prereg/agent-pilot.md` is why: declaring a rule up front made it a
+        commitment on paper, but the harness still evaluated it only on demand,
+        so a rule that would have fired at step 2 stopped the replay where the
+        realized search carried on, and the guard refused two runs of three.
+        """
+        state = self.info_state()
+        out = []
+        for rec in self.log.declared_trigger_records:
+            trig = Trigger.from_record(rec)
+            fires, value = trig.evaluate(state)
+            if fires:
+                out.append((trig, float(value)))
+        return out
+
     def declare_budget(self, budget: int) -> None:
         """The step budget of a meta-adaptive session. Declared before any
         evaluation: a budget chosen after seeing results is itself a meta
@@ -168,6 +204,15 @@ class Session:
         improves -- and collapsing the two would either hide an evaluation that
         happened or record a support that was never held.
         """
+        # (b), decided 2026-09-25: when a declared trigger fires the harness
+        # announces it and takes no content move until the agent stops or calls
+        # `change_trigger`. The agent keeps its agency and every departure from
+        # its own rule is priced, rather than the rule being enforced silently.
+        if not move.is_meta:
+            fired = self.fired_triggers()
+            if fired:
+                trig, value = fired[0]
+                raise TriggerFired(trig, value)
         new_support, new_score, n_cand = self.grammar.apply(self.support, move)
         if not self.grammar.contains(new_support):
             raise ValueError(

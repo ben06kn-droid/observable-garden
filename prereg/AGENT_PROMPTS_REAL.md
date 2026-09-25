@@ -61,6 +61,8 @@ You do not build specifications yourself. You name a move and the harness perfor
 
 Before your first move you must call `declare_triggers`, naming the stopping rules you will search under: each is one of `best_so_far_above`, `failures_at_least` or `last_gain_at_most`, with its parameter and whether it stops or restarts. To stop or to restart you then call `stop` or `restart` naming one of those rules. The harness evaluates it on the state of your search and performs the move only if it fires. A rule you did not declare is refused, and a rule that does not fire is refused.
 
+While one of your declared rules is firing, the harness will not perform any further move: it tells you which rule fired and what it licenses, and waits. You then take that move, or change the rule.
+
 You may change a declared rule later with `change_trigger`, naming the new rule and your reason. That is allowed, and it is recorded: a rule chosen after seeing results is a decision about the data, so the rule in force before the change is what your search is replayed under, and every move after the change is reported as not replayable.
 
 Before your first move you may call `pick_prior` once, naming one specification you believe in for reasons that do not depend on this data, with your reason. A `pick_prior` named after any move is refused.
@@ -288,3 +290,24 @@ The block in §2 above states both to the agent. `quixote/session.py` enforces
 them (`declare_triggers`, `change_trigger`), and `quixote/agent_adapter.py`
 exposes them as tools. A session that declares nothing keeps the old behaviour,
 so 7.1's scripted searchers and every log written before today are unaffected.
+
+**5 — 2026-09-25, before the next pilot re-run. A firing rule stops the search
+until the agent resolves it.**
+
+Amendment 4 made a declared trigger a commitment on paper. Attempt 5 showed it
+was not one in fact: the harness evaluated a declared rule only when the agent
+invoked it, while a replay evaluates every declared rule at every step, so a rule
+that would have fired early ended the replay where the realized search carried
+on, and two verdicts of three were refused by the identity guard for that reason
+alone.
+
+**Decided: check and refuse to continue.** Before every content move the harness
+evaluates the declared rules. If one fires it **announces which and what it
+licenses, and takes no content move** until the agent either performs that move
+or calls `change_trigger`. The agent keeps its agency — nothing is done on its
+behalf — and every departure from its own rule is priced rather than hidden.
+
+The alternative was to enforce the rule outright, performing the move the trigger
+licenses. That makes every log replayable by construction and takes the decision
+away from the agent, which is the thing this experiment is trying to observe. It
+is recorded here as the option not taken.

@@ -215,6 +215,10 @@ def test_every_registered_refusal_kind_is_produced_by_some_real_refusal():
         "outside_class": "specification 'x' is outside the declared class",
         "declaration_after_evaluation": "refuses a budget declared after the first move",
         "malformed_arguments": "feature 22 is outside 0..21",
+        "undeclared_trigger": ("stop names 'best_so_far > bar', which was not "
+                               "declared before the first evaluation"),
+        "trigger_is_firing": ("your declared rule last_gain > 0.0 has fired "
+                              "(value 0.0000). It licenses a stop."),
     }
     assert set(samples) == set(REFUSAL_KINDS)
     for kind, message in samples.items():
