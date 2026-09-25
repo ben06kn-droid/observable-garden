@@ -468,3 +468,47 @@ Attempts 1–4 ran at depth 3. Corrected to depth 2 for attempt 5.
 **Attempt 5 runs the three replay-arm runs again** on their registered seeds,
 under the amended prompt, on the corrected panel, at the registered class. Rule 5
 still stands: no verdict claim.
+
+**5 — 2026-09-24, from attempt 5. A ninth refusal kind, and what the trigger rule
+did and did not fix.**
+
+**(i) `undeclared_trigger` joins the list.** Attempt 5's two unregistered
+refusals were the new rule firing correctly: a run declared
+`last_gain_at_most(0.02)` for **stop** and then named it for a **restart**. The
+action is part of the declaration, so the harness refused. Registered as a kind
+rather than counted as a defect.
+
+**(ii) What the rule fixed.** All three runs declared their stopping policy
+before their first move — three rules each, unprompted beyond the registered
+sentence — and one exercised `change_trigger` and was priced as unreplayable
+exactly as amendment 4 specifies. The mechanism works.
+
+**(iii) What it did not fix, and this is the next decision.** Two of three
+verdicts are still UNDECIDABLE, and the reason has moved. **The harness evaluates
+a declared trigger only when the agent invokes it**, while the replay evaluates
+every declared trigger at every step. So a rule that *would* have fired at step 2
+— `last_gain_at_most(0.02)`, on a panel where gains are tiny — stops the replay
+where the realized search carried on, and the guard refuses the run.
+
+Declaring a trigger up front makes it a commitment on paper. It becomes a
+commitment in fact only if the harness **enforces it live**, which is a further
+choice with a cost:
+
+- **(a) enforce.** When a declared trigger fires, the harness performs the move
+  it licenses. The realized search is then the declared policy by construction
+  and the replay reproduces it. The agent loses the ability to keep searching
+  past its own rule.
+- **(b) check and refuse to continue.** The harness tells the agent its rule has
+  fired and takes no content move until the agent either stops or calls
+  `change_trigger`. The agent keeps agency; every departure is priced.
+
+**Not decided here.** (b) is the smaller change and keeps the priced-exception
+design already registered; (a) is what makes an agent's log replayable without
+any bracket at all. Attempt 5's numbers are in
+`runs/agent_pilot/pilot_report_attempt5.txt`, and rule 5 still stands: no verdict
+claim from any of it.
+
+**(iv) The first contradicted pick.** pilot_4 made a `pick` whose named choice is
+not what its declared rule selects, and the harness recorded it as *rejected as
+declared* and carried on. The consistency check has now fired once on agent data,
+which it had not in any earlier attempt.

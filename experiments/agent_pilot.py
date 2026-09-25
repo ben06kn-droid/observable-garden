@@ -61,7 +61,8 @@ RUNS_ROOT = Path(__file__).resolve().parent.parent / "runs" / "agent_pilot"
 REFUSAL_KINDS = ("unknown_tool", "trigger_did_not_fire", "unknown_trigger",
                  "declaration_after_evaluation", "outside_class", "after_submit",
                  "after_stop",          # amendment 1, found by the dry run
-                 "malformed_arguments")  # amendment 2, found by attempt 1
+                 "malformed_arguments",  # amendment 2, found by attempt 1
+                 "undeclared_trigger")   # amendment 5, the new rule firing
 
 
 def classify_refusal(message: str) -> str:
@@ -78,6 +79,10 @@ def classify_refusal(message: str) -> str:
         return "after_submit"
     if "has stopped" in m:
         return "after_stop"
+    # amendment 5: a meta move naming a trigger that was not declared up front,
+    # or declared for the other action. The rule working, not a defect.
+    if "not declared before the first evaluation" in m:
+        return "undeclared_trigger"
     if "outside the declared class" in m or "leave the declared class" in m:
         return "outside_class"
     # amendment 2: an argument the harness cannot interpret. The harness is
