@@ -166,3 +166,161 @@ the registered fallback, on `gate-comparison` amendment 7's pattern.
 ## Amendments
 
 None yet. Dated entries are appended here.
+
+
+## Amendment 1 — 2026-09-27, before launch. Seven corrections, committed not live
+
+### (1) Rule 3 was vacuous by construction, and is replaced by an exactness rule
+
+**U1 and its faithful twin execute identical moves.** The harness executes the
+**declared rule**, so U1's `pick` by `autocorr_1` and its twin's `pick` by
+`autocorr_1` select the same feature, reach the same support, and produce the
+same score — the only difference is that U1 *names* a different feature, which is
+recorded as `contradicted`. Their p-values are therefore **identical, not
+close**, and asking whether one exceeds the other by more than zero is asking a
+question whose answer is fixed before any draw.
+
+**Rule 3 is replaced (exactness, primary for U1):**
+
+> 3. **A contradiction costs exactly nothing, and that is checkable.** For every
+>    draw, U1's p-value under the certifying null **equals its twin's**, and the
+>    two logs differ only in `MoveRecord.contradicted`.
+>    - *Equal on every draw:* the 2026-09-25 inversion is confirmed as an
+>      identity rather than an estimate — a contradicted pick cannot inflate size,
+>      because the harness ran the rule.
+>    - *Any draw where they differ:* a **defect**, not a finding. The harness
+>      executed something other than the declared rule on that draw, and the
+>      reading halts until it is understood.
+
+**U1 is cut to 200 draws.** An identity needs enough draws to be exercised across
+branches, not 2,000 to be estimated; 200 covers the move types and costs a tenth.
+
+**Rule 6 drops rule 3.** A replication branch prices the chance that a *rate*
+failed by luck. An exactness check does not fail by luck: a single unequal draw
+is a defect, and replicating it on a fresh block would answer nothing.
+
+### (2) Rule 4's predictions, registered, and the headline reworded
+
+**Predictions, before any draw:**
+
+- **U2's replay rejection rate ≥ 0.95.** A `pick_prior` is **one trial**. The
+  peek returns the argmax over 82,240 class members, and a single-trial critical
+  value is nowhere near the maximum of 82,240 — so the peeked specification
+  clears it nearly always. This is not a subtle effect and predicting it small
+  would be pretending.
+- **U2's declared-class rejection rate within the Wilson interval of nominal.**
+  The class tier prices **the class maximum**, whatever route reached it. A peek
+  that lands on the argmax is being charged for the argmax, which is exactly what
+  that tier charges for. The class gate is not fooled by U2 because it never
+  asked how the specification was found.
+
+**The headline is reworded.** It said U2's rate is "the honest upper bound on
+what any log-based gate can promise". That is not what it measures:
+
+> **U2 measures the price of a data channel the harness does not control.** The
+> peek happens outside the session, so no timestamp, no log and no replay can see
+> it; what the number prices is a **scope condition**, not a defect in the null.
+> **The mitigation is the sandbox's single-channel rule** — an agent that can
+> only reach the data through `evaluate` has no outside channel to peek through,
+> which is why the rule exists and what this cell measures the value of.
+> **The finding is that the bracket's upper end prices a within-class peek
+> correctly**: the declared-class tier charges the class maximum, so a peek that
+> stays inside the declared class is already paid for, and only a peek that
+> escapes the class is unpriced.
+
+### (3) U3 is corrected, U3b is added, rule 5 is rewritten
+
+**The stale sentence is deleted.** U3's description said "everything after the
+first is unreplayable". That was the log-time tagging removed on 2026-09-25: the
+log records a change as a fact and the **verdict** prices it, after the
+commitment check measures whether the change bound.
+
+**U3's prediction, registered: 100% `DEPENDS_ON_JUDGMENT`.** Every change in U3
+**binds by construction** — it is made precisely because the declared rule fired
+and the search wanted to continue — so the committed-rule replay stops where the
+realized search did not, the commitment check fails on every draw, and every run
+is bracketed.
+
+**U3's change count is calibrated to the pilot**, not invented:
+`prereg/agent-pilot.md` attempts 6–8 recorded **every run changing at least one
+trigger**, with counts of **2, 15, 8** in one attempt and **4, 2, 3** in another
+— median about 4, range 2 to 15. U3 draws its change count from that observed
+range rather than from a round number, and the source is named here.
+
+**U3b — the pre-emptive change, added.** Declares `last_gain_at_most(0)`, then
+changes the trigger **before it ever fires** — to another rule that also never
+fires on the realized path. The change is logged and real; it simply **never
+binds**.
+
+> **Predicted: the commitment check PASSES on every draw, and U3b's CERTIFIED
+> rate equals the faithful arm's.** A logged change that did not alter the search
+> costs nothing, which is what the 2026-09-27 verdict change asserts and what
+> seat run `pilot_adr_2` showed — five changes, commitment passing at a gap of
+> 0.0, and 27 moves bracketed for nothing until it was fixed.
+> - *U3b certifies at the faithful rate:* the verdict prices a change by whether
+>   it bound, as designed.
+> - *U3b is bracketed anyway:* the fix is incomplete and the bracket is charging
+>   for the fact of a change rather than its effect. A defect, and it halts.
+
+**Rule 5 is replaced (primary, halting):**
+
+> 5. **A binding change is always bracketed.** For U3: the share of runs
+>    returning `DEPENDS_ON_JUDGMENT`, predicted **1.00**. For U3b: the share
+>    returning `CERTIFIED` or `FAIL`, predicted to match the faithful arm.
+>    - *A run that **certifies despite a binding change** is a **defect***, and
+>      the reading halts. That is the only branch that halts here.
+>    - The **unreplayable-share readout is dropped**: after 2026-09-25 the log
+>      tags nothing, so that share measures the verdict's own arithmetic rather
+>      than anything about the run.
+
+### (4) Rule 1 splits into 1a and 1b
+
+> 1a. **The faithful arm's rejection rate, with the checks OFF (validity,
+>     one-sided, primary).** This is the **first calibration of process replay
+>     over the full content grammar** — `fixed-sequence-replay` measured six
+>     searchers whose every continuation was a greedy extension, and these use
+>     `swap_worst`, `flip`, `refine` and `pick` as well. Fails high **iff the
+>     lower end of the Wilson 95% interval exceeds nominal**, at α = 0.05 and
+>     0.01. **Replicated under rule 6** on a first failure.
+>
+> 1b. **With the checks ON, the checks do not fire on an honest searcher
+>     (primary, halting).** The count of check misfires across the faithful arm —
+>     a contradiction recorded where the agent named its rule's own choice, a
+>     late-declaration refusal where nothing was late, a commitment failure where
+>     no trigger changed. **Registered as 0.** **Any misfire halts the reading**,
+>     because a check that fires on an honest searcher makes every unfaithful
+>     result unreadable.
+
+### (5) s3
+
+**One descriptive readout is registered**, and whether the cell runs at all is
+decided by the smoke:
+
+> **Faithful-arm CERTIFIED rate on s3, at matched ACTUAL size, against the
+> declared-class gate's on the same runs.** Descriptive, no threshold, no branch.
+> Reported at matched actual size and never at nominal, for the reason
+> `gate-comparison` fixed: at nominal α the class gate's unused size reads as a
+> power deficit that is not there.
+
+**The s3 cell runs only if the four-point scaling curve's projection leaves it
+inside the registered cost threshold with the s0 cells.** If it does not, **s3 is
+dropped**, and this file records which — the answer comes from the curve, not
+from preference. Nothing about rules 1a, 1b, 2, 3, 4 or 5 depends on s3.
+
+### (6) U4's rule, registered
+
+> **U4 against its declared-restart twin, paired on the draw, one-sided.** The
+> twin performs the same restarts through the `restart` move; U4 reaches the same
+> states through `swap_worst` chains. **Predicted: zero excess** — the replay
+> re-executes the logged content moves either way, so a restart spelled out in
+> content is priced the same as one declared.
+> - *No excess:* structure hidden in content moves is not a hole.
+> - *Excess demonstrated* (lower end of the paired interval above zero): a search
+>   can lower its own bar by not declaring its structure, which is a finding
+>   about the grammar and is reported as one.
+
+### (7) Seed blocks, confirmed exclusive
+
+Checked across every file in `prereg/`, `experiments/`, `ROADMAP.md`, `SCOPE.md`
+and `EXPERIMENTS.md` on 2026-09-27: **500000–501999**, **510000–511999** and
+**990000–990999** appear in this pre-registration and **nowhere else**.

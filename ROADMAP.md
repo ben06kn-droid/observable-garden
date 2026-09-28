@@ -501,8 +501,10 @@ replication on **2026-09-27** (04:04 UTC 2026-09-28 on the instance clock):
 2. **Rule 2, size of every certifier: one liberal check of 68**, in amendment 2's
    one-sided form. `budgeted-random-25` under holdout 70/30 at α = 0.05, 6.05%
    with a Wilson lower end of 0.0509. **Amendment 4's replication passed** at
-   **4.80%** (0.0395–0.0583) on the registered block, so the original is a
-   **family false alarm** and no certifier is excluded. The declared-class
+   **4.80%** (0.0395–0.0583) on the registered block. The rule fires iff the lower
+   end exceeds nominal, so the two ends side by side are the whole reading:
+   **0.0509 > 0.05 fired; 0.0395 < 0.05 did not.** The original is a **family
+   false alarm** and no certifier is excluded. The declared-class
    certifier's actual size on the slack searchers is **0.0000–0.0005**.
 3. **Rule 3, power at matched ACTUAL type-I, on the slack searchers.** At matched
    5% actual size: `stop-when-cleared` class 0.5765 / replay 0.5740,
