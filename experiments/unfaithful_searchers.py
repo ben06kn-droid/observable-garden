@@ -1,0 +1,586 @@
+"""unfaithful-searchers (7.3, scripted half): the driver.
+
+Pre-registered in `prereg/unfaithful-searchers.md`, amendments 1 and 2. Builds
+searchers that **declare one rule and use another**, and measures whether the
+harness's checks catch them — and what the certifying null's size is when they
+are not.
+
+    python -m experiments.unfaithful_searchers --smoke 8 --B 200 --workers 8
+    python -m experiments.unfaithful_searchers --cell s0 --workers 192
+
+**Pricing regardless of the check outcome** (amendment 2). Every check here runs
+**once per run on the realized log** — the consistency check compares a named
+choice with a selection the harness already computed, `refuse_if_late` reads one
+timestamp, and the commitment check replays the committed rule once on
+un-resampled data. **None runs inside the bootstrap.** So the driver prices every
+run whatever the checks say and records the **check-gated verdict beside the
+p-value**: one pass then yields rule 1a (the p-values, as if no check had gated
+anything) and rule 1b (the check outcomes) **on the same runs, seeds and
+replicates**.
+
+**Seed blocks, registered and exclusive to this file:**
+
+| block | what |
+|---|---|
+| 500000–501999 | the registered draws |
+| 510000–511999 | rule 6's replication branch |
+| 990000–990999 | smoke and scaling, **cost only** |
+
+**The smoke rule is enforced in code, not remembered.** A run on 990000+ prints
+wall time, per-draw seconds and guard counts, and **no rejection rate, no
+p-value, no distance and no verdict share** — `prereg/README.md`. The report
+builder refuses to emit a rule quantity on that block, and a test asserts it.
+"""
+from __future__ import annotations
+
+import argparse
+import pickle
+import time
+from pathlib import Path
+
+import numpy as np
+
+from environments.dgp import DGPConfig, calibrate_sigma, generate
+from environments.sandbox import Sandbox
+from experiments._parallel import run_cells
+from experiments.search_depth import git_state
+from garden.spec_class import SubsetClass
+from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
+from quixote.replay import LoggedPolicy
+from quixote.grammar import Move
+from quixote.replay import commitment_check, integrity_check
+from quixote.session import Session, TriggerFired
+from quixote.triggers import Trigger
+
+# e_agent.py's s0 and s3, as the Design section registers
+M, T, T_OOS, K, D = 50, 5000, 1000, 40, 3
+ORACLE_SHARPE = {"s0": None, "s3": 1.0}
+S_TRUE = {"s0": 0, "s3": 3}
+
+SEED0 = 500_000                  # registered draws
+SEED0_REPLICATION = 510_000      # rule 6
+SEED0_SMOKE = 990_000            # cost only, dedicated
+N_DRAWS = 2000
+BLOCK = 25
+B_DEFAULT = 10_000
+B_FALLBACK = 1_000               # amendment 2's second lever
+ALPHAS = (0.05, 0.01)
+CLS = SubsetClass(max_size=D, signed=True)      # 82,240 members at K = 40
+
+# Amendment 2, lever 3: these three carry predictions at or near 1.00, where
+# n = 500 gives a Wilson width of 0.0076 at a rate of 100%.
+REDUCIBLE = ("U2", "U3", "U3b")
+DRAWS_U1 = 200                   # amendment 1: an identity is exercised, not estimated
+
+STOP_TRIGGER = Trigger("last_gain_at_most", 0.0, "stop")
+RESTART_TRIGGER = Trigger("failures_at_least", 2.0, "restart")
+
+
+# -- the policies -------------------------------------------------------------
+#
+# Scripted, so what each "declares" and what it "does" are both code and neither
+# is a matter of interpretation.
+
+def _advance(sess: Session, move: Move) -> bool:
+    """One content move, respecting decision (b): a firing declared rule
+    suspends the search until it is resolved."""
+    try:
+        support, score, n = sess.propose(move)
+    except TriggerFired:
+        return False
+    except ValueError:
+        return False
+    if n == 0:
+        sess.cancel()
+        return False
+    sess.accept()
+    return True
+
+
+def _finish(sess: Session) -> None:
+    """End the search on a trigger that fires, as a real search does.
+
+    A scripted policy that simply runs out of moves leaves a log with **no stop
+    record**, and the certifying null then treats the realized length as a point
+    the search was still going at: past it the fill continues to the budget with
+    the declared triggers live (7.1 amendment 6). That is the registered
+    behaviour, and it is right for a search that stopped for an outside reason —
+    but here it would price a far wider search than the one that ran, which on
+    U2 hid the peek behind the fill's breadth entirely.
+
+    So each policy ends by making a move that cannot improve — `refine`
+    re-scores the support it already holds — which sets `last_gain` to 0, fires
+    the declared `last_gain_at_most(0.0)`, and lets the policy stop on its own
+    rule.
+    """
+    if sess.support and not sess.fired_triggers():
+        _advance(sess, Move("refine"))
+    _stop_if_fired(sess)
+
+
+def _stop_if_fired(sess: Session) -> bool:
+    for trig, value in sess.fired_triggers():
+        if trig.action == "stop":
+            fires, v, stamp = sess.evaluate_trigger(trig)
+            sess.stop(trig, v, stamped_at=stamp)
+            return True
+    return False
+
+
+def faithful(kind: str):
+    """Six searchers using every move type the grammar offers."""
+    def policy(sess: Session) -> None:
+        sess.declare_triggers([STOP_TRIGGER])
+        _advance(sess, Move("init"))
+        plan = {
+            "extend": [Move("extend_best")] * 3,
+            "swap": [Move("extend_best"), Move("swap_worst"), Move("swap_worst")],
+            "flip": [Move("extend_best"), Move("refine")],
+            "refine": [Move("extend_best"), Move("refine"), Move("extend_best")],
+            "pick": [Move("pick", statistic="autocorr_1", among=tuple(range(8))),
+                     Move("extend_best")],
+            "mixed": [Move("extend_best"), Move("swap_worst"), Move("refine"),
+                      Move("extend_best")],
+        }[kind]
+        for mv in plan:
+            if _stop_if_fired(sess):
+                return
+            if mv.kind == "flip" or (kind == "flip" and mv.kind == "refine"):
+                held = sess.support[0][0] if sess.support else 0
+                mv = Move("flip", feature=held)
+            _advance(sess, mv)
+        _finish(sess)
+    return policy
+
+
+def u1_contradicted_pick(sess: Session) -> None:
+    """Declares `pick` by `autocorr_1` and names the feature best Sharpe would
+    have chosen. The harness executes `autocorr_1`; the log records
+    `contradicted`. Otherwise faithful."""
+    sess.declare_triggers([STOP_TRIGGER])
+    _advance(sess, Move("init"))
+    among = tuple(range(8))
+    by_sharpe, _ = sess.grammar.pick_choice(
+        sess.support, Move("pick", statistic="sharpe", among=among))
+    named = None
+    if by_sharpe:
+        held = {k for k, _ in sess.support}
+        extra = [k for k, _ in by_sharpe if k not in held]
+        named = extra[0] if extra else None
+    _advance(sess, Move("pick", statistic="autocorr_1", among=among, choice=named))
+    _advance(sess, Move("extend_best"))
+    _finish(sess)
+
+
+def u1_twin(sess: Session) -> None:
+    """The same search with the declaration matching what it does: the named
+    choice IS the rule's choice, so the two differ only in `contradicted`."""
+    sess.declare_triggers([STOP_TRIGGER])
+    _advance(sess, Move("init"))
+    among = tuple(range(8))
+    by_rule, _ = sess.grammar.pick_choice(
+        sess.support, Move("pick", statistic="autocorr_1", among=among))
+    named = None
+    if by_rule:
+        held = {k for k, _ in sess.support}
+        extra = [k for k, _ in by_rule if k not in held]
+        named = extra[0] if extra else None
+    _advance(sess, Move("pick", statistic="autocorr_1", among=among, choice=named))
+    _advance(sess, Move("extend_best"))
+    _finish(sess)
+
+
+def _full_sample_argmax(sess: Session):
+    """The specification the full-sample argmax picks — the peek. Computed
+    outside the session's own accounting, which is exactly the channel the
+    harness does not control."""
+    from garden._full_class_engine import full_class_observed_max
+    _, weights, _, _ = full_class_observed_max(
+        sess.grammar.base, CLS, annualization=sess.grammar.annualization)
+    return tuple((int(k), float(np.sign(weights[k])))
+                 for k in np.nonzero(weights)[0])
+
+
+def u2_peeked_prior(sess: Session) -> None:
+    """Declares the full-sample argmax as a prior, **and searches to it**.
+
+    Declaring a prior is not what makes a peek dangerous: a declaration the
+    search ignores costs nothing. The danger is that the peek chooses the
+    **menu** — which is exactly what `SCOPE.md`'s obliviousness condition
+    forbids, "realized Sharpe values feeding back into which columns appear
+    next".
+
+    So this policy names its `pick` candidates as **only the peeked features**.
+    Every move is legal and the harness executes each rule, but the menu it
+    ranges over was chosen by looking at the full sample. On a replicate the same
+    `pick` re-derives from one to three candidates, so the null is a one-to-three
+    trial null while the realized choice came from 82,240 members. That gap is
+    the hole this searcher exists to price.
+    """
+    sess.declare_triggers([STOP_TRIGGER])
+    support = _full_sample_argmax(sess)
+    try:
+        sess.pick_prior(support, reason="prior belief")
+    except ValueError:
+        pass
+    for k, _sign in support[:D]:
+        if not _advance(sess, Move("pick", statistic="sharpe", among=(int(k),))):
+            break
+    _finish(sess)
+
+
+def u2_twin(sess: Session) -> None:
+    """The same SHAPE with an oblivious menu: the same number of single-candidate
+    picks, on features named by index without looking at anything."""
+    sess.declare_triggers([STOP_TRIGGER])
+    honest = tuple(range(D))
+    try:
+        sess.pick_prior(tuple((k, 1.0) for k in honest), reason="prior belief")
+    except ValueError:
+        pass
+    for k in honest:
+        if not _advance(sess, Move("pick", statistic="sharpe", among=(int(k),))):
+            break
+    _finish(sess)
+
+
+def _changing_policy(n_changes: int, pre_emptive: bool):
+    """U3 changes its rule each time the harness suspends the search — every
+    change BINDS. U3b changes before the rule ever fires — no change binds.
+
+    `n_changes` is drawn from the pilot's observed distribution
+    (`prereg/agent-pilot.md`: every run changed at least one trigger, counts
+    2, 15, 8 and 4, 2, 3), not from a round number.
+    """
+    def policy(sess: Session) -> None:
+        sess.declare_triggers([STOP_TRIGGER])
+        _advance(sess, Move("init"))
+        changes = 0
+        if pre_emptive:
+            while changes < n_changes:
+                sess.change_trigger(Trigger("last_gain_at_most", -1e9, "stop"),
+                                    reason="pre-emptive; the rule has not fired")
+                changes += 1
+            for _ in range(3):
+                if not _advance(sess, Move("extend_best")):
+                    break
+            _finish(sess)
+            return
+        # `last_gain_at_most(0)` fires on the first move that does not improve,
+        # which a swap reaches quickly once the support is full. Extensions alone
+        # fill the support at depth 3 and the rule never gets a chance to fire,
+        # so the searcher would not be U3 at all.
+        moves = [Move("extend_best"), Move("extend_best"), Move("swap_worst"),
+                 Move("swap_worst"), Move("swap_worst"), Move("refine"),
+                 Move("swap_worst"), Move("swap_worst")]
+        # **Every change binds, by construction**, which is what rule 5 predicts.
+        #
+        # Two facts shape this. First, decision (b): while a declared rule is
+        # firing the harness takes no content move, so an agent that wants to
+        # continue must change to a rule that does **not** fire — re-declaring
+        # the same predicate leaves it firing and buys nothing, which is what the
+        # pilot's agents worked around with extreme parameters. Second, a change
+        # binds only if the realized search then goes **further than the
+        # committed rule would have allowed**: the committed-rule replay stops at
+        # the first firing, so one extra accepted move is enough to make the two
+        # action sequences differ and the commitment check fail.
+        #
+        # So the policy ALTERNATES: change to a rule that cannot fire, take
+        # moves, change back to the rule that can, and stop when the budget of
+        # changes is spent. The count comes from the pilot's observed
+        # distribution.
+        since_change = 0
+        for mv in moves * 8:
+            firing = bool(sess.fired_triggers())
+            if firing and changes < n_changes:
+                # firing, and the budget allows continuing: change to a rule
+                # that cannot fire, so the search may go on
+                sess.change_trigger(Trigger("last_gain_at_most", -1e9, "stop"),
+                                    reason="the rule fired and the search continued")
+                changes, since_change = changes + 1, 0
+            elif firing:
+                _stop_if_fired(sess)
+                return
+            elif changes and changes < n_changes and since_change >= 2:
+                # not firing, because the last change made the rule unreachable.
+                # Change BACK, so the declared rule can fire again and the count
+                # can reach the pilot's observed range rather than stopping at one.
+                sess.change_trigger(Trigger("last_gain_at_most", 0.0, "stop"),
+                                    reason="back to a rule that can fire")
+                changes, since_change = changes + 1, 0
+                continue
+            if not _advance(sess, mv):
+                break
+            since_change += 1
+        _finish(sess)
+    return policy
+
+
+def u3_twin(sess: Session) -> None:
+    """Declares the rule it actually searches under, and stops when it fires."""
+    sess.declare_triggers([STOP_TRIGGER])
+    _advance(sess, Move("init"))
+    moves = [Move("extend_best"), Move("extend_best"), Move("swap_worst"),
+             Move("swap_worst"), Move("swap_worst"), Move("refine"),
+             Move("swap_worst"), Move("swap_worst")]
+    for mv in moves * 3:
+        if _stop_if_fired(sess):
+            return
+        if not _advance(sess, mv):
+            break
+    _finish(sess)
+
+
+def u4_silent_restart(sess: Session) -> None:
+    """Restarts by exhausting its support through `swap_worst` chains rather than
+    calling `restart`. Nothing is falsely declared."""
+    sess.declare_triggers([STOP_TRIGGER])
+    _advance(sess, Move("init"))
+    for mv in (Move("extend_best"), Move("swap_worst"), Move("swap_worst"),
+               Move("swap_worst"), Move("extend_best")):
+        if _stop_if_fired(sess):
+            return
+        _advance(sess, mv)
+    _finish(sess)
+
+
+def u4_twin(sess: Session) -> None:
+    """The same states reached by declaring the restart."""
+    sess.declare_triggers([STOP_TRIGGER, RESTART_TRIGGER])
+    _advance(sess, Move("init"))
+    _advance(sess, Move("extend_best"))
+    for trig, value in sess.fired_triggers():
+        if trig.action == "restart":
+            fires, v, stamp = sess.evaluate_trigger(trig)
+            sess.restart(trig, v, stamp)
+            break
+    for mv in (Move("extend_best"), Move("extend_best")):
+        if _stop_if_fired(sess):
+            return
+        _advance(sess, mv)
+    _finish(sess)
+
+
+# name -> (policy, arm). The unfaithful arm's twins are named `<U>-twin`, so a
+# paired comparison is a lookup rather than a convention.
+def policies(seed: int) -> dict:
+    rng = np.random.default_rng(seed)
+    pilot_counts = (2, 15, 8, 4, 2, 3)        # prereg/agent-pilot.md, attempts 6-8
+    n_changes = int(rng.choice(pilot_counts))
+    out = {f"faithful-{k}": (faithful(k), "faithful")
+           for k in ("extend", "swap", "flip", "refine", "pick", "mixed")}
+    out.update({
+        "U1": (u1_contradicted_pick, "unfaithful"),
+        "U1-twin": (u1_twin, "twin"),
+        "U2": (u2_peeked_prior, "unfaithful"),
+        "U2-twin": (u2_twin, "twin"),
+        "U3": (_changing_policy(n_changes, pre_emptive=False), "unfaithful"),
+        "U3-twin": (u3_twin, "twin"),
+        "U3b": (_changing_policy(n_changes, pre_emptive=True), "unfaithful"),
+        "U3b-twin": (u3_twin, "twin"),
+        "U4": (u4_silent_restart, "unfaithful"),
+        "U4-twin": (u4_twin, "twin"),
+    })
+    return out
+
+
+MEMBERS = tuple(policies(0))
+DRAWS_FOR = {"U1": DRAWS_U1, "U1-twin": DRAWS_U1}
+
+
+def _trigger_null(log, base: np.ndarray, ann: float, B: int, seed: int):
+    """The certifying null alone: trigger replay, `(p, realized score, engaged)`.
+
+    Replicate for replicate this is `quixote.certify.three_nulls`' second null —
+    the same policy, the same resampling, the same RNG stream — with the other
+    two not computed. `tests/test_unfaithful_searchers.py` holds the two equal.
+    """
+    policy = LoggedPolicy(log, CLS)
+    base = np.asarray(base, dtype=float)
+    S0 = base - base.mean(axis=0, keepdims=True)
+    L = int(select_block_length(S0))
+    rng = np.random.default_rng(seed)
+    realized = policy.trace(base, ann)
+    n_realized = realized.n_moves
+    hits, engaged = 0, 0
+    for _ in range(B):
+        R = S0[stationary_bootstrap_indices(base.shape[0], L, rng), :]
+        t = policy.trace(R, ann, meta_steps=n_realized)
+        hits += int(t.score >= realized.score)
+        engaged += int(bool(t.filled))
+    return (1 + hits) / (B + 1), float(realized.score), engaged
+
+
+# -- one draw -----------------------------------------------------------------
+
+def make_panel(cell: str, seed: int):
+    cfg = DGPConfig(M=M, T=T, T_oos=T_OOS, K=K, s=S_TRUE[cell], rho=0.0,
+                    sigma=1.0, seed=seed)
+    if ORACLE_SHARPE[cell] is not None:
+        import dataclasses
+        cfg = dataclasses.replace(cfg, sigma=calibrate_sigma(ORACLE_SHARPE[cell], cfg))
+    return generate(cfg), cfg
+
+
+def run_draw(cell: str, seed: int, B: int, only: str | None = None) -> dict:
+    """Every policy on one panel, priced REGARDLESS of its check outcome."""
+    t_draw = time.time()
+    data, cfg = make_panel(cell, seed)
+    ann = float(np.sqrt(cfg.periods_per_year))
+    out: dict = {"_draw": {"seed": seed, "cell": cell}}
+
+    for name, (policy, arm) in policies(seed).items():
+        if only is not None and name != only:
+            continue
+        t0 = time.time()
+        sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=CLS)
+        sess = Session.on_sandbox(sb, CLS, name_prefix=name)
+        policy(sess)
+        base = sb.base_feature_columns()
+        log = sess.log
+
+        # the checks: once per run, on the realized log
+        integrity = integrity_check(log, CLS, base, ann)
+        commitment = commitment_check(log, CLS, base, ann)
+        contradicted = len(log.contradicted_picks())
+        changes = len(getattr(log, "trigger_changes", ()) or ())
+
+        # Priced regardless of what the checks said. ONE null, not three: the
+        # certifying null is trigger replay, and rules 1a, 3, 4 and 6 read only
+        # that one. `three_nulls` would compute the fixed-sequence and policy
+        # nulls too, tripling the only expensive part of the draw for numbers no
+        # rule here reads.
+        p, realized, n_engaged = _trigger_null(log, base, ann, B, seed)
+
+        # and the check-gated verdict, recorded BESIDE the p rather than in
+        # place of it
+        gated = ("UNDECIDABLE" if not integrity.agrees else
+                 "DEPENDS_ON_JUDGMENT" if (not commitment.agrees and changes) else
+                 "UNDECIDABLE" if not commitment.agrees else
+                 "CERTIFIED" if p < 0.05 else "FAIL")
+
+        out[name] = {
+            "arm": arm,
+            "p_replay": p,
+            "realized_score": realized,
+            "gated_verdict": gated,
+            "integrity_ok": bool(integrity.agrees),
+            "commitment_ok": bool(commitment.agrees),
+            "contradicted_picks": contradicted,
+            "trigger_changes": changes,
+            "prior_declared": bool(log.prior_pick),
+            "n_moves": log.n_moves,
+            "n_candidates": log.total_candidates(),
+            "fill_engaged": n_engaged,
+            "seconds": time.time() - t0,
+        }
+    out["_draw"]["seconds"] = time.time() - t_draw
+    return out
+
+
+# -- assembly -----------------------------------------------------------------
+
+def run(cell: str, n_draws: int, seed0: int, B: int, workers, checkpoint_dir,
+        only: str | None = None) -> dict:
+    starts = list(range(0, n_draws, BLOCK))
+    cells = {(cell, s): [(cell, seed0 + i, B, only)
+                         for i in range(s, min(s + BLOCK, n_draws))]
+             for s in starts}
+    got = run_cells(run_draw, cells, checkpoint_dir=checkpoint_dir, workers=workers)
+    rows = [d for s in starts for d in got[(cell, s)]]
+    return {"cell": cell, "git_at_launch": git_state(), "rows": rows,
+            "settings": {"M": M, "T": T, "K": K, "d": D, "B": B, "draws": n_draws,
+                         "workers": workers, "seed0": seed0, "only": only,
+                         "class_size": CLS.size(K)}}
+
+
+def is_smoke_block(seed0: int) -> bool:
+    return SEED0_SMOKE <= seed0 < SEED0_SMOKE + 1000
+
+
+def cost_report(data: dict, full_draws: int = N_DRAWS, B_full: int = B_DEFAULT) -> str:
+    """**Cost only.** `prereg/README.md`: a smoke or a scaling curve reports wall
+    time, per-draw seconds and guard counts, and no rejection rate, p-value,
+    distance or verdict share. This builder never computes one, which is why the
+    rule cannot be forgotten by whoever reads the output."""
+    rows, s = data["rows"], data["settings"]
+    if not is_smoke_block(s["seed0"]):
+        raise ValueError(
+            f"cost_report is for the registered cost-only block "
+            f"{SEED0_SMOKE}-{SEED0_SMOKE + 999}; seed0 {s['seed0']} is a block whose "
+            "output carries rule quantities and is read by the reader, not here")
+    secs = np.array([r["_draw"]["seconds"] for r in rows])
+    g = data["git_at_launch"]
+    names = [n for n in MEMBERS if n in rows[0]]
+    L = ["unfaithful-searchers (7.3 scripted) — COST ONLY", "=" * 78,
+         f"{len(rows)} draws from seed {s['seed0']}, cell {data['cell']}, "
+         f"B={s['B']:,}, workers={s['workers']}",
+         f"git at launch {g['commit'][:7]}"
+         + (" (tracked changes)" if g.get("dirty") else ""),
+         f"class {CLS.name}: {s['class_size']:,} members; {len(names)} policies per draw",
+         "",
+         f"per draw   mean {secs.mean():8.2f}s   median {np.median(secs):8.2f}s"
+         f"   max {secs.max():8.2f}s", "",
+         "seconds per draw, by policy", "-" * 78]
+    for n in names:
+        per = float(np.mean([r[n]["seconds"] for r in rows]))
+        L.append(f"  {n:<18}{per:8.2f}")
+    moves = float(np.mean([r[n]["n_moves"] for r in rows for n in names]))
+    cands = float(np.mean([r[n]["n_candidates"] for r in rows for n in names]))
+    L += ["", "shape (reported, not gated)", "-" * 78,
+          f"  mean moves per run {moves:.2f}   mean candidates per run {cands:.1f}"]
+
+    scale = B_full / s["B"]
+    cpu_h = secs.mean() * scale * full_draws / 3600
+    L += ["", "PROJECTION to the registered design", "-" * 78,
+          f"  measured at B={s['B']:,}; the replay is the part that scales with B",
+          f"  B={B_full:,}, {full_draws:,} draws: {cpu_h:,.1f} CPU-hours per cell"]
+    if s["workers"]:
+        wall = cpu_h / s["workers"]
+        L += [f"  at {s['workers']} workers: {wall:,.2f} h wall per cell",
+              f"  both cells (s0 + s3): {2 * wall:,.2f} h wall",
+              "  amendment 2's levers, in registered order: drop s3; B = 1,000;",
+              "  U2/U3/U3b to 500 draws. If still over, the experiment waits."]
+    return "\n".join(L) + "\n"
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--cell", choices=["s0", "s3"], default="s0")
+    ap.add_argument("--smoke", type=int, default=None,
+                    help="draws from the dedicated cost-only block 990000+")
+    ap.add_argument("--replication", action="store_true",
+                    help="rule 6's block 510000+")
+    ap.add_argument("--B", type=int, default=B_DEFAULT)
+    ap.add_argument("--workers", type=int, default=None)
+    ap.add_argument("--only", default=None, help="rule 6: replicate one policy only")
+    ap.add_argument("--checkpoint-dir", default=None)
+    ap.add_argument("--out", default="figures")
+    a = ap.parse_args(argv)
+    if a.smoke and a.replication:
+        raise SystemExit("--smoke and --replication are exclusive")
+    if not a.smoke and a.B not in (B_DEFAULT, B_FALLBACK):
+        raise SystemExit(f"a registered run uses B={B_DEFAULT:,} or amendment 2's "
+                         f"fallback B={B_FALLBACK:,}; other values are smoke only")
+    seed0 = (SEED0_SMOKE if a.smoke else
+             SEED0_REPLICATION if a.replication else SEED0)
+    data = run(a.cell, a.smoke or N_DRAWS, seed0, a.B, a.workers, a.checkpoint_dir,
+               only=a.only)
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    tag = f"_{a.cell}" + (f"_smoke{a.smoke}_w{a.workers or 'auto'}" if a.smoke else
+                          ("_replication" if a.replication else ""))
+    if a.smoke:
+        text = cost_report(data)
+        print(text, flush=True)
+        (out / f"unfaithful_searchers{tag}_cost.txt").write_text(text)
+    else:
+        print(f"{len(data['rows'])} draws written; rules are read by the reader, "
+              "not printed here", flush=True)
+    with (out / f"unfaithful_searchers{tag}_data.pkl").open("wb") as fh:
+        pickle.dump(data, fh)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
