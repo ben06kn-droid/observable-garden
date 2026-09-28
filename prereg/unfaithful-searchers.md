@@ -378,3 +378,204 @@ which is the case that needs power.
 **If the projection is still over after all three levers, the experiment waits.**
 It does not run at a size its own rules cannot be read at, and it does not
 acquire a fourth lever invented after the number was seen.
+## Amendment 3 — 2026-09-28, before any registered draw. The minimal design
+
+**Reason: the smoke projection.** The local smoke on the cost-only block projected
+the registered design at roughly **2,958 CPU-hours per cell** at B = 10,000, which
+is over the threshold amendment 2 was written to respect. Amendment 2 registered a
+lever order to be pulled in that case. **This amendment pulls all of it at once,
+before any registered draw, and replaces the order with the result** — so the
+design is fixed in one place rather than reconstructed from which levers were
+pulled. **Amendment 2's item (2), the lever order, is superseded by this
+amendment and says so at the end.**
+
+Amendment 2's item (1) — one workload shape, checks read per run — **stands
+unchanged**.
+
+### (1) The s3 cell is dropped
+
+The experiment runs on **s0 only**. s3 carried one descriptive readout and no
+rule (amendment 1, item 5); nothing in rules 1a, 1b, 2, 3, 4, 5 or 6 referred to
+it. `S_TRUE` and `ORACLE_SHARPE` in the driver hold one cell, and `--cell` accepts
+one value, so an s3 draw cannot be taken by mistake.
+
+### (2) B = 1,000 throughout
+
+The registered fallback `gate-comparison` amendment 7 used, now the default rather
+than a fallback. Every p-value in this experiment is `(1+#)/(1001)`, whose
+granularity is 0.000999 — finer than any rule here reads.
+
+### (3) The faithful arm is two searchers, and that is the minimum
+
+The arm was six searchers, one per move kind. It is now **the smallest set that
+together uses every move type in the grammar**, which is **two**:
+
+- **`faithful-restart`** — `init`, `pick` (by `autocorr_1`, among the first six
+  features), `extend_best`, `refine`, `flip`, then `swap_worst` until its declared
+  rule fires, then `restart`, then `extend_best`. Declares
+  `failures_at_least(3) -> restart`.
+- **`faithful-stop`** — `init`, `extend_best`, `extend_best`, then `swap_worst`
+  until its declared rule fires, then `stop`. Declares
+  `failures_at_least(3) -> stop`.
+
+**Coverage table.** Eight move kinds, both searchers, verified on seeds
+990000–990007 (the cost-only block) before this amendment was written:
+
+| move kind | `faithful-restart` | `faithful-stop` | also exercised by |
+|---|---|---|---|
+| `init` | yes | yes | every policy |
+| `pick` | yes | — | U1, U1-twin, U2, U2-twin |
+| `extend_best` | yes | yes | every policy |
+| `refine` | yes | — | U3, U3-twin |
+| `flip` | yes | — | U3, U3-twin |
+| `swap_worst` | yes | yes | U4, U4-twin |
+| `restart` | yes | — | U4-twin |
+| `stop` | — | yes | U3, U3b |
+
+**Why not one searcher.** One searcher covering both `restart` and `stop` has to
+declare a rule for each, and the two rules then fire together — at which point
+**which action the log took is a decision of the policy, not a function of the
+declared rules**. The commitment replay re-derives the decision from the committed
+rules, takes the first that fires, and reports a disagreement. It is **right** to:
+the committed rule set does not determine the action, so the log is not
+reproducible from its own declaration. A single-searcher version reached complete
+coverage on 8 of 8 seeds and then failed the commitment check on all 8, for that
+reason. **Each faithful searcher therefore declares exactly one rule**, which
+`tests/test_unfaithful_searchers.py` holds.
+
+**The coverage claim is about this arm, not about the experiment.** The right-hand
+column records that seven of the eight kinds are also exercised elsewhere, so
+reducing the arm to two does not reduce the grammar the experiment as a whole
+covers. What the arm alone certifies is rule 1b: a check that misfires on an
+honest searcher misfires on one of these two.
+
+**Two defects found while building the arm, both fixed before this amendment.**
+Neither is a deviation from this pre-registration — both are defects in shared
+replay code that the earlier six-searcher arm never reached, because none of those
+six ever restarted or stopped by rule:
+
+- **`quixote/replay.py`, the `cap_to_log` bound.** The commitment replay was
+  bounded at the number of *content* moves in the log while its loop also spends a
+  step on each *meta* decision, so a log with a restart and a rule-fired stop was
+  replayed one to two steps short — reported as a support disagreement on a search
+  that had not diverged. Now bounded at the number of logged steps.
+- **`quixote/replay.py`, the logged-move index.** `_run_logged` held content moves
+  in one list and indexed it by the **global step counter**, so after any meta
+  decision the replay applied the **wrong logged move**, and once the index ran
+  past the end it silently took the **fill** in place of the move that was logged.
+  Every identity check on a log whose restart rule fired was affected. Now tracked
+  by its own cursor.
+  **Regression test:** `tests/test_fixed_sequence_replay.py::
+  test_a_logged_restart_does_not_shift_the_replayed_moves`, which was confirmed to
+  fail with the index restored. The test's logged sequence **ends on a `flip`**
+  deliberately: a run of `extend_best` moves replays identically whether the index
+  is right or wrong, because the fill is the best admissible move and so is an
+  extension, so a test built on extensions alone does not see the bug.
+
+**What this changes in already-recorded results.** Nothing that carries a claim.
+The 7.0 gate-comparison used the `_run` and `_run_meta` paths, not `_run_logged`.
+The ADR and ETF agent pilots did replay logs containing restarts, and their
+identity-check outcomes are affected — but those runs were recorded explicitly
+with **no verdict claim**, as a harness shake-out, so no published number moves.
+The pilot records are annotated with a pointer to this item.
+
+### (4) Draw counts, per policy
+
+| policy | draws | why this n |
+|---|---|---|
+| `faithful-restart`, `faithful-stop` | 2,000 each | rules 1a and 1b, **unchanged** |
+| U1, U1-twin | 200 each | amendment 1: an identity, exercised not estimated |
+| U2, U2-twin | 500 each | predictions at or near 1.00 |
+| U3, U3-twin | 500 each | a share predicted 1.00 |
+| U3b, U3b-twin | 500 each | a share predicted 1.00 |
+| U4, U4-twin | 1,000 each | a paired difference predicted to be zero |
+
+**9,400 policy-runs in total.** The driver walks 2,000 draws and runs each policy
+on the first `DRAWS_FOR[name]` of them, so a smaller count is *spent*, not
+sampled-and-discarded: policy and draw index are both fixed in advance, and
+`tests/test_unfaithful_searchers.py` pins the whole table.
+
+### (5) Every rule's detectability, restated at its new n
+
+Computed from the Wilson 95% interval at the stated n. Where a rule's threshold
+can no longer be **confirmed** at the new n, that is said rather than left to be
+discovered at reading time.
+
+1. **Rule 1a — the faithful arm's rejection rate, n = 2,000 per searcher.**
+   Unchanged from the original design. At α = 0.05 an observed rate *at* nominal
+   gives [0.0413, 0.0604]; the rule fails high iff the **lower** end exceeds
+   0.05, so the smallest excess it can call is about **+0.0104** in rate. At
+   α = 0.01: [0.0065, 0.0154], smallest callable excess about **+0.0054**.
+2. **Rule 1b — misfires on the faithful arm, n = 2,000 per searcher.** Registered
+   as 0. An observed 0/2,000 gives [0.0000, **0.0019**]: the arm rules out a
+   misfire rate above 0.19% with 95% confidence, and a *single* misfire halts the
+   reading regardless of rate.
+3. **Rule 2 — each unfaithful searcher is caught, at its own n.** The catch is
+   **deterministic** for U1 (`contradicted` is recorded on every run), U3 and U3b
+   (a trigger change is a logged fact), and **structurally absent** for U2 and
+   U4 — so this rule reads a count, not an estimate, at every n. Where it is read
+   as a *rate*: at n = 500, 99% caught gives [0.9768, 0.9957]; at **n = 200**,
+   even a 100% observed rate gives [0.9812, 1.0000], whose lower end is **below
+   0.99** — so at U1's n the rule's "≥ 99%" threshold **can be found consistent
+   with the data but cannot be confirmed by the lower end**. This costs nothing
+   here because U1's catch is deterministic, and it is stated so that no
+   confirmation is claimed from n = 200.
+4. **Rule 3 — U1's p-value equals its twin's, n = 200 pairs.** An exactness rule:
+   any single unequal draw is a defect. 200 pairs exercise the identity across the
+   move types; they do not estimate a rate, and amendment 1 already removed rule
+   3 from the replication branch for that reason.
+5. **Rule 4 — U2's rejection rate, the headline, n = 500.** This is the number
+   the experiment exists to report, so its precision is stated across the range it
+   could land in: at an observed 0.20 the interval is [0.1673, 0.2373] (width
+   0.0700); at 0.50, [0.4563, 0.5437] (0.0873); at the predicted 0.95,
+   [0.9272, 0.9659] (0.0387); at 1.00, [0.9924, 1.0000] (0.0076). **The prediction
+   is ≥ 0.95, where n = 500 gives a width under 0.04** — enough to report the
+   headline to two decimals. Were the rate to land near 0.5, the width would be
+   0.087, and the write-up reports it to **one** decimal in that case rather than
+   implying precision the n does not carry.
+6. **Rule 5 — U3's bracket share, n = 500.** Descriptive, predicted 1.00, where
+   500 draws give [0.9924, 1.0000]. The per-run trigger-change count is reported
+   as a distribution, not a rate.
+7. **U4's paired difference, n = 1,000 pairs.** Predicted zero. At a per-draw
+   paired SD of 0.5 in p-value units, n = 1,000 gives a 95% half-width of
+   **0.031**, against 0.022 at 2,000. The prediction is an exact zero and the
+   pairing removes the draw, so 1,000 is the case that still needs power and gets
+   it; the realized SD is reported beside the interval so the half-width can be
+   checked against the assumption rather than taken on faith.
+8. **Rule 6 — the replication branch.** Unchanged: the first failure in rule 1
+   triggers one replication of that check on 510000–511999 at identical settings,
+   which now means **the same per-policy counts registered above**.
+
+### (6) The re-projection, from the same local smoke
+
+Re-measured on the cost-only block (990000+) on this machine at 8 workers, three
+to four draws per point, **after** the design above was fixed:
+
+| basis | CPU-hours, whole experiment | c7a.48xlarge, 192 vCPU |
+|---|---|---|
+| scaling the whole per-draw time with B (what the driver prints) | **140** | 0.73 h wall |
+| fitting `seconds = a + b·B` per policy from B = 60 and B = 240 | **58** | 0.30 h wall |
+
+Against roughly **2,958 CPU-hours per cell** for the design before this amendment.
+The first row is the honest **upper bound** and the second the honest estimate: the
+driver's printed projection scales the fixed per-draw cost — generating the panel,
+running the realized search once — with B as well, and at a small measured B that
+fixed part is most of the time. The driver now says so where it prints the number.
+**Both rows are under the threshold, so no further lever is pulled and the
+experiment does not wait.** The four-point curve on the box replaces the two-point
+fit before launch; if it lands above either row here, the discrepancy is
+investigated before any registered draw rather than absorbed.
+
+### (7) Amendment 2's lever order is superseded
+
+Amendment 2 item (2) registered three levers in order — drop s3, B = 1,000,
+U2/U3/U3b to 500 — to be pulled if the projection exceeded the threshold. **It
+did, and this amendment pulls all three plus two more** (U1 to 200, U4 to 1,000)
+and reduces the faithful arm. **Item (2) of amendment 2 is therefore superseded
+and is not a live instruction**; it stays in this file as the record of what was
+registered before the number was seen, which is the point of having written it
+down. Amendment 2's closing condition survives and is restated here:
+
+> **If the projection is still over after this amendment, the experiment waits.**
+> It does not run at a size its own rules cannot be read at, and it does not
+> acquire a further lever invented after the number was seen.

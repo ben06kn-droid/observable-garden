@@ -738,3 +738,25 @@ attempt alongside the ADR attempts. **Still open:** an `endpoint` field carrying
 the served-model assertion. §3 pins the model string and every run checks it, but
 nothing yet records *which endpoint answered*, and the field is present as `null`
 until it does.
+## 2026-09-28 — a replay defect that touches these runs' identity-check outcomes
+
+`prereg/unfaithful-searchers.md` amendment 3, item (3), records two defects in
+`quixote/replay.py` found while building 7.3's faithful arm. One of them affects
+**this pilot's recorded identity-check outcomes**: `_run_logged` indexed the
+logged content moves by its **global step counter**, which also advances on meta
+decisions, so after a `restart` the replay applied the **wrong logged move** and,
+once the index ran past the end, silently took the **fill** in place of the move
+the log held.
+
+**Every pilot run whose log contains a restart is affected** — the checks were
+comparing a shifted replay against the realized search, so an INTEGRITY or
+COMMITMENT disagreement recorded here may be the shift rather than the search.
+
+**No recorded claim moves.** This pilot was registered as a harness shake-out and
+an engagement readout with **no verdict claim** (§"What this pilot cannot do"), so
+nothing published rests on those outcomes. The engagement figures — moves by type,
+triggers declared against filled, picks accepted against contradicted — are read
+off the **realized log** and are unaffected; only the replay-side check outcomes
+are. They are not re-read here: this pilot's purpose was served, and the corrected
+code is exercised on registered draws in 7.3 rather than retrofitted onto a run
+that claimed nothing.

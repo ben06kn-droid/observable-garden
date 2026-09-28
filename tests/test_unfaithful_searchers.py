@@ -23,10 +23,18 @@ RULE_WORDS = ("rejection", "reject", "p-value", "p_value", "p =", "wilson",
 
 def test_the_three_registered_blocks_are_the_ones_the_driver_uses():
     assert (us.SEED0, us.SEED0_REPLICATION, us.SEED0_SMOKE) == (500_000, 510_000, 990_000)
-    assert us.N_DRAWS == 2000 and us.B_DEFAULT == 10_000
-    assert us.B_FALLBACK == 1_000            # amendment 2's second lever
-    assert us.DRAWS_U1 == 200                # amendment 1: an identity, not a rate
-    assert us.REDUCIBLE == ("U2", "U3", "U3b")   # amendment 2's third lever
+    assert us.N_DRAWS == 2000                # the largest policy's count
+    assert us.B_DEFAULT == 1_000             # amendment 3: B = 1,000 throughout
+    assert us.REDUCIBLE == ("U2", "U3", "U3b")
+    # amendment 3's per-policy counts, which is how the design was made minimal
+    assert us.DRAWS_FOR == {
+        "faithful-restart": 2000, "faithful-stop": 2000,
+        "U1": 200, "U1-twin": 200,
+        "U2": 500, "U2-twin": 500, "U3": 500, "U3-twin": 500,
+        "U3b": 500, "U3b-twin": 500,
+        "U4": 1000, "U4-twin": 1000,
+    }
+    assert set(us.S_TRUE) == {"s0"}           # amendment 3 drops the s3 cell
 
 
 def test_each_flag_routes_to_its_own_block():
@@ -99,10 +107,53 @@ def _draw(seed=None, B=20):
 
 def test_the_policy_set_is_the_faithful_arm_plus_four_unfaithful_and_their_twins():
     names = set(us.MEMBERS)
-    assert len([n for n in names if n.startswith("faithful-")]) == 6
+    assert len([n for n in names if n.startswith("faithful-")]) == 2
     for u in ("U1", "U2", "U3", "U3b", "U4"):
         assert u in names and f"{u}-twin" in names, u
-    assert len(names) == 16
+    assert len(names) == 12
+
+
+def test_the_faithful_arm_covers_every_move_kind_in_the_grammar():
+    """Amendment 3 registers the faithful arm as the SMALLEST set that uses every
+    move kind. If a kind stops being reached, the arm no longer answers rule 1b
+    for that kind and the claim in the prereg's coverage table is false."""
+    from collections import Counter
+
+    from environments.sandbox import Sandbox
+    from quixote.session import Session
+
+    seen = Counter()
+    for name in ("faithful-restart", "faithful-stop"):
+        for seed in (us.SEED0_SMOKE, us.SEED0_SMOKE + 1, us.SEED0_SMOKE + 3):
+            data, cfg = us.make_panel("s0", seed)
+            sb = Sandbox(data, periods_per_year=cfg.periods_per_year,
+                         spec_class=us.CLS)
+            sess = Session.on_sandbox(sb, us.CLS, name_prefix="c")
+            us.policies(seed)[name][0](sess)
+            seen.update(r.move.kind for r in sess.log.records)
+    assert set(seen) == {"init", "pick", "extend_best", "refine", "flip",
+                         "swap_worst", "restart", "stop"}, sorted(seen)
+
+
+def test_each_faithful_searcher_declares_exactly_one_rule():
+    """Why the arm needs two searchers and not one. Two rules sharing a predicate
+    fire together, so WHICH action the log took is a decision of the policy rather
+    than a function of the declared rules — and the commitment replay, which
+    re-derives the decision from the rules, refuses it. One rule per searcher
+    keeps the replay determinate."""
+    from environments.sandbox import Sandbox
+    from quixote.session import Session
+
+    for name in ("faithful-restart", "faithful-stop"):
+        data, cfg = us.make_panel("s0", us.SEED0_SMOKE)
+        sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=us.CLS)
+        sess = Session.on_sandbox(sb, us.CLS, name_prefix="d")
+        us.policies(us.SEED0_SMOKE)[name][0](sess)
+        assert len(sess.log.declared_trigger_records) == 1, name
+        # and a declared budget, or the replay falls back to 7.1's default of 12
+        # steps — below this arm's own length, which reads as a disagreement the
+        # search never had
+        assert sess.log.budget == us.FAITHFUL_BUDGET, name
 
 
 def test_U1_and_its_twin_price_identically_which_is_rule_3():
@@ -175,7 +226,7 @@ def test_the_single_null_equals_three_nulls_trigger_replicate_for_replicate():
     ann = float(np.sqrt(cfg.periods_per_year))
     sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=us.CLS)
     sess = Session.on_sandbox(sb, us.CLS, name_prefix="t")
-    us.policies(us.SEED0_SMOKE)["faithful-mixed"][0](sess)
+    us.policies(us.SEED0_SMOKE)["faithful-restart"][0](sess)
     base = sb.base_feature_columns()
 
     p, realized, _ = us._trigger_null(sess.log, base, ann, B=25, seed=3)

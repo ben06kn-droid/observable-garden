@@ -54,23 +54,33 @@ from quixote.triggers import Trigger
 
 # e_agent.py's s0 and s3, as the Design section registers
 M, T, T_OOS, K, D = 50, 5000, 1000, 40, 3
-ORACLE_SHARPE = {"s0": None, "s3": 1.0}
-S_TRUE = {"s0": 0, "s3": 3}
+# Amendment 3 drops the s3 cell: it carried one descriptive readout and no rule.
+ORACLE_SHARPE = {"s0": None}
+S_TRUE = {"s0": 0}
 
 SEED0 = 500_000                  # registered draws
 SEED0_REPLICATION = 510_000      # rule 6
 SEED0_SMOKE = 990_000            # cost only, dedicated
-N_DRAWS = 2000
+N_DRAWS = 2000                   # the largest policy's count
 BLOCK = 25
-B_DEFAULT = 10_000
-B_FALLBACK = 1_000               # amendment 2's second lever
+B_DEFAULT = 1_000                # amendment 3: B = 1,000 throughout
+B_FALLBACK = 1_000               # amendment 2's lever, now the default
 ALPHAS = (0.05, 0.01)
 CLS = SubsetClass(max_size=D, signed=True)      # 82,240 members at K = 40
 
-# Amendment 2, lever 3: these three carry predictions at or near 1.00, where
-# n = 500 gives a Wilson width of 0.0076 at a rate of 100%.
+# Amendment 3, the minimal design: each policy's own draw count, and the largest
+# of them is how many draws the driver walks.
+DRAWS_FOR = {
+    "faithful-restart": 2000,    # rules 1a and 1b, unchanged
+    "faithful-stop": 2000,
+    "U1": 200, "U1-twin": 200,           # an identity, exercised not estimated
+    "U2": 500, "U2-twin": 500,           # predictions at or near 1.00
+    "U3": 500, "U3-twin": 500,
+    "U3b": 500, "U3b-twin": 500,
+    "U4": 1000, "U4-twin": 1000,         # a paired difference predicted to be zero
+}
 REDUCIBLE = ("U2", "U3", "U3b")
-DRAWS_U1 = 200                   # amendment 1: an identity is exercised, not estimated
+DRAWS_U1 = 200
 
 STOP_TRIGGER = Trigger("last_gain_at_most", 0.0, "stop")
 RESTART_TRIGGER = Trigger("failures_at_least", 2.0, "restart")
@@ -127,30 +137,73 @@ def _stop_if_fired(sess: Session) -> bool:
     return False
 
 
-def faithful(kind: str):
-    """Six searchers using every move type the grammar offers."""
-    def policy(sess: Session) -> None:
-        sess.declare_triggers([STOP_TRIGGER])
-        _advance(sess, Move("init"))
-        plan = {
-            "extend": [Move("extend_best")] * 3,
-            "swap": [Move("extend_best"), Move("swap_worst"), Move("swap_worst")],
-            "flip": [Move("extend_best"), Move("refine")],
-            "refine": [Move("extend_best"), Move("refine"), Move("extend_best")],
-            "pick": [Move("pick", statistic="autocorr_1", among=tuple(range(8))),
-                     Move("extend_best")],
-            "mixed": [Move("extend_best"), Move("swap_worst"), Move("refine"),
-                      Move("extend_best")],
-        }[kind]
-        for mv in plan:
-            if _stop_if_fired(sess):
-                return
-            if mv.kind == "flip" or (kind == "flip" and mv.kind == "refine"):
-                held = sess.support[0][0] if sess.support else 0
-                mv = Move("flip", feature=held)
-            _advance(sess, mv)
-        _finish(sess)
-    return policy
+# The faithful arm: TWO searchers, which is the smallest set that exercises every
+# move kind (`prereg/unfaithful-searchers.md` amendment 3's coverage table).
+#
+# One searcher is not enough, and the reason is a property of the guard rather
+# than a limit of the grammar. A single searcher covering both `restart` and
+# `stop` has to declare a rule for each, and when both rules share a predicate
+# they fire together — so which one the log took is a decision of the POLICY, not
+# a function of the declared rules. The commitment replay re-derives the decision
+# from the rules, picks the first that fires, and reports a disagreement. It is
+# right to: the committed rule set does not determine the action. Verified on
+# seeds 990000-990007 before the arm was registered.
+#
+# So each faithful searcher declares exactly ONE rule, with one action, and the
+# two together cover the eight kinds.
+FAITHFUL_BUDGET = 24
+
+
+def _faithful_prelude(sess: Session, trigger: Trigger) -> None:
+    sess.declare_budget(FAITHFUL_BUDGET)
+    sess.declare_triggers([trigger])
+
+
+def _swap_until_fired(sess: Session, limit: int = 12) -> bool:
+    """Swap the worst feature until the declared rule fires. Returns whether it
+    did. A swap at a one-feature support is a no-op the harness cancels, and a
+    cancelled move still counts as an action in the log while contributing no
+    content move — so the loop stops on the first refusal rather than logging
+    actions the replay has no move for."""
+    for _ in range(limit):
+        if sess.fired_triggers():
+            return True
+        if not _advance(sess, Move("swap_worst")):
+            break
+    return bool(sess.fired_triggers())
+
+
+def faithful_restart(sess: Session) -> None:
+    """init, pick, extend_best, refine, flip, swap_worst, restart.
+
+    `refine` and `flip` come before the run of swaps: under decision (b) a firing
+    rule suspends content moves, so a kind placed after the swaps is unreachable
+    on any seed where the rule fires early.
+    """
+    trig = Trigger("failures_at_least", 3.0, "restart")
+    _faithful_prelude(sess, trig)
+    _advance(sess, Move("init"))
+    _advance(sess, Move("pick", statistic="autocorr_1", among=tuple(range(6))))
+    _advance(sess, Move("extend_best"))
+    _advance(sess, Move("refine"))
+    if sess.support:
+        _advance(sess, Move("flip", feature=sess.support[0][0]))
+    if _swap_until_fired(sess):
+        fired, value, stamp = sess.evaluate_trigger(trig)
+        sess.restart(trig, value, stamp)
+        _advance(sess, Move("extend_best"))
+
+
+def faithful_stop(sess: Session) -> None:
+    """init, extend_best, swap_worst, stop."""
+    trig = Trigger("failures_at_least", 3.0, "stop")
+    _faithful_prelude(sess, trig)
+    _advance(sess, Move("init"))
+    _advance(sess, Move("extend_best"))
+    _advance(sess, Move("extend_best"))
+    if _swap_until_fired(sess):
+        fired, value, stamp = sess.evaluate_trigger(trig)
+        sess.stop(trig, value, stamped_at=stamp)
 
 
 def u1_contradicted_pick(sess: Session) -> None:
@@ -367,8 +420,8 @@ def policies(seed: int) -> dict:
     rng = np.random.default_rng(seed)
     pilot_counts = (2, 15, 8, 4, 2, 3)        # prereg/agent-pilot.md, attempts 6-8
     n_changes = int(rng.choice(pilot_counts))
-    out = {f"faithful-{k}": (faithful(k), "faithful")
-           for k in ("extend", "swap", "flip", "refine", "pick", "mixed")}
+    out = {"faithful-restart": (faithful_restart, "faithful"),
+           "faithful-stop": (faithful_stop, "faithful")}
     out.update({
         "U1": (u1_contradicted_pick, "unfaithful"),
         "U1-twin": (u1_twin, "twin"),
@@ -385,7 +438,7 @@ def policies(seed: int) -> dict:
 
 
 MEMBERS = tuple(policies(0))
-DRAWS_FOR = {"U1": DRAWS_U1, "U1-twin": DRAWS_U1}
+assert set(DRAWS_FOR) == set(MEMBERS), "amendment 3 registers a count per policy"
 
 
 def _trigger_null(log, base: np.ndarray, ann: float, B: int, seed: int):
@@ -422,8 +475,15 @@ def make_panel(cell: str, seed: int):
     return generate(cfg), cfg
 
 
-def run_draw(cell: str, seed: int, B: int, only: str | None = None) -> dict:
-    """Every policy on one panel, priced REGARDLESS of its check outcome."""
+def run_draw(cell: str, seed: int, B: int, only: str | None = None,
+             index: int | None = None) -> dict:
+    """Every policy on one panel, priced REGARDLESS of its check outcome.
+
+    `index` is the draw's position in its block. A policy whose registered count
+    is smaller than the block's runs only on the first `DRAWS_FOR[name]` draws,
+    which is how amendment 3's per-policy counts are spent rather than by running
+    everything everywhere and discarding.
+    """
     t_draw = time.time()
     data, cfg = make_panel(cell, seed)
     ann = float(np.sqrt(cfg.periods_per_year))
@@ -431,6 +491,8 @@ def run_draw(cell: str, seed: int, B: int, only: str | None = None) -> dict:
 
     for name, (policy, arm) in policies(seed).items():
         if only is not None and name != only:
+            continue
+        if index is not None and index >= DRAWS_FOR.get(name, N_DRAWS):
             continue
         t0 = time.time()
         sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=CLS)
@@ -483,7 +545,7 @@ def run_draw(cell: str, seed: int, B: int, only: str | None = None) -> dict:
 def run(cell: str, n_draws: int, seed0: int, B: int, workers, checkpoint_dir,
         only: str | None = None) -> dict:
     starts = list(range(0, n_draws, BLOCK))
-    cells = {(cell, s): [(cell, seed0 + i, B, only)
+    cells = {(cell, s): [(cell, seed0 + i, B, only, i)
                          for i in range(s, min(s + BLOCK, n_draws))]
              for s in starts}
     got = run_cells(run_draw, cells, checkpoint_dir=checkpoint_dir, workers=workers)
@@ -511,7 +573,7 @@ def cost_report(data: dict, full_draws: int = N_DRAWS, B_full: int = B_DEFAULT) 
             "output carries rule quantities and is read by the reader, not here")
     secs = np.array([r["_draw"]["seconds"] for r in rows])
     g = data["git_at_launch"]
-    names = [n for n in MEMBERS if n in rows[0]]
+    names = [n for n in MEMBERS if any(n in r for r in rows)]
     L = ["unfaithful-searchers (7.3 scripted) — COST ONLY", "=" * 78,
          f"{len(rows)} draws from seed {s['seed0']}, cell {data['cell']}, "
          f"B={s['B']:,}, workers={s['workers']}",
@@ -523,30 +585,43 @@ def cost_report(data: dict, full_draws: int = N_DRAWS, B_full: int = B_DEFAULT) 
          f"   max {secs.max():8.2f}s", "",
          "seconds per draw, by policy", "-" * 78]
     for n in names:
-        per = float(np.mean([r[n]["seconds"] for r in rows]))
-        L.append(f"  {n:<18}{per:8.2f}")
-    moves = float(np.mean([r[n]["n_moves"] for r in rows for n in names]))
-    cands = float(np.mean([r[n]["n_candidates"] for r in rows for n in names]))
+        vals = [r[n]["seconds"] for r in rows if n in r]
+        L.append(f"  {n:<18}{float(np.mean(vals)):8.2f}   on {len(vals)} of "
+                 f"{len(rows)} draws (count {DRAWS_FOR.get(n, N_DRAWS)})")
+    moves = float(np.mean([r[n]["n_moves"] for r in rows for n in names if n in r]))
+    cands = float(np.mean([r[n]["n_candidates"] for r in rows for n in names if n in r]))
     L += ["", "shape (reported, not gated)", "-" * 78,
           f"  mean moves per run {moves:.2f}   mean candidates per run {cands:.1f}"]
 
+    # The registered design is per-policy: each policy's own count times its own
+    # per-draw cost, scaled from the measured B to the registered one.
     scale = B_full / s["B"]
-    cpu_h = secs.mean() * scale * full_draws / 3600
-    L += ["", "PROJECTION to the registered design", "-" * 78,
-          f"  measured at B={s['B']:,}; the replay is the part that scales with B",
-          f"  B={B_full:,}, {full_draws:,} draws: {cpu_h:,.1f} CPU-hours per cell"]
+    per_policy = {n: float(np.mean([r[n]["seconds"] for r in rows if n in r]))
+                  for n in names}
+    cpu_s = sum(per_policy[n] * DRAWS_FOR.get(n, N_DRAWS) for n in names) * scale
+    L += ["", "PROJECTION to the registered design (amendment 3, minimal)", "-" * 78,
+          f"  measured at B={s['B']:,}; scaled to B={B_full:,}",
+          "  each policy at its own registered count, not all at the largest:",
+          f"  {cpu_s / 3600:,.1f} CPU-hours for the whole experiment (s0 only)",
+          "",
+          "  This is an UPPER BOUND, not an estimate. It scales the whole per-draw",
+          "  time with B, including the part that does not depend on B at all —",
+          "  generating the panel and running the realized search once. At a small",
+          "  measured B that fixed part is most of the time, so the bound is loose",
+          "  by roughly the ratio of fixed to replay cost. Separating the two is",
+          "  what the four-point curve is for: fit seconds = a + b*B per policy",
+          "  across the four B values and project from b."]
     if s["workers"]:
-        wall = cpu_h / s["workers"]
-        L += [f"  at {s['workers']} workers: {wall:,.2f} h wall per cell",
-              f"  both cells (s0 + s3): {2 * wall:,.2f} h wall",
-              "  amendment 2's levers, in registered order: drop s3; B = 1,000;",
-              "  U2/U3/U3b to 500 draws. If still over, the experiment waits."]
+        wall = cpu_s / 3600 / s["workers"]
+        L += [f"  at {s['workers']} workers: {wall:,.2f} h wall",
+              "  amendment 3 IS the minimal design; if this is still over the",
+              "  threshold the experiment waits rather than shrinking further."]
     return "\n".join(L) + "\n"
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cell", choices=["s0", "s3"], default="s0")
+    ap.add_argument("--cell", choices=["s0"], default="s0")
     ap.add_argument("--smoke", type=int, default=None,
                     help="draws from the dedicated cost-only block 990000+")
     ap.add_argument("--replication", action="store_true",
