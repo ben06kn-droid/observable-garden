@@ -324,3 +324,57 @@ from preference. Nothing about rules 1a, 1b, 2, 3, 4 or 5 depends on s3.
 Checked across every file in `prereg/`, `experiments/`, `ROADMAP.md`, `SCOPE.md`
 and `EXPERIMENTS.md` on 2026-09-27: **500000–501999**, **510000–511999** and
 **990000–990999** appear in this pre-registration and **nowhere else**.
+
+## Amendment 2 — 2026-09-27, before launch. The workload has one shape, and the
+## levers are ordered
+
+### (1) One pass, not two: the checks run per RUN, not per replicate
+
+Amendment 1 split rule 1 into 1a (checks off) and 1b (checks on), and the launch
+note guessed that this doubles the workload. **It does not, and the reason is
+structural.**
+
+Every check this experiment reads runs **once per run, on the realized log**: the
+consistency check compares a named choice with the rule's selection that the
+harness already computed (`quixote/consistency.py`), `refuse_if_late` looks at one
+timestamp, and the commitment check replays the committed rule **once on the
+un-resampled data**. **None of them runs inside the bootstrap.** The expensive
+part — the replay of a policy across `B` replicates — is identical whether the
+checks are on or off.
+
+**So the driver prices every run regardless of check outcome**, and records the
+**check-gated verdict beside the p-value** rather than in place of it. One pass
+then yields both rules on the same runs: **1a** reads the p-values as if no check
+had gated anything, **1b** reads the check outcomes on the same runs. **The
+scaling curve measures that one shape.**
+
+This also makes 1a and 1b exactly comparable, which two passes would not have
+been: they are the same draws, the same seeds and the same replicates.
+
+### (2) The lever order, if the projection exceeds the threshold
+
+Registered **before the curve runs**, so the choice is not made in sight of the
+number. In this order, and **no further**:
+
+1. **Drop the s3 cell.** It carries one descriptive readout and no rule
+   (amendment 1, item 5). Nothing in rules 1a, 1b, 2, 3, 4, 5 or 6 depends on it.
+2. **B = 1,000** in place of 10,000, the same registered fallback
+   `gate-comparison` amendment 7 used.
+3. **U2, U3, U3b to 500 draws each.** These three have predictions at or near
+   **1.00** — U2's replay rejection ≥ 0.95, U3's bracket share 1.00, U3b's
+   commitment pass 1.00 — and a proportion near 1 is the cheapest thing in
+   statistics to bound. **At n = 500 a rate of 100% has a Wilson 95% interval of
+   [0.9924, 1.0000], a width of 0.0076**, against [0.9981, 1.0000] and 0.0019 at
+   n = 2,000. Four times the draws buy 0.006 of interval width on a quantity
+   predicted to be 1.
+
+**What does not move:** rules **1a** and **1b**, **U4**, and the **faithful arm**
+stay at **2,000 draws**. 1a is the first calibration of process replay over the
+full content grammar and is a *rate near nominal*, where n buys real precision;
+1b is a count registered as 0, where a smaller n means a smaller chance of seeing
+a misfire that exists; U4's rule is a paired difference predicted to be zero,
+which is the case that needs power.
+
+**If the projection is still over after all three levers, the experiment waits.**
+It does not run at a size its own rules cannot be read at, and it does not
+acquire a fourth lever invented after the number was seen.
