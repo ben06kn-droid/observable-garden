@@ -481,3 +481,45 @@ have had to pick one silently, so it is fixed here.
 
 Rules 1–4 are unaffected. This amendment changes a readout, not a decision: rule
 5 halts nothing and licenses nothing either way.
+
+
+## Amendment 4's replication, read once — 2026-09-28
+
+Rule 2's one failing check of 68 was **`budgeted-random-25` under holdout 70/30
+at α = 0.05**, at 6.05% with a Wilson lower end of 0.0509. The branch registered
+in amendment 4 fired on it: **one** replication, of that searcher, that certifier
+and that level only, on the registered block **210000–211999**, at identical
+settings — B = 10,000, 2,000 draws, s0, nothing else rerun and no parameter
+changed.
+
+|  | k | rate | Wilson 95% | liberal? |
+|---|---|---|---|---|
+| original, 200000–201999 | 121 | 0.0605 | 0.0509–0.0718 | YES |
+| replication, 210000–211999 | 96 | **0.0480** | 0.0395–0.0583 | no |
+
+**The replication passes.** Per amendment 4: the original is recorded as a
+**family false alarm**, both rates are reported side by side, and **the exclusion
+branch does not fire** — holdout 70/30 is not excluded from rule 4's tier order.
+The upper end 0.0583 is the largest liberality not ruled out, in amendment 2's
+form.
+
+**This is the outcome amendment 4 was written for.** Rule 1 makes 3 checks and
+rule 2 makes 2 per searcher per certifier, so the family is dozens of one-sided
+checks and a first failure was close to expected; 6.3's registered family rate
+across rule 1's nine checks was 0.3546 on the same reasoning. One check of 68
+firing once and passing on a fresh block is what that looks like.
+
+**What it changes in the reading.** Rule 4's ordering was read among the
+certifiers surviving rule 2, and holdout 70/30 was held out of it provisionally.
+It now re-enters, and the ordering already reported stands: at matched 5% actual
+size on the slack searchers, process replay 0.5001 and the declared class 0.4999
+are within a thousandth of each other — replay minus class +0.0003 (−0.0015,
++0.0021), straddling zero, so amendment 6's wording applies — with holdout 50/50
+at 0.3334 and holdout 70/30 behind it. Re-entry does not move the leader and does
+not change any branch.
+
+**Cost:** 2,000 draws of one searcher's holdout arm, about 2.5 minutes wall at 192
+workers on the c7a.48xlarge.
+
+Result files: `figures/gate_comparison_s0_replication_budgeted-random-25_holdout_70_30_{cost.txt,data.pkl}`,
+fetched and hash-verified against the instance.
