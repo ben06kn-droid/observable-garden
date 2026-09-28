@@ -227,3 +227,43 @@ def test_the_cost_report_says_nothing_about_rates_or_p_values():
     for forbidden in ("rejection", "p-value", "p_value", "distance", "wilson", "power"):
         assert forbidden not in low, forbidden
     assert "COST ONLY" in text and "per draw" in low
+
+
+def test_the_replication_branch_prices_one_searcher_under_one_certifier():
+    """Amendment 4: 'One replication of that searcher, that certifier and that
+    level only. Nothing else is rerun and no parameter is changed.' So the
+    narrowed run computes no other searcher, and no class null the selected
+    certifier does not need."""
+    row = gc.run_draw("s0", gc.SEED0_SMOKE, B=25,
+                      only_searcher="budgeted-random-25",
+                      only_certifier="holdout_70_30")
+    scored = [k for k in row if not k.startswith("_")]
+    assert scored == ["budgeted-random-25"]
+    r = row["budgeted-random-25"]
+    assert 0.0 < r["p_holdout_70_30"] <= 1.0
+    assert r["p_class"] is None and r["p_replay"] is None
+    assert r["p_holdout_50_50"] is None
+    # the class null is the expensive part and is not computed at all
+    assert row["_draw"]["null_q_signed"] is None
+    assert row["_draw"]["seconds_class_nulls"] < 0.5
+    assert row["_draw"]["only_searcher"] == "budgeted-random-25"
+
+
+def test_narrowing_is_refused_on_a_registered_run():
+    """The flags narrow amendment 4's replication or a smoke. A registered run
+    prices every searcher under every certifier it is matched to."""
+    import subprocess
+    import sys
+    r = subprocess.run([sys.executable, "-m", "experiments.gate_comparison",
+                        "--cell", "s0", "--only-searcher", "greedy"],
+                       capture_output=True, text=True)
+    assert r.returncode != 0
+    assert "narrow amendment 4's" in (r.stdout + r.stderr)
+
+
+def test_an_unknown_searcher_or_certifier_is_refused_by_name():
+    import pytest as _pytest
+    with _pytest.raises(KeyError, match="unknown searcher"):
+        gc.run_draw("s0", gc.SEED0_SMOKE, B=25, only_searcher="no-such-searcher")
+    with _pytest.raises(KeyError, match="unknown certifier"):
+        gc.run_draw("s0", gc.SEED0_SMOKE, B=25, only_certifier="holdout_90_10")

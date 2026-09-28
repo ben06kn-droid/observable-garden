@@ -38,7 +38,8 @@ is taken over.
   of the tokens the full 780-pair matrix would cost;
 - per-feature **excess kurtosis**, pooled, 2dp — the fourth moment, because
   cross-sectional z-scoring pins the first two and a volatility line would read
-  1.00 for every feature; a rank feature sits at **-1.20** by construction;
+  1.00 for every feature; a rank feature sits at **-1.2015** by construction at
+  `N = 40` names, delivered as -1.20 after rounding;
 - per-feature autocorrelation at lags 1 and 5, 2dp;
 - per-feature turnover of a unit position path, `mean |x_t - x_{t-1}|`, because
   costs are charged on turnover and turnover is an X-only quantity.
@@ -95,10 +96,14 @@ def _excess_kurtosis(X: np.ndarray) -> np.ndarray:
     construction.** Both panels z-score cross-sectionally, which pins the first
     two moments by construction — a cross-sectional sd line would read 1.00 for
     every feature and say nothing — and a cross-sectional mean is pinned at
-    zero. The fourth is where features start to differ: a rank feature mapped
-    uniformly to [-1, 1] is uniform, whose excess kurtosis is exactly **-1.20**
-    (-6/5), while a z-scored raw signal keeps whatever tail its construction
-    gave it.
+    zero. The fourth is where features start to differ.
+
+    A rank feature is a **discrete** uniform, not a continuous one:
+    `environments/real_panel._rank` maps each period's ranks to `N` equally
+    spaced points on [-1, 1]. Its excess kurtosis is
+    `-(6/5)(N^2 + 1)/(N^2 - 1)`, which is **-1.2015** at the ETF panel's
+    `N = 40` names and tends to -6/5 only as `N` grows. A z-scored raw signal
+    keeps whatever tail its construction gave it.
 
     Pooled over every (period, name) observation, as the correlations are, so
     the two lines of the table describe the same pooled distribution.

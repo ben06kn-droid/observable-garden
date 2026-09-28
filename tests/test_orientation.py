@@ -193,3 +193,33 @@ def test_a_panel_with_no_correlated_pair_says_so_rather_than_listing_nothing():
     table = orientation_table(X)
     assert table["correlated_pairs"] == []
     assert "every pair is below it" in render(table)
+
+
+def test_a_rank_feature_sits_at_the_discrete_uniform_value_not_the_continuous_one():
+    """`prereg/agent-cell.md` amendment 1, as corrected. `_rank` maps a period's
+    ranks to N equally spaced points, so a rank feature is a DISCRETE uniform:
+    excess kurtosis -(6/5)(N^2+1)/(N^2-1), which is -1.2015 at the ETF panel's
+    N = 40 and only tends to -6/5 as N grows."""
+    from environments.real_panel import _rank
+
+    N = 40
+    closed_form = -(6 / 5) * (N ** 2 + 1) / (N ** 2 - 1)
+    assert closed_form == pytest.approx(-1.2015, abs=5e-5)
+
+    # the actual mapping the panel uses, on a strictly-ordered period
+    rng = np.random.default_rng(0)
+    raw = rng.normal(size=(200, N))
+    ranked = _rank(raw)
+    X = ranked[:, :, None]                      # (T, N, 1)
+    table = orientation_table(X)
+    assert table["per_feature"][0]["excess_kurtosis"] == round(closed_form, 2)
+
+    # computed without rounding, it is the discrete value and not -1.2
+    flat = X.reshape(-1, 1)
+    d = flat - flat.mean(axis=0)
+    exact = float((d ** 4).mean() / (d ** 2).mean() ** 2 - 3.0)
+    assert exact == pytest.approx(closed_form, rel=1e-9)
+    assert abs(exact - (-6 / 5)) > 1e-4         # distinguishable from the limit
+
+    # and the formula's Bernoulli check, which pins its form
+    assert -(6 / 5) * (2 ** 2 + 1) / (2 ** 2 - 1) == pytest.approx(-2.0)

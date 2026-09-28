@@ -90,11 +90,26 @@ run config, so what an agent was shown is fixed and checkable afterwards.
 cross-sectionally, which **pins the first two moments by construction**: a
 cross-sectional sd line would read 1.00 for every feature and a mean line 0.00,
 so neither carries information about anything. The fourth is the first that
-survives the construction and distinguishes features. On the ETF panel the
-**rank features sit at −1.20 by construction** — a rank mapped uniformly to
-[−1, 1] is uniform, whose excess kurtosis is exactly −6/5 — so that value in the
-delivered table is a fact about the feature's *form*, not about the data, and is
-read as such.
+survives the construction and distinguishes features.
+
+**The rank features' value, computed rather than approximated.**
+`environments/real_panel._rank` maps each period's ranks to `N` **equally spaced
+points** on [−1, 1], so a rank feature is a **discrete** uniform on the names
+present, not a continuous one. The discrete uniform on `N` points has excess
+kurtosis
+
+    −(6/5)·(N² + 1)/(N² − 1)
+
+which at the ETF panel's **N = 40** names is **−1.2015** (the continuous limit
+−6/5 = −1.20 is the `N → ∞` case, and at `N = 2` the same formula gives −2, the
+Bernoulli value). The table's 2dp rounding therefore **delivers −1.20**, and the
+underlying construction value is −1.2015. Checked numerically against the actual
+mapping in `tests/test_orientation.py`.
+
+Either way the number is a fact about the feature's *form*, not about the data,
+and is read as such. A period with fewer names present has a slightly different
+`N`, so a rank feature's pooled value can sit a little off −1.2015 without that
+meaning anything either.
 
 ### The prompt
 
@@ -198,9 +213,12 @@ said nothing. It is replaced by **per-feature excess kurtosis at 2dp, pooled**,
 the fourth moment being the first that survives the construction.
 
 Registered with it, so the number is not over-read when it appears: on the ETF
-panel the **rank features sit at −1.20**, because a rank mapped uniformly to
-[−1, 1] is uniform and a uniform's excess kurtosis is exactly −6/5. That is a
-fact about the feature's form, not about the panel.
+panel the **rank features sit at −1.2015**, because `_rank` maps a period's ranks
+to `N` equally spaced points, making a rank feature a **discrete** uniform on the
+names present, whose excess kurtosis is `−(6/5)(N² + 1)/(N² − 1)` — −1.2015 at
+`N = 40`, delivered as −1.20 after the table's 2dp rounding. The continuous
+uniform's −6/5 is the `N → ∞` limit and is not the panel's value. That is a fact
+about the feature's form, not about the panel.
 
 The builder's signature is unchanged — `orientation_table(X, labels, seed)` —
 and the poisoned-sentinel test stands unchanged with it.

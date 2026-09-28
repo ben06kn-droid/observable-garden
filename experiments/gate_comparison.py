@@ -217,7 +217,8 @@ def oos_sharpes(data, cfg, weights: np.ndarray) -> tuple[float, float]:
     return unshifted, flipped
 
 
-def run_draw(cell: str, seed: int, B: int) -> dict:
+def run_draw(cell: str, seed: int, B: int, only_searcher: str | None = None,
+             only_certifier: str | None = None) -> dict:
     """One panel, every searcher, every certifier that searcher is scored under.
 
     Both matched class nulls are priced once and shared, as arm D and 6.3 do.
@@ -226,6 +227,17 @@ def run_draw(cell: str, seed: int, B: int) -> dict:
     experiment has to re-price a null.
     """
     t_draw = time.time()
+    # Amendment 4's replication branch prices ONE searcher under ONE certifier.
+    # Nothing else is computed: not the other searchers, and not a class null the
+    # selected certifier does not need. "One replication of that searcher, that
+    # certifier and that level only. Nothing else is rerun."
+    members = MEMBERS if only_searcher is None else (only_searcher,)
+    if only_searcher is not None and only_searcher not in MATCHED:
+        raise KeyError(f"unknown searcher {only_searcher!r}; the registered set is "
+                       f"{list(MEMBERS)}")
+    if only_certifier is not None and only_certifier not in (
+            "class", "holdout_70_30", "holdout_50_50", "replay"):
+        raise KeyError(f"unknown certifier {only_certifier!r}")
     data, cfg = make_panel(cell, seed)
     ann = float(np.sqrt(cfg.periods_per_year))
     sb0 = Sandbox(data, periods_per_year=cfg.periods_per_year)
@@ -234,18 +246,25 @@ def run_draw(cell: str, seed: int, B: int) -> dict:
 
     t0 = time.time()
     nulls, floor, cap = {}, 0, 0
-    for tag, cls in (("signed", SIGNED), ("unsigned", UNSIGNED)):
+    needs_class = only_certifier in (None, "class")
+    for tag, cls in ((("signed", SIGNED), ("unsigned", UNSIGNED)) if needs_class else ()):
         M_b, _, f, c = full_class_null_max(base, cls, B=B, block_length=L,
                                            annualization=ann, seed=seed)
         nulls[tag] = M_b
         floor, cap = floor + int(f), cap + int(c)
     out: dict = {"_draw": {"seed": seed, "cell": cell, "block_length": L,
                            "seconds_class_nulls": time.time() - t0,
-                           "null_q_signed": np.quantile(nulls["signed"], NULL_QUANTILES),
-                           "null_q_unsigned": np.quantile(nulls["unsigned"], NULL_QUANTILES)}}
+                           "only_searcher": only_searcher,
+                           "only_certifier": only_certifier,
+                           "null_q_signed": np.quantile(nulls["signed"], NULL_QUANTILES)
+                           if needs_class else None,
+                           "null_q_unsigned": np.quantile(nulls["unsigned"], NULL_QUANTILES)
+                           if needs_class else None}}
 
-    for name in MEMBERS:
+    for name in members:
         cls, is_slack, certifiers = MATCHED[name]
+        if only_certifier is not None:
+            certifiers = tuple(c for c in certifiers if c == only_certifier)
         tag = "signed" if cls is SIGNED else "unsigned"
         row = {"slack_searcher": is_slack, "class": cls.name}
 
@@ -259,7 +278,8 @@ def run_draw(cell: str, seed: int, B: int) -> dict:
         row["seconds_search"] = time.time() - t0
 
         # 1. declared class, full sample
-        row["p_class"] = _mc_p(nulls[tag], row["sr_sel"])
+        row["p_class"] = (_mc_p(nulls[tag], row["sr_sel"])
+                          if "class" in certifiers else None)
 
         # 2-3. holdouts
         for frac, key in HOLDOUTS:
@@ -289,23 +309,28 @@ def run_draw(cell: str, seed: int, B: int) -> dict:
         out[name] = row
 
     # the anchor's own statistic, for the guard counts the class engine reports
-    _, _, fs, cs = full_class_observed_max(base, SIGNED, annualization=ann)
-    out["_draw"]["floor"] = floor + int(fs)
-    out["_draw"]["cap"] = cap + int(cs)
+    if needs_class:
+        _, _, fs, cs = full_class_observed_max(base, SIGNED, annualization=ann)
+        floor, cap = floor + int(fs), cap + int(cs)
+    out["_draw"]["floor"], out["_draw"]["cap"] = floor, cap
     out["_draw"]["seconds"] = time.time() - t_draw
     return out
 
 
 # -- assembly ----------------------------------------------------------------
 
-def run(cell: str, n_draws: int, seed0: int, B: int, workers, checkpoint_dir) -> dict:
+def run(cell: str, n_draws: int, seed0: int, B: int, workers, checkpoint_dir,
+        only_searcher: str | None = None, only_certifier: str | None = None) -> dict:
     starts = list(range(0, n_draws, BLOCK))
-    cells = {(cell, s): [(cell, seed0 + i, B) for i in range(s, min(s + BLOCK, n_draws))]
+    cells = {(cell, s): [(cell, seed0 + i, B, only_searcher, only_certifier)
+                         for i in range(s, min(s + BLOCK, n_draws))]
              for s in starts}
     got = run_cells(run_draw, cells, checkpoint_dir=checkpoint_dir, workers=workers)
     rows = [d for s in starts for d in got[(cell, s)]]
     data = {"cell": cell, "git_at_launch": git_state(), "members": MEMBERS,
             "settings": {"M": M, "T": T, "K": K, "d": D, "B": B, "draws": n_draws,
+                         "only_searcher": only_searcher,
+                         "only_certifier": only_certifier,
                          "workers": workers, "seed0": seed0, "stop_bar": STOP_BAR,
                          "budgets": BUDGETS, "oracle_sharpe": ORACLE_SHARPE[cell],
                          "signed_size": SIGNED.size(K), "unsigned_size": UNSIGNED.size(K)},
@@ -315,7 +340,7 @@ def run(cell: str, n_draws: int, seed0: int, B: int, workers, checkpoint_dir) ->
             "cap": np.array([r["_draw"]["cap"] for r in rows])}
     keep = ("sr_sel", "p_class", "p_holdout_70_30", "p_holdout_50_50", "p_replay",
             "n_evaluations", "support_size", "oos_unshifted", "oos_flipped")
-    for name in MEMBERS:
+    for name in ([only_searcher] if only_searcher else MEMBERS):
         data[name] = {f: np.array([r[name][f] if r[name][f] is not None else np.nan
                                    for r in rows], dtype=float) for f in keep}
         data[name]["certifiers"] = MATCHED[name][2]
@@ -338,7 +363,8 @@ def cost_report(data: dict, full_draws: int = N_DRAWS, B_full: int = B_DEFAULT) 
          "where it goes (mean seconds per draw, summed over searchers)", "-" * 78]
 
     def per_draw(part: str) -> float:
-        return float(np.mean([sum(r[n][part] for n in MEMBERS) for r in rows]))
+        present = [n for n in MEMBERS if n in rows[0]]
+        return float(np.mean([sum(r[n][part] for n in present) for r in rows]))
 
     shared_null = float(np.mean([r["_draw"]["seconds_class_nulls"] for r in rows]))
     scales_with_B = {"class nulls (shared, 2 per draw)": shared_null,
@@ -390,6 +416,11 @@ def main() -> None:
                     help="draws from the dedicated cost-only block 980000+")
     ap.add_argument("--replication", action="store_true",
                     help="amendment 4's replication block 210000+")
+    ap.add_argument("--only-searcher", default=None,
+                    help="amendment 4: replicate this searcher only")
+    ap.add_argument("--only-certifier", default=None,
+                    choices=("class", "holdout_70_30", "holdout_50_50", "replay"),
+                    help="amendment 4: replicate this certifier only")
     ap.add_argument("--B", type=int, default=B_DEFAULT)
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--checkpoint-dir", default=None)
@@ -401,7 +432,12 @@ def main() -> None:
         raise SystemExit(f"a registered run uses B={B_DEFAULT:,} or the registered "
                          f"fallback B={B_FALLBACK:,}; other values are smoke only")
     seed0 = SEED0_SMOKE if a.smoke else (SEED0_REPLICATION if a.replication else SEED0)
-    data = run(a.cell, a.smoke or N_DRAWS, seed0, a.B, a.workers, a.checkpoint_dir)
+    if (a.only_searcher or a.only_certifier) and not (a.replication or a.smoke):
+        raise SystemExit("--only-searcher/--only-certifier narrow amendment 4's "
+                         "replication or a smoke; a registered run prices every "
+                         "searcher under every certifier it is matched to")
+    data = run(a.cell, a.smoke or N_DRAWS, seed0, a.B, a.workers, a.checkpoint_dir,
+               only_searcher=a.only_searcher, only_certifier=a.only_certifier)
     text = cost_report(data)
     print(text, flush=True)
     # The worker count is in the filename because a scaling curve is four smokes
@@ -409,6 +445,8 @@ def main() -> None:
     # another.
     tag = f"_{a.cell}" + (f"_smoke{a.smoke}_w{a.workers or 'auto'}" if a.smoke else
                           ("_replication" if a.replication else ""))
+    if a.only_searcher or a.only_certifier:
+        tag += f"_{a.only_searcher or 'all'}_{a.only_certifier or 'all'}"
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / f"gate_comparison{tag}_cost.txt").write_text(text)
