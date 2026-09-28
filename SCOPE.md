@@ -355,6 +355,19 @@ the exact policy null, against **0.0000** once the triggers are re-evaluated. So
 what a log must carry is not the sequence of moves but the *predicates behind
 them*; a sequence alone prices a search that did not happen.
 
+**What justifies preferring the replay tier is size, not power.** Measured in
+`gate-comparison` (7.0), read 2026-09-25 with its replication 2026-09-27: at
+**matched actual type-I** on the slack searchers, replay and the declared-class
+gate rank draws identically — mean PASS 0.5001 against 0.4999, paired difference
+**+0.0003 (−0.0015, +0.0021)**, straddling zero — while both holdout splits sit
+about **0.17 below**. What separates replay is that its actual size is near its
+nominal level (3.45–4.70% at α = 0.05 across 7.1's six searchers) where the class
+gate's is about **1%** on a slack searcher, so the class gate declines most of the
+error budget it was given. **Neither certifier ranks draws better than the
+other**, and the replay tier is not preferred for finding more; it is preferred
+because its stated level means what it says, and because it prices searches whose
+class cannot be enumerated at all.
+
 **The fill for a replicate that outruns its record is liberal against a stronger
 continuation.** Where a replicate runs past the realized length, the gate
 supplies the best one-step content move with the declared triggers still live.

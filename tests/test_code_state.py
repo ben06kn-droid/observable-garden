@@ -151,5 +151,10 @@ def test_dirty_paths_does_not_eat_the_first_paths_first_character():
     lines = [" M experiments/code_state.py", "?? prereg/new.md", " D garden/x.py"]
     got = sorted(line[3:].strip() for line in "\n".join(lines).splitlines() if line.strip())
     assert got == ["experiments/code_state.py", "garden/x.py", "prereg/new.md"]
+    # A path can be dirty because it was DELETED, in which case it is correctly
+    # reported and correctly absent - which is how closing a pre-registration
+    # shows up, since a completed one leaves prereg/ by the standing rule. So the
+    # check is that git knows the path, not that it still exists.
+    known = cs._git("status", "--porcelain")
     for p in cs.dirty_paths():
-        assert (cs.ROOT / p).exists() or p.endswith((".pyc",)), p
+        assert (cs.ROOT / p).exists() or p in known, p

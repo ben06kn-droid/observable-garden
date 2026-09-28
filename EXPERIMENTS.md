@@ -50,6 +50,7 @@ and which pins ROADMAP 6.5-6.7) and the history-rewrite record.
 | `feature-count` | `21dbbc1` | `prereg/E19c.md` |
 | `non-additive-scoring` | `f298103` | `prereg/E20.md` |
 | `oblivious-calibration` | `82bea64` | `prereg/E21.md` |
+| `gate-comparison` | `92d4751` (draft), live `e224f8b`, closed `b42eefb` | `prereg/gate-comparison.md` |
 
 **Live pre-registrations**, still in `prereg/` because their experiment has not
 finished reporting. Amendments are recorded by commit too, so a later reader can
@@ -61,7 +62,6 @@ check that each one preceded the code and the run it authorises.
 | `costs-and-regime-change` | `16457d9` | 1, the cost half cannot measure what it claims — `04dcc53`; 2, withdraw the cost half entirely — `2ba240f` |
 | `heterogeneous-correlation-fat-tails` | `96b48dc` | 1, the one-sided validity rule — `5b8042c`; 2, cell (B) pinned and a replication branch — `6739589`; 3, cell (A) needs rho>0 and two nulls per draw — `7cc4c67`; deviation 1, the skipped pre-launch smoke — `35a3fab`; deviation 2, box change partway through cell (C), cross-box check identical, interim outputs disclosed — `7582ad6`; the n = 2,000 reading and cell (A)'s ECDF departure — `a408304`; the replication passes, recorded as a family false alarm — `b8df48f` |
 | `fixed-sequence-replay` | `96b48dc` | 1, rule 1's one-sided form — `5b8042c`; 2, the widened fill and a fifth searcher — `c2acb41`; 3, rule 1's replication branch and rule 3's "material" — `2ba32d4`; 4, null 4 withdrawn — `587aa34`; 5, MetaAdaptive's restart mismatch and its fix — `19a87bd`; 6, the trigger-evaluated fill, a paired rule 3, six searchers — `17589fd`; 7, B by a cost rule fixed before measuring — `0cf734f`; deviation 1, the session on the c7a.8xlarge, run unattended — `1505653`; the reading at n = 2,000 — `9a68c25` |
-| `gate-comparison` | `92d4751` (draft), live `e224f8b` | 1, arm D's decomposition, slack searchers, rules 3 and 4 replaced — `8baa888`; 2, rule 2's one-sided form — `5b8042c`; 3, the launch gate satisfied — `40654ce`; 4, a replication branch for rules 1 and 2 on 210000–211999 — `40654ce`; 5, `BudgetedRandom` specified — `40654ce`; 6, what 7.0 no longer decides, rule 4's tie branch reworded — `40654ce`; 7, cost, instance, and the dedicated smoke block 980000–980999 — `40654ce`; 8, the holdout certifier's test — `622e1f0`; 9, rule 5 reads the PASS − FAIL gap in median gross OOS Sharpe — `e224f8b` |
 
 
 
@@ -140,7 +140,7 @@ rather than in a footnote.
 |---|---|---|
 | `calibration-at-1pct` | is the declared-class gate calibrated at 1%, not just 5%? | arm A: 15 of 419 graded agent runs reject at 5%. arm B: conservative, and unable to answer — see deviation 1. arm C running; arm D pre-registered, not run |
 | `costs-and-regime-change` | what does a PASS survive once the regime shifts? (cost half withdrawn, amendment 2) | ran 2026-09-20 |
-| `gate-comparison` | which of the three certifiers should the gate use, and in what order should 7.2 fall back? | **live 2026-09-24.** Launch gate satisfied (amendment 3): arm D reported and process replay is sized. Driver written (`experiments/gate_comparison.py`); scaling curve and smoke on the registered cost-only block 980000–980999 next, then the run |
+| `gate-comparison` | which of the three certifiers should the gate use, and in what order should 7.2 fall back? | **complete, read 2026-09-25, replication 2026-09-27.** Rule 1 holds (4.45% / 0.70%, KS p = 0.5266). Rule 2: one liberal check of 68 — `budgeted-random-25` under holdout 70/30 at α = 0.05, 6.05% (lower end 0.0509) on **200000–201999**, replicating at 4.80% (0.0395–0.0583) on **210000–211999**, so the original is a family false alarm and nothing is excluded. Rules 3–4, at matched ACTUAL size on the slack searchers: replay 0.5001 and class 0.4999, replay − class +0.0003 (−0.0015, +0.0021) straddling zero, holdout 50/50 0.3334. Rule 5: every certifier's PASS − FAIL gap narrows under the flip, none conspicuously less |
 | `fixed-sequence-replay` | what does freezing a search's meta decisions cost, and do declared triggers remove it? | **complete, read 2026-09-24.** Rule 1 passes for all six searchers, so the replay tier is built on declared triggers. Freezing is liberal (+0.012 at 5% for the bar searchers) and sits 0.44 in sup-norm from the policy null, which declared triggers remove. Rule 3: the fill is liberal against a width-2 beam (1,506 of 1,507 draws) and conservative against continuations it dominates, but the inflation is not detectable (no discordant draws, McNemar p = 1.0), so strengthening the agent-path fill is optional and stated |
 | `heterogeneous-correlation-fat-tails` | does the full-class null survive factor-structured correlation and fat tails? | **complete, read 2026-09-21/22.** Yes, in all three cells at n = 2,000. Rule 1 held on containment everywhere; its KS check rejected once, in cell (A) (p = 0.0090), and the registered replication on 410000–411999 passed (p = 0.8503), so that is recorded as a family false alarm. Rule 2: no liberal searcher in any cell. Block lengths moved off 1 in (B) and (C); guard counts zero |
 | `agent-pilot` | does the harness survive a model on a real panel? (5 runs, ADR panel; harness shake-out and engagement only, **no verdict claim**) | registered 2026-09-24, not yet run |
@@ -152,7 +152,7 @@ rather than in a footnote.
 | `bits-of-selection` | is there a common unit for how much a search looked at? (measurement only, enters no verdict) | draft, not live |
 | `pivotal-interrogation` | can DEPENDS_ON_JUDGMENT be resolved by querying the agent only where its answer could move the verdict? | draft, not live |
 
-`prereg/gate-comparison.md` went **live on 2026-09-24**, when both conditions its opening named were met: `calibration-at-1pct` arm D reported, and process replay was sized by `fixed-sequence-replay` (amendment 3). It is in the commit table above from that date. Nine amendments precede any draw, and no 7.0 data existed when any of them was written. The remaining Phase 7 amendment drafts are still **committed but not live**: they are in the tree so they cannot be lost, they have not been reviewed, and they authorise nothing.
+`prereg/gate-comparison.md` is **closed** and has left `prereg/` per the standing rule above: it went live on 2026-09-24 when both conditions its opening named were met, was read once on 2026-09-25, and closed on 2026-09-27 when amendment 4's replication passed. Nine amendments precede any draw. Recover it with `git show b42eefb:prereg/gate-comparison.md`. The remaining Phase 7 amendment drafts are still **committed but not live**: they are in the tree so they cannot be lost, they have not been reviewed, and they authorise nothing.
 
 ## Null calibration and the mechanism
 

@@ -487,12 +487,59 @@ size measured, and the fidelity measurement in 7.3.
 
 ## 7.0 gate-comparison — which test should certify? (EC2, first)
 
-**Status 2026-09-24: live.** The launch gate is closed (prereg amendment 3): arm D
-reported, and process replay is sized by 7.1 at ~62 ms per replicate for one null.
-The driver is written and tested (`experiments/gate_comparison.py`, `6a89aae`). What
-runs next is 7.0's own four-point scaling curve and an end-to-end smoke on the
-registered cost-only block 980000–980999, which set the worker count and decide
-B against amendment 7's $150 threshold; no registered draw is computed before then.
+**Status: CLOSED 2026-09-27.** Ran on the c7a.48xlarge at B = 10,000, 2,000 draws
+per cell on seeds 200000–201999, 192 workers, ~$90.
+
+**Read once, in registered order, on 2026-09-25**, with amendment 4's
+replication on **2026-09-27** (04:04 UTC 2026-09-28 on the instance clock):
+
+1. **Rule 1, anchor exactness: HOLDS.** `ExhaustiveClass` under the declared-class
+   certifier on s0 at **4.45%** against a nominal 5% (Wilson 0.0363–0.0544,
+   contains 0.05) and **0.70%** at 1% (0.0042–0.0117, contains 0.01); KS
+   D = 0.0180, p = 0.5266, does not reject uniformity. P1's prediction for a
+   data-independent menu whose maximum is submitted.
+2. **Rule 2, size of every certifier: one liberal check of 68**, in amendment 2's
+   one-sided form. `budgeted-random-25` under holdout 70/30 at α = 0.05, 6.05%
+   with a Wilson lower end of 0.0509. **Amendment 4's replication passed** at
+   **4.80%** (0.0395–0.0583) on the registered block, so the original is a
+   **family false alarm** and no certifier is excluded. The declared-class
+   certifier's actual size on the slack searchers is **0.0000–0.0005**.
+3. **Rule 3, power at matched ACTUAL type-I, on the slack searchers.** At matched
+   5% actual size: `stop-when-cleared` class 0.5765 / replay 0.5740,
+   `budgeted-random-25` 0.3685 / 0.3685, `-100` 0.4900 / 0.4905, `-400` 0.5645 /
+   0.5675. Holdouts trail both.
+4. **Rule 4, tier order.** Mean PASS at matched 5% actual size: replay 0.5001,
+   class 0.4999, holdout 50/50 0.3334. Paired over draws, **replay − class
+   +0.0003 (−0.0015, +0.0021)** — straddles zero, so amendment 6's wording
+   applies; **replay − holdout 50/50 +0.1668 (+0.1555, +0.1780)**.
+5. **Rule 5, regime shift.** The PASS − FAIL gap in median gross OOS Sharpe
+   narrows under the `S[0]` flip for every certifier — class +0.2688 → +0.1156,
+   replay +0.1955 → +0.0672, holdout 50/50 +0.1580 → +0.0657, holdout 70/30
+   +0.1089 → +0.0142. **No certifier degrades conspicuously less.** PASS rates are
+   invariant by construction and both facts that rests on are checked.
+
+**Reconciling the gate sentence below with amendment 6.** The original sentence
+said replay must **beat** the class gate's PASS rate on s3 at matched type-I or
+Phase 7 reduces to the holdout fallback. Measured, **at matched actual size replay
+and the class gate rank draws identically**: +0.0003 with a paired interval of
+(−0.0015, +0.0021), which straddles zero. The holdouts sit about **0.17 below**
+both. So the original sentence's antecedent is neither satisfied nor refuted, and
+amendment 6's replacement governs: replay's power advantage is **unmeasured at
+this sample size**, and Phase 7 does **not** reduce to the holdout fallback.
+
+**The tier order for 7.2 stands as replay, class, holdout**, with holdout 70/30
+**retained** after its replication passed.
+
+**What justifies the replay tier is a SIZE claim, not a power claim.** Replay's
+actual size sits near nominal — 3.45–4.70% at α = 0.05 across 7.1's six
+searchers, and 0.0450–0.0550 here — where the declared-class gate's is about
+**1%** on a slack searcher and 0.0000–0.0005 on these. A certifier whose actual
+size is near its nominal level spends the error budget it was given; one at a
+twentieth of nominal does not. **Neither ranks draws better than the other**: at
+matched actual size their PASS rates are indistinguishable. The replay tier is
+preferred because it is the one whose stated level means what it says, and
+because it prices searches whose class cannot be enumerated at all — a coverage
+argument. It is not preferred because it finds more.
 
 Unregistered scouting (2026-09-19, scripted greedy, K=40, d=3 signed,
 T=5,000, oracle 1.0, n=120–300, bar priced once per configuration; null
@@ -530,9 +577,17 @@ says so.
 - *The class gate's actual size is far below nominal, so power must be compared
   at matched actual type-I, not at matched nominal α.* Measured at α = 0.05:
   scripted Adaptive **1.0%**, agents **3.6%** (arm A), against a nominal 5%.
-  That slack is exactly what process replay is meant to recover, and comparing
-  PASS rates at nominal α would credit replay with power that is really just the
-  class gate's unused size.
+  Comparing PASS rates at nominal α would credit replay with power that is really
+  just the class gate's unused size.
+
+  > **Superseded 2026-09-27 by 7.0's reading.** This entry originally added that
+  > the slack "is exactly what process replay is meant to recover". It does not
+  > recover it: at matched actual type-I, replay and the class gate rank draws
+  > identically (+0.0003, paired interval (−0.0015, +0.0021)). The unused size is
+  > not convertible into power by changing certifier, and no claim that replay
+  > recovers power survives anywhere in this repository. What the slack means is
+  > that the class gate declines most of the error budget it was given, which is
+  > a **size** argument for the replay tier and is how §7.0 now states it.
 - *The exhaustive searcher joins 7.0 as the calibration anchor.* `ExhaustiveClass`
   submits the argmax over the declared class, so P2's conservatism vanishes and
   P1 predicts exactness; it is the only searcher whose size measures the
@@ -914,9 +969,21 @@ SE ≈ 0.71 annualized on the full sample and ≈ 1.3 on a 30% slice.
 Preflight with a reference Sharpe chosen and recorded before any data is
 seen; the holdout tier is expected to be INADMISSIBLE at Sharpe 1.0 here.
 
-**Arms.** control, class gate, replay gate — 30 runs each, Sonnet; then a
-rolling-origin pass with the replay arm only, ~20 origins. The holdout
-tier is computed for every run as a reported number, not an arm.
+**Arms.** control, class gate, replay gate, **replay gate (reasoned pick)** —
+30 runs each, Sonnet; then a rolling-origin pass with the replay arm only, ~20
+origins. The holdout tier is computed for every run as a reported number, not an
+arm. **240 certifications in total including twins.**
+
+> **Fourth arm added 2026-09-27. Design, not an amendment: 7.4 is not live.**
+> **Readouts 5 and 6 below are empty without picks**, and the agent pilot
+> produced **none unasked** — 0 picks in 5 runs once the harness allowed them and
+> the prompt named the statistic library
+> (`prereg/agent-pilot.md`). The replay-gate prompt *permits* a reasoned choice;
+> it does not ask for one. The fourth arm is the reasoned-pick arm registered in
+> `prereg/AGENT_PROMPTS_REAL.md` amendment 3, whose prompt asks for at least one
+> `pick` with a named statistic and a stated reason, naming no statistic in
+> particular. It carries 7.3's conditional: **a fidelity readout taken from any
+> other arm has to say why.**
 
 **Readouts, pre-registered.**
 1. Verdict distributions per arm; certification rate for the replay gate.
@@ -1234,3 +1301,30 @@ which `cloud/run.sh` exports as 1, so `--workers $(nproc)` silently launches one
 worker — use `nproc --all`. And a projection must divide by the worker count the
 smoke actually used: `calibration_at_1pct` divided by a hardcoded 32 regardless,
 which understated arm D's main pass by exactly 2× until it was fixed.
+
+
+## Sequence decisions — 2026-09-27
+
+Appended to the Phase 7 amendment above; nothing there is edited.
+
+**Item 4, the stability statistic, is deferred past 6.5.** It changes a statistic,
+it is never the default, and nothing downstream is gated on it: no other item's
+design input is its result, and no verdict path reads it unless a run asks for it.
+Deferring it costs a measurement and blocks nothing, where running it before 6.5
+spends a window on the one item whose absence no later item notices.
+
+**6.5 waits for the 7.3 agent cell**, as the sequence above already has it. The
+reason is one-shot: **the holdout opens once.** 7.3's agent cell is what tells
+6.5 how a model behaves inside the grammar — engagement, trigger changes, whether
+picks happen at all — and every one of those changes what 6.5's arms should look
+like. Opening the holdout before that is spending the irreplaceable resource on a
+design that 7.3 would have improved.
+
+**7.4 grows to a fourth arm: replay gate (reasoned pick), 30 runs**, taking it to
+**240 certifications including twins**. Written into the Arms paragraph of §7.4
+and into `prereg/adr-features.md`'s arms section. Because **7.4 is not live, this
+is design rather than an amendment**, and it is dated here so the order is
+checkable. The reason is that ROADMAP 7.4's **readouts 5 and 6** — decision
+behaviour, and fidelity rate by move type — are **empty without picks**, and the
+pilot produced none when picks were merely permitted. The arm carries 7.3's
+conditional: a fidelity readout from any other arm says why.

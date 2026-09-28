@@ -168,6 +168,35 @@ Sharpe grows roughly with √(names): about √3 ≈ 1.7× from 6 to 18. Breadth
 2.0 more plausible to reach; it does not make 2.0 easier to certify. Serial
 correlation is not modeled and would widen the standard error.
 
+## 8b. Arms — 2026-09-27, design (7.4 is not live)
+
+**Four arms, 30 runs each, `claude-sonnet-5`**, then a rolling-origin pass with
+the replay arm only. **240 certifications in total including twins.** The holdout
+tier is computed for every run as a reported number, not an arm.
+
+| arm | prompt |
+|---|---|
+| control | `prereg/AGENT_PROMPTS_REAL.md` §2 control |
+| class gate | §2 declared-class gate (byte-identical to control; the gate is applied by the harness) |
+| replay gate | §2 replay gate |
+| **replay gate (reasoned pick)** | §2 reasoned-pick arm, added by amendment 3 |
+
+**Why the fourth arm.** ROADMAP 7.4's **readouts 5 and 6** — decision behaviour
+(the share of `pick_prior` against `pick`, triggers declared against filled) and
+**fidelity rate by move type** — have no unit of analysis without picks. The agent
+pilot recorded **0 picks in 5 runs** once the harness allowed them and the prompt
+named the statistic library, because the replay-gate prompt *permits* a reasoned
+choice without asking for one (`prereg/agent-pilot.md`). The reasoned-pick arm
+asks for at least one `pick` with a named statistic and a stated reason, naming
+no statistic in particular.
+
+**7.3's conditional carries over:** a fidelity readout taken from any arm other
+than the reasoned-pick arm has to say why.
+
+**This is design, not an amendment.** 7.4 has not gone live, so its arms are
+still being written rather than being changed after registration; the date above
+is what makes that checkable.
+
 ## 9. Readouts, registered
 
 1. Verdict distributions per arm (ROADMAP 7.4 readout 1).
