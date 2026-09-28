@@ -277,18 +277,34 @@ class LoggedPolicy:
         best, best_support = float("-inf"), ()
         failures, last_gain, restarts = 0, float("inf"), 0
         trace = ReplayTrace()
+        # `moves` holds CONTENT moves; this loop's `step` counts meta decisions
+        # too. The logged move to apply is therefore tracked by its own cursor:
+        # indexing `moves` by `step` shifted the replay by one move per restart,
+        # so a log with a restart re-executed the wrong moves after it and, once
+        # past the end, silently took the fill instead of the move that was
+        # logged. Every check on a log whose restart rule fired was affected.
+        cursor = 0
 
         def score_list(ns):
             return g.score(tuple(ns), self.statistic)
 
-        # `cap_to_log` bounds the replay at the number of moves the log holds.
+        # `cap_to_log` bounds the replay at the number of STEPS the log took.
         # The commitment check asks whether the search followed its rule WHILE IT
         # RAN: a rule that fires earlier than the log stopped is divergence, but
         # a rule that would have kept going is not something the log contradicts,
         # because an agent may submit at any time. Past the logged moves an
         # uncapped replay takes the fill, which belongs to the bootstrap null and
         # not to a comparison on un-resampled data.
-        limit = min(self.budget, len(moves)) if cap_to_log else self.budget
+        #
+        # The bound counts meta records too. `moves` holds content moves alone,
+        # but this loop spends a step on each meta decision as well, so bounding
+        # it at `len(moves)` left the replay one step short per restart and per
+        # rule-fired stop — reported as a support disagreement on a search that
+        # had not diverged at all. Every log whose rules actually fired was
+        # affected; logs that only ever continued were not, which is why the
+        # earlier scripted searchers never showed it.
+        logged_steps = sum(1 for r in self.log.records if r.move.note != "rejected")
+        limit = min(self.budget, logged_steps) if cap_to_log else self.budget
         for step in range(limit):
             filling = False
             if frozen is not None:
@@ -320,7 +336,7 @@ class LoggedPolicy:
                 trace.moves.append("restart")
                 continue
 
-            if filling or step >= len(moves):
+            if filling or cursor >= len(moves):
                 trace.filled = trace.filled or filling
                 cands = MetaAdaptive._grammar(list(support), K, score_list,
                                               allow=lambda ns: g.contains(tuple(ns)))
@@ -330,7 +346,8 @@ class LoggedPolicy:
                     break
                 cand_score, cand_support = chosen[0], tuple(chosen[2])
             else:
-                cand_support, cand_score, n = g.apply(support, moves[step])
+                cand_support, cand_score, n = g.apply(support, moves[cursor])
+                cursor += 1
                 if n == 0:
                     trace.moves.append("stop")
                     break
