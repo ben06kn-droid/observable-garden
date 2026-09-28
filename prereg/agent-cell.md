@@ -261,3 +261,95 @@ construction and the menu is oblivious unconditionally.
 
 Corrected in this file and in `quixote/orientation.py`'s own statement of the
 argument, which carried the same wording.
+
+**2 — 2026-09-27, before anything is live. The calibration and fidelity
+measurements, from ROADMAP 7.3's checks 1 and 2.**
+
+The draft registered the orientation arm and deferred the rest of the agent cell
+to this amendment. It is written now so the registration is **complete before the
+seat window opens**, not during it.
+
+### Check 1 — calibration
+
+**Design.** Each **s0** run's submitted Sharpe is placed within **its own replay
+null**: the position is the certifying null's p-value for that run. If the gate
+reproduces what the agent does on noise, those positions are uniform — `e1`,
+applied to agent plus gate together rather than to either alone.
+
+**Readouts.** KS against U(0,1), and the type-I rate at α = 0.05 and 0.01. **Per
+decision kind**, the fraction of runs whose p-value falls in the lowest decile,
+because skew toward small p means a decision kind is leaking and the per-kind
+fractions say which.
+
+**Rule (validity, one-sided).** Fails high **iff the lower end of the Wilson 95%
+interval for the type-I rate exceeds nominal**.
+
+**What n buys, stated before the run.** At **n = 80** this detects a true rate
+near **13%** or worse. It **rules out gross leakage and no more**, and the
+scripted arms of `prereg/unfaithful-searchers.md` carry the calibration claim.
+A pass is not a calibration result and the write-up says so.
+
+- *Holds:* no gross leakage, and the per-kind fractions are reported flat.
+- *Fails high:* the per-kind fractions name the suspect kind, and **no
+  behavioural readout from the cell is reported as a finding** until it is
+  understood — the same order the orientation arm's rule uses.
+- *KS rejects with the rate inside its interval:* reported as a shape departure
+  with the ECDF, not as a size failure, exactly as 6.3 handled its one KS
+  rejection.
+
+### Check 2 — fidelity
+
+**Design.** For a **pre-registered subsample — 10 runs per config, every `pick`
+and every meta move** — re-present that single decision to the agent about **20
+times with resampled numbers in context**, and record how often **the declared
+rule predicts the choice**. Reported as a **rate by move type**.
+
+**It runs on the reasoned-pick arm.** A fidelity rate has no unit of analysis
+without picks, and the pilot recorded **0 picks in 5 runs** when picks were merely
+permitted (`prereg/agent-pilot.md`). Amendment 3 of
+`prereg/AGENT_PROMPTS_REAL.md` registers the arm that asks for one. **A fidelity
+readout taken from any other arm has to say why**, and that conditional carries
+into 7.4.
+
+**Tolerance, fixed now: 0.80.** A move type whose measured fidelity rate falls
+**below 0.80** is **priced locally in the certifying null from then on**
+(`quixote/pricing.py`'s fidelity-driven pricing, which exists behind a flag that
+defaults to off). The tolerance is registered here rather than chosen after
+seeing the rates.
+
+- *Every kind at or above 0.80:* no kind is priced locally, and the flag stays
+  off. The local-max conjecture is then **untested by this cell**, which is
+  stated rather than read as support.
+- *A kind below 0.80:* that kind is priced locally, and the verdict says which
+  kinds were priced and why. **Local pricing being liberal anywhere** drops the
+  run to the class tier instead, as ROADMAP 7.3 already requires.
+- *A kind with too few instances to estimate:* reported as unmeasured with its
+  count, never as passing.
+
+**Prior art, to be searched before claiming the measurement.** Turpin et al.
+(2023) and the chain-of-thought faithfulness literature are the neighbours.
+**They are to be verified before citing** — neither has been read against this
+design yet, and that is recorded here so the write-up cannot quietly assume it.
+
+### What these two license
+
+**7.3 licenses `p_upper` and the two pricing flags.** Nothing switches a flag on
+before this cell reports: `quixote/pricing.py`'s local-max and fidelity-driven
+pricing both default to off, and a verdict that used either says it is unlicensed
+and names what would license it. Check 2 is what licenses the fidelity-driven
+one; the local-max conjecture is 7.3's scripted half.
+
+### Checks 3 and 4
+
+ROADMAP 7.3's **behaviour** and **power** checks are descriptive and gate nothing:
+share of moves by kind; how often `pick_prior` is used and refused; triggers
+declared against filled; predictions made before the first look; and the
+CERTIFIED rate on s3 against the class gate's PASS rate on the same runs. The
+three readouts registered on 2026-09-25 — **trigger changes, `trigger_is_firing`
+refusals, and engagement, per run** — join check 3.
+
+**Power is reported at matched ACTUAL size**, not at nominal, for the reason
+`gate-comparison` fixed: at nominal α the class gate's unused size reads as a
+power deficit. 7.0 measured replay and class as **indistinguishable at matched
+actual size** (+0.0003, straddling zero), so a difference here would be a fact
+about the agent, not about the certifiers.

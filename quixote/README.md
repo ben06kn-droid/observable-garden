@@ -11,10 +11,19 @@ not a lie; it is a windmill seen by someone who came expecting giants.
 `quixote/` is the **agent-facing** form of the gate in `garden/`. Where `garden`
 audits a finished transcript, `quixote` sits inside the search while it happens.
 
-**Status: 7.2 part one.** Everything whose design does not depend on what
-`fixed-sequence-replay` (7.1) reports. Several deliberate holes, listed at the
-bottom. Nothing here is claimed to be novel; prior art is recorded in the
-pre-registrations, and where it has not been searched, that is said.
+**Status: 7.2 part one and part two are built; 7.3 has not reported.** Part one's
+items — the information-set log, the typed grammar, the consistency check, `pick`
+with its statistic library and `else` branch, and the twin generator with
+identifier masking — are built and tested. Part two is built on 7.1's reading:
+trigger replay is the certifying null (`quixote/certify.py`), and local-max and
+fidelity-driven pricing exist **behind flags that default to off**, because both
+rest on a conjecture 7.3 tests and 7.3 has not run. **Nothing switches a flag on
+before it reports.**
+
+Several deliberate holes remain and are listed at the bottom: IC, sequential twin
+stopping, and the living verdict. Nothing here is claimed to be novel; prior art
+is recorded in the pre-registrations, and where it has not been searched, that is
+said.
 
 ---
 
@@ -271,8 +280,12 @@ the same structural fact 7.1 found about the fill.
 - **the consistency check** (`quixote/consistency.py`) — for every `pick`, the
   harness compares the choice the agent names with what the declared rule
   selects on the realized data. It is free, because the harness computed that
-  selection in order to execute it; a contradicted pick is recorded as **not
-  replayable**, which is rejected-as-declared, and the run continues. It checks
+  selection in order to execute it. **The harness executes the RULE**, so the move
+  is replayable — a replicate re-derives the same selection — and the
+  disagreement is recorded as `contradicted` and reported in the verdict.
+  Inverted 2026-09-25: the earlier flag called such a move unreplayable, which put
+  a deterministic step into the bracket for something it did not do. The run
+  continues. It checks
   the choice, not the reason: an agent naming a rule it did not use, whose
   selection coincides, passes here, and that is what 7.3's fidelity measurement
   is for.
@@ -301,10 +314,6 @@ panels to their pre-registrations, a sandbox holding no out-of-sample data at
 all, and grading as a separate entry point the sandbox cannot reach. It lives in
 `environments/` rather than here, so that running an agent on real data never
 requires importing quixote.
-
-Still to come in part one, in order: the **consistency check**, `pick` with its
-statistic library and `else` branch, and the **twin generator with identifier
-masking**.
 
 ---
 

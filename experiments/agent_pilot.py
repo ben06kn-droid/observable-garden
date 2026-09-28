@@ -176,6 +176,13 @@ class RunRecord:
     verdict: dict | None = None
     no_submit: bool = False
     credential: str = "unknown"
+    # Which endpoint answered, and whether the model it served is the pinned one.
+    # §3's exclusion rule ("a run whose usage log reports any other string is
+    # excluded from analysis and noted") rests on the model STRING; until
+    # 2026-09-27 nothing recorded where that string came from, so a run served by
+    # a different endpoint that happened to report the right name was
+    # indistinguishable from one served by the pinned model.
+    endpoint: dict | None = None
     usd: float | None = None
     usage: dict | None = None
     models_seen: list = field(default_factory=list)
@@ -457,6 +464,7 @@ def run_one(arm: str, seed: int, panel, masking, index: int,
     elif rec.submitted and sandbox.submission is not None:
         rec.submitted_sharpe = float(max((e.sharpe for e in sandbox.transcript),
                                          default=float("nan")))
+    rec.endpoint = _served_model_assertion(rec)
     if not rec.submitted:
         rec.no_submit = True
     rec.log("end", submitted=rec.submitted, engagement=rec.engagement,
@@ -513,6 +521,56 @@ def _certify_run(rec: RunRecord, tools: ToolSession, sandbox, cls, table=None) -
                        "different statistic from the net one the search optimised. A "
                        "specimen of the machinery, not a certification of this run.")}
     rec.log("verdict", **{k: v for k, v in rec.verdict.items() if k != "reasons"})
+
+
+def _served_model_assertion(rec: RunRecord) -> dict:
+    """Which endpoint answered, and whether it served the pinned model.
+
+    `prereg/AGENT_PROMPTS_REAL.md` §3 pins the model string and excludes a run
+    that reports any other, and every run checks that string. What nothing
+    recorded until 2026-09-27 is **where the string came from**: a run served by
+    some other endpoint that reported the pinned name would have passed the check
+    and been indistinguishable from a genuine one.
+
+    So the endpoint is recorded and the assertion is made explicit:
+
+    - `base_url` — whatever `ANTHROPIC_BASE_URL` names, or `"default"` when it is
+      unset, which is the public API;
+    - `auth` — which credential variable was present, by NAME only. **No key, no
+      prefix and no length is recorded**, on the same rule the ADR key is handled
+      under: read it, never write it anywhere;
+    - `models_reported` — the distinct model strings the assistant messages
+      carried;
+    - `served_is_pinned` — whether that set is exactly the pinned model, which is
+      the assertion §3's exclusion rule actually needs;
+    - `agrees_with_prereg` — the two conditions together.
+
+    A run where `served_is_pinned` is false is excluded from analysis and noted,
+    which is §3's rule unchanged; what is new is that the reason is now visible.
+    """
+    import os
+
+    base = os.environ.get("ANTHROPIC_BASE_URL") or "default"
+    auth = [name for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
+                              "CLAUDE_CODE_OAUTH_TOKEN")
+            if os.environ.get(name)]
+    reported = sorted(rec.models_seen)
+    served_is_pinned = reported == [MODEL]
+    # "no model was called" is not the same fact as "a different model answered",
+    # and a dry run is the first case. Both fail the assertion; only the second is
+    # a run §3 excludes from analysis.
+    status = ("ok" if served_is_pinned else
+              "no model called" if not reported else "mismatch")
+    return {"base_url": base,
+            "auth": auth,                       # names only, never values
+            "models_reported": reported,
+            "pinned_model": MODEL,
+            "served_is_pinned": served_is_pinned,
+            "status": status,
+            "agrees_with_prereg": bool(served_is_pinned and reported),
+            "note": ("§3 excludes a run whose usage log reports any other model "
+                     "string; this field records which endpoint the string came "
+                     "from, which the check alone did not.")}
 
 
 def _drive_model(arm, rec, handlers, panel, sandbox, K) -> None:
@@ -635,7 +693,18 @@ def report(records: list[RunRecord], dry_run: bool) -> str:
     for r in records:
         L.append(f"  {r.run_id}: {r.picks_accepted} accepted, "
                  f"{r.picks_contradicted} contradicted")
-    L += ["", "NO_SUBMIT — reached max_turns without submitting (a recorded outcome,",
+    L += ["", "ENDPOINT — which endpoint answered, and did it serve the pinned model?",
+          "-" * 78]
+    for r in records:
+        e = r.endpoint or {}
+        L.append(f"  {r.run_id:<40}{e.get('base_url', '?'):<10}"
+                 f"{','.join(e.get('models_reported', [])) or 'none reported':<22}"
+                 + {"ok": "OK", "mismatch": "MISMATCH — excluded from analysis",
+                    "no model called": "no model called (dry run)"}.get(
+                        e.get("status"), "unknown"))
+    L += ["  §3 excludes a run reporting any other model string; the endpoint is",
+          "  recorded so the string's provenance is visible, not just its value.",
+          "", "NO_SUBMIT — reached max_turns without submitting (a recorded outcome,",
           "            kept in the run count, not an error)", "-" * 78]
     for arm in sorted({r.arm for r in records}):
         rows = [r for r in records if r.arm == arm]
@@ -737,10 +806,8 @@ def main(argv=None) -> int:
         {"seeds": seeds, "arms": list(ARM_PLAN[:a.runs]), "model": MODEL,
          "max_turns": MAX_TURNS, "code_state": code_state(), "arms_run": a.arms,
          "panel": a.panel, "depth": DEPTH[a.panel], "credential": a.credential,
-         # Open: the endpoint actually served, asserted rather than assumed.
-         # AGENT_PROMPTS_REAL.md section 3 pins the model string and every run
-         # checks it, but nothing yet records WHICH endpoint answered.
-         "endpoint": None,
+         # The served-model assertion, per run (see _served_model_assertion).
+         "endpoint": [{"run_id": r.run_id, **(r.endpoint or {})} for r in records],
          "class_table": {"path": table.path, "N": table.N, "T": table.T,
                          "panel_hash": table.panel_hash},
          "masked_labels": masking.labels, "dry_run": a.dry_run}, indent=1, default=str))
