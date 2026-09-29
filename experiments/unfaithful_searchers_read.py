@@ -188,6 +188,37 @@ def read(data: dict) -> str:
     A(f"  VERDICT 4 (class side): {'DEFECT — reading halts' if off else 'HOLDS — U2 submits the class maximum on every draw'}")
     A("")
 
+    # ------------------------------------------- U4's rule (amendment 1, item 6)
+    A("U4's RULE (amendment 1, item 6) — the hidden restart, paired one-sided")
+    A("-" * 78)
+    A("  Registered: U4 against its DECLARED-RESTART TWIN, paired on the draw,")
+    A("  one-sided. The twin restarts through the `restart` move; U4 reaches the")
+    A("  same states through `swap_worst` chains. Predicted: ZERO EXCESS — the")
+    A("  replay re-executes the logged content moves either way.")
+    A("    No excess: structure hidden in content moves is not a hole.")
+    A("    Excess demonstrated (LOWER end of the paired interval above zero): a")
+    A("      search can lower its own bar by not declaring its structure, which is")
+    A("      a finding about the grammar and is reported as one.")
+    pu = np.asarray(_col(rows, "U4", "p_replay"), dtype=float)
+    pt = np.asarray(_col(rows, "U4-twin", "p_replay"), dtype=float)
+    n4 = min(len(pu), len(pt))
+    pu, pt = pu[:n4], pt[:n4]
+    excess = False
+    for a in ALPHAS:
+        ru, rt = pu < a, pt < a
+        diff = ru.astype(float) - rt.astype(float)
+        m = float(diff.mean())
+        se = float(diff.std(ddof=1)) / np.sqrt(n4)
+        lo, hi = m - 1.96 * se, m + 1.96 * se
+        excess = excess or lo > 0
+        A(f"    alpha = {a}: U4 {int(ru.sum())}/{n4} = {ru.mean():.4f}   "
+          f"twin {int(rt.sum())}/{n4} = {rt.mean():.4f}")
+        A(f"      paired difference (U4 - twin) {m:+.4f}   95% [{lo:+.4f}, {hi:+.4f}]"
+          f"   discordant: U4-only {int((ru & ~rt).sum())}, "
+          f"twin-only {int((~ru & rt).sum())}")
+    A(f"  VERDICT U4: {'EXCESS DEMONSTRATED — a finding about the grammar' if excess else 'NO EXCESS — structure hidden in content moves is not a hole'}")
+    A("")
+
     # ----------------------------------------------------------------- rule 5
     A("RULE 5 — the bracket does its job (descriptive)")
     A("-" * 78)
@@ -253,7 +284,17 @@ def read(data: dict) -> str:
     for name in ("U2", *FAITHFUL):
         d = np.asarray(_col(rows, name, "submitted_minus_fill"), dtype=float)
         A(f"    {name:<18} mean {d.mean():+.4f}  median {np.median(d):+.4f}")
-    A("  Amendment 5: the submitted statistic against the same null")
+    A("  Amendment 5: the submitted statistic against the same null.")
+    A("  The faithful pair side by side, which is where the arm's gap lives:")
+    for name in FAITHFUL:
+        pp = np.asarray(_col(rows, name, "p_replay"), dtype=float)
+        ps = np.asarray(_col(rows, name, "p_submitted"), dtype=float)
+        ho = np.asarray(_col(rows, name, "handover_rate"), dtype=float)
+        fe = np.asarray(_col(rows, name, "fill_engaged"), dtype=float)
+        A(f"    {name:<18} PROCEDURE rate {(pp < 0.05).mean():.4f}   "
+          f"SUBMITTED rate {(ps < 0.05).mean():.4f}   "
+          f"hand-over {ho.mean():.4f}   fill engaged {fe.mean() / len(pp) * len(pp):.0f}")
+    A("  Each policy:")
     for name in MEMBERS:
         ps = np.asarray(_col(rows, name, "p_submitted"), dtype=float)
         pp = np.asarray(_col(rows, name, "p_replay"), dtype=float)

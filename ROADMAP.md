@@ -775,6 +775,38 @@ the prediction slot cannot be written after the result exists.
 
 ## 7.3 Does the gate account for the agent? (EC2, then seat)
 
+**7.3 SCRIPTED: CLOSED 2026-09-29.** Ran on the c7a.48xlarge — 2,000 draws on s0,
+seeds 500000–501999, B = 1,000, 12 policies, 80/80 cells in 3,389 s, $9.28 against
+a registered $200 threshold, no lever pulled. The full reading is in
+`EXPERIMENTS.md`; `prereg/unfaithful-searchers.md` stays in `prereg/` per the
+standing rule, with its six amendments.
+
+**What it establishes.** The identity checks do not harm an honest searcher (rule
+1a holds for both faithful searchers; rule 1b is 0 misfires across 2,000 draws
+each). A contradicted pick costs **exactly** nothing — an identity, not an estimate
+(rule 3, equal on all 200 draws). Structure hidden in content moves is **not** a
+hole (U4 against its declared-restart twin: +0.0030 at 0.05, [-0.0060, +0.0120]). A
+binding change is always bracketed and a non-binding one never is (rule 5).
+
+**What it prices.** U2's replay rejection is **0.9900** — the cost of a peek that
+chose the menu outside the session, where no timestamp, log or replay can see it.
+That number is the experiment's headline and it is recorded as a **scope condition**
+on the sandbox's single-channel rule, not a defect in the null; the registered
+>= 0.95 prediction is recorded as **not blind** (amendment 4). Inside a
+harness-fixed class the peek is already paid for: U2 submits the class maximum on
+every draw, so 6.1 arm D's exactness transfers unchanged.
+
+**What it leaves open.** U2 and U4 are never caught (0/500 and 0/1000), reported as
+holes with what would close them. The faithful pair's rate gap is recorded in
+`EXPERIMENTS.md` as the **measured price of the completed certifying null**, not as
+the procedure/submission asymmetry — the competing explanation is falsified by the
+run itself.
+
+**The agent cell does not start until `prereg/agent-cell.md` has had its full read,
+and nothing runs on the seat before that.** The five pre-agent-cell quixote changes
+listed at the end of this file land first.
+
+
 **Amendment, 2026-09-24: a 5-run pilot precedes this section, and why.**
 
 `prereg/agent-pilot.md` is registered and runs before 7.3's agent cell is

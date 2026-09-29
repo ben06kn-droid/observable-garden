@@ -62,6 +62,7 @@ check that each one preceded the code and the run it authorises.
 | `costs-and-regime-change` | `16457d9` | 1, the cost half cannot measure what it claims — `04dcc53`; 2, withdraw the cost half entirely — `2ba240f` |
 | `heterogeneous-correlation-fat-tails` | `96b48dc` | 1, the one-sided validity rule — `5b8042c`; 2, cell (B) pinned and a replication branch — `6739589`; 3, cell (A) needs rho>0 and two nulls per draw — `7cc4c67`; deviation 1, the skipped pre-launch smoke — `35a3fab`; deviation 2, box change partway through cell (C), cross-box check identical, interim outputs disclosed — `7582ad6`; the n = 2,000 reading and cell (A)'s ECDF departure — `a408304`; the replication passes, recorded as a family false alarm — `b8df48f` |
 | `fixed-sequence-replay` | `96b48dc` | 1, rule 1's one-sided form — `5b8042c`; 2, the widened fill and a fifth searcher — `c2acb41`; 3, rule 1's replication branch and rule 3's "material" — `2ba32d4`; 4, null 4 withdrawn — `587aa34`; 5, MetaAdaptive's restart mismatch and its fix — `19a87bd`; 6, the trigger-evaluated fill, a paired rule 3, six searchers — `17589fd`; 7, B by a cost rule fixed before measuring — `0cf734f`; deviation 1, the session on the c7a.8xlarge, run unattended — `1505653`; the reading at n = 2,000 — `9a68c25` |
+| `unfaithful-searchers` | `359df62` | 1, seven corrections — `359df62`; 2, one workload shape and the lever order — `eac3ded`; 3, the minimal design — `094728c`; 4, the faithful pair, U2's null and the class tier — `dbe4a3d`; 5, two statistics on one null and a prelude defect — `78a9454`; 6, the certifying null's completed definition — `721ce60` |
 
 
 
@@ -142,6 +143,7 @@ rather than in a footnote.
 | `costs-and-regime-change` | what does a PASS survive once the regime shifts? (cost half withdrawn, amendment 2) | ran 2026-09-20 |
 | `gate-comparison` | which of the three certifiers should the gate use, and in what order should 7.2 fall back? | **complete, read 2026-09-25, replication 2026-09-27.** Rule 1 holds (4.45% / 0.70%, KS p = 0.5266). Rule 2: one liberal check of 68 — `budgeted-random-25` under holdout 70/30 at α = 0.05, 6.05% with a **lower Wilson end of 0.0509** on **200000–201999**, replicating at 4.80% with a **lower end of 0.0395** (0.0395–0.0583) on **210000–211999** — the check fires iff that lower end exceeds nominal, so 0.0509 > 0.05 fired and 0.0395 < 0.05 did not, so the original is a family false alarm and nothing is excluded. Rules 3–4, at matched ACTUAL size on the slack searchers: replay 0.5001 and class 0.4999, replay − class +0.0003 (−0.0015, +0.0021) straddling zero, holdout 50/50 0.3334. Rule 5: every certifier's PASS − FAIL gap narrows under the flip, none conspicuously less |
 | `fixed-sequence-replay` | what does freezing a search's meta decisions cost, and do declared triggers remove it? | **complete, read 2026-09-24.** Rule 1 passes for all six searchers, so the replay tier is built on declared triggers. Freezing is liberal (+0.012 at 5% for the bar searchers) and sits 0.44 in sup-norm from the policy null, which declared triggers remove. Rule 3: the fill is liberal against a width-2 beam (1,506 of 1,507 draws) and conservative against continuations it dominates, but the inflation is not detectable (no discordant draws, McNemar p = 1.0), so strengthening the agent-path fill is optional and stated. **Unchanged under the certifying null's completed definition (2026-09-29, `prereg/unfaithful-searchers.md` amendment 6):** an inapplicable logged move now hands the remainder of that replicate to the fill instead of ending it, and this reading is untouched for two independent reasons — `experiments/fixed_sequence_replay.py` does not import `quixote.replay` at all, and all six registered searchers recompute their content moves from each replicate's own data, so none of their moves can be inapplicable on a replicate |
+| `unfaithful-searchers` (7.3 scripted) | do the identity checks harm an honest searcher, and what does each kind of unfaithfulness cost? | **complete, read 2026-09-29.** 2,000 draws on s0, seeds 500000+, B = 1,000, 12 policies, $9.28 on a c7a.48xlarge. **Rule 1a holds:** the faithful arm is not harmed — `faithful-restart` 0.0425 at a nominal 0.05 (Wilson [0.0345, 0.0523]) and `faithful-stop` 0.0080 ([0.0049, 0.0130]); neither lower end exceeds nominal. **Rule 1b holds at 0:** no integrity failure, commitment failure, contradicted pick or trigger change on either faithful searcher across 2,000 draws each. **Rule 3 holds as an identity:** U1 and its twin have equal p-values and equal scores on all 200 draws, so a contradicted pick costs exactly nothing. **Rule 4, the headline:** U2's replay rejection is **0.9900** ([0.9768, 0.9957]), above nominal at both levels — the measured price of a peek the harness cannot see; the registered >= 0.95 is met and is recorded as NOT blind (amendment 4). On the class side U2 submits the class maximum on all 500 draws, so 6.1 arm D's exactness transfers and no new calibration is claimed. **U4's rule: no excess** — paired against its declared-restart twin, +0.0030 at 0.05 ([-0.0060, +0.0120]) and -0.0050 at 0.01 ([-0.0115, +0.0015]), so structure hidden in content moves is not a hole. **Rule 5 holds:** U3 bracketed on 500/500 with every change binding, U3b certified at 0.0500 with none binding, and no run certifies despite a binding change. **Rule 2:** U3 and U3b caught on 500/500; U1 on 175/200 = 0.875, not deterministically, because on 25 draws the best-Sharpe feature coincided with the `autocorr_1` choice; **U2 and U4 never caught (0/500, 0/1000), reported as holes** as registered. Rule 6 not triggered. **Amendment 6's invariant held:** 0 replicates ended on an inapplicable move, across all 12 policies and 2,000 draws |
 | `heterogeneous-correlation-fat-tails` | does the full-class null survive factor-structured correlation and fat tails? | **complete, read 2026-09-21/22.** Yes, in all three cells at n = 2,000. Rule 1 held on containment everywhere; its KS check rejected once, in cell (A) (p = 0.0090), and the registered replication on 410000–411999 passed (p = 0.8503), so that is recorded as a family false alarm. Rule 2: no liberal searcher in any cell. Block lengths moved off 1 in (B) and (C); guard counts zero |
 | `agent-pilot` | does the harness survive a model on a real panel? (5 runs, ADR panel; harness shake-out and engagement only, **no verdict claim**) | registered 2026-09-24, not yet run |
 | `bracketed-verdicts` | what does reporting two p-values cost for a decision the gate cannot replay? | draft, not live |
@@ -217,3 +219,45 @@ rather than in a footnote.
 `build_manifest.py` builds `runs/`'s per-batch tables.
 `analyze_agent.py` produces the agent-arm analysis.
 `plot_*.py` build the figures. `verify_*.py` are standing checks, not experiments.
+
+## The faithful pair's gap, 2026-09-29: the measured price of the hand-over fix
+
+7.3 scripted's two faithful searchers reject at different rates — `faithful-restart`
+**0.0425** at a nominal 0.05, `faithful-stop` **0.0080** — and both pass rule 1a.
+The pair was built to differ in one thing, so the gap needs an explanation, and the
+data pick one of the two candidates.
+
+**It is the hand-over, not the procedure/submission asymmetry.** What decides a
+searcher's rate is **whether its realized statistic is fill-dominated in the same
+way its null is**:
+
+- **`faithful-restart` is exact** because its realized statistic is *itself*
+  fill-dominated, exactly like its null. It declares no stop rule, so its procedure
+  runs to the 24-step budget under the fill on the realized data, and its
+  replicates do the same — the fill engages on **100%** of them, and the log is
+  handed over on **0.82**. Like against like gives **0.0425**, within sampling of
+  nominal.
+- **`faithful-stop` is conservative** because its realized statistic is the
+  **policy's own moves** — it ends under its own declared rule and prices its
+  submission exactly (gaps of at most 5.6e-16) — while its null hands over to a
+  **stronger** fill on **0.34** of replicates, with the fill entering on **0.59**
+  once past-the-log steps are counted too. A null built partly from the greedy fill
+  is harder to beat than the policy that produced the statistic, so the rate falls
+  to **0.0080**.
+
+**The competing explanation is falsified by the run.** If the gap were the
+procedure-against-submission asymmetry amendment 5 registers, then
+`faithful-restart`'s *submitted*-score rate would resemble `faithful-stop`'s. It
+does — **0.0085 against 0.0080** — and both sit far below `faithful-restart`'s
+*procedure* rate of 0.0425. So the split tracks **which statistic is
+fill-dominated**, not which of the two statistics is being read.
+
+**What this means for reading rule 1a.** Neither rate is evidence that a check
+harms an honest searcher; that is what rule 1a asked and it holds for both. What
+the pair measures instead is the **price of the completed certifying null**
+(`prereg/unfaithful-searchers.md` amendment 6): handing an inapplicable logged move
+to the fill removes the truncation bias, and it buys that at the cost of a null
+that is **stronger than the policy** for a searcher whose own moves, not the fill,
+produce its statistic. **`faithful-stop`'s 0.0080 is the size of that price**, and
+it is conservative — the safe direction — but it is not free, and a reader should
+not take a faithful searcher's low rate as evidence of anything but this.
