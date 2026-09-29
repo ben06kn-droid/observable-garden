@@ -1,0 +1,152 @@
+unfaithful-searchers (7.3 scripted) — THE REGISTERED READ
+==============================================================================
+cell s0, 2000 draws, git at launch {'commit': 'dc4e2574abc93dafa3268dda9e5b3f506a33d704', 'dirty': True, 'untracked': 552}
+Each rule is read once, in registered order, with both branches stated.
+
+RULE 1a — the faithful arm is not harmed (validity, one-sided, primary)
+------------------------------------------------------------------------------
+  Registered: for each faithful searcher, the rejection rate under trigger
+  replay FAILS HIGH iff the LOWER end of the Wilson 95% interval exceeds
+  nominal. Amendment 5: it reads the PROCEDURE score's p-value.
+    Holds: the checks cost the honest searcher nothing, and everything
+      below is readable.
+    Fails high: a check is rejecting honest searches; nothing downstream is
+      read until that is understood.
+  faithful-restart  (n = 2000)
+    alpha = 0.05              85/2000  =  0.0425   Wilson [0.0345, 0.0523]   does not fail high
+    alpha = 0.01              26/2000  =  0.0130   Wilson [0.0089, 0.0190]   does not fail high
+  faithful-stop  (n = 2000)
+    alpha = 0.05              16/2000  =  0.0080   Wilson [0.0049, 0.0130]   does not fail high
+    alpha = 0.01               4/2000  =  0.0020   Wilson [0.0008, 0.0051]   does not fail high
+  VERDICT 1a: HOLDS
+
+RULE 1b — no check misfires on the faithful arm (registered as 0)
+------------------------------------------------------------------------------
+  Registered: a count, registered as 0. A single misfire halts the reading,
+  whatever the rate, because every comparison here is against this arm.
+  faithful-restart  (n = 2000): integrity failures 0, commitment failures 0, contradicted picks 0, trigger changes 0
+    identity-check misfire rate Wilson [0.0000, 0.0019]
+  faithful-stop  (n = 2000): integrity failures 0, commitment failures 0, contradicted picks 0, trigger changes 0
+    identity-check misfire rate Wilson [0.0000, 0.0019]
+  VERDICT 1b: HOLDS (0 misfires)
+
+RULE 2 — each unfaithful searcher is caught, or is recorded as uncaught
+------------------------------------------------------------------------------
+  Registered: the share of runs the harness flags — `contradicted` for U1, a
+  late declaration for U2, a logged trigger change for U3, nothing available
+  for U4.
+    Caught in >= 99%: the check does what it claims.
+    Caught sometimes: reported as the detection rate with its Wilson
+      interval, and NO claim of detection beyond it.
+    Never caught: reported as a hole, named, with what would close it.
+      U2 is PREDICTED to land here, registered before the run.
+  U1   flagged by contradicted pick                        175/200   = 0.8750  [0.8220, 0.9139]  caught sometimes
+  U2   flagged by a late declaration (nothing available)     0/500   = 0.0000  [0.0000, 0.0076]  NEVER CAUGHT — a hole
+  U3   flagged by logged trigger change                    500/500   = 1.0000  [0.9924, 1.0000]  caught in >= 99%
+  U3b  flagged by logged trigger change                    500/500   = 1.0000  [0.9924, 1.0000]  caught in >= 99%
+  U4   flagged by nothing available                          0/1000  = 0.0000  [0.0000, 0.0038]  NEVER CAUGHT — a hole
+
+RULE 3 — a contradiction costs exactly nothing (EXACTNESS, primary for U1)
+------------------------------------------------------------------------------
+  Registered (amendment 1): for EVERY draw, U1's p-value under the certifying
+  null EQUALS its twin's, and the two logs differ only in `contradicted`.
+  This is an exactness rule, not a rate: it is read as equality on every
+  draw, never at a nominal alpha.
+    Equal on every draw: the 2026-09-25 inversion is confirmed as an
+      IDENTITY rather than an estimate.
+    Any draw where they differ: a DEFECT, not a finding; the reading halts.
+  pairs compared 200; p-values unequal on 0 draws; scores unequal on 0 draws
+  contradicted: U1 on 175 of 200 runs, its twin on 0
+  VERDICT 3: HOLDS — equal on every draw
+
+RULE 4 — the uncaught hole is priced (primary). THE HEADLINE NUMBER
+------------------------------------------------------------------------------
+  Registered: U2's rejection rate on s0 under trigger replay, and under the
+  declared-class certifier. Prediction, registered before the run: the replay
+  rate is >= 0.95. Amendment 4 discloses this prediction was NOT blind — it
+  was made after p-values on the cost-only block had been seen at n <= 8.
+    At or below nominal: the peek does not help; surprising, investigated.
+    Above nominal: the measured cost of trusting a declaration the harness
+      cannot verify.
+    trigger replay, alpha = 0.05: 495/500 = 0.9900  Wilson [0.9768, 0.9957]  ABOVE nominal
+    trigger replay, alpha = 0.01: 431/500 = 0.8620  Wilson [0.8290, 0.8895]  ABOVE nominal
+  prediction >= 0.95 at alpha = 0.05: observed 0.9900, lower end 0.9768 — CONSISTENT
+
+  Amendment 4 item (3): the class side is an EXACTNESS claim, not an estimate.
+  Registered: U2's declared-class p-value IS the class-maximum p-value; its
+  rate is 6.1 arm D's, already established as exactly calibrated. This
+  experiment does not re-estimate it.
+    Equal on every draw: confirmed — a peek inside a harness-fixed class is
+      already paid for.
+    Any draw where they differ: a DEFECT; the reading halts.
+  U2's submission against the observed class maximum: differ on 0 of 500 draws
+    declared class, alpha = 0.05: 25/500 = 0.0500  Wilson [0.0341, 0.0728]
+    declared class, alpha = 0.01: 7/500 = 0.0140  Wilson [0.0068, 0.0286]
+  VERDICT 4 (class side): HOLDS — U2 submits the class maximum on every draw
+
+RULE 5 — the bracket does its job (descriptive)
+------------------------------------------------------------------------------
+  Registered (amendment 1, item 3), verbatim: 'A binding change is always
+  bracketed. For U3: the share of runs returning DEPENDS_ON_JUDGMENT,
+  predicted 1.00. For U3b: the share returning CERTIFIED or FAIL, predicted
+  to match the faithful arm.'
+    A run that certifies despite a BINDING change is a defect, and the
+      reading halts. THAT IS THE ONLY BRANCH THAT HALTS HERE.
+  A change BINDS when it altered the search, which is what the commitment
+  check measures — so a logged change alone is NOT the defect condition.
+  U3b exists to log changes that never bind; it is predicted to certify.
+  U3   DEPENDS_ON_JUDGMENT 500/500 = 1.0000 [0.9924, 1.0000]   CERTIFIED-or-FAIL 0/500 = 0.0000 [0.0000, 0.0076]   CERTIFIED 0/500 = 0.0000
+       trigger changes per run: mean 3.60, min 2, max 5;  changes that BOUND (commitment failed): 500
+       certified despite a BINDING change: 0
+  U3b  DEPENDS_ON_JUDGMENT 0/500 = 0.0000 [0.0000, 0.0076]   CERTIFIED-or-FAIL 500/500 = 1.0000 [0.9924, 1.0000]   CERTIFIED 25/500 = 0.0500
+       trigger changes per run: mean 6.22, min 2, max 15;  changes that BOUND (commitment failed): 0
+       certified despite a BINDING change: 0
+  the faithful arm's CERTIFIED rate, for U3b's comparison: 0.0425 (faithful-restart), 0.0080 (faithful-stop)
+  VERDICT 5: HOLDS — no run certifies despite a binding change
+
+RULE 6 — replication branch
+------------------------------------------------------------------------------
+  Registered: the first failure of any check in rules 1 or 3 triggers ONE
+  replication of that check only, on 510000-511999, at identical settings.
+  Amendment 1 removed rule 3 from this branch: an exactness check does not
+  fail by luck, so replicating it would answer nothing.
+  rule 1 failed: no
+  VERDICT 6: not triggered
+
+DESCRIPTIVE READOUTS — no rule, no threshold, no branch
+------------------------------------------------------------------------------
+  Amendment 4 (4a): p_class - p_trigger per run
+    U2                 mean +0.4723  median +0.4690  [+0.0010, +0.9530]
+    faithful-restart   mean +0.1001  median +0.0959  [+0.0000, +0.1938]
+    faithful-stop      mean +0.2228  median +0.2483  [+0.0000, +0.3706]
+  Amendment 4 (4b): submitted score - the fill's score on realized data
+    U2                 mean +0.1211  median +0.0951
+    faithful-restart   mean -0.0193  median -0.0448
+    faithful-stop      mean -0.0888  median -0.1025
+  Amendment 5: the submitted statistic against the same null
+    faithful-restart   submitted-score rejection at 0.05 0.0085 against procedure 0.0425   procedure-minus-submitted mean +0.0903   ended under its rule on every run: NO
+    faithful-stop      submitted-score rejection at 0.05 0.0080 against procedure 0.0080   procedure-minus-submitted mean +0.0000   ended under its rule on every run: yes
+    U1                 submitted-score rejection at 0.05 0.0500 against procedure 0.0500   procedure-minus-submitted mean +0.0000   ended under its rule on every run: yes
+    U1-twin            submitted-score rejection at 0.05 0.0500 against procedure 0.0500   procedure-minus-submitted mean +0.0000   ended under its rule on every run: yes
+    U2                 submitted-score rejection at 0.05 0.9900 against procedure 0.9900   procedure-minus-submitted mean +0.0000   ended under its rule on every run: yes
+    U2-twin            submitted-score rejection at 0.05 0.0260 against procedure 0.0260   procedure-minus-submitted mean +0.0000   ended under its rule on every run: yes
+    U3                 submitted-score rejection at 0.05 0.0500 against procedure 0.0500   procedure-minus-submitted mean +0.0000   ended under its rule on every run: NO
+    U3-twin            submitted-score rejection at 0.05 0.0500 against procedure 0.0500   procedure-minus-submitted mean +0.0000   ended under its rule on every run: yes
+    U3b                submitted-score rejection at 0.05 0.0500 against procedure 0.0500   procedure-minus-submitted mean +0.0000   ended under its rule on every run: NO
+    U3b-twin           submitted-score rejection at 0.05 0.0500 against procedure 0.0500   procedure-minus-submitted mean +0.0000   ended under its rule on every run: yes
+    U4                 submitted-score rejection at 0.05 0.0610 against procedure 0.0610   procedure-minus-submitted mean +0.0000   ended under its rule on every run: yes
+    U4-twin            submitted-score rejection at 0.05 0.0580 against procedure 0.0580   procedure-minus-submitted mean +0.0000   ended under its rule on every run: yes
+  Amendment 6: the fill hand-over
+    faithful-restart   hand-over rate mean 0.8211   mean step 4.26
+    faithful-stop      hand-over rate mean 0.3413   mean step 4.00
+    U1                 hand-over rate mean 0.0000   mean step nan
+    U1-twin            hand-over rate mean 0.0000   mean step nan
+    U2                 hand-over rate mean 0.0000   mean step nan
+    U2-twin            hand-over rate mean 0.0000   mean step nan
+    U3                 hand-over rate mean 0.0000   mean step nan
+    U3-twin            hand-over rate mean 0.0000   mean step nan
+    U3b                hand-over rate mean 0.0000   mean step nan
+    U3b-twin           hand-over rate mean 0.0000   mean step nan
+    U4                 hand-over rate mean 0.0000   mean step nan
+    U4-twin            hand-over rate mean 0.0000   mean step nan
+    replicates ended by an inapplicable move, all policies: 0  (the invariant amendment 6 registers)
