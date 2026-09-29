@@ -173,7 +173,9 @@ def test_the_fidelity_subsample_is_the_first_runs_in_seed_order(tmp_path):
 
 def _reasoned_pick_session(seed=21):
     """A session shaped like a reasoned-pick run: a declared rule, a `pick` with a
-    named statistic over a candidate set, and a meta move."""
+    named statistic over a candidate set, and a meta move. Returns the session and
+    the payloads the adapter actually returned, in order, so the round trip can be
+    checked against what was sent rather than against a re-derivation."""
     from quixote.agent_adapter import ToolSession
     from quixote.session import Session
 
@@ -182,16 +184,16 @@ def _reasoned_pick_session(seed=21):
     ts = ToolSession(sess)
     ts.call("declare_triggers", triggers=[
         {"trigger": "failures_at_least", "param": 2.0, "action": "stop"}])
-    ts.call("init")
-    ts.call("pick", among=[0, 1, 2, 3, 4], statistic="autocorr_1")
-    ts.call("extend_best")
+    payloads = [ts.call("init"),
+                ts.call("pick", among=[0, 1, 2, 3, 4], statistic="autocorr_1"),
+                ts.call("extend_best")]
     for _ in range(6):
         if ts.session.fired_triggers():
             break
-        ts.call("swap_worst")
+        payloads.append(ts.call("swap_worst"))
     if ts.session.fired_triggers():
-        ts.call("stop", trigger="failures_at_least", param=2.0)
-    return ts.session
+        payloads.append(ts.call("stop", trigger="failures_at_least", param=2.0))
+    return ts.session, payloads
 
 
 def test_the_information_set_slot_exists_and_is_the_re_interrogation_template():
@@ -203,7 +205,7 @@ def test_the_information_set_slot_exists_and_is_the_re_interrogation_template():
     from quixote.log import InformationSet
 
     assert "shown" in InformationSet.__dataclass_fields__
-    log = _reasoned_pick_session().log
+    log = _reasoned_pick_session()[0].log
     for rec in log.records:
         if rec.move.is_meta:
             continue
@@ -212,14 +214,6 @@ def test_the_information_set_slot_exists_and_is_the_re_interrogation_template():
         assert set(ctx) == {"step", "support", "score", "shown"}
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "NOT IMPLEMENTED as of 2026-09-29. `quixote/agent_adapter.py` calls "
-    "`session.propose(move)` with no `shown` argument, so `InformationSet.shown` "
-    "is empty on every agent-driven move. Check 2 of prereg/agent-cell.md "
-    "re-presents each logged pick and meta move with resampled numbers and asks "
-    "whether the declared rule predicts the choice -- which cannot be done from a "
-    "log that did not record the numbers the agent was shown. Strict xfail so this "
-    "flips to a hard failure the moment it starts passing, forcing the marker off."))
 def test_every_pick_and_meta_move_stores_the_information_set_presented():
     """Check 2's precondition, stated as the test it needs to pass.
 
@@ -230,7 +224,7 @@ def test_every_pick_and_meta_move_stores_the_information_set_presented():
     not enough to rebuild what was on screen, and re-deriving the values later
     would be measuring today's numbers against yesterday's choice.
     """
-    log = _reasoned_pick_session().log
+    log = _reasoned_pick_session()[0].log
     picks = [r for r in log.records if r.move.kind == "pick"]
     metas = [r for r in log.records if r.move.is_meta]
     assert picks, "the fixture must make a pick"
@@ -239,10 +233,13 @@ def test_every_pick_and_meta_move_stores_the_information_set_presented():
         info = rec.information
         assert info is not None and info.shown, (
             f"pick at step {rec.step} records no shown values")
-        # one (label, value) pair per candidate the agent was offered
-        assert len(info.shown) == len(rec.move.among), (
-            f"pick at step {rec.step} was offered {len(rec.move.among)} candidates "
+        # One pair per CANDIDATE, which is not `len(among)`: the declared class is
+        # signed, so each named feature yields a + and a - candidate and the count
+        # the harness recorded is the one to match.
+        assert len(info.shown) == rec.n_candidates, (
+            f"pick at step {rec.step} saw {rec.n_candidates} candidates "
             f"but records {len(info.shown)} shown values")
+        assert len(info.shown) >= len(rec.move.among)
         for label, value in info.shown:
             assert isinstance(label, str) and isinstance(value, float)
 
@@ -251,3 +248,71 @@ def test_every_pick_and_meta_move_stores_the_information_set_presented():
         assert info is not None and info.shown, (
             f"{rec.move.kind} at step {rec.step} records no shown values; a meta "
             "move's information set is the trigger state it was taken on")
+
+
+def test_re_rendering_shown_reproduces_the_payload_sent_byte_for_byte():
+    """`prereg/agent-cell.md` amendment 8's invariant, and the reason the adapter
+    and the re-interrogation share ONE renderer.
+
+    A fidelity measurement re-presents a decision and asks whether the declared
+    rule predicts the choice. If the adapter formatted the payload one way and the
+    re-presentation formatted it another, the agent would be scored against
+    numbers it never saw in that form -- and the difference would read as
+    infidelity. So the stored `shown` must render back to exactly the text that
+    was sent, not to something equivalent.
+    """
+    from quixote.log import render_shown
+
+    session, payloads = _reasoned_pick_session()
+    records = [r for r in session.log.records]
+    assert len(records) == len(payloads), (len(records), len(payloads))
+
+    for rec, payload in zip(records, payloads):
+        assert payload.ok, (rec.move.kind, payload.text)
+        rendered = render_shown(rec.information.shown)
+        assert rendered, f"{rec.move.kind} at step {rec.step} rendered nothing"
+        # BYTE FOR BYTE, as a substring of the payload the agent received
+        assert f"| shown: {rendered}" in payload.text, (
+            f"{rec.move.kind} at step {rec.step}:\n"
+            f"  re-rendered: {rendered!r}\n"
+            f"  payload:     {payload.text!r}")
+        # and the machine-readable half of the payload carries the same pairs
+        assert payload.state["shown"] == [list(p) for p in rec.information.shown]
+
+
+def test_the_payload_round_trip_survives_a_json_round_trip():
+    """The agent receives `ToolResult.to_json()`, not the dataclass. The pairs
+    have to survive that, or a re-presentation rebuilt from a stored transcript
+    would differ from one rebuilt from the log."""
+    import json
+
+    from quixote.log import render_shown
+
+    session, payloads = _reasoned_pick_session()
+    for rec, payload in zip(session.log.records, payloads):
+        blob = json.loads(payload.to_json())
+        assert blob["result"] == payload.text
+        assert blob["shown"] == [list(p) for p in rec.information.shown]
+        assert f"| shown: {render_shown(rec.information.shown)}" in blob["result"]
+
+
+def test_a_pick_shows_the_candidate_statistics_it_will_be_measured_against():
+    """Amendment 8 changes what the `pick` tool renders, and this is the change.
+
+    Before it, `_pick` returned the outcome alone -- the agent named a candidate
+    set and learned only which one the rule selected. A fidelity measurement would
+    then have had to re-derive the candidate values afterwards, scoring today's
+    numbers against yesterday's choice. The candidates and their statistic are now
+    in the payload, so the numbers the agent saw are the numbers it is measured
+    against.
+    """
+    session, payloads = _reasoned_pick_session()
+    picks = [(r, p) for r, p in zip(session.log.records, payloads)
+             if r.move.kind == "pick"]
+    assert picks, "the fixture must make a pick"
+    rec, payload = picks[0]
+    # every candidate the harness scored appears in the text the agent got
+    for label, value in rec.information.shown:
+        assert f"{label}={value:.4f}" in payload.text, label
+    # ranked by the statistic the move NAMED, not by sharpe
+    assert rec.move.statistic == "autocorr_1"

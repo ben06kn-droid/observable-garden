@@ -467,3 +467,59 @@ depend on `shown` — but **any fidelity rate would be computed from a log that 
 not record what the agent saw**, and `prereg/agent-cell.md`'s own licensing then
 follows: check 2 is what licenses fidelity-driven pricing, so that flag stays off
 and unlicensed regardless of what the cell returns.
+
+**8 — 2026-09-29, before the shake-out. `shown` is the verbatim payload, and the
+round trip is an invariant.**
+
+Amendment 7 recorded that check 2's precondition was unmet. It is now met, and
+this registers what is stored and the guarantee attached to it.
+
+**`shown` is the verbatim payload the adapter rendered to the agent at that
+step**, as `(label, value)` pairs, for **every move kind**:
+
+- **`pick`** — one pair per **candidate**, labelled `<feature><sign>`, carrying the
+  value of **the statistic the move named**. Note the count: the declared class is
+  signed, so five named features yield ten candidates, and the pairs match the
+  candidate count rather than `len(among)`.
+- **meta moves (`stop`, `restart`)** — the **trigger state** the rule was evaluated
+  on: `step`, `best`, `failures`, `last_gain`, and `budget_left` where a budget was
+  declared.
+- **every other content move** — the state the move was proposed from, in the same
+  form.
+
+**The invariant, registered: re-rendering a stored `shown` reproduces the payload
+that was sent, BYTE FOR BYTE.** One function, `quixote.log.render_shown`, both
+builds the text the agent receives and reproduces it afterwards; the adapter
+appends `| shown: <rendered>` to every tool result and stores the same pairs in the
+record. Held by `tests/test_agent_cell.py`, against the payloads the adapter
+actually returned and again after a JSON round trip, because the agent receives
+`ToolResult.to_json()` and not the dataclass.
+
+Why an invariant and not a convention: a fidelity measurement re-presents a
+decision and asks whether the declared rule predicts the choice. If the adapter
+formatted the payload one way and the re-presentation another, the agent would be
+scored against numbers **it never saw in that form**, and the difference would read
+as infidelity. The two directions therefore cannot be allowed to drift apart, and
+sharing the renderer is what stops them.
+
+**This changes what the `pick` tool renders, and the change is the point.** Before
+this the tool returned the outcome alone: an agent named a candidate set and
+learned only which one the rule selected, never the candidates' statistics. A
+fidelity measurement would then have had to **re-derive** those values afterwards —
+scoring today's numbers against yesterday's choice, with any later change to the
+scorer, the basis or the class table silently becoming a fidelity signal. The
+candidates and their statistic are now in the payload, so the numbers the agent saw
+are the numbers it is measured against.
+
+**What it costs, recorded rather than waved past:** the pick tool's result is
+longer, and tool-result length is the one lever on per-turn cost
+(`quixote/agent_adapter.py`). A pick over five features in a signed class adds ten
+`label=value` pairs. It also changes the **agent's information**: an agent that can
+see candidate statistics may choose differently from one that cannot, so the
+reasoned-pick arm's behaviour is not comparable with the pilot's picks — of which
+there were none, so nothing already measured moves.
+
+**`tests/test_agent_cell.py::test_every_pick_and_meta_move_stores_the_information_set_presented`
+is no longer `xfail`.** Amendment 7's two open questions — what "resampled numbers"
+resamples, and whether re-presentation is stateless — **stay open**, and belong to
+the tool, which is built after the cell.

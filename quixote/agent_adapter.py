@@ -76,6 +76,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from quixote.grammar import Move
+from quixote.log import render_shown
 from quixote.session import Session, TriggerFired
 from quixote.triggers import PREDICATES, Trigger
 
@@ -166,6 +167,29 @@ class ToolSession:
 
     # -- content moves -------------------------------------------------------
 
+    def _shown_for(self, move: Move) -> tuple:
+        """The payload this step will render to the agent, as `(label, value)`
+        pairs, computed BEFORE the move so it can be passed into `propose` and
+        land in the record the move creates (`InformationSet` is frozen, so it
+        cannot be filled in afterwards).
+
+        `prereg/agent-cell.md` amendment 8 registers what each kind carries. For a
+        `pick` it is one pair per candidate with the statistic it was ranked by --
+        which the adapter now also RENDERS, so the agent sees the numbers its
+        choice is later measured against. Before amendment 8 the pick tool
+        returned the outcome alone, and a fidelity measurement would have had to
+        re-derive the candidate values afterwards.
+        """
+        st = self.session
+        if move.kind == "pick":
+            cands = st.grammar.pick_candidates(st.support, move)
+            return tuple(
+                (f"{ns[-1][0]}{'+' if ns[-1][1] > 0 else '-'}", float(v))
+                for v, ns in cands)
+        state = st.info_state()
+        return tuple((k, float(v)) for k, v in state.items() if v is not None
+                     and not isinstance(v, bool))
+
     def _move(self, move: Move, keep: bool, trigger=None) -> ToolResult:
         """Propose, then accept or reject. Both outcomes are recorded: the
         candidates were evaluated either way, so both count toward breadth.
@@ -184,8 +208,9 @@ class ToolSession:
                 f"{move.kind} is not defined in this state: {why}. The arguments are "
                 "well formed and nothing is outside the declared class; the move has "
                 "no meaning here.")
+        shown = self._shown_for(move)
         try:
-            support, score, n_cand = self.session.propose(move)
+            support, score, n_cand = self.session.propose(move, shown=shown)
         except TriggerFired as e:
             raise ToolRefused(str(e)) from None
         if n_cand == 0:
@@ -199,12 +224,17 @@ class ToolSession:
             self.session.reject(trigger=trigger)
             kept = "discarded"
         st = self.session
+        # The rendered payload ENDS with `render_shown(shown)`, and the record
+        # holds the same `shown`: re-rendering it reproduces this text byte for
+        # byte, which is amendment 8's invariant and what makes check 2's
+        # re-presentation possible.
         return ToolResult(True,
                           f"{move.kind} {kept}: {_support_text(st.support)} "
                           f"sharpe {st.score:.4f} (best {st.best_score:.4f}, "
-                          f"{n_cand} candidates)",
+                          f"{n_cand} candidates) | shown: {render_shown(shown)}",
                           {"support": list(st.support), "score": st.score,
-                           "best": st.best_score, "n_candidates": n_cand})
+                           "best": st.best_score, "n_candidates": n_cand,
+                           "shown": [list(pair) for pair in shown]})
 
     def _init(self, statistic: str = "sharpe", keep: bool = True) -> ToolResult:
         """Anchor on the best single feature by the named statistic."""
@@ -269,10 +299,15 @@ class ToolSession:
                 f"stop refused: {t.name} does not fire on the current state "
                 f"(value {value:.4f}). A meta move is taken because a declared "
                 "trigger fired, not because the agent prefers it.")
-        self.session.stop(t, value, stamped_at=stamp)
+        shown = tuple((k, float(v)) for k, v in self.session.info_state().items()
+                      if v is not None and not isinstance(v, bool))
+        self.session.stop(t, value, stamped_at=stamp, shown=shown)
         self.stopped = True
-        return ToolResult(True, f"stopped on {t.name} (value {value:.4f})",
-                          {"best": self.session.best_score})
+        return ToolResult(True,
+                          f"stopped on {t.name} (value {value:.4f})"
+                          f" | shown: {render_shown(shown)}",
+                          {"best": self.session.best_score,
+                           "shown": [list(pair) for pair in shown]})
 
     def _restart(self, trigger: str, param: float = 0.0,
                  statistic: str = "sharpe") -> ToolResult:
@@ -283,16 +318,21 @@ class ToolSession:
             raise ToolRefused(
                 f"restart refused: {t.name} does not fire on the current state "
                 f"(value {value:.4f}).")
-        moved = self.session.restart(t, value, stamp, statistic=statistic)
+        shown = tuple((k, float(v)) for k, v in self.session.info_state().items()
+                      if v is not None and not isinstance(v, bool))
+        moved = self.session.restart(t, value, stamp, statistic=statistic,
+                                     shown=shown)
         if not moved:
             return ToolResult(False, "no anchor left; recorded as a stop on exhausted",
                               {"best": self.session.best_score})
         return ToolResult(True,
                           f"restarted on {t.name}: {_support_text(self.session.support)} "
                           f"sharpe {self.session.score:.4f} (best "
-                          f"{self.session.best_score:.4f})",
+                          f"{self.session.best_score:.4f})"
+                          f" | shown: {render_shown(shown)}",
                           {"support": list(self.session.support),
-                           "best": self.session.best_score})
+                           "best": self.session.best_score,
+                           "shown": [list(pair) for pair in shown]})
 
     # -- declaration slots ---------------------------------------------------
 

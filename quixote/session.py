@@ -338,7 +338,8 @@ class Session:
         self._pending = None
 
     def stop(self, trigger: str | Trigger, trigger_value: float,
-             replayable: bool = True, stamped_at: float | None = None) -> None:
+             replayable: bool = True, stamped_at: float | None = None,
+             shown: tuple = ()) -> None:
         """The `stop` meta move. It changes no support, so it is recorded with a
         zero candidate count, its declared trigger, and when that trigger was
         stamped."""
@@ -348,7 +349,7 @@ class Session:
         self._require_declared(trigger, "stop")
         name, params = _trigger_fields(trigger)
         info = InformationSet(step=self.log.n_moves, support_before=self.support,
-                              score_before=self.score)
+                              score_before=self.score, shown=tuple(shown))
         self.log.record(MoveRecord(
             step=info.step, move=Move("stop"),
             support_after=self.support, score_after=self.score, n_candidates=0,
@@ -357,7 +358,8 @@ class Session:
             trigger_params=params, trigger_stamped_at=stamped_at))
 
     def restart(self, trigger: Trigger, trigger_value: float,
-                stamped_at: float, statistic: str = "sharpe") -> bool:
+                stamped_at: float, statistic: str = "sharpe",
+                shown: tuple = ()) -> bool:
         """The `restart` meta move: abandon the current support for the next
         anchor in the ranking of single features. The best score and its support
         are kept -- a restart changes where the search goes next, not what it has
@@ -371,11 +373,13 @@ class Session:
         rank = self.n_restarts + 1
         new_support, new_score, n_cand = self.grammar.anchor(rank, statistic)
         if new_support is None:
-            self.stop("exhausted", float(rank), stamped_at=stamped_at)
+            self.stop("exhausted", float(rank), stamped_at=stamped_at,
+                      shown=tuple(shown))
             return False
         name, params = _trigger_fields(trigger)
         info = InformationSet(step=self.log.n_moves, support_before=self.support,
-                              score_before=self.score, n_candidates_seen=n_cand)
+                              score_before=self.score, n_candidates_seen=n_cand,
+                              shown=tuple(shown))
         self.support, self.score = new_support, new_score
         self.failures, self.last_gain = 0, float("inf")
         self.n_restarts = rank

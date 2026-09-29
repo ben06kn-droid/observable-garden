@@ -21,10 +21,32 @@ from dataclasses import dataclass, field
 from quixote.grammar import Move, Support
 
 
+def render_shown(shown) -> str:
+    """The canonical rendering of a `shown` payload, used BOTH to build the text
+    the agent receives and to reproduce it afterwards.
+
+    One function for both directions is the whole point: the invariant
+    `prereg/agent-cell.md` amendment 8 registers is that re-rendering a stored
+    `shown` reproduces the payload that was sent, **byte for byte**. If the adapter
+    formatted the payload one way and a re-interrogation formatted it another, a
+    fidelity measurement would score the agent against numbers it never saw in
+    that form.
+    """
+    return "; ".join(f"{label}={value:.4f}" for label, value in shown)
+
+
 @dataclass(frozen=True)
 class InformationSet:
     """What the agent had been shown before a move. Deliberately not the whole
-    sample: it is the answers to queries it actually made."""
+    sample: it is the answers to queries it actually made.
+
+    `shown` is the **verbatim payload the adapter rendered to the agent at that
+    step** (`prereg/agent-cell.md` amendment 8), as `(label, value)` pairs: for a
+    `pick`, one pair per candidate with the statistic it was ranked by; for a meta
+    move, the trigger state it was evaluated on; for any other content move, the
+    state the move was proposed from. `render_shown` turns it back into the text
+    that was sent, and the round trip is tested.
+    """
     step: int
     support_before: Support
     score_before: float
