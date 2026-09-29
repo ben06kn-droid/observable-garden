@@ -895,3 +895,81 @@ inside it.
 
 **Cost:** one more run at the $0.268 stored mean, so the shake-out is about
 **$1.34** in total.
+
+### The shake-out attempt, 2026-09-29 — recorded, rule 5 standing
+
+Five runs on the seat, as registered: 2 orientation and 2 reasoned-pick on `s0`,
+1 orientation on `etf` in-sample. All five completed, submitted, and returned no
+error. **No number from them enters a verdict, a rate, or any reading**; what
+follows is harness integrity and nothing else.
+
+**Rule 1 — refusals inside the registered set: PASSES.** Every refusal across the
+five runs falls in the registered 11 kinds, and `unregistered_refusals` is empty on
+all five. Kinds seen: `trigger_is_firing`, `trigger_did_not_fire`,
+`inapplicable_move`, `after_submit`, `after_stop`. `inapplicable_move` — added as
+item 1 of the 2026-09-27 list — fired for the first time here and carried the
+message it was written for.
+
+**The four registered stop conditions:**
+
+| condition | outcome |
+|---|---|
+| a refusal outside the registered kinds | **none** — rule 1 passes |
+| a run config lacking the delivered table's hash | **none** — present on all three orientation runs, and `null` on the reasoned-pick runs, which carry no table |
+| a served model other than the pinned string | **none** — `models_seen` is `['claude-sonnet-5']` and `served_is_pinned` is true on all five |
+| a self-check not replayable on a run that made moves | **none** — replayable on all five |
+
+The certifying null was **computable end to end on all five**, which is what the
+pilot exists to establish; its value is not read, per rule 5.
+
+**Two faults found, which is what a shake-out is for.**
+
+**(1) The reasoned-pick arm executed no `pick`, and the reason is timing rather than
+compliance.** The agent *did* call `pick` — three times in one run, once in the
+other — so the arm's sentence works. Every call failed, for three different
+structural reasons: the support was already **full at depth 3** so every candidate
+would leave the declared class (`pick: no candidate inside the class`, then
+`inapplicable_move`: "every candidate named is already held"); a **declared rule was
+firing**, which decision (b) makes a refusal; and in the second run the pick came
+**after `stop`**. So the agent obeys the instruction but reaches it late, by which
+time there is nothing left to pick among.
+
+**Check 2 therefore still has an empty unit of analysis**, for a reason no amendment
+has yet addressed: `prereg/AGENT_PROMPTS_REAL.md` amendment 3 asks for a pick but
+does not say **when**, and the natural place an agent puts it — after exploring — is
+the one place the grammar cannot accept it. This is a **design fault in the arm, not
+a harness bug**, and it needs an amendment before the cell: either the sentence asks
+for the pick **early, while the support has room**, or the grammar accepts a pick at
+a full support as a **swap** rather than refusing it. Both change what the arm
+measures, so the choice is registered rather than made in code.
+
+**(2) `experiments/agent_cell.py` writes no `session_log` event, so the per-move
+`shown` never reaches disk.** `experiments/agent_pilot.py` serializes the full move
+records; the new runner does not, and the omission was mine in the 2026-09-29
+build. Consequences: these five runs **cannot be re-graded**, and amendment 8's
+byte-for-byte round trip **cannot be audited from the artifact** even though it
+holds in process.
+
+**What the artifact does show.** The payloads reached disk through the
+`tool_result` events, and **every successful content and meta move carries its
+`| shown:` block** — 7 of 7 in one reasoned-pick run, 5 of 5 in the other, 4 pairs
+each, the trigger state amendment 8 registers for a meta move. So the rendering
+half of the invariant is confirmed on the real runs; the stored-pairs half is not,
+because the pairs are not stored.
+
+**On the question as asked — does every pick and meta move in the reasoned-pick
+logs have a non-empty `shown` that re-renders to the sent payload:**
+
+- **picks: vacuously, there are none.** No pick executed, so no pick record exists
+  to carry a `shown`. The question cannot be answered on this arm until fault (1)
+  is fixed.
+- **meta moves: the payload carries a rendered `shown` on every one**, but the
+  stored pairs are absent from the run file, so the **round trip is unverified on
+  these runs**. It is verified in `tests/test_agent_cell.py` against the adapter's
+  own return values.
+
+**Neither fault is a reason to change a registered rule, and neither number is
+read.** Fault (2) is a serialization gap and is fixed in code. Fault (1) needs an
+amendment to the arm before the cell runs, and **the cell does not start until it
+has one** — a fidelity cell whose picks are all refused measures nothing, which is
+the situation amendment 3 was written to prevent and did not.
