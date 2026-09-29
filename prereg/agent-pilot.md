@@ -760,3 +760,69 @@ off the **realized log** and are unaffected; only the replay-side check outcomes
 are. They are not re-read here: this pilot's purpose was served, and the corrected
 code is exercised on registered draws in 7.3 rather than retrofitted onto a run
 that claimed nothing.
+
+### The re-grade, 2026-09-28: current integrity and commitment statuses
+
+Run with `experiments/regrade_pilot.py` against the corrected replay indexing.
+Results are written beside the runs as `regrade_2026-09-28.json`.
+
+**Only a rebuild that reproduces its own file is graded.** The re-grader replays
+the rebuilt log and compares against the file's **best** recorded support and
+score; a rebuild that does not match is discarded rather than graded, because a
+re-grade off a wrong reconstruction is worse than no re-grade. All three ETF
+rebuilds matched **exactly** — the same support, score gap 0.00e+00. (The gate's
+first version compared against the log's **last** record and reported every
+rebuild as unfaithful. That was the gate being wrong: a replay tracks the best
+support it reached, and a log ending in `restart` then `stop` finishes at a worse
+support than its best. The same best-against-last confusion was found once before,
+in this pilot's ETF run.)
+
+**ETF, `runs/agent_pilot_etf_seat/` — re-graded:**
+
+| run | restarts in log | recorded verdict | INTEGRITY now | COMMITMENT now |
+|---|---|---|---|---|
+| `pilot_etf_2` | 1 | UNDECIDABLE | **PASS** | **FAIL** |
+| `pilot_etf_3` | 0 | UNDECIDABLE | **PASS** | **PASS** |
+| `pilot_etf_4` | 0 | UNDECIDABLE | **PASS** | **PASS** |
+
+**Runs 3 and 4 were UNDECIDABLE because of the defect, and are not.** Both checks
+pass under the corrected indexing; neither log contains a restart, so what the old
+code failed on was the `cap_to_log` step bound (amendment 3's first defect), which
+left the commitment replay short on a log ending in a rule-fired `stop`.
+
+**Run 2's commitment failure is genuine and survives the fix.** It committed to
+`last_gain_at_most(0.02) -> stop` and then **restarted** on that trigger and kept
+searching, so the committed-rule replay stops where the realized search continued:
+replayed `[continue, continue, stop]` against realized
+`[continue, continue, restart, continue, stop]`, at an identical score. A trigger
+change is logged for the run, so the right reading is the bracket's
+**DEPENDS_ON_JUDGMENT**, not UNDECIDABLE — the search that ran is not the search
+its committed rule describes, and the verdict says so rather than refusing.
+
+**ADR, `runs/agent_pilot_seat2/` — NOT re-gradable, and that is a finding about
+the log format:**
+
+| run | restarts in log | recorded verdict | why not |
+|---|---|---|---|
+| `pilot_adr_2` | 6 | FAIL | `flip` recorded without its feature |
+| `pilot_adr_3` | 8 | FAIL | `flip` and `pick` recorded without their parameters |
+| `pilot_adr_4` | 9 | FAIL | `flip` recorded without its feature |
+
+The `session_log` event recorded `move.kind` and **not the move's parameters**, so
+a `flip` without its feature and a `pick` without its statistic and candidate list
+are **different moves on re-execution**. These three runs have 6, 8 and 9 restarts
+between them — precisely the case the indexing defect hit — and they cannot be
+re-graded, because the replay would be grading a reconstruction rather than the
+run. The ETF runs were re-gradable only because their moves happen to be
+parameterless.
+
+**A log that cannot be replayed is not an audit trail**, which is the point of
+keeping one. `experiments/agent_pilot.py` now serializes the full move — kind,
+statistic, feature, note, candidate list, `else_statistic`, `choice` — so a future
+run can be re-graded when the replay is fixed or changed. `regrade_pilot.py` reads
+either format and says which runs it had to refuse.
+
+**What still does not move.** This pilot registered **no verdict claim**, so no
+published number changes either way. The three ADR runs' recorded statuses stay on
+the record as what the defective code produced, marked not re-gradable, and are not
+quoted as outcomes.

@@ -452,11 +452,25 @@ def run_one(arm: str, seed: int, panel, masking, index: int,
         rec.triggers_predeclared = [dict(t) for t in tools.session.log.declared_trigger_records]
         rec.triggers_changed = bool(tools.session.log.trigger_changes)
         _certify_run(rec, tools, sandbox, cls, table)
+        # The move's PARAMETERS are recorded, not only its kind. A log that keeps
+        # the kind alone cannot be replayed later: a `flip` without its feature and
+        # a `pick` without its statistic and candidate list are different moves on
+        # re-execution, so the run cannot be re-graded when the replay is fixed or
+        # changed. That is exactly what happened on 2026-09-28 — the ADR seat runs
+        # could not be re-graded under the corrected replay indexing, while the ETF
+        # runs, whose moves happen to be parameterless, could. See
+        # `experiments/regrade_pilot.py`.
         rec.log("session_log", records=[
             {"step": r.step, "kind": r.move.kind, "support": list(r.support_after),
              "score": r.score_after, "n_candidates": r.n_candidates,
              "trigger": r.trigger, "trigger_value": r.trigger_value,
-             "replayable": r.replayable} for r in tools.session.log.records])
+             "replayable": r.replayable,
+             "move": {"kind": r.move.kind, "statistic": r.move.statistic,
+                      "feature": r.move.feature, "note": r.move.note,
+                      "among": list(r.move.among or ()),
+                      "else_statistic": r.move.else_statistic,
+                      "choice": r.move.choice}}
+            for r in tools.session.log.records])
         if not rec.submitted:
             support, score = tools.session.submission()
             rec.submitted_support = [[int(k), float(s)] for k, s in support]

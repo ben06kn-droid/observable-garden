@@ -579,3 +579,186 @@ down. Amendment 2's closing condition survives and is restated here:
 > **If the projection is still over after this amendment, the experiment waits.**
 > It does not run at a size its own rules cannot be read at, and it does not
 > acquire a further lever invented after the number was seen.
+
+## Amendment 4 — 2026-09-28, before the curve and before any registered draw
+
+Four corrections to amendment 3's arm and to rule 4, one of them a disclosure.
+
+### (1) Both faithful searchers take the same content moves; how `faithful-restart` ends
+
+`faithful-stop` now takes the **same content prelude** as `faithful-restart` —
+`init`, `pick`, `extend_best`, `refine`, `flip`, then `swap_worst` until its rule
+fires — so up to the point the rule fires the two searches are **identical move
+for move**, and what differs is **the action the declared rule names**.
+
+Past that point they cannot be identical, and the pre-registration says so rather
+than claiming a symmetry that does not hold: a `restart` **empties the support**, so
+`faithful-restart` takes **one further `extend_best`** that `faithful-stop` has no
+need of. The pair is matched on the prelude, not on total move count, and
+`tests/test_unfaithful_searchers.py` holds the prelude equal and nothing more. `faithful-restart` is what
+exercises `restart`; `faithful-stop` is what exercises `stop`. The coverage table
+of amendment 3 item (3) is replaced by this one:
+
+| move kind | `faithful-restart` | `faithful-stop` |
+|---|---|---|
+| `init`, `pick`, `extend_best`, `refine`, `flip`, `swap_worst` | yes | yes |
+| `restart` | **yes** | — |
+| `stop` | — | **yes** |
+
+Amendment 3's reason for needing two searchers rather than one stands unchanged:
+two rules sharing a predicate fire together, so which action the log took would be
+a decision of the policy rather than a function of the declared rules.
+
+**How `faithful-restart` ends, in the realized run.** It declares **only** a
+restart rule, so nothing in its declaration ends its search. After the restart and
+one `extend_best` the policy simply stops issuing moves and **submits** — which an
+agent may do at any time. Its log is 6–8 steps on the seeds measured.
+
+**How it ends in a replicate.** There is no stop rule to fire, so the replay runs
+on under the **fill** until the declared budget of 24 steps is spent. **The same
+is true of the realized replay**, which is what the certifying null prices: it
+runs 24 steps against a log of 6–8, so **the statistic certified is the best over
+24 steps, of which roughly 16 are fill** — not the score the session submitted.
+
+Measured on seeds 990000–990003: the priced score **exceeded the submitted score
+on 2 of 4 seeds**, by **+0.1224** and **+0.1310** in annualized Sharpe; on the
+other two they agreed to 1e-16. `faithful-stop`, which ends on its own declared
+rule, priced its submission **exactly on every seed measured**, as did U2, U3, U3b
+and U4.
+
+**What this does and does not invalidate.** Both sides of the comparison run the
+same 24 steps, so the p-value is a **valid null for that 24-step search**. What it
+is not is a null for the search that was *submitted*. Rule 1a is read with that
+stated: for `faithful-restart` it measures the rejection rate of a search that
+runs to its budget under the fill, and the **submitted-against-priced gap is
+recorded per run** as a descriptive readout so the size of the difference is
+measured on the registered draws rather than inferred from four smoke seeds.
+
+**A reporting consequence, stated because it looks like the opposite.** The
+`fill_engaged` counter counts replicates that ran **past the realized length**,
+not replicates that took the fill. For a searcher with no stop rule the realized
+length is *itself* set by the fill, so the counter reads **0 engagement for
+`faithful-restart`** while most of its steps were fill. Engagement figures are
+read with that meaning, and not as evidence the fill was idle.
+
+### (2) What generates content in U2's null replicate — the menu, not the class
+
+**Measured, before this amendment was written:** over seeds 990000–990005 at
+B = 200, U2's fill engaged in **0 of 1,200 replicates**.
+
+So the replicate's content is **U2's own logged moves, re-executed**: `pick` with
+**one candidate each**, the peeked features. The fill is *available* past the
+realized length and does range over the class greedily when it engages — but U2's
+declared stop rule, `last_gain_at_most(0)`, fires before that on every replicate
+measured, because a single-candidate pick on resampled data usually fails to
+improve. **The null replicate is therefore confined to U2's declared candidate
+menu**, which is the condition under which the registered prediction stands.
+
+**The prediction stays ≥ 0.95, and this is why.** A replicate re-derives U2's
+specification from **one candidate per pick** — a one-trial null — while the
+realized statistic is the **argmax over 82,240 class members**. A single-trial
+critical value is nowhere near the maximum of 82,240, so the peeked specification
+clears it nearly always. Quantified on seed 990000 at B = 400: the replay null has
+**mean 0.3094 and 99th percentile 0.6316** against a realized **0.7885**, and
+**1 of 400 replicates** reached the realized score. For contrast the *class* null
+on the same draw has mean 0.8250 and 252 of 400 draws above 0.7885 — the two
+certifiers are not close, which is the hole this searcher exists to price.
+
+**Disclosure, and it weakens this prediction's pre-registration.** The U2
+mechanism was **finalized after p-values on the cost-only block had been seen**,
+at **n ≤ 8 draws and B ≤ 400**. What was seen: U2's replay p-values sat at or near
+the attainable floor — 0.0100, 0.0050, 0.0100, 0.0050, 0.0149, 0.0050 on seeds
+990000–990005 at B = 200 — and its class p-values were large, order 0.63. That is
+a **departure from this file's own cost-only discipline**, which reserves
+990000–990999 for wall time, per-draw seconds and guard counts and forbids a rule
+quantity. It happened in diagnosis, not in a smoke report, and the driver's
+`cost_report` still refuses to print a rule quantity on any block — but the
+discipline is about what was *looked at*, not only what was printed.
+
+**The consequence, registered rather than argued away:** the ≥ 0.95 prediction for
+U2 is **not blind**. It is consistent with six values already seen at n ≤ 8, and
+those values are a subset of the same mechanism the registered draws will use on a
+disjoint block. **The write-up states that U2's prediction was made with those
+values in hand** and does not present ≥ 0.95 as a blind call. The registered draws
+on 500000–501999 remain a genuine out-of-sample test of the *rate*, since n = 8 at
+B = 200 fixes nothing about a rate at n = 500 and B = 1,000, but the **direction**
+was known.
+
+### (3) U2's class prediction is an exactness claim, via 6.1 arm D
+
+Rule 4's second half read "U2's declared-class rejection rate within the Wilson
+interval of nominal" — an estimate. It is **an exactness claim**, and
+`calibration-at-1pct` arm D already established it.
+
+**U2 submits the class maximum.** Verified exactly, not approximately: on seeds
+990000–990009, U2's submitted score equals `full_class_observed_max` over the
+declared class to within 1e-12 on **10 of 10 seeds**. So U2's declared-class
+statistic is `sr_sel = max_Θ SR_θ` — **arm D's quantity, by construction**.
+
+Arm D's argument transfers unchanged: P2's inequality binds with **equality**, so
+its conservatism vanishes; what remains is **P1**, under which the statistic is
+the maximum over a **data-independent menu** and the bootstrap p-value is exactly
+calibrated up to `o(1)`. Arm D measured it at n = 2,000: **k = 110 at α = 0.05 and
+k = 19 at α = 0.01, with KS not rejecting**.
+
+**Registered, replacing rule 4's second half:**
+
+> **U2's declared-class p-value is the class-maximum p-value, exactly.** Its
+> rejection rate is arm D's, already established as exactly calibrated; this
+> experiment does not re-estimate it and claims no new calibration result from it.
+> - *Equal to the class-max p-value on every draw:* registered as confirmed. A
+>   peek that stays **inside** the declared class is already paid for, because the
+>   class tier charges the class maximum whatever route reached it.
+> - *Any draw where they differ:* a **defect**, not a finding — U2 failed to reach
+>   the class argmax, or the two statistics are not the same statistic — and the
+>   reading halts until it is understood.
+
+**The condition this rests on, registered explicitly.** **The class is fixed by
+the harness, not declared by the searcher.** `CLS = SubsetClass(max_size=3,
+signed=True)` is set in the driver before any data is generated, is identical for
+every policy, and no move in the grammar can change it. **If a searcher could name
+its own class, the peek would choose the menu and P1 would not apply** — the
+statistic would be a maximum over a data-*dependent* menu and arm D's exactness
+would not transfer. What U2 demonstrates is therefore narrower than "the class
+gate is not fooled": it is that **a peek confined to a harness-fixed class is
+already priced**, and it says nothing about a peek that escapes the class or about
+a gate that lets the searcher declare the class.
+
+### (4) Two descriptive readouts, no rule
+
+Recorded per run, reported as distributions with U2 against the faithful arm. No
+threshold, no branch, no halt — these are here to make the mechanism visible, and
+a pre-registration that cannot say what it expects should not pretend a rule.
+
+1. **`p_class − p_trigger`, per run.** The gap between the two certifiers on the
+   same submission. For U2 it is the size of the hole on that draw; for the
+   faithful arm it is what the gap looks like when nothing was peeked. On seed
+   990000 at B = 200 it was **+0.632** for U2 against **+0.517** and **+0.527**
+   for the two faithful searchers, and **0.000** for U3, U3b and U4-twin.
+2. **Submitted score − the fill's score on the realized data under the same
+   trigger, per run.** The fill is run from step 0 on the **un-resampled** data
+   under the searcher's own declared triggers, so it is a pure greedy walk over
+   the class. The difference is **what the searcher's own moves bought over taking
+   the fill instead**. For U2 this is the value of the peek measured directly in
+   Sharpe rather than through a p-value; for the faithful arm it is what ordinary
+   search buys.
+
+Both are computed in `run_draw` beside the p-values and carry no gate.
+
+### (5) The projection, updated for the second certifier and the amended arm
+
+Amendment 4 adds a per-draw declared-class null and changes the faithful arm, so
+amendment 3 item (6)'s table is superseded by this one. Re-measured on the
+cost-only block at 8 workers, three draws per point, B = 60 and B = 240:
+
+| basis | CPU-hours, whole experiment | c7a.48xlarge, 192 vCPU |
+|---|---|---|
+| scaling the whole per-draw time with B (the driver's printed upper bound) | **149** | 0.78 h wall |
+| fitting `seconds = a + b·B` per policy | **31** | 0.16 h wall |
+
+The class null is **1.4 to 3.3 CPU-hours of that total** — about 2.6 s a draw at
+B = 1,000 against roughly 100 s for the twelve policies' replays — so the second
+certifier is close to free, which is why rule 4 can have both tiers on every run
+rather than on a subsample. The arm change *lowered* the total: `faithful-stop`'s
+prelude drives its failure count up sooner, so its rule fires earlier and its log
+is shorter. **Both rows remain under the threshold; no further lever is pulled.**

@@ -135,6 +135,85 @@ def test_the_faithful_arm_covers_every_move_kind_in_the_grammar():
                          "swap_worst", "restart", "stop"}, sorted(seen)
 
 
+def test_both_faithful_searchers_take_the_same_content_moves():
+    """Amendment 4, item (1): the pair differs in exactly one thing, the action its
+    declared rule names. If one of them stops taking `pick` or `flip`, the pair is
+    no longer matched and rule 1a is comparing two different searches."""
+    from collections import Counter
+
+    from environments.sandbox import Sandbox
+    from quixote.session import Session
+
+    content = {}
+    for name in ("faithful-restart", "faithful-stop"):
+        data, cfg = us.make_panel("s0", us.SEED0_SMOKE)
+        sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=us.CLS)
+        sess = Session.on_sandbox(sb, us.CLS, name_prefix="m")
+        us.policies(us.SEED0_SMOKE)[name][0](sess)
+        # the PRELUDE: everything up to the first meta move. Past it the two
+        # necessarily differ — a restart empties the support, so `faithful-restart`
+        # takes one further `extend_best` that `faithful-stop` has no need of.
+        recs = list(sess.log.records)
+        cut = next((i for i, r in enumerate(recs) if r.move.is_meta), len(recs))
+        content[name] = Counter(r.move.kind for r in recs[:cut])
+    assert content["faithful-restart"] == content["faithful-stop"], content
+    assert {"init", "pick", "extend_best", "refine", "flip", "swap_worst"} <= set(
+        content["faithful-restart"])
+
+
+def test_U2_submits_the_class_maximum_exactly():
+    """Amendment 4, item (3). U2's declared-class statistic is `max_theta SR_theta`
+    — 6.1 arm D's quantity — which is what lets arm D's exactness transfer instead
+    of the rate being re-estimated here. If U2 stops reaching the class argmax the
+    class-side claim is void, so this is checked rather than assumed."""
+    import numpy as np
+
+    from environments.sandbox import Sandbox
+    from garden._full_class_engine import full_class_observed_max
+    from quixote.replay import LoggedPolicy
+    from quixote.session import Session
+
+    for seed in (us.SEED0_SMOKE, us.SEED0_SMOKE + 1, us.SEED0_SMOKE + 2):
+        data, cfg = us.make_panel("s0", seed)
+        sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=us.CLS)
+        sess = Session.on_sandbox(sb, us.CLS, name_prefix="u")
+        us.policies(seed)["U2"][0](sess)
+        base = sb.base_feature_columns()
+        ann = float(np.sqrt(cfg.periods_per_year))
+        got = LoggedPolicy(sess.log, us.CLS).trace(base, ann).score
+        want, _, _, _ = full_class_observed_max(base, us.CLS, annualization=ann)
+        assert got == pytest.approx(want, abs=1e-12), (seed, got, want)
+
+
+def test_the_two_descriptive_readouts_are_recorded_per_run():
+    """Amendment 4, item (4): both readouts, on every policy, with no gate. They
+    are descriptive, so the test checks they EXIST and are on the scales claimed,
+    not that they take any particular value."""
+    row = _draw()
+    for name in us.MEMBERS:
+        r = row[name]
+        assert -1.0 <= r["p_class_minus_p_replay"] <= 1.0, name
+        assert r["p_class_minus_p_replay"] == pytest.approx(
+            r["p_class"] - r["p_replay"]), name
+        assert r["submitted_minus_fill"] == pytest.approx(
+            r["submitted_score"] - r["fill_score"]), name
+        assert 0.0 < r["p_class"] <= 1.0, name
+
+
+def test_the_faithful_pair_differs_on_whether_the_priced_score_is_the_submitted_one():
+    """Amendment 4, item (1), the asymmetry it registers. `faithful-stop` ends on
+    its own declared rule, so the replay prices exactly what the session submitted.
+    `faithful-restart` declares no stop rule, so the replay runs on under the fill
+    to its budget and may price MORE than was submitted. Registering that means
+    holding the mechanism in place, not just the sentence."""
+    row = _draw()
+    stop = row["faithful-stop"]
+    assert stop["realized_score"] == pytest.approx(stop["submitted_score"])
+    # and never less than submitted: the fill can only add
+    r = row["faithful-restart"]
+    assert r["realized_score"] >= r["submitted_score"] - 1e-9
+
+
 def test_each_faithful_searcher_declares_exactly_one_rule():
     """Why the arm needs two searchers and not one. Two rules sharing a predicate
     fire together, so WHICH action the log took is a decision of the policy rather

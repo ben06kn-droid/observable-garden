@@ -44,6 +44,7 @@ from environments.dgp import DGPConfig, calibrate_sigma, generate
 from environments.sandbox import Sandbox
 from experiments._parallel import run_cells
 from experiments.search_depth import git_state
+from garden._full_class_engine import full_class_null_max, full_class_observed_max
 from garden.spec_class import SubsetClass
 from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
 from quixote.replay import LoggedPolicy
@@ -155,8 +156,26 @@ FAITHFUL_BUDGET = 24
 
 
 def _faithful_prelude(sess: Session, trigger: Trigger) -> None:
+    """The content moves both faithful searchers take, in an order the harness
+    allows: `init`, `pick`, `extend_best`, `refine`, `flip`.
+
+    The order is not free. Under decision (b) a firing rule suspends content
+    moves, so `refine` and `flip` have to come before the run of swaps that drives
+    the failure count up — placed after it they were unreachable on every seed
+    tried. `pick` has to come before the support fills, since a pick at a full
+    support would leave the declared class.
+
+    Both searchers take the SAME content moves, so the pair differs in exactly one
+    thing: the action its declared rule names.
+    """
     sess.declare_budget(FAITHFUL_BUDGET)
     sess.declare_triggers([trigger])
+    _advance(sess, Move("init"))
+    _advance(sess, Move("pick", statistic="autocorr_1", among=tuple(range(6))))
+    _advance(sess, Move("extend_best"))
+    _advance(sess, Move("refine"))
+    if sess.support:
+        _advance(sess, Move("flip", feature=sess.support[0][0]))
 
 
 def _swap_until_fired(sess: Session, limit: int = 12) -> bool:
@@ -174,20 +193,17 @@ def _swap_until_fired(sess: Session, limit: int = 12) -> bool:
 
 
 def faithful_restart(sess: Session) -> None:
-    """init, pick, extend_best, refine, flip, swap_worst, restart.
+    """The content prelude, then swaps until the rule fires, then `restart`, then
+    one `extend_best`. **This searcher is what exercises `restart`.**
 
-    `refine` and `flip` come before the run of swaps: under decision (b) a firing
-    rule suspends content moves, so a kind placed after the swaps is unreachable
-    on any seed where the rule fires early.
+    How it ends is asymmetric between the realized run and a replicate, and the
+    pre-registration states it (amendment 4, item 1): the realized run **submits**
+    after the post-restart `extend_best` — an agent may submit at any time, and
+    this one declares no stop rule — while a replicate, having no stop rule to
+    fire, runs on under the **fill** until the declared budget is spent.
     """
     trig = Trigger("failures_at_least", 3.0, "restart")
     _faithful_prelude(sess, trig)
-    _advance(sess, Move("init"))
-    _advance(sess, Move("pick", statistic="autocorr_1", among=tuple(range(6))))
-    _advance(sess, Move("extend_best"))
-    _advance(sess, Move("refine"))
-    if sess.support:
-        _advance(sess, Move("flip", feature=sess.support[0][0]))
     if _swap_until_fired(sess):
         fired, value, stamp = sess.evaluate_trigger(trig)
         sess.restart(trig, value, stamp)
@@ -195,12 +211,11 @@ def faithful_restart(sess: Session) -> None:
 
 
 def faithful_stop(sess: Session) -> None:
-    """init, extend_best, swap_worst, stop."""
+    """The same content prelude, then swaps until the rule fires, then `stop`.
+    **This searcher is what exercises `stop`**, and it ends the same way in the
+    realized run and in a replicate: on its own declared rule."""
     trig = Trigger("failures_at_least", 3.0, "stop")
     _faithful_prelude(sess, trig)
-    _advance(sess, Move("init"))
-    _advance(sess, Move("extend_best"))
-    _advance(sess, Move("extend_best"))
     if _swap_until_fired(sess):
         fired, value, stamp = sess.evaluate_trigger(trig)
         sess.stop(trig, value, stamped_at=stamp)
@@ -487,7 +502,30 @@ def run_draw(cell: str, seed: int, B: int, only: str | None = None,
     t_draw = time.time()
     data, cfg = make_panel(cell, seed)
     ann = float(np.sqrt(cfg.periods_per_year))
-    out: dict = {"_draw": {"seed": seed, "cell": cell}}
+
+    # The declared-class null, computed ONCE per draw and shared by every policy,
+    # as `calibration-at-1pct` arm D and 7.0 both do. It does not depend on the
+    # policy: it is the distribution of the maximum over the class, and what
+    # differs between policies is only the score compared against it. At B = 1,000
+    # it costs about 2.6 s a draw against roughly 100 s for the twelve policies'
+    # replays, so the second certifier is close to free.
+    sb_draw = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=CLS)
+    base_draw = sb_draw.base_feature_columns()
+    t_cls = time.time()
+    L_draw = int(select_block_length(base_draw - base_draw.mean(axis=0)))
+    M_b, _, n_floor, n_cap = full_class_null_max(
+        base_draw, CLS, B=B, block_length=L_draw, annualization=ann, seed=seed)
+    class_max, _, _, _ = full_class_observed_max(base_draw, CLS, annualization=ann)
+    out: dict = {"_draw": {"seed": seed, "cell": cell, "block_length": L_draw,
+                           "class_max": float(class_max),
+                           "seconds_class_null": time.time() - t_cls,
+                           "null_max_q95": float(np.quantile(M_b, 0.95)),
+                           "guard_floor": int(n_floor), "guard_cap": int(n_cap)}}
+
+    def p_class_of(score: float) -> float:
+        """The declared-class p-value: `(1 + #{M_b >= score}) / (B + 1)`, the same
+        form as the replay p so the two are differenced on one scale."""
+        return (1 + int(np.sum(M_b >= score))) / (B + 1)
 
     for name, (policy, arm) in policies(seed).items():
         if only is not None and name != only:
@@ -521,10 +559,29 @@ def run_draw(cell: str, seed: int, B: int, only: str | None = None,
                  "UNDECIDABLE" if not commitment.agrees else
                  "CERTIFIED" if p < 0.05 else "FAIL")
 
+        # The SUBMITTED score is the best the session itself reached; `realized`
+        # is what the replay prices. They are equal for every policy that ends on
+        # its own declared rule, and they DIFFER for `faithful-restart`, which
+        # declares no stop rule — see amendment 4, item (1).
+        submitted = max([r.score_after for r in log.records
+                         if r.score_after is not None], default=float("-inf"))
+        # Amendment 4, item (4b): the fill's score on the REALIZED data under the
+        # same declared triggers — a pure greedy walk from step 0, no logged move
+        # used. What the searcher's own moves bought over taking the fill instead.
+        fill_here = LoggedPolicy(log, CLS).trace(base, ann, meta_steps=0).score
+
         out[name] = {
             "arm": arm,
             "p_replay": p,
             "realized_score": realized,
+            "submitted_score": float(submitted),
+            "p_class": p_class_of(realized),
+            "p_class_submitted": p_class_of(submitted),
+            # amendment 4, item (4a): descriptive, no rule
+            "p_class_minus_p_replay": p_class_of(realized) - p,
+            "fill_score": float(fill_here),
+            # amendment 4, item (4b): descriptive, no rule
+            "submitted_minus_fill": float(submitted) - float(fill_here),
             "gated_verdict": gated,
             "integrity_ok": bool(integrity.agrees),
             "commitment_ok": bool(commitment.agrees),
@@ -599,10 +656,16 @@ def cost_report(data: dict, full_draws: int = N_DRAWS, B_full: int = B_DEFAULT) 
     per_policy = {n: float(np.mean([r[n]["seconds"] for r in rows if n in r]))
                   for n in names}
     cpu_s = sum(per_policy[n] * DRAWS_FOR.get(n, N_DRAWS) for n in names) * scale
+    # The declared-class null is per DRAW, not per policy, and the driver walks
+    # `full_draws` of them however few policies run on the later ones.
+    cls_s = float(np.mean([r["_draw"]["seconds_class_null"] for r in rows]))
+    cpu_s += cls_s * scale * full_draws
     L += ["", "PROJECTION to the registered design (amendment 3, minimal)", "-" * 78,
           f"  measured at B={s['B']:,}; scaled to B={B_full:,}",
           "  each policy at its own registered count, not all at the largest:",
           f"  {cpu_s / 3600:,.1f} CPU-hours for the whole experiment (s0 only)",
+          f"  of which the per-draw class null is "
+          f"{cls_s * scale * full_draws / 3600:,.1f} CPU-hours",
           "",
           "  This is an UPPER BOUND, not an estimate. It scales the whole per-draw",
           "  time with B, including the part that does not depend on B at all —",
