@@ -141,6 +141,31 @@ def test_appending_an_amendment_to_either_prereg_moves_no_fingerprint(tmp_path):
         assert heading in text, path.name
         design, _, _ = text.partition(heading)
         assert heading not in design
+        # A REPEAT of the heading is the case `partition` cannot see, and it is
+        # the dangerous one: the fingerprint is taken over `split(heading)[0]`, so
+        # everything after a second heading silently leaves the design hash.
+        # `prereg/agent-cell.md` carried exactly that until 2026-09-29.
+        assert text.count(heading) == 1, (
+            f"{path.name} repeats {heading!r} {text.count(heading)} times; "
+            "content after the second one is excluded from the design hash")
+
+
+def test_no_prereg_file_repeats_its_amendments_heading():
+    """The same guarantee for every pre-registration, not only the two whose
+    design hash is computed. A duplicated `## Amendments` splits the amendment log
+    in two, and a reader who stops at the first one reads a stale 'None yet' --
+    which is what `prereg/agent-cell.md` said above its four amendments."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent / "prereg"
+    offenders = {}
+    for path in sorted(root.glob("*.md")):
+        text = path.read_text()
+        for heading in ("## Amendments", "## 6. Amendments", "## 7. Amendments"):
+            n = sum(1 for line in text.splitlines() if line.strip() == heading)
+            if n > 1:
+                offenders[f"{path.name}:{heading}"] = n
+    assert not offenders, f"repeated amendment headings: {offenders}"
 
 
 def test_dirty_paths_does_not_eat_the_first_paths_first_character():

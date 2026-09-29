@@ -461,6 +461,17 @@ class Session:
         """
         from quixote.replay import integrity_check
 
+        # A log with no moves has nothing to re-execute, and asking the check
+        # anyway compares an empty realized support against a replay that anchors
+        # a move the search never made -- a FAIL that says nothing about the run.
+        # Reported as not applicable rather than as a failure.
+        if not [r for r in self.log.records if r.move.note != "rejected"]:
+            self.log.self_check = {
+                "replayable": None, "check": "integrity", "basis": None,
+                "reason": "no moves were logged, so there is nothing to re-execute",
+                "error": None}
+            return self.log.self_check
+
         try:
             chk = integrity_check(self.log, self.grammar.spec_class,
                                   self.grammar.base, self.grammar.annualization,

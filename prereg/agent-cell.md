@@ -187,19 +187,13 @@ measures nothing.
 ## What this arm cannot show
 
 - It cannot show that orientation helps on a panel with **no edge to find**. The
-  ADR panel has none (`prereg/adr-features.md` amendment 3), so the behavioural
-  predictions are read on the ETF panel and the ADR panel contributes only the
-  validity and placebo readings.
+  behavioural predictions are therefore read on the **ETF panel**, which is cell
+  3.
 - It cannot separate "the agent used the table" from "the agent was primed by
   being handed something" **except** through cell 2, which is why cell 2 is
   registered as a cell rather than as a robustness check.
 - At n = 20 it cannot measure a small change in the false-certification rate.
   Cell 1 rules out a hole; it does not calibrate.
-
-## Amendments
-
-None yet. Dated entries are appended here.
-
 
 ## Amendments
 
@@ -262,8 +256,14 @@ construction and the menu is oblivious unconditionally.
 Corrected in this file and in `quixote/orientation.py`'s own statement of the
 argument, which carried the same wording.
 
-**2 — 2026-09-27, before anything is live. The calibration and fidelity
+**4 — 2026-09-27, before anything is live. The calibration and fidelity
 measurements, from ROADMAP 7.3's checks 1 and 2.**
+
+*(Numbered 4. It was written as a second "2" — the number was taken by the
+2026-09-25 threshold-scoping entry. Renumbered 2026-09-29 with the duplicate
+`## Amendments` header, and the heading check strengthened to catch a repeat
+rather than only a heading that precedes the first:
+`tests/test_code_state.py`.)*
 
 The draft registered the orientation arm and deferred the rest of the agent cell
 to this amendment. It is written now so the registration is **complete before the
@@ -353,3 +353,38 @@ refusals, and engagement, per run** — join check 3.
 power deficit. 7.0 measured replay and class as **indistinguishable at matched
 actual size** (+0.0003, straddling zero), so a difference here would be a fact
 about the agent, not about the certifiers.
+**5 — 2026-09-29, before anything is live. Which panel carries which cell, stated
+so the runner is not chosen by inference.**
+
+The file registered cells 1 and 2 as `s0` and `s3 at rho = 0` — the **simulated**
+panel's configurations — while "What this arm cannot show" said the ADR panel
+"contributes only the validity and placebo readings". Those are two different
+panels for the same two cells, and a reader had to guess which. The sentence is
+corrected above; this records what is meant and why.
+
+**Cells 1 and 2 run on the SIMULATED panel**, at `e_agent.py`'s registered
+configurations: `s0` (s = 0) and `s3` (s = 3), both at **`rho = 0`**, `K = 40`,
+`M = 50`, `T = 5,000`.
+
+**The ADR panel contributes NOTHING to the agent cell.** Not the validity reading,
+not the placebo. Two reasons, and either alone is sufficient:
+
+- **Its null is unknown.** Cell 1 is a validity cell: it asks whether the
+  false-certification rate exceeds nominal, which presupposes a known null. On a
+  real panel there is no such thing — whatever edge ADR does or does not contain is
+  not a quantity this project knows, so a rejection there cannot be called false.
+  On the simulated panel at `s0` the null is true **by construction**, which is the
+  only footing a validity claim has.
+- **Its features are correlated.** Cell 2 is a placebo: it needs a table that
+  carries **no information**, which `rho = 0` delivers by making the feature
+  covariance the identity — every correlation below the threshold, features
+  exchangeable, autocorrelations zero in expectation. ADR's features are
+  cross-correlated, so a table built on them says something, and a behavioural
+  difference there would be uninterpretable: neither priming nor information, but
+  both confounded.
+
+So ADR is the **pilot's** panel (`prereg/agent-pilot.md`, a harness shake-out with
+no verdict claim) and nothing more. The agent cell is **simulated for cells 1 and
+2, ETF for cell 3**, and `experiments/agent_cell.py` takes `--panel {s0,s3,etf}`
+with no ADR option, so the distinction is enforced by the runner rather than
+remembered.

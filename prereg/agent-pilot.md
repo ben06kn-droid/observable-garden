@@ -826,3 +826,41 @@ either format and says which runs it had to refuse.
 published number changes either way. The three ADR runs' recorded statuses stay on
 the record as what the defective code produced, marked not re-gradable, and are not
 quoted as outcomes.
+
+## Amendment — 2026-09-29, before it runs. A shake-out for the new backend and the two new arms
+
+**What runs: 2 runs of the orientation arm and 2 of the reasoned-pick arm, on
+`s0`, seat credential.** Four runs.
+
+**Purpose: harness integrity, and nothing else.** Two things are new and neither
+has been exercised by a model-backed run:
+
+- **the backend.** `experiments/agent_backend.py` was factored out of this
+  pilot's runner on 2026-09-29 so that `experiments/agent_cell.py` drives the same
+  session, adapter and prompt machinery rather than a second copy. The pilot's
+  `--dry-run` reproduces its old output through it, and the suite passes, but no
+  *model* has driven the factored path.
+- **the two arms.** `orientation` and `replay gate (reasoned pick)` have prompts,
+  tests and a table builder, and have never been run. The orientation arm in
+  particular delivers a **rendered table** into the prompt, which no pilot run has
+  ever carried.
+
+**It also exercises the simulated panel behind the grammar for the first time.**
+Every model-backed run so far has been on a real panel; `s0` through
+`Sandbox` plus the quixote grammar is a path only the dry run has taken.
+
+**Rule 5 applies, standing and unweakened: no number from these four runs enters
+a verdict, a rate, or any reading of the agent cell.** They are a check that the
+harness works end to end. In particular the orientation arm's *behaviour* here is
+not evidence about orientation — `prereg/agent-cell.md` cell 1 is `n = 20` and
+this is `n = 2`, which `prereg/README.md`'s low-n rule puts well below anything
+reportable.
+
+**What would stop the cell.** Any refusal outside the registered kinds; a run
+whose `run_config.json` lacks the delivered table's hash; a served model other
+than the pinned string; a self-check that comes back not replayable on a run that
+made moves. Each is a harness fault, and each is why these four runs happen before
+20 × 6 do.
+
+**Cost:** four runs against the $0.268 stored mean, so about **$1.07**, on the
+seat.
