@@ -155,27 +155,48 @@ def _stop_if_fired(sess: Session) -> bool:
 FAITHFUL_BUDGET = 24
 
 
+# The feature the `flip` is anchored on. A CONSTANT, and that matters: it is
+# measurable with respect to a sigma-field independent of the return-generating
+# randomness, which is `SCOPE.md`'s obliviousness condition. A feature chosen by
+# looking at the data would make the prelude data-dependent.
+FLIP_ANCHOR = 0
+
+
 def _faithful_prelude(sess: Session, trigger: Trigger) -> None:
-    """The content moves both faithful searchers take, in an order the harness
-    allows: `init`, `pick`, `extend_best`, `refine`, `flip`.
+    """The content moves both faithful searchers take: `init`, `pick`,
+    `extend_best`, `refine`, `flip`.
 
-    The order is not free. Under decision (b) a firing rule suspends content
-    moves, so `refine` and `flip` have to come before the run of swaps that drives
-    the failure count up — placed after it they were unreachable on every seed
-    tried. `pick` has to come before the support fills, since a pick at a full
-    support would leave the declared class.
+    The order is not free, for three separate reasons.
 
-    Both searchers take the SAME content moves, so the pair differs in exactly one
-    thing: the action its declared rule names.
+    Under decision (b) a firing rule suspends content moves, so `refine` and
+    `flip` have to come before the run of swaps that drives the failure count up —
+    placed after it they were unreachable on every seed tried. `pick` has to come
+    before the support fills, since a pick at a full support would leave the
+    declared class.
+
+    And the `flip` is anchored on a **constant** feature that a single-candidate
+    `pick` has just put into the support. This is not decoration. A `flip` names a
+    feature by index, so a flip on whatever the realized support happened to hold
+    is a move that **only applies to the realized data**: on a bootstrap replicate
+    the support after four moves rarely contains that index, the replay refuses the
+    logged move and truncates. Measured at the old construction: the flip was
+    refused in **98 of 100 replicates**, so the null was a distribution of searches
+    cut off at four steps while the realized statistic came from the whole search —
+    a null systematically weaker than the thing it prices, which would have made
+    rule 1a over-reject for reasons having nothing to do with the checks. Anchoring
+    the flip on a constant the pick guarantees present takes truncation to about
+    5%, and `run_draw` records the rate per run so the registered draws measure it.
     """
     sess.declare_budget(FAITHFUL_BUDGET)
     sess.declare_triggers([trigger])
     _advance(sess, Move("init"))
-    _advance(sess, Move("pick", statistic="autocorr_1", among=tuple(range(6))))
+    # single-candidate, so FLIP_ANCHOR is in the support on every replicate too.
+    # The MULTI-candidate form of `pick` — a statistic ranging over a set — is
+    # exercised by U1 and U1-twin, so both forms appear in the experiment.
+    _advance(sess, Move("pick", statistic="sharpe", among=(FLIP_ANCHOR,)))
     _advance(sess, Move("extend_best"))
     _advance(sess, Move("refine"))
-    if sess.support:
-        _advance(sess, Move("flip", feature=sess.support[0][0]))
+    _advance(sess, Move("flip", feature=FLIP_ANCHOR))
 
 
 def _swap_until_fired(sess: Session, limit: int = 12) -> bool:
@@ -456,12 +477,33 @@ MEMBERS = tuple(policies(0))
 assert set(DRAWS_FOR) == set(MEMBERS), "amendment 3 registers a count per policy"
 
 
-def _trigger_null(log, base: np.ndarray, ann: float, B: int, seed: int):
-    """The certifying null alone: trigger replay, `(p, realized score, engaged)`.
+def _trigger_null(log, base: np.ndarray, ann: float, B: int, seed: int,
+                  submitted: float | None = None):
+    """The certifying null alone: trigger replay.
 
-    Replicate for replicate this is `quixote.certify.three_nulls`' second null —
-    the same policy, the same resampling, the same RNG stream — with the other
-    two not computed. `tests/test_unfaithful_searchers.py` holds the two equal.
+    Returns `(p_procedure, procedure_score, p_submitted, engaged)`.
+
+    **Two statistics, one null** (amendment 5). The null is the declared
+    procedure's — the same policy, the same resampling, the same RNG stream — and
+    TWO realized statistics are compared against those same replicates:
+
+    - the **procedure score**, the declared procedure run on the realized data,
+      which is what the replay reaches and what **rule 1a reads**;
+    - the **submitted score**, what the session actually submitted, whose
+      rejection rate and per-run gap are **descriptive**.
+
+    They coincide whenever the search ended under its own declared rule, because
+    then the procedure stops where the session stopped. They differ for
+    `faithful-restart`, which declares no stop rule: its procedure runs on to the
+    budget under the fill while its submission was made earlier.
+
+    Comparing both against one set of replicates costs one extra comparison per
+    replicate and no extra bootstrap, and it keeps the two p-values on exactly the
+    same null rather than on two nulls that differ by resampling noise.
+
+    Replicate for replicate the procedure p is `quixote.certify.three_nulls`'
+    second null with the other two not computed;
+    `tests/test_unfaithful_searchers.py` holds the two equal.
     """
     policy = LoggedPolicy(log, CLS)
     base = np.asarray(base, dtype=float)
@@ -470,13 +512,27 @@ def _trigger_null(log, base: np.ndarray, ann: float, B: int, seed: int):
     rng = np.random.default_rng(seed)
     realized = policy.trace(base, ann)
     n_realized = realized.n_moves
-    hits, engaged = 0, 0
+    if submitted is None:
+        submitted = realized.score
+    hits, hits_sub, engaged, truncated = 0, 0, 0, 0
+    n_content = len([r for r in log.records
+                     if not r.move.is_meta and r.move.note != "rejected"])
     for _ in range(B):
         R = S0[stationary_bootstrap_indices(base.shape[0], L, rng), :]
         t = policy.trace(R, ann, meta_steps=n_realized)
         hits += int(t.score >= realized.score)
+        hits_sub += int(t.score >= submitted)
+        # A replicate that refused a logged move ends on "stop" with fewer steps
+        # than the log has content moves: the replay truncated rather than the
+        # rule firing. Counted so the arm's null can be read for what it is.
+        truncated += int(t.n_moves < n_content and
+                         bool(t.moves) and t.moves[-1] == "stop")
+        # amendment 5: replicates that ran PAST THE LOGGED LENGTH, so took at
+        # least one fill step. Before the fix this counted only the
+        # `meta_steps`-driven case and read zero for a searcher with no stop rule.
         engaged += int(bool(t.filled))
-    return (1 + hits) / (B + 1), float(realized.score), engaged
+    return ((1 + hits) / (B + 1), float(realized.score),
+            (1 + hits_sub) / (B + 1), engaged, truncated)
 
 
 # -- one draw -----------------------------------------------------------------
@@ -550,7 +606,15 @@ def run_draw(cell: str, seed: int, B: int, only: str | None = None,
         # that one. `three_nulls` would compute the fixed-sequence and policy
         # nulls too, tripling the only expensive part of the draw for numbers no
         # rule here reads.
-        p, realized, n_engaged = _trigger_null(log, base, ann, B, seed)
+        # The SUBMITTED score is the best the session itself reached; the
+        # PROCEDURE score is what the declared procedure reaches on the realized
+        # data. Equal for every policy that ends on its own declared rule; they
+        # differ for `faithful-restart`, which declares no stop rule (amendment 4
+        # item 1, amendment 5).
+        submitted = max([r.score_after for r in log.records
+                         if r.score_after is not None], default=float("-inf"))
+        p, realized, p_submitted, n_engaged, n_trunc = _trigger_null(
+            log, base, ann, B, seed, submitted=float(submitted))
 
         # and the check-gated verdict, recorded BESIDE the p rather than in
         # place of it
@@ -559,12 +623,6 @@ def run_draw(cell: str, seed: int, B: int, only: str | None = None,
                  "UNDECIDABLE" if not commitment.agrees else
                  "CERTIFIED" if p < 0.05 else "FAIL")
 
-        # The SUBMITTED score is the best the session itself reached; `realized`
-        # is what the replay prices. They are equal for every policy that ends on
-        # its own declared rule, and they DIFFER for `faithful-restart`, which
-        # declares no stop rule — see amendment 4, item (1).
-        submitted = max([r.score_after for r in log.records
-                         if r.score_after is not None], default=float("-inf"))
         # Amendment 4, item (4b): the fill's score on the REALIZED data under the
         # same declared triggers — a pure greedy walk from step 0, no logged move
         # used. What the searcher's own moves bought over taking the fill instead.
@@ -572,9 +630,24 @@ def run_draw(cell: str, seed: int, B: int, only: str | None = None,
 
         out[name] = {
             "arm": arm,
+            # rule 1a reads this one: the declared procedure's score against its
+            # own null
             "p_replay": p,
-            "realized_score": realized,
+            "procedure_score": realized,
+            "realized_score": realized,          # kept: the prior field name
             "submitted_score": float(submitted),
+            # descriptive (amendment 5): the same null, the submitted statistic
+            "p_submitted": p_submitted,
+            "procedure_minus_submitted": realized - float(submitted),
+            # STRUCTURAL, not a score comparison: did the log end on a meta
+            # `stop`? A searcher that declares no stop rule ends by submitting,
+            # and its two statistics can still coincide when the extra procedure
+            # steps fail to improve — so equality of scores is not the test.
+            "ended_under_its_rule": bool(
+                any(r.move.kind == "stop" for r in log.records)),
+            "declares_stop_rule": any(
+                (d.get("action") if isinstance(d, dict) else None) == "stop"
+                for d in (log.declared_trigger_records or ())),
             "p_class": p_class_of(realized),
             "p_class_submitted": p_class_of(submitted),
             # amendment 4, item (4a): descriptive, no rule
@@ -591,6 +664,9 @@ def run_draw(cell: str, seed: int, B: int, only: str | None = None,
             "n_moves": log.n_moves,
             "n_candidates": log.total_candidates(),
             "fill_engaged": n_engaged,
+            # replicates whose replay refused a logged move and stopped short
+            "replicates_truncated": n_trunc,
+            "truncation_rate": n_trunc / B,
             "seconds": time.time() - t0,
         }
     out["_draw"]["seconds"] = time.time() - t_draw

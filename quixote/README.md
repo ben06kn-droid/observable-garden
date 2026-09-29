@@ -319,3 +319,52 @@ requires importing quixote.
 `prereg/bracketed-verdicts.md`, `prereg/bits-of-selection.md` and
 `prereg/twin-calibration.md` for the fields the verdict carries.
 `tests/test_quixote_milestones.py` for what is actually guaranteed.
+
+---
+
+## Registered 2026-09-28, to implement after 7.3 scripted and before the agent cell
+
+Four changes, registered here and in `ROADMAP.md` before the run that motivated
+them, so the order is checkable. **None is implemented yet**: 7.3 scripted launches
+on the code as it stands, and these land before 6.5's agent cell.
+
+**1. `CERTIFIED` attaches to the submitted specification.** A verdict currently
+prices what the *replay* reaches — the declared procedure on the realized data —
+while a reader quotes what the searcher *submitted*. These coincide whenever the
+search ended under its own declared rule and they do not otherwise, so:
+
+- `CERTIFIED` attaches to **the submitted specification**, and prices **its score
+  against the declared procedure's null**. One null, the statistic the reader
+  cares about.
+- **The procedure-level line is reported beside it**, not instead of it, so the
+  quantity whose null the replay actually is stays visible.
+- **The verdict states when a declaration has no stop rule.** Such a procedure has
+  no end of its own: its replay runs to the declared budget under the fill, so the
+  procedure line prices a longer search than the submission, and a reader must be
+  told that rather than left to infer it. `prereg/unfaithful-searchers.md`
+  amendment 5 item (1) measures the case.
+
+**2. Co-firing stop and restart rules resolve by declaration order.** Two rules
+sharing a predicate fire together, and today which one the log took is a decision
+of the *policy* — so the committed rule set does not determine the action and the
+commitment replay rightly refuses the run. Making the resolution **the order the
+rules were declared in** turns it into a function of the declaration, which a
+replay can reproduce. Until then a searcher declaring both is unreplayable by
+construction, which is why 7.3's faithful arm needs two searchers rather than one
+(`prereg/unfaithful-searchers.md` amendment 3 item 3).
+
+**3. A close-time self-check.** At session close, re-execute the log on the
+realized data and **record the result in the log**. The defects found on
+2026-09-28 — a replay indexing shift, a step bound, a `flip` anchored on the
+realized support — were all invisible until something replayed a log much later. A
+check at close catches them while the session that produced them still exists, and
+recording it in the log means a stored run carries its own verdict on whether it
+can be replayed.
+
+**4. A test that every accepted move carries every parameter its re-execution
+needs.** The agent pilot's logs recorded `move.kind` without parameters, so a
+`flip` without its feature and a `pick` without its candidate list are different
+moves on re-execution — and three ADR runs could not be re-graded at all
+(`prereg/agent-pilot.md`, the 2026-09-28 re-grade). The serializer is fixed; the
+test is what keeps it fixed, and it belongs on the accepted-move path rather than
+on one writer of one format.

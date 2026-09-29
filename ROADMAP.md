@@ -1330,3 +1330,25 @@ checkable. The reason is that ROADMAP 7.4's **readouts 5 and 6** — decision
 behaviour, and fidelity rate by move type — are **empty without picks**, and the
 pilot produced none when picks were merely permitted. The arm carries 7.3's
 conditional: a fidelity readout from any other arm says why.
+**Four quixote changes registered 2026-09-28, to implement after 7.3 scripted and
+before 6.5's agent cell.** Written in full in `quixote/README.md`; listed here so
+the order is checkable and nothing lands silently. **None is implemented yet** —
+7.3 scripted launches on the code as it stands.
+
+1. **`CERTIFIED` attaches to the submitted specification**, pricing its score
+   against the declared procedure's null, with the **procedure-level line reported
+   beside it**, and the verdict **stating when a declaration has no stop rule** (a
+   procedure with no end of its own replays to the budget under the fill, so it
+   prices a longer search than the submission).
+2. **Co-firing stop and restart rules resolve by declaration order**, so which
+   action fired is a function of the declaration rather than of the policy — today
+   it is the latter, which is why 7.3's faithful arm needs two searchers.
+3. **A close-time self-check** that re-executes the log on the realized data and
+   records the result in the log, so a replay defect is caught while the session
+   exists and a stored run carries its own replayability verdict.
+4. **A test that every accepted move carries every parameter its re-execution
+   needs**, on the accepted-move path rather than on one serializer — the gap that
+   left three ADR pilot runs un-re-gradable.
+
+The motivating measurements are in `prereg/unfaithful-searchers.md` amendments 3–5
+and `prereg/agent-pilot.md`'s 2026-09-28 re-grade.

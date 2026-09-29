@@ -762,3 +762,103 @@ certifier is close to free, which is why rule 4 can have both tiers on every run
 rather than on a subsample. The arm change *lowered* the total: `faithful-stop`'s
 prelude drives its failure count up sooner, so its rule fires earlier and its log
 is shorter. **Both rows remain under the threshold; no further lever is pulled.**
+
+## Amendment 5 — 2026-09-28, the last amendment before launch
+
+### (1) Two statistics per run, against one null
+
+Recorded per run and compared against **the same bootstrap replicates**:
+
+- the **procedure score** — the declared procedure run on the realized data, which
+  is what the replay reaches;
+- the **submitted score** — the best the session itself reached, which is what a
+  reader would call the result.
+
+**Rule 1a reads the procedure score's p-value.** That is the quantity whose null
+the replay actually is: the replicates are the declared procedure on resampled
+data, so the statistic they calibrate is the declared procedure's.
+
+**The submitted score's rejection rate, and the per-run gap, are descriptive.** No
+threshold, no branch. They are recorded because a gate that certifies a *procedure*
+while a reader quotes a *submission* is a gap worth measuring rather than
+assuming away.
+
+Both p-values come from **one** set of replicates — one extra comparison per
+replicate, no extra bootstrap — so they differ only in the statistic and never in
+resampling noise.
+
+**When they coincide.** Whenever the search ended under its own declared rule, the
+procedure stops where the session stopped and the two are equal by construction.
+Measured: equal to 1e-16 for `faithful-stop`, U1, U2, U3, U3b and U4 on every seed
+checked.
+
+**`faithful-restart` is the exception, and the precise statement is narrower than
+"they differ".** It declares no stop rule, so **its procedure is longer than its
+submission on every run, by design** — the replay runs on under the fill to the
+24-step budget, and engages the fill on roughly **90% of replicates**. Whether the
+two *scores* differ is then an empirical matter: the extra steps only move the best
+score when they improve on it. On seeds 990000–990003 under this amendment's
+prelude the two **coincided on all four**; under the prelude amendment 4 registered
+they differed on 2 of 4, by +0.1224 and +0.1310. **So the gap is recorded per run
+rather than predicted**, and the pre-registration does not claim the two always
+differ for this searcher — only that the procedure is always longer.
+
+Two structural fields are recorded beside them, so the reader is not left inferring
+the reason from a score comparison: **`ended_under_its_rule`** (does the log end on
+a meta `stop`?) and **`declares_stop_rule`** (does its declaration contain a stop
+action at all?).
+
+### (2) `fill_engaged` is fixed to mean what it says
+
+It counted only the `meta_steps`-driven fill, so it read **0** for a searcher whose
+replay ran past its logged length onto the fill — the precise case amendment 4
+item (1) had to describe in prose because the counter contradicted it. It now
+counts **replicates that took at least one fill step**, which is what "ran past the
+logged length" means: every route to the fill sets it, whether the step index
+passed the realized length or the logged moves simply ran out.
+
+Measured on `faithful-restart`, seed 990000 at B = 200: **5 of 200 before the fix,
+181 of 200 after.** The earlier figure was the defect, not a finding about the
+fill.
+
+### (3) A defect in the faithful prelude that would have broken rule 1a
+
+Found while checking the new engagement counter, and **fixed before launch**.
+
+The prelude's `flip` named the feature **the realized support happened to hold**.
+A `flip` names a feature by index, so such a move applies *only to the realized
+data*: on a bootstrap replicate the support after four moves rarely contains that
+index, so the replay **refuses the logged move and truncates**.
+
+**Measured at the old construction: the flip was refused in 98 of 100
+replicates.** The null was therefore a distribution of searches **cut off at four
+steps**, while the realized statistic came from the whole search — a null
+systematically weaker than the thing it prices. **Rule 1a would have over-rejected
+for reasons having nothing to do with the checks**, and rule 1a is the rule every
+other reading in this experiment is conditioned on.
+
+**The fix.** The `flip` is anchored on a **constant** feature, `FLIP_ANCHOR = 0`,
+which a **single-candidate `pick`** places in the support immediately after `init`.
+A constant is measurable with respect to a σ-field independent of the
+return-generating randomness, which is `SCOPE.md`'s obliviousness condition; a
+feature chosen by looking at the data would not be. The prelude is therefore
+`init`, `pick(among=(0,))`, `extend_best`, `refine`, `flip(feature=0)`, then
+`swap_worst` until the rule fires.
+
+**Residual truncation is measured, not assumed away: 7–14% of replicates** on
+seeds 990000–990003, against 98% before. The residue is the `pick` being refused on
+a replicate whose support already contains feature 0. **`run_draw` records
+`replicates_truncated` and `truncation_rate` per run**, so the registered draws
+measure it and rule 1a is read with the rate beside it rather than on the
+assumption that it is small.
+
+**What this costs the coverage claim.** The faithful `pick` is now
+**single-candidate**. The multi-candidate form — a statistic ranging over a set —
+is exercised by **U1 and U1-twin**, which pick by `autocorr_1` among six features,
+so both forms of `pick` appear in the experiment; what the *faithful arm* alone
+exercises is the single-candidate form. Amendment 3's coverage table still holds for
+move **kinds**, which is what it claimed, and this narrowing is stated so the claim
+is not read as more than that.
+
+Both faithful searchers pass INTEGRITY and COMMITMENT on 8 of 8 policy-runs under
+the amended prelude, and the arm still covers all eight move kinds.

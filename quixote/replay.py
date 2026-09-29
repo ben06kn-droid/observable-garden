@@ -337,7 +337,13 @@ class LoggedPolicy:
                 continue
 
             if filling or cursor >= len(moves):
-                trace.filled = trace.filled or filling
+                # Either branch means this step took the FILL rather than a move
+                # the log holds, which is what "ran past the logged length" means.
+                # Setting this only on `filling` under-reported every searcher that
+                # declares no stop rule: its replay runs past its log to the budget
+                # on the fill, and the engagement counter read zero while most of
+                # its steps were fill.
+                trace.filled = True
                 cands = MetaAdaptive._grammar(list(support), K, score_list,
                                               allow=lambda ns: g.contains(tuple(ns)))
                 chosen = max(cands) if cands else None

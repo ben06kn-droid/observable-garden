@@ -185,6 +185,65 @@ def test_U2_submits_the_class_maximum_exactly():
         assert got == pytest.approx(want, abs=1e-12), (seed, got, want)
 
 
+def test_two_statistics_are_priced_against_one_null():
+    """Amendment 5, item (1). Rule 1a reads the PROCEDURE score's p; the submitted
+    score's p is descriptive. Both come from the same replicates, so a searcher
+    that ended under its rule has them exactly equal — not merely close, which is
+    what two separate bootstraps would give."""
+    row = _draw()
+    for name in us.MEMBERS:
+        r = row[name]
+        assert r["procedure_score"] == r["realized_score"], name
+        if r["ended_under_its_rule"]:
+            assert r["procedure_score"] == pytest.approx(
+                r["submitted_score"], abs=1e-12), name
+            assert r["p_replay"] == r["p_submitted"], name
+        assert r["procedure_minus_submitted"] == pytest.approx(
+            r["procedure_score"] - r["submitted_score"]), name
+
+
+def test_ended_under_its_rule_is_structural_not_a_score_comparison():
+    """Amendment 5: `faithful-restart` declares no stop rule and ends by
+    submitting, and its two statistics can still coincide when the extra procedure
+    steps fail to improve. So the flag must read the LOG, not the scores — an
+    earlier version compared scores and called it 'ended under its rule'."""
+    row = _draw()
+    assert row["faithful-restart"]["ended_under_its_rule"] is False
+    assert row["faithful-restart"]["declares_stop_rule"] is False
+    assert row["faithful-stop"]["ended_under_its_rule"] is True
+    assert row["faithful-stop"]["declares_stop_rule"] is True
+
+
+def test_the_faithful_prelude_does_not_truncate_its_own_replicates():
+    """Amendment 5, item (3), the defect that would have broken rule 1a.
+
+    The prelude's `flip` used to name whatever feature the realized support held,
+    which is a move that applies only to the realized data: on a replicate the
+    support rarely contains that index, so the replay refused the logged move and
+    the null became a distribution of searches cut off at four steps — weaker than
+    the statistic it prices. It was refused in 98 of 100 replicates.
+
+    Anchoring the flip on a constant that a single-candidate `pick` places in the
+    support takes truncation to well under half. The bound here is deliberately
+    loose: what must never return is a null dominated by truncation.
+    """
+    row = us.run_draw("s0", us.SEED0_SMOKE, B=100)
+    for name in ("faithful-restart", "faithful-stop"):
+        assert row[name]["truncation_rate"] < 0.5, (name, row[name])
+        assert row[name]["replicates_truncated"] == pytest.approx(
+            row[name]["truncation_rate"] * 100)
+
+
+def test_the_fill_counter_sees_a_searcher_that_runs_past_its_log():
+    """Amendment 5, item (2). `faithful-restart` declares no stop rule, so its
+    replicates run past the logged length onto the fill. The counter read 0 for
+    exactly this case before the fix, which contradicted the prose describing it."""
+    row = us.run_draw("s0", us.SEED0_SMOKE, B=100)
+    assert row["faithful-restart"]["fill_engaged"] > 50
+    # and the anchor feature is a constant, not read off the data
+    assert us.FLIP_ANCHOR == 0
+
+
 def test_the_two_descriptive_readouts_are_recorded_per_run():
     """Amendment 4, item (4): both readouts, on every policy, with no gate. They
     are descriptive, so the test checks they EXIST and are on the scales claimed,
@@ -308,7 +367,8 @@ def test_the_single_null_equals_three_nulls_trigger_replicate_for_replicate():
     us.policies(us.SEED0_SMOKE)["faithful-restart"][0](sess)
     base = sb.base_feature_columns()
 
-    p, realized, _ = us._trigger_null(sess.log, base, ann, B=25, seed=3)
+    p, realized, _p_sub, _eng, _tr = us._trigger_null(
+        sess.log, base, ann, B=25, seed=3)
     nulls, _ = three_nulls(sess.log, us.CLS, base, ann, B=25, seed=3)
     expected = (1 + np.sum(np.asarray(nulls.trigger) >= nulls.realized_score)) / 26
     assert p == pytest.approx(expected)
