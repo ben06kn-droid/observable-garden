@@ -461,6 +461,33 @@ built, not after:**
    context per presentation) or continues a session. These change what is being
    measured, so they are registered rather than chosen at implementation time.
 
+**Settled 2026-09-29, with amendment 8: what the information set for a decision
+IS.**
+
+> **The information set for decision `k` is the prompt plus `shown[0..k-1]`.**
+
+A decision's context is everything the agent had received **before** it made that
+decision, and nothing it received as a consequence of making it.
+
+**A `pick`'s own `shown` is post-execution.** The adapter computes the candidate
+statistics before calling `propose`, but it renders them in the **tool result** —
+which the agent receives only **after** the pick has executed. So `shown[k]` did
+not inform decision `k`; it informs decision `k + 1`, and belongs to that
+decision's context. The same holds for every move kind: `_shown_for` reads the
+state before the move and the payload is returned after it.
+
+Getting this backwards would inflate measured fidelity in the one direction that
+looks like success: re-presenting decision `k` with `shown[k]` in view hands the
+agent the answer to the question it is being asked, since the candidate statistics
+are exactly what the declared rule ranks by. A rule would then "predict" a choice
+the agent could read off the context, and the rate would approach 1 for reasons
+having nothing to do with the agent.
+
+**Still open, and belonging to the tool rather than to this definition:** what
+"resampled numbers" resamples — the candidate values only, or the whole
+information set — and whether re-presentation is **stateless** (a fresh context per
+presentation) or continues a session. Both are registered before the tool is built.
+
 **Consequence, stated plainly: check 2 cannot be read from runs made today.** The
 reasoned-pick arm may still run — its behavioural readouts under check 3 do not
 depend on `shown` — but **any fidelity rate would be computed from a log that did
@@ -523,3 +550,48 @@ there were none, so nothing already measured moves.
 is no longer `xfail`.** Amendment 7's two open questions — what "resampled numbers"
 resamples, and whether re-presentation is stateless — **stay open**, and belong to
 the tool, which is built after the cell.
+
+**9 — 2026-09-29, before the shake-out. Cell 1's validity rule covers the
+reasoned-pick arm on `s0`.**
+
+Cell 1 registered its validity rule for the **orientation arm against the
+replay-gate arm**. It now applies, unchanged in form, to the **reasoned-pick arm
+on `s0`** as well.
+
+**Why it has to.** Amendment 8 made a `pick` render **every candidate's statistic**
+into the payload, and the reasoned-pick arm is **the only arm that reliably
+picks** — its prompt asks for one, which is why it exists
+(`prereg/AGENT_PROMPTS_REAL.md` amendment 3), and the pilot recorded **0 picks in
+5 runs** when picks were merely permitted. So that arm is the one where the agent
+sees the most of the data per run, by a wide margin, and it is the arm most able to
+convert what it sees into a false certification. An arm whose data exposure was
+increased by an amendment cannot inherit a validity reading taken on arms that
+never picked.
+
+**The rule, stated in full rather than by reference:**
+
+> **The reasoned-pick arm on `s0` fails high iff the LOWER end of the Wilson 95%
+> interval for its rejection rate exceeds nominal**, at α = 0.05 and α = 0.01.
+> - *Predicted: unchanged.* Revealing a candidate's statistic after the move is
+>   information about features, not about returns, and `s0`'s features are
+>   independent of its returns by construction.
+> - *If liberal:* **the arm is withdrawn**, and the **adapter is audited for a
+>   returns leak in the rendered payload before anything else is concluded** — the
+>   same order cell 1 uses, and for the same reason: on `s0` a leak is the only way
+>   this outcome can happen. **No behavioural readout from a liberal arm is
+>   reported as a finding**, which includes the fidelity rate check 2 takes from
+>   this arm.
+> - *If conservative:* reported, and compared with the replay-gate arm's rate on
+>   the same panel.
+
+**Detectability at the registered n = 20, computed and stated so a pass is not
+read as a calibration claim.** The rule fires at **3 or more rejections of 20** at
+α = 0.05 (15%; Wilson [0.0524, 0.3604]) and at **2 or more of 20** at α = 0.01
+(10%; [0.0279, 0.3010]). At 2 of 20 and α = 0.05 the interval is [0.0279, 0.3010]
+and the rule does **not** fire. **This detects gross leakage and nothing finer.**
+The scripted arms of `prereg/unfaithful-searchers.md` carry the calibration claim;
+this rules out a hole.
+
+**What it does not extend to.** The orientation arm's own rule is unchanged, and
+nothing here is read on `s3`, where the null is not true and a rejection rate is
+not a size.
