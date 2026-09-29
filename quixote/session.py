@@ -187,6 +187,26 @@ class Session:
                 out.append((trig, float(value)))
         return out
 
+    def resolved_trigger(self):
+        """The trigger a meta move must act on: **the first that fires, in
+        DECLARATION ORDER**. `None` when nothing fires.
+
+        Registered 2026-09-28, implemented after 7.3 scripted. Two rules sharing a
+        predicate fire together, and before this the choice between them lived in
+        the POLICY — so the committed rule set did not determine the action and the
+        commitment replay rightly refused the run. `quixote/replay.py` has always
+        taken the first firing trigger in the order it holds them; making the
+        session resolve the same way turns the tie-break into a function of the
+        declaration, which a replay can reproduce.
+
+        `active_trigger_records` preserves declaration order (it is keyed by action
+        and built by iterating the declaration), and the replay iterates
+        `self.triggers` in the same order, so the two agree by construction rather
+        than by coincidence. `tests/test_quixote_session.py` holds them equal.
+        """
+        fired = self.fired_triggers()
+        return fired[0][0] if fired else None
+
     def declare_budget(self, budget: int) -> None:
         """The step budget of a meta-adaptive session. Declared before any
         evaluation: a budget chosen after seeing results is itself a meta
@@ -347,6 +367,7 @@ class Session:
         if self._pending is not None:
             raise ValueError("resolve the pending proposal before restarting")
         self._require_declared(trigger, "restart")
+        self._refuse_restart_under_a_firing_stop(trigger)
         rank = self.n_restarts + 1
         new_support, new_score, n_cand = self.grammar.anchor(rank, statistic)
         if new_support is None:
@@ -365,6 +386,39 @@ class Session:
             trigger_value=trigger_value, trigger_params=params,
             trigger_stamped_at=stamped_at))
         return True
+
+    def _refuse_restart_under_a_firing_stop(self, trigger) -> None:
+        """A restart while a STOP rule is firing is refused.
+
+        Registered 2026-09-29, implemented after 7.3 scripted. A firing stop rule
+        means stop; continuing past it is a CHANGE OF RULE, and must be declared as
+        one. Before this a searcher could restart straight through a firing stop
+        and the only trace was that the committed-rule replay later disagreed --
+        which is how the ETF pilot's run 2 came to read UNDECIDABLE
+        (`prereg/agent-pilot.md`, the 2026-09-28 re-grade).
+
+        The legitimate path stays open and is named in the message: call
+        `change_trigger` to a rule that does not fire, on the record, then restart.
+        A change that lifts the stop makes it stop firing, so no history is
+        inspected here -- the condition is simply whether a stop rule fires NOW.
+
+        Resolution is by DECLARATION ORDER: it is the first firing rule that
+        decides, so a stop declared before the restart rule wins the tie.
+        """
+        if not self.log.declared_trigger_records:
+            return                       # the pre-amendment path, left alone
+        resolved = self.resolved_trigger()
+        if resolved is None or resolved.action != "stop":
+            return
+        if isinstance(trigger, Trigger) and trigger.as_record() == resolved.as_record():
+            return                       # restarting on the stop rule itself is the
+            # caller's own confusion, caught by _require_declared's action check
+        raise ValueError(
+            f"restart refused: the declared stop rule {resolved.name!r} is firing, "
+            "and it was declared before the rule this restart names. A firing stop "
+            "rule means stop; continuing past it is a change of rule and has to be "
+            "declared as one. Call change_trigger to a rule that does not fire -- "
+            "which is logged and priced -- and then restart.")
 
     def _require_declared(self, trigger, kind: str) -> None:
         """A meta move may only fire a trigger that was declared up front.
@@ -390,6 +444,44 @@ class Session:
         what the search absorbed, and this is the stated side of that."""
         self.log.prediction = {"mean": float(mean), "sd": float(sd),
                                "note": note, "timestamp": time.monotonic()}
+
+    def close(self) -> dict:
+        """Re-execute this log on the realized data and record the result IN the
+        log. Idempotent: calling it twice recomputes and overwrites, so a caller
+        cannot accumulate stale verdicts.
+
+        This is the close-time self-check. It runs the same integrity comparison
+        `quixote.replay` runs, on the basis the session itself searched, at the
+        moment the session ends -- so a log that cannot be re-executed says so
+        while the run that produced it still exists, instead of surfacing as an
+        UNDECIDABLE verdict weeks later with nothing left to diagnose it with.
+
+        The result is recorded whatever it says. A failing self-check does not
+        raise: refusing to close would destroy the very log a reader needs.
+        """
+        from quixote.replay import integrity_check
+
+        try:
+            chk = integrity_check(self.log, self.grammar.spec_class,
+                                  self.grammar.base, self.grammar.annualization,
+                                  score_fn=self.grammar._score_fn)
+            out = {
+                "replayable": bool(chk.agrees),
+                "check": chk.check,
+                "basis": chk.basis,
+                "realized_support": list(chk.realized_support),
+                "replayed_support": list(chk.replayed_support),
+                "realized_score": float(chk.realized_score),
+                "replayed_score": float(chk.replayed_score),
+                "reason": chk.reason(),
+                "error": None,
+            }
+        except Exception as exc:                 # noqa: BLE001 - recorded, not raised
+            out = {"replayable": False, "check": "integrity", "basis": None,
+                   "reason": f"the self-check itself failed: {exc!r}",
+                   "error": repr(exc)}
+        self.log.self_check = out
+        return out
 
     def submission(self) -> tuple[Support, float]:
         """The best support seen and its score. For a search that only ever

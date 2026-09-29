@@ -86,7 +86,12 @@ def test_noise_is_not_certified_and_a_real_signal_can_be():
 def test_every_verdict_that_used_the_fill_carries_its_measured_direction():
     sess, cls, base, ann, _, _ = _run(7, bar=0.3, s=0)
     v = certify(sess.log, cls, base, ann, alpha=0.05, B=300, seed=4)
-    note = [r for r in v.reasons if "fill" in r.lower()]
+    # The FILL note specifically. Other reasons mention the fill in passing -- the
+    # no-stop-rule notice says the procedure replays to its budget under it -- so
+    # the note is selected by what only it carries, not by the word "fill".
+    note = [r for r in v.reasons
+            if "replicates" in r and ("never used" in r or "of the replay" in r
+                                      or "LIBERAL" in r or "engaged" in r)]
     assert note, "a verdict must say what the fill did"
     if v.fill_engaged:
         text = note[0]
@@ -122,3 +127,66 @@ def test_a_run_whose_replay_disagrees_with_itself_is_not_priced():
     v = certify(sess.log, cls, base, ann, alpha=0.05, B=50, seed=0)
     assert v.status == "UNDECIDABLE"
     assert v.p_certifying is None and "not priced" in " ".join(v.reasons).lower()
+
+
+# -- pre-agent-cell item 1: CERTIFIED attaches to the submitted specification --
+
+def test_certified_attaches_to_the_submission_with_the_procedure_line_beside_it():
+    """Registered 2026-09-28 in `quixote/README.md`, implemented after 7.3 scripted.
+
+    The verdict used to price what the REPLAY reaches — the declared procedure on
+    the realized data — while a reader quotes what the searcher SUBMITTED. Those
+    coincide whenever the search ended under its own declared rule and not
+    otherwise, so `p_certifying` is now the submitted specification's p-value and
+    the procedure's own is reported beside it as `p_procedure`.
+    """
+    sess, cls, base, ann, _, _ = _run(7, bar=0.3, s=0)
+    v = certify(sess.log, cls, base, ann, alpha=0.05, B=200, seed=4)
+    assert v.p_certifying is not None and v.p_procedure is not None
+    assert v.submitted_score is not None
+    # the status follows the SUBMITTED p, not the procedure's
+    assert v.status == ("CERTIFIED" if v.p_certifying < v.alpha else "FAIL")
+    # both are priced against the same null, so both are valid p-values
+    for p in (v.p_certifying, v.p_procedure):
+        assert 0.0 < p <= 1.0
+    assert any("SUBMITTED specification" in r for r in v.reasons)
+
+
+def test_a_declaration_with_no_stop_rule_is_named_in_the_verdict():
+    """The same item's third part. A procedure with no stop rule has no end of its
+    own: its replay runs to the declared budget under the fill, so it prices a
+    LONGER search than the submission. A reader must be told that rather than left
+    to infer it from two p-values that disagree."""
+    sess, cls, base, ann, _, _ = _run(7, bar=0.3, s=0)
+    v = certify(sess.log, cls, base, ann, alpha=0.05, B=200, seed=4)
+    assert v.declares_stop_rule is False, "this fixture declares no stop rule"
+    assert any("NO STOP RULE" in r for r in v.reasons)
+    # and the notice is absent when a stop rule IS declared
+    from quixote.grammar import Move
+    from quixote.session import Session, TriggerFired
+    from quixote.triggers import Trigger
+    from environments.sandbox import Sandbox
+    sess2, cls2, base2, ann2, data2, cfg2 = _run(7, bar=0.3, s=0)
+    sb2 = Sandbox(data2, periods_per_year=cfg2.periods_per_year)
+    s2 = Session.on_sandbox(sb2, cls2, name_prefix="stoprule")
+    s2.declare_triggers([Trigger("failures_at_least", 2.0, "stop")])
+    for mv in (Move("init"), Move("extend_best"), Move("extend_best")):
+        try:
+            _s, _sc, n = s2.propose(mv)
+        except (TriggerFired, ValueError):
+            break
+        s2.accept() if n else s2.cancel()
+    v2 = certify(s2.log, cls2, base2, ann2, alpha=0.05, B=100, seed=5)
+    assert v2.declares_stop_rule is True
+    assert not any("NO STOP RULE" in r for r in v2.reasons)
+
+
+def test_the_verdict_block_carries_the_hand_over_share():
+    """Registered 2026-09-29: a per-run line. The fill share says how often the
+    null left the log; the hand-over share says how often it had no choice, which
+    is a property of the searcher's own moves and changes how the null reads."""
+    sess, cls, base, ann, _, _ = _run(7, bar=0.3, s=0)
+    v = certify(sess.log, cls, base, ann, alpha=0.05, B=200, seed=4)
+    assert v.handover_replicates is not None
+    assert 0 <= v.handover_replicates <= v.fill_replicates
+    assert v.handover_share == v.handover_replicates / v.fill_replicates

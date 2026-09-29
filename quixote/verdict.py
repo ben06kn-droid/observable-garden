@@ -49,11 +49,23 @@ class QuixoteVerdict:
 
     # -- the certifying null (7.2 part two; the null 7.1 selected) ---------
     certifying_null: str | None = None
+    # CERTIFIED attaches to the SUBMITTED specification: `p_certifying` prices the
+    # submitted score against the declared procedure's null. The procedure's own
+    # statistic is reported beside it and never in place of it, because the two
+    # coincide only when the search ended under its own declared rule.
     p_certifying: float | None = None
+    p_procedure: float | None = None             # the procedure line, beside it
     p_policy: float | None = None                # exact for a scripted policy
-    realized_score: float | None = None
+    realized_score: float | None = None          # the procedure's score
+    submitted_score: float | None = None         # what the session submitted
+    declares_stop_rule: bool | None = None
     fill_engaged: int | None = None              # replicates that used the fill
     fill_replicates: int | None = None
+    # Replicates where a logged move was inapplicable and the fill took over for
+    # the remainder. Reported per run beside the fill share, because the two mean
+    # different things: the fill share says how often the null left the log, and
+    # this says how often it had no choice.
+    handover_replicates: int | None = None
 
     # -- local-max and fidelity-driven pricing (quixote/pricing.py) ---------
     # Empty unless a flag is on, and a flag being on makes the verdict
@@ -87,6 +99,12 @@ class QuixoteVerdict:
         if self.fill_engaged is None or not self.fill_replicates:
             return None
         return self.fill_engaged / self.fill_replicates
+
+    @property
+    def handover_share(self) -> float | None:
+        if self.handover_replicates is None or not self.fill_replicates:
+            return None
+        return self.handover_replicates / self.fill_replicates
 
     def standard_reasons(self) -> list[str]:
         out = list(self.reasons)

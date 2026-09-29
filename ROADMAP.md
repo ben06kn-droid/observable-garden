@@ -1391,3 +1391,6 @@ and `prereg/agent-pilot.md`'s 2026-09-28 re-grade.
    divergence — found only when the committed-rule replay disagrees, as in the ETF
    pilot's run 2 — into a refusal at the moment it happens, while leaving the
    legitimate path open: change the rule on the record, then restart.
+
+
+**Status 2026-09-29: all five are IMPLEMENTED and tested.** Item 1 in `quixote/certify.py` and `quixote/verdict.py` (`p_certifying` is the submitted specification, `p_procedure` beside it, `declares_stop_rule` and the no-stop-rule notice), tested in `tests/test_quixote_certify.py`. Items 2, 3 and 5 in `quixote/session.py` (`resolved_trigger`, `close`, `_refuse_restart_under_a_firing_stop`) and `quixote/log.py` (`self_check`), tested in `tests/test_pre_agent_cell.py`. Item 4 in `tests/test_move_completeness.py`, on the accepted-move path. The verdict block also carries the hand-over share as a per-run line. **The agent cell does not start until `prereg/agent-cell.md` has had its full read, and nothing runs on the seat before that.**

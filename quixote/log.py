@@ -86,6 +86,16 @@ class SessionLog:
     first_evaluation_at: float | None = None
     # the step budget a meta-adaptive session runs under; None for a plain search
     budget: int | None = None
+    # The close-time self-check (registered 2026-09-28, implemented after 7.3
+    # scripted): re-executing this log on the realized data at the moment the
+    # session closes, recorded here so a stored run carries its own verdict on
+    # whether it can be replayed. None until `Session.close()` runs.
+    #
+    # Every replay defect found on 2026-09-28 -- an indexing shift, a step bound, a
+    # `flip` anchored on the realized support -- was invisible until something
+    # replayed a log much later. A check at close catches them while the session
+    # that produced them still exists.
+    self_check: dict | None = None
 
     # -- append-only ------------------------------------------------------
 

@@ -47,6 +47,12 @@ class ReplayNulls:
     B: int
     realized_score: float
     realized_actions: tuple[str, ...]
+    # Replicates on which a logged content move was inapplicable and the fill
+    # took over for the remainder (`prereg/unfaithful-searchers.md` amendment 6).
+    # A high share means the search's moves name things by identity, so the null
+    # is substantially the fill rather than the policy — which a reader of the
+    # verdict has to know. None when the replay did not report it.
+    handover_replicates: int | None = None
 
     def as_dict(self) -> dict[str, np.ndarray]:
         return {k: getattr(self, k) for k in NULLS}

@@ -517,6 +517,8 @@ def _certify_run(rec: RunRecord, tools: ToolSession, sandbox, cls, table=None) -
                    "p_frozen": v.p_frozen, "p_policy": v.p_policy,
                    "realized_score": v.realized_score, "n_moves": v.n_moves,
                    "n_candidates": v.n_candidates, "fill_engaged": v.fill_engaged,
+                   "handover_replicates": v.handover_replicates,
+                   "handover_share": v.handover_share,
                    "fill_replicates": v.fill_replicates,
                    "unreplayable_decisions": list(v.unreplayable_decisions),
                    "certifying_null": v.certifying_null, "B": CERTIFY_B,
@@ -759,6 +761,9 @@ def report(records: list[RunRecord], dry_run: bool) -> str:
               f"  realized score    {_num(v['realized_score'])}",
               f"  moves             {v['n_moves']}   candidates {v['n_candidates']}",
               f"  fill engaged      {v['fill_engaged']} of {v['fill_replicates']} replicates",
+              f"  hand-over share   {_num(v.get('handover_share'))}   "
+              f"({v.get('handover_replicates')} replicates where a logged move did "
+              "not apply and the fill carried the remainder)",
               f"  unreplayable      {v['unreplayable_decisions'] or 'none'}",
               "  CAVEAT: " + v["basis_caveat"]]
         for reason in v["reasons"]:

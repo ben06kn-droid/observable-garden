@@ -89,6 +89,7 @@ def three_nulls(log, spec_class, base: np.ndarray, annualization: float = 1.0,
     acts, n = realized.actions(), realized.n_moves
     n1, n2, n3 = np.empty(B), np.empty(B), np.empty(B)
     engaged = np.zeros(B, dtype=bool)
+    handed = np.zeros(B, dtype=bool)
     for b in range(B):
         idx = stationary_bootstrap_indices(T, L, rng)
         R = S0[idx, :]
@@ -96,10 +97,35 @@ def three_nulls(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         n1[b] = policy.trace(R, annualization, frozen=acts, score_fn=sf).score
         t2 = policy.trace(R, annualization, meta_steps=n, score_fn=sf)
         n2[b], engaged[b] = t2.score, bool(t2.filled)
+        handed[b] = t2.handover_step is not None
         n3[b] = policy.trace(R, annualization, score_fn=sf).score
     return ReplayNulls(fixed_sequence=n1, trigger=n2, policy=n3, block_length=L, B=B,
                        realized_score=realized.score,
-                       realized_actions=tuple(acts)), engaged
+                       realized_actions=tuple(acts),
+                       handover_replicates=int(handed.sum())), engaged
+
+
+def _submitted_score(log) -> float | None:
+    """The best score the session itself reached, which is what it submitted."""
+    scores = [r.score_after for r in log.records if r.score_after is not None]
+    return max(scores) if scores else None
+
+
+def _declares_stop_rule(log) -> bool:
+    """Does the declaration contain a stop action at all? A procedure without one
+    has no end of its own: its replay runs to the declared budget under the fill."""
+    return any((d.get("action") if isinstance(d, dict) else None) == "stop"
+               for d in (getattr(log, "declared_trigger_records", ()) or ()))
+
+
+NO_STOP_RULE_NOTE = (
+    "This declaration contains NO STOP RULE, so the procedure has no end of its "
+    "own: its replay runs to the declared budget under the fill, on the realized "
+    "data and on every replicate alike. The verdict therefore attaches to the "
+    "SUBMITTED specification (p_certifying) and the procedure's own statistic is "
+    "reported beside it (p_procedure); the two are different searches here, and on "
+    "7.3 scripted's faithful arm they differed by 0.0903 in score and by 0.0425 "
+    "against 0.0085 in rejection rate.")
 
 
 def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
@@ -183,11 +209,24 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
     priced, pricing_reasons = steps_to_price(log, pricing)
     nulls, engaged = three_nulls(log, spec_class, base, annualization, B, block_length,
                                  seed, pricing=pricing, table=table)
-    p_trigger = nulls.p_value("trigger")
     n_eng = int(engaged.sum())
+    # The PROCEDURE's statistic: what the declared procedure reaches on the
+    # realized data, which is what the replay produces.
+    p_procedure = nulls.p_value("trigger")
+    # The SUBMITTED statistic: the best the session itself reached. CERTIFIED
+    # attaches to this one, priced against the SAME null — one extra comparison,
+    # no extra bootstrap. The two coincide whenever the search ended under its own
+    # declared rule, and diverge when it did not: a procedure with no stop rule
+    # replays to its budget under the fill, so it reaches a score the session never
+    # submitted. Certifying the procedure's score in that case would certify a
+    # search the searcher did not perform.
+    submitted = _submitted_score(log)
+    p_submitted = (p_procedure if submitted is None
+                   else nulls.p_value("trigger", sr=submitted))
+    has_stop = _declares_stop_rule(log)
 
     v = QuixoteVerdict(
-        status="CERTIFIED" if p_trigger < alpha else "FAIL",
+        status="CERTIFIED" if p_submitted < alpha else "FAIL",
         alpha=alpha,
         p_frozen=nulls.p_value("fixed_sequence"),
         p_upper=p_declared_class,
@@ -199,16 +238,27 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         n_candidates=log.total_candidates(),
         unreplayable_decisions=tuple(r.move.kind for r in log.unreplayable()),
         certifying_null=CERTIFYING_NULL,
-        p_certifying=p_trigger,
+        p_certifying=p_submitted,
+        p_procedure=p_procedure,
+        submitted_score=(None if submitted is None else float(submitted)),
+        declares_stop_rule=has_stop,
         p_policy=nulls.p_value("policy"),
         realized_score=float(nulls.realized_score),
         fill_engaged=n_eng,
+        handover_replicates=nulls.handover_replicates,
         fill_replicates=B,
         contradicted_picks=len(log.contradicted_picks()),
         locally_priced_steps=tuple(sorted(priced)),
         pricing_licensed=False if priced else None,
     )
     v.reasons.append(integrity.reason())
+    if not has_stop:
+        v.reasons.append(NO_STOP_RULE_NOTE)
+    elif submitted is not None and p_submitted != p_procedure:
+        v.reasons.append(
+            "The submitted and procedure statistics differ although a stop rule is "
+            "declared, which is unexpected: a search ending under its own rule "
+            "submits what its procedure reaches. Reported rather than reconciled.")
     if changes:
         v.reasons.append(
             f"{len(changes)} declared trigger change(s) are logged, and the commitment "
@@ -217,7 +267,10 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
             "recorded unreplayable for them. A change is priced when it costs "
             "something, and this one did not.")
     v.reasons.append(
-        f"Certified against {CERTIFYING_NULL}: p = {p_trigger:.4f} against alpha = {alpha}. "
+        f"The verdict attaches to the SUBMITTED specification: p = {p_submitted:.4f} "
+        f"against alpha = {alpha}, priced against {CERTIFYING_NULL} — the declared "
+        f"procedure's null. Beside it, the PROCEDURE's own statistic prices at "
+        f"p = {p_procedure:.4f} on the same replicates. "
         "7.1 measured this null at or below nominal for all six registered searchers "
         "(3.45-4.70% at a nominal 5%); the rates sit under nominal as P2 predicts, and no "
         "exactness is claimed.")
