@@ -416,3 +416,54 @@ about, and a fidelity rate computed on the pick-richest half of the arm is not t
 arm's fidelity. **Every pick and every meta move in those 10 runs is
 re-presented**, as check 2 registers; the other 10 runs of each config contribute
 their behavioural readouts and no fidelity.
+
+**7 — 2026-09-29, before the shake-out. Check 2 has an unmet precondition, and it
+is recorded before the window rather than discovered inside it.**
+
+Check 2 re-presents each logged `pick` and meta move with resampled numbers and
+records whether the declared rule predicts the choice. **That requires the log to
+hold the information set the agent was actually presented**, and it does not.
+
+**What is in place.** `quixote/log.py`'s `InformationSet` carries a `shown` field
+for the `(label, value)` pairs revealed, and its `as_context()` is documented as
+the fixed template a re-interrogation rebuilds from, "so it cannot drift between
+the original session and a re-interrogation". The slot and the contract exist.
+
+**What is missing.** `quixote/agent_adapter.py` calls `session.propose(move)` with
+**no `shown` argument**, and `Session.propose`'s `shown` defaults to empty — so
+`shown` is `()` on **every agent-driven move**. Verified on a reasoned-pick-shaped
+session: a `pick` offered 10 candidates records `as_context() = {'step': 1,
+'support': [[25, -1.0]], 'score': 0.583…, 'shown': []}`. The count of candidates is
+kept; **the values are not**. Nothing anywhere populates `shown`.
+
+**Why a count is not enough, and why re-deriving is not either.** A fidelity
+measurement asks whether the declared rule predicts the choice *given what was in
+front of the agent*. Re-deriving the candidate values from the panel afterwards
+would score today's numbers against yesterday's choice, and any change to the
+scorer, the basis or the class table between the run and the measurement would
+silently become a fidelity signal.
+
+**Registered as the test it must pass**:
+`tests/test_agent_cell.py::test_every_pick_and_meta_move_stores_the_information_set_presented`,
+marked `xfail(strict=True)` so it becomes a hard failure the moment it starts
+passing and the marker has to come off deliberately.
+
+**Two design questions this leaves open, to be registered before the tool is
+built, not after:**
+
+1. **What `shown` records for each move kind.** For a `pick`, one pair per
+   candidate in `among` is the obvious reading. For a meta move the natural
+   content is the trigger state it was evaluated on (`step`, `best`, `failures`,
+   `last_gain`, `budget_left`), which is a different shape from `(label, value)`
+   pairs.
+2. **What "resampled numbers" resamples** — the candidate values only, or the
+   whole information set — and whether re-presentation is **stateless** (a fresh
+   context per presentation) or continues a session. These change what is being
+   measured, so they are registered rather than chosen at implementation time.
+
+**Consequence, stated plainly: check 2 cannot be read from runs made today.** The
+reasoned-pick arm may still run — its behavioural readouts under check 3 do not
+depend on `shown` — but **any fidelity rate would be computed from a log that did
+not record what the agent saw**, and `prereg/agent-cell.md`'s own licensing then
+follows: check 2 is what licenses fidelity-driven pricing, so that flag stays off
+and unlicensed regardless of what the cell returns.

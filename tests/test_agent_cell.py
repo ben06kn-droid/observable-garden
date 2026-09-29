@@ -167,3 +167,87 @@ def test_the_fidelity_subsample_is_the_first_runs_in_seed_order(tmp_path):
              "--dry-run", "--out", str(tmp_path / "ctl")])
     other = json.loads((tmp_path / "ctl" / "run_config.json").read_text())
     assert other["fidelity_subsample_run_ids"] == []
+
+
+# -- check 2's precondition: the presented information set is stored ------------
+
+def _reasoned_pick_session(seed=21):
+    """A session shaped like a reasoned-pick run: a declared rule, a `pick` with a
+    named statistic over a candidate set, and a meta move."""
+    from quixote.agent_adapter import ToolSession
+    from quixote.session import Session
+
+    _d, _c, cls, sb, _dgp = ac.simulated_panel("s0", seed)
+    sess = Session.on_sandbox(sb, cls, name_prefix="fid")
+    ts = ToolSession(sess)
+    ts.call("declare_triggers", triggers=[
+        {"trigger": "failures_at_least", "param": 2.0, "action": "stop"}])
+    ts.call("init")
+    ts.call("pick", among=[0, 1, 2, 3, 4], statistic="autocorr_1")
+    ts.call("extend_best")
+    for _ in range(6):
+        if ts.session.fired_triggers():
+            break
+        ts.call("swap_worst")
+    if ts.session.fired_triggers():
+        ts.call("stop", trigger="failures_at_least", param=2.0)
+    return ts.session
+
+
+def test_the_information_set_slot_exists_and_is_the_re_interrogation_template():
+    """What IS in place: `InformationSet` carries a `shown` field for the
+    (label, value) pairs revealed, and `as_context()` is documented as the fixed
+    template a re-interrogation rebuilds from, "so it cannot drift between the
+    original session and a re-interrogation". The slot and the contract are there.
+    """
+    from quixote.log import InformationSet
+
+    assert "shown" in InformationSet.__dataclass_fields__
+    log = _reasoned_pick_session().log
+    for rec in log.records:
+        if rec.move.is_meta:
+            continue
+        assert rec.information is not None, rec.move.kind
+        ctx = rec.information.as_context()
+        assert set(ctx) == {"step", "support", "score", "shown"}
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "NOT IMPLEMENTED as of 2026-09-29. `quixote/agent_adapter.py` calls "
+    "`session.propose(move)` with no `shown` argument, so `InformationSet.shown` "
+    "is empty on every agent-driven move. Check 2 of prereg/agent-cell.md "
+    "re-presents each logged pick and meta move with resampled numbers and asks "
+    "whether the declared rule predicts the choice -- which cannot be done from a "
+    "log that did not record the numbers the agent was shown. Strict xfail so this "
+    "flips to a hard failure the moment it starts passing, forcing the marker off."))
+def test_every_pick_and_meta_move_stores_the_information_set_presented():
+    """Check 2's precondition, stated as the test it needs to pass.
+
+    For every `pick` and every meta move, the log must record the candidate
+    values the agent was actually shown -- not a count of them, and not the
+    harness's own state before the move. A fidelity measurement re-presents a
+    decision, so it needs the decision's inputs verbatim; a count of candidates is
+    not enough to rebuild what was on screen, and re-deriving the values later
+    would be measuring today's numbers against yesterday's choice.
+    """
+    log = _reasoned_pick_session().log
+    picks = [r for r in log.records if r.move.kind == "pick"]
+    metas = [r for r in log.records if r.move.is_meta]
+    assert picks, "the fixture must make a pick"
+
+    for rec in picks:
+        info = rec.information
+        assert info is not None and info.shown, (
+            f"pick at step {rec.step} records no shown values")
+        # one (label, value) pair per candidate the agent was offered
+        assert len(info.shown) == len(rec.move.among), (
+            f"pick at step {rec.step} was offered {len(rec.move.among)} candidates "
+            f"but records {len(info.shown)} shown values")
+        for label, value in info.shown:
+            assert isinstance(label, str) and isinstance(value, float)
+
+    for rec in metas:
+        info = rec.information
+        assert info is not None and info.shown, (
+            f"{rec.move.kind} at step {rec.step} records no shown values; a meta "
+            "move's information set is the trigger state it was taken on")
