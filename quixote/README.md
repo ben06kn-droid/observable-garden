@@ -368,3 +368,14 @@ moves on re-execution — and three ADR runs could not be re-graded at all
 (`prereg/agent-pilot.md`, the 2026-09-28 re-grade). The serializer is fixed; the
 test is what keeps it fixed, and it belongs on the accepted-move path rather than
 on one writer of one format.
+
+**5. A restart while a stop rule is firing is refused unless a `change_trigger`
+precedes it.** Registered 2026-09-29, same list, same timing. Today a searcher
+whose stop rule is firing can call `restart` and keep going, and the only record
+that anything unusual happened is that the committed-rule replay later disagrees —
+which is how the ETF pilot's run 2 came to read UNDECIDABLE before it was re-graded
+(`prereg/agent-pilot.md`). A stop rule that fires means *stop*: continuing past it
+is a change of rule, so it must be declared as one. Refusing the bare restart turns
+a silent divergence into an `inapplicable_move` refusal at the moment it happens,
+and leaves the legitimate path — change the rule, on the record, then restart —
+open.

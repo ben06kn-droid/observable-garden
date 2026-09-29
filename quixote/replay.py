@@ -61,6 +61,12 @@ class ReplayTrace:
     # two directly is comparing different events, so the action comparison is
     # made only where both sides speak the same vocabulary.
     path: str = "run"
+    # The step at which a logged content move was INAPPLICABLE on this replicate
+    # and the fill took over for the remainder; None if that never happened. A
+    # replicate ends by trigger or by budget, never by an inapplicable move, so
+    # this records where the replay stopped following the log rather than where it
+    # stopped searching.
+    handover_step: int | None = None
     # steps replaced by the best admissible move under local-max or
     # fidelity-driven pricing; zero unless one of those flags is on
     locally_priced: int = 0
@@ -284,6 +290,9 @@ class LoggedPolicy:
         # past the end, silently took the fill instead of the move that was
         # logged. Every check on a log whose restart rule fired was affected.
         cursor = 0
+        # Latched once a logged move proves inapplicable on this replicate: from
+        # then on the fill drives the remainder, under the same declared triggers.
+        handed_over = False
 
         def score_list(ns):
             return g.score(tuple(ns), self.statistic)
@@ -336,28 +345,52 @@ class LoggedPolicy:
                 trace.moves.append("restart")
                 continue
 
-            if filling or cursor >= len(moves):
-                # Either branch means this step took the FILL rather than a move
-                # the log holds, which is what "ran past the logged length" means.
-                # Setting this only on `filling` under-reported every searcher that
-                # declares no stop rule: its replay runs past its log to the budget
-                # on the fill, and the engagement counter read zero while most of
-                # its steps were fill.
+            # Does this step follow the log, or take the fill?
+            #
+            # The fill takes over in three cases, and they share one meaning —
+            # there is no logged move to follow here, so the declared procedure
+            # continues under its triggers:
+            #   1. `filling`: the step index has passed the realized length;
+            #   2. the logged content moves have simply run out;
+            #   3. HANDOVER: the next logged move is INAPPLICABLE on this
+            #      replicate, so following the log is impossible.
+            #
+            # Case 3 used to end the replicate. That made the null wrong rather
+            # than approximate. A move that names a feature by identity — a `flip`
+            # on whatever the realized support held, a `pick` among realized
+            # indices — is applicable to the realized data and usually not to a
+            # resample, so its replicates were cut off where the realized search
+            # ran on: a null of truncated searches pricing an untruncated
+            # statistic, biased toward rejection. Measured on one such searcher,
+            # 98 of 100 replicates ended this way.
+            #
+            # So a replicate ends by TRIGGER or by BUDGET, never by an
+            # inapplicable move. `handover_step` records where the log stopped
+            # being followed, which is a property of the searcher's moves worth
+            # measuring rather than a failure to hide.
+            take_fill = filling or cursor >= len(moves) or handed_over
+            if not take_fill:
+                cand_support, cand_score, n = g.apply(support, moves[cursor])
+                cursor += 1
+                if n == 0:
+                    take_fill = True
+                    handed_over = True
+                    if trace.handover_step is None:
+                        trace.handover_step = step
+                else:
+                    cand_support = tuple(cand_support)
+
+            if take_fill:
                 trace.filled = True
                 cands = MetaAdaptive._grammar(list(support), K, score_list,
                                               allow=lambda ns: g.contains(tuple(ns)))
                 chosen = max(cands) if cands else None
                 if chosen is None:
+                    # No admissible move exists at all: the search is exhausted,
+                    # which is budget-like and not an inapplicable logged move.
                     trace.moves.append("stop")
                     break
                 cand_score, cand_support = chosen[0], tuple(chosen[2])
-            else:
-                cand_support, cand_score, n = g.apply(support, moves[cursor])
-                cursor += 1
-                if n == 0:
-                    trace.moves.append("stop")
-                    break
-                cand_support = tuple(cand_support)
 
             last_gain = cand_score - best
             support = cand_support

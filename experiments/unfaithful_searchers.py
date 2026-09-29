@@ -155,48 +155,34 @@ def _stop_if_fired(sess: Session) -> bool:
 FAITHFUL_BUDGET = 24
 
 
-# The feature the `flip` is anchored on. A CONSTANT, and that matters: it is
-# measurable with respect to a sigma-field independent of the return-generating
-# randomness, which is `SCOPE.md`'s obliviousness condition. A feature chosen by
-# looking at the data would make the prelude data-dependent.
-FLIP_ANCHOR = 0
-
-
 def _faithful_prelude(sess: Session, trigger: Trigger) -> None:
     """The content moves both faithful searchers take: `init`, `pick`,
     `extend_best`, `refine`, `flip`.
 
-    The order is not free, for three separate reasons.
+    The order is not free. Under decision (b) a firing rule suspends content
+    moves, so `refine` and `flip` have to come before the run of swaps that drives
+    the failure count up — placed after it they were unreachable on every seed
+    tried. `pick` has to come before the support fills, since a pick at a full
+    support would leave the declared class.
 
-    Under decision (b) a firing rule suspends content moves, so `refine` and
-    `flip` have to come before the run of swaps that drives the failure count up —
-    placed after it they were unreachable on every seed tried. `pick` has to come
-    before the support fills, since a pick at a full support would leave the
-    declared class.
-
-    And the `flip` is anchored on a **constant** feature that a single-candidate
-    `pick` has just put into the support. This is not decoration. A `flip` names a
-    feature by index, so a flip on whatever the realized support happened to hold
-    is a move that **only applies to the realized data**: on a bootstrap replicate
-    the support after four moves rarely contains that index, the replay refuses the
-    logged move and truncates. Measured at the old construction: the flip was
-    refused in **98 of 100 replicates**, so the null was a distribution of searches
-    cut off at four steps while the realized statistic came from the whole search —
-    a null systematically weaker than the thing it prices, which would have made
-    rule 1a over-reject for reasons having nothing to do with the checks. Anchoring
-    the flip on a constant the pick guarantees present takes truncation to about
-    5%, and `run_draw` records the rate per run so the registered draws measure it.
+    **The `pick` is multi-candidate and the `flip` is identity-named**, which is
+    deliberate and was briefly the other way round. A flip on whatever the realized
+    support holds is a move that applies to the realized data and usually not to a
+    resample, and for a while this prelude anchored the flip on a constant so its
+    replicates would not truncate. That was fixing the searcher to suit the engine.
+    **Rule 1a has to measure the engine on the moves agents actually make** — the
+    pilot's agents named features by identity — so the searcher is back to the
+    natural form and `quixote/replay.py` handles an inapplicable logged move by
+    handing the remainder of that replicate to the fill (amendment 6).
     """
     sess.declare_budget(FAITHFUL_BUDGET)
     sess.declare_triggers([trigger])
     _advance(sess, Move("init"))
-    # single-candidate, so FLIP_ANCHOR is in the support on every replicate too.
-    # The MULTI-candidate form of `pick` — a statistic ranging over a set — is
-    # exercised by U1 and U1-twin, so both forms appear in the experiment.
-    _advance(sess, Move("pick", statistic="sharpe", among=(FLIP_ANCHOR,)))
+    _advance(sess, Move("pick", statistic="autocorr_1", among=tuple(range(6))))
     _advance(sess, Move("extend_best"))
     _advance(sess, Move("refine"))
-    _advance(sess, Move("flip", feature=FLIP_ANCHOR))
+    if sess.support:
+        _advance(sess, Move("flip", feature=sess.support[0][0]))
 
 
 def _swap_until_fired(sess: Session, limit: int = 12) -> bool:
@@ -514,7 +500,8 @@ def _trigger_null(log, base: np.ndarray, ann: float, B: int, seed: int,
     n_realized = realized.n_moves
     if submitted is None:
         submitted = realized.score
-    hits, hits_sub, engaged, truncated = 0, 0, 0, 0
+    hits, hits_sub, engaged = 0, 0, 0
+    handovers: list[int] = []
     n_content = len([r for r in log.records
                      if not r.move.is_meta and r.move.note != "rejected"])
     for _ in range(B):
@@ -522,17 +509,17 @@ def _trigger_null(log, base: np.ndarray, ann: float, B: int, seed: int,
         t = policy.trace(R, ann, meta_steps=n_realized)
         hits += int(t.score >= realized.score)
         hits_sub += int(t.score >= submitted)
-        # A replicate that refused a logged move ends on "stop" with fewer steps
-        # than the log has content moves: the replay truncated rather than the
-        # rule firing. Counted so the arm's null can be read for what it is.
-        truncated += int(t.n_moves < n_content and
-                         bool(t.moves) and t.moves[-1] == "stop")
+        # Amendment 6: where the fill took over from the log on this replicate,
+        # because a logged move was inapplicable. The DISTRIBUTION of these is the
+        # readout; a replicate no longer ends when a move does not apply.
+        if t.handover_step is not None:
+            handovers.append(int(t.handover_step))
         # amendment 5: replicates that ran PAST THE LOGGED LENGTH, so took at
         # least one fill step. Before the fix this counted only the
         # `meta_steps`-driven case and read zero for a searcher with no stop rule.
         engaged += int(bool(t.filled))
     return ((1 + hits) / (B + 1), float(realized.score),
-            (1 + hits_sub) / (B + 1), engaged, truncated)
+            (1 + hits_sub) / (B + 1), engaged, handovers)
 
 
 # -- one draw -----------------------------------------------------------------
@@ -613,7 +600,7 @@ def run_draw(cell: str, seed: int, B: int, only: str | None = None,
         # item 1, amendment 5).
         submitted = max([r.score_after for r in log.records
                          if r.score_after is not None], default=float("-inf"))
-        p, realized, p_submitted, n_engaged, n_trunc = _trigger_null(
+        p, realized, p_submitted, n_engaged, handovers = _trigger_null(
             log, base, ann, B, seed, submitted=float(submitted))
 
         # and the check-gated verdict, recorded BESIDE the p rather than in
@@ -664,9 +651,17 @@ def run_draw(cell: str, seed: int, B: int, only: str | None = None,
             "n_moves": log.n_moves,
             "n_candidates": log.total_candidates(),
             "fill_engaged": n_engaged,
-            # replicates whose replay refused a logged move and stopped short
-            "replicates_truncated": n_trunc,
-            "truncation_rate": n_trunc / B,
+            # Amendment 6, replacing the truncation readout: where the fill took
+            # over from the log, per replicate. No replicate ends on an
+            # inapplicable move, so a count of truncations would now always be 0.
+            "handover_replicates": len(handovers),
+            "handover_rate": len(handovers) / B,
+            "handover_step_mean": (float(np.mean(handovers)) if handovers
+                                   else None),
+            "handover_step_hist": {int(k): int(v) for k, v in
+                                   zip(*np.unique(handovers, return_counts=True))}
+                                  if handovers else {},
+            "replicates_ended_by_inapplicable_move": 0,
             "seconds": time.time() - t0,
         }
     out["_draw"]["seconds"] = time.time() - t_draw
@@ -721,6 +716,23 @@ def cost_report(data: dict, full_draws: int = N_DRAWS, B_full: int = B_DEFAULT) 
         vals = [r[n]["seconds"] for r in rows if n in r]
         L.append(f"  {n:<18}{float(np.mean(vals)):8.2f}   on {len(vals)} of "
                  f"{len(rows)} draws (count {DRAWS_FOR.get(n, N_DRAWS)})")
+    # Amendment 6's readout, reported here because it is an ENGAGEMENT count and
+    # not a rule quantity: where the fill took over from the log, and how often.
+    L += ["", "fill hand-over (amendment 6), per policy", "-" * 78,
+          f"  {'policy':<18}{'replicates':>11}{'hand-over':>11}"
+          f"{'mean step':>11}{'ended on an inapplicable move':>32}"]
+    for n in names:
+        rs = [r[n] for r in rows if n in r]
+        hr = float(np.mean([x["handover_rate"] for x in rs]))
+        ms = [x["handover_step_mean"] for x in rs if x["handover_step_mean"] is not None]
+        eng = float(np.mean([x["fill_engaged"] for x in rs]))
+        bad = sum(x["replicates_ended_by_inapplicable_move"] for x in rs)
+        L.append(f"  {n:<18}{eng:11.1f}{hr:11.2f}"
+                 f"{(float(np.mean(ms)) if ms else float('nan')):11.2f}{bad:>32}")
+    L += ["  replicates: mean count engaging the fill, of B per draw",
+          "  hand-over: share of replicates where a logged move did not apply and",
+          "  the fill carried the remainder. A replicate ends by trigger or budget."]
+
     moves = float(np.mean([r[n]["n_moves"] for r in rows for n in names if n in r]))
     cands = float(np.mean([r[n]["n_candidates"] for r in rows for n in names if n in r]))
     L += ["", "shape (reported, not gated)", "-" * 78,

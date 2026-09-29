@@ -1352,3 +1352,10 @@ the order is checkable and nothing lands silently. **None is implemented yet** �
 
 The motivating measurements are in `prereg/unfaithful-searchers.md` amendments 3–5
 and `prereg/agent-pilot.md`'s 2026-09-28 re-grade.
+
+5. **A restart while a stop rule is firing is refused unless a `change_trigger`
+   precedes it** (added 2026-09-29). A firing stop rule means stop; continuing past
+   it is a change of rule and must be declared as one. This turns a silent
+   divergence — found only when the committed-rule replay disagrees, as in the ETF
+   pilot's run 2 — into a refusal at the moment it happens, while leaving the
+   legitimate path open: change the rule on the record, then restart.

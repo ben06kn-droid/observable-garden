@@ -862,3 +862,108 @@ is not read as more than that.
 
 Both faithful searchers pass INTEGRITY and COMMITMENT on 8 of 8 policy-runs under
 the amended prelude, and the arm still covers all eight move kinds.
+
+## Amendment 6 — 2026-09-29, before launch. The certifying null's definition is completed
+
+### The gap in the definition
+
+The certifying null was defined as: replay the declared procedure on each
+bootstrap replicate, following the logged content moves, taking the fill past the
+realized length. **It did not say what happens when a logged content move is
+inapplicable on a replicate**, and the code ended the replicate there.
+
+That is not an approximation, it is a different null. A move that names a feature
+**by identity** — a `flip` on whatever the realized support held, a `pick` among
+realized indices — is applicable to the realized data and usually not to a
+resample. Its replicates were therefore **cut off where the realized search ran
+on**: a distribution of truncated searches pricing an untruncated statistic, biased
+**toward rejection**. Measured on one such searcher: **98 of 100 replicates ended
+this way**.
+
+### The completed definition
+
+> **When a logged content move is inapplicable on a replicate, the fill takes over
+> for the remainder of that replicate, under the declared triggers — the same
+> semantics as past-the-log.** A replicate ends by **trigger** or by **budget**,
+> never by an inapplicable move.
+
+The three routes to the fill now share one meaning: there is no logged move to
+follow here, so the declared procedure continues under its own rules. The step at
+which the hand-over happened is **recorded per replicate** (`handover_step`), so
+how far a searcher's moves survive resampling is measured rather than hidden.
+
+**This is an engine change, not a searcher change**, and that is the point.
+Amendment 5 item (3) had fixed the *searcher* — anchoring the flip on a constant so
+its replicates would not truncate. **That is reversed.** Rule 1a has to measure the
+engine on the moves **agents actually make**, and the pilot's agents named features
+by identity; a faithful arm contorted to avoid the engine's weak spot measures the
+contortion. The prelude is restored to its natural form: a **multi-candidate**
+`pick` by `autocorr_1` among six features, and an **identity-named** `flip` on the
+realized support's first feature.
+
+### The readout changes with it
+
+`replicates_truncated` and `truncation_rate` are **replaced** by the
+**fill-handover step distribution** — `handover_replicates`, `handover_rate`,
+`handover_step_mean` and `handover_step_hist` per run. A truncation count would now
+be identically zero, and
+`replicates_ended_by_inapplicable_move` is recorded as **0** so that invariant is
+asserted in the data rather than trusted.
+
+### Earlier readings are unchanged, and this is checkable rather than asserted
+
+**7.0's and 7.1's drivers never execute this code path.** Neither
+`experiments/gate_comparison.py` nor `experiments/fixed_sequence_replay.py` imports
+`quixote.replay` at all: 7.1 replays its searchers through
+`searchers/meta_adaptive.py`'s own trace, and 7.0 prices through the class engine
+and its own certifiers.
+
+Independently, **their searchers use no identity-named moves.** 7.1's six
+registered searchers — `StopWhenCleared`, `ExtendWhileImproving`, `ClearedRestart`,
+`LookaheadStopWhenCleared`, `RandomExtendWhileImproving`, `ExtendBySecondBest` —
+have content moves that are **recomputed from each replicate's own data** (greedy,
+random and second-best extensions), so no move of theirs *can* be inapplicable on a
+replicate. The same holds for 7.0's `ExhaustiveClass`, `Greedy` and `Adaptive`.
+
+So both experiments' readings stand under the completed definition, for two
+independent reasons, and the note is repeated in `EXPERIMENTS.md` against 7.1 where
+a reader meets the number.
+
+**What is affected:** logs replayed through `LoggedPolicy` that contain an
+identity-named move — the agent pilot's runs, and this experiment. The pilot
+claimed no verdict; this experiment has not launched.
+
+### The smoke under the completed definition, and the cost it adds
+
+Re-run on the cost-only block, **cost and engagement only**, four draws at B = 60
+and B = 240, 8 workers:
+
+| policy | replicates engaging the fill | hand-over share | mean hand-over step | ended on an inapplicable move |
+|---|---|---|---|---|
+| `faithful-restart` | all of B | **0.88** | **4.31** | **0** |
+| `faithful-stop` | ~0.15 of B | **0.42** | **4.00** | **0** |
+| U1, U1-twin, U2-twin, U3-twin, U3b-twin | small | 0.00 | — | **0** |
+| U2, U3, U3b, U4, U4-twin | ~0 | 0.00 | — | **0** |
+
+**Zero replicates end on an inapplicable move, on every one of the twelve
+policies.** The hand-over lands at step 4 — the `flip` — which is exactly the move
+that names a feature by identity, and only the faithful arm has one; the unfaithful
+policies name single candidates by index or take parameterless moves, so their
+logged moves apply on any resample.
+
+`faithful-stop`'s hand-over share is lower than `faithful-restart`'s because its
+stop rule fires on many replicates before the flip is reached.
+
+**Cost.** The completed definition is **more expensive**, because a replicate that
+would have stopped at step 4 now continues under the fill to a trigger or the
+budget:
+
+| basis | CPU-hours | c7a.48xlarge, 192 vCPU | at $9.85/h |
+|---|---|---|---|
+| fitted `a + b·B` per policy | **68** | 0.35 h wall | **$3.48** |
+| upper bound (all per-draw time scaled with B) | **231** | 1.20 h wall | **$11.87** |
+
+against **68** fitted before this amendment, and a registered threshold of **$200**.
+**No lever is pulled.** The rise is the price of a null that prices the statistic it
+claims to; the previous figure was cheaper because most replicates were being cut
+off at step 4.

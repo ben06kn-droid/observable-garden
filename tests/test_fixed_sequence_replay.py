@@ -115,3 +115,85 @@ def test_a_logged_restart_does_not_shift_the_replayed_moves():
     trace = lp.trace(base, ann, frozen=lp.frozen_actions())
     assert not trace.filled
     assert trace.support == chk.realized_support
+
+
+# -- an inapplicable logged move hands over to the fill, it does not end the run --
+
+def test_an_identity_named_flip_truncates_no_replicate_and_records_handover():
+    """`prereg/unfaithful-searchers.md` amendment 6: the certifying null's
+    definition completed.
+
+    A move that names a feature by IDENTITY — a `flip` on whatever the realized
+    support held — is applicable to the realized data and usually not to a
+    bootstrap resample. The replay used to end such a replicate, which made the
+    null a distribution of TRUNCATED searches pricing an untruncated statistic:
+    biased toward rejection, and measured at 98 of 100 replicates on one searcher.
+
+    Now the fill takes over for the remainder of that replicate under the same
+    declared triggers — the same semantics as past-the-log — so a replicate ends
+    only by trigger or by budget. `handover_step` records where the log stopped
+    being followed.
+    """
+    import numpy as np
+
+    from environments.sandbox import Sandbox
+    from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
+    from experiments import unfaithful_searchers as us
+    from quixote.grammar import Move
+    from quixote.replay import LoggedPolicy
+    from quixote.session import Session, TriggerFired
+    from quixote.triggers import Trigger
+
+    data, cfg = us.make_panel("s0", 990_000)
+    sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=us.CLS)
+    sess = Session.on_sandbox(sb, us.CLS, name_prefix="idflip")
+    sess.declare_budget(24)
+    sess.declare_triggers([Trigger("failures_at_least", 3.0, "stop")])
+
+    def step(move):
+        try:
+            _s, _sc, n = sess.propose(move)
+        except (TriggerFired, ValueError):
+            return False
+        if n == 0:
+            sess.cancel()
+            return False
+        sess.accept()
+        return True
+
+    assert step(Move("init"))
+    assert step(Move("extend_best"))
+    assert step(Move("extend_best"))
+    # THE identity-named move: a feature index read off the realized support
+    held = sess.support[0][0]
+    assert step(Move("flip", feature=held))
+
+    base = sb.base_feature_columns()
+    ann = float(np.sqrt(cfg.periods_per_year))
+    lp = LoggedPolicy(sess.log, us.CLS)
+    n_content = len([r for r in sess.log.records
+                     if not r.move.is_meta and r.move.note != "rejected"])
+    realized = lp.trace(base, ann)
+
+    S0 = base - base.mean(axis=0, keepdims=True)
+    L = int(select_block_length(S0))
+    rng = np.random.default_rng(990_000)
+    ended_inapplicable, handovers = 0, []
+    for _ in range(100):
+        R = S0[stationary_bootstrap_indices(base.shape[0], L, rng), :]
+        t = lp.trace(R, ann, meta_steps=realized.n_moves)
+        if t.handover_step is not None:
+            handovers.append(t.handover_step)
+            # handing over must not shorten the replicate below the logged length:
+            # the fill carries it on until a trigger fires or the budget is spent
+            assert t.n_moves >= n_content, (t.n_moves, n_content)
+            assert t.filled
+        # a replicate that stopped at exactly the handover step would be the old
+        # truncation behaviour
+        if t.handover_step is not None and t.n_moves <= t.handover_step:
+            ended_inapplicable += 1
+
+    assert ended_inapplicable == 0
+    assert handovers, "the identity-named flip must be inapplicable on some replicate"
+    # the handover lands on the flip, which is the fourth content move (index 3)
+    assert min(handovers) >= 3

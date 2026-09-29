@@ -214,24 +214,52 @@ def test_ended_under_its_rule_is_structural_not_a_score_comparison():
     assert row["faithful-stop"]["declares_stop_rule"] is True
 
 
-def test_the_faithful_prelude_does_not_truncate_its_own_replicates():
-    """Amendment 5, item (3), the defect that would have broken rule 1a.
+def test_no_replicate_ends_on_an_inapplicable_move_and_handover_is_recorded():
+    """Amendment 6: the certifying null's completed definition, at the driver.
 
-    The prelude's `flip` used to name whatever feature the realized support held,
-    which is a move that applies only to the realized data: on a replicate the
-    support rarely contains that index, so the replay refused the logged move and
-    the null became a distribution of searches cut off at four steps — weaker than
-    the statistic it prices. It was refused in 98 of 100 replicates.
+    The faithful prelude names a `flip` by identity — the realized support's first
+    feature — which is usually inapplicable on a resample. That used to END the
+    replicate, making the null a distribution of truncated searches pricing an
+    untruncated statistic. Now the fill takes over for the remainder, so the
+    invariant is that NO replicate ends that way, and where the hand-over happened
+    is recorded instead of being hidden.
 
-    Anchoring the flip on a constant that a single-candidate `pick` places in the
-    support takes truncation to well under half. The bound here is deliberately
-    loose: what must never return is a null dominated by truncation.
+    Amendment 5's fix was to the searcher, anchoring the flip on a constant. That is
+    reversed: rule 1a must measure the engine on the moves agents make.
     """
     row = us.run_draw("s0", us.SEED0_SMOKE, B=100)
     for name in ("faithful-restart", "faithful-stop"):
-        assert row[name]["truncation_rate"] < 0.5, (name, row[name])
-        assert row[name]["replicates_truncated"] == pytest.approx(
-            row[name]["truncation_rate"] * 100)
+        r = row[name]
+        assert r["replicates_ended_by_inapplicable_move"] == 0, name
+        # the identity-named flip is inapplicable on most replicates, so a
+        # hand-over must actually be exercised here or the test proves nothing
+        assert r["handover_replicates"] > 0, name
+        assert r["handover_rate"] == pytest.approx(r["handover_replicates"] / 100)
+        assert sum(r["handover_step_hist"].values()) == r["handover_replicates"]
+        # it lands on the flip or later, never on `init`
+        assert min(r["handover_step_hist"]) >= 3, (name, r["handover_step_hist"])
+        assert r["handover_step_mean"] == pytest.approx(
+            sum(k * v for k, v in r["handover_step_hist"].items())
+            / r["handover_replicates"])
+
+
+def test_the_faithful_prelude_keeps_the_moves_agents_actually_make():
+    """Amendment 6: the prelude is the natural form — a MULTI-candidate `pick` and
+    an IDENTITY-NAMED `flip` — not the shape that avoided the engine's weak spot."""
+    from environments.sandbox import Sandbox
+    from quixote.session import Session
+
+    data, cfg = us.make_panel("s0", us.SEED0_SMOKE)
+    sb = Sandbox(data, periods_per_year=cfg.periods_per_year, spec_class=us.CLS)
+    sess = Session.on_sandbox(sb, us.CLS, name_prefix="p")
+    us.policies(us.SEED0_SMOKE)["faithful-stop"][0](sess)
+    by_kind = {r.move.kind: r.move for r in sess.log.records}
+    assert len(by_kind["pick"].among) > 1, "the pick must range over a set"
+    assert by_kind["pick"].statistic == "autocorr_1"
+    # the flip names a feature that was in the REALIZED support, which is what
+    # makes it identity-named and what the engine now has to cope with
+    assert by_kind["flip"].feature is not None
+    assert not hasattr(us, "FLIP_ANCHOR"), "amendment 5's workaround is reversed"
 
 
 def test_the_fill_counter_sees_a_searcher_that_runs_past_its_log():
@@ -240,8 +268,6 @@ def test_the_fill_counter_sees_a_searcher_that_runs_past_its_log():
     exactly this case before the fix, which contradicted the prose describing it."""
     row = us.run_draw("s0", us.SEED0_SMOKE, B=100)
     assert row["faithful-restart"]["fill_engaged"] > 50
-    # and the anchor feature is a constant, not read off the data
-    assert us.FLIP_ANCHOR == 0
 
 
 def test_the_two_descriptive_readouts_are_recorded_per_run():
