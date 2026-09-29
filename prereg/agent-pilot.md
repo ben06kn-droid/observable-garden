@@ -864,3 +864,34 @@ made moves. Each is a harness fault, and each is why these four runs happen befo
 
 **Cost:** four runs against the $0.268 stored mean, so about **$1.07**, on the
 seat.
+
+**Run 5 added, 2026-09-29, before the shake-out runs: the real-X table path.**
+
+`--panel etf --arm orientation --runs 1`, **in-sample only, no holdout touched.**
+Five runs in total, not four.
+
+**Why it is needed.** Runs 1–4 exercise the orientation arm on the **simulated**
+panel, whose feature array is (5,000 × 50 × 40) and drawn from a known DGP. The
+ETF panel's is (4,276 × 40 × 40) and is **real**: its features are cross-correlated
+and its moments are whatever the market made them, so the delivered table has
+different content, different row counts in the correlated-pairs section, and a
+different rendered length. Without this run, the first model-backed pass over the
+real-X table path would be **6.5 itself**, by which time the holdout is open and a
+harness fault costs the window.
+
+**What it touches, and what it cannot.** The in-sample ETF panel and the class
+table only. `environments/real_sandbox.py` holds no out-of-sample data at all, and
+grading is a separate entry point (`experiments/grade_real.py`) which this run does
+not call. **No holdout is opened, and no submission is graded.**
+
+**Rule 5 applies to it as to the others: no number enters a verdict, a rate, or any
+reading.** In particular this run's submitted Sharpe is an in-sample number on a
+panel whose holdout is still sealed, and is not reported as performance.
+
+**What would stop 6.5:** the table failing to build on real X; a rendered table
+that does not fit the prompt; a hash absent from the run config; a refusal outside
+the registered kinds. Each is why this run happens before the window rather than
+inside it.
+
+**Cost:** one more run at the $0.268 stored mean, so the shake-out is about
+**$1.34** in total.

@@ -141,9 +141,29 @@ def test_the_simulated_panel_is_rho_zero_on_both_configs():
     assert "adr" not in ac.PANELS
 
 
-def test_the_reasoned_pick_count_is_read_from_the_prereg_not_hard_coded():
-    """Registered in `prereg/agent-cell.md` check 2 as the fidelity subsample.
-    Read rather than copied, so a number changed in the file changes the run."""
-    assert ac.reasoned_pick_runs() == 10
-    text = ac.CELL_PREREG.read_text()
-    assert "pre-registered subsample" in text
+def test_the_arm_size_and_the_fidelity_subsample_are_different_numbers():
+    """Amendment 6. The file let these be read as one quantity, and this runner
+    read the SUBSAMPLE where it needed the ARM until 2026-09-29. Both are parsed
+    from the pre-registration, so a number changed there changes the run."""
+    assert ac.reasoned_pick_runs() == 20        # the arm, per config
+    assert ac.fidelity_subsample() == 10        # check 2's subsample, per config
+    assert ac.reasoned_pick_runs() > ac.fidelity_subsample()
+
+
+def test_the_fidelity_subsample_is_the_first_runs_in_seed_order(tmp_path):
+    """Amendment 6 fixes the SELECTION rule, not only the size: a subsample chosen
+    after seeing which runs produced picks would select on the outcome the
+    measurement is about. The runner records which run ids it is, before any
+    fidelity is measured, so the choice is checkable against the seed list."""
+    ac.main(["--panel", "s0", "--arm", "replay gate (reasoned pick)",
+             "--runs", "4", "--dry-run", "--out", str(tmp_path)])
+    cfg = json.loads((tmp_path / "run_config.json").read_text())
+    ids = [e["run_id"] for e in cfg["runs_index"]]
+    assert cfg["fidelity_subsample_size"] == 10
+    # 4 runs here, so the subsample is all of them, in seed order and no other
+    assert cfg["fidelity_subsample_run_ids"] == ids[:10] == ids
+    # and a non-fidelity arm names none
+    ac.main(["--panel", "s0", "--arm", "control", "--runs", "1",
+             "--dry-run", "--out", str(tmp_path / "ctl")])
+    other = json.loads((tmp_path / "ctl" / "run_config.json").read_text())
+    assert other["fidelity_subsample_run_ids"] == []

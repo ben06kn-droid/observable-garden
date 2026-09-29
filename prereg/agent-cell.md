@@ -388,3 +388,31 @@ no verdict claim) and nothing more. The agent cell is **simulated for cells 1 an
 2, ETF for cell 3**, and `experiments/agent_cell.py` takes `--panel {s0,s3,etf}`
 with no ADR option, so the distinction is enforced by the runner rather than
 remembered.
+
+**6 — 2026-09-29, before anything is live. The reasoned-pick arm's size, and which
+runs check 2's fidelity subsample is.**
+
+Amendment 3 of `prereg/AGENT_PROMPTS_REAL.md` registers the reasoned-pick **arm**
+and states **no run count**; check 2 above registers a **fidelity subsample** of
+"10 runs per config". Those are two different quantities and the file let them be
+read as one, so `experiments/agent_cell.py` was reading the subsample where it
+needed the arm. Both are fixed here.
+
+**The reasoned-pick arm is 20 runs on `s0` and 20 on `s3`.** Forty runs. It is
+sized like the other arms rather than like its subsample, because it carries the
+behavioural readouts of check 3 alongside the fidelity measurement, and a
+behavioural rate at n = 10 is below what `prereg/README.md`'s low-n rule allows
+to be reported at all.
+
+**Check 2's fidelity subsample is the FIRST 10 RUNS OF EACH CONFIG, IN SEED
+ORDER.** Not a random 10, not the 10 with the most picks. The runner draws its
+seeds from a fixed block per panel and runs them in that order, so "the first 10
+in seed order" is determined before any run happens and can be checked afterwards
+against the seed list in `run_config.json`.
+
+Naming it this way closes a hole the file had left open: a subsample chosen after
+seeing which runs produced picks would select on the outcome the measurement is
+about, and a fidelity rate computed on the pick-richest half of the arm is not the
+arm's fidelity. **Every pick and every meta move in those 10 runs is
+re-presented**, as check 2 registers; the other 10 runs of each config contribute
+their behavioural readouts and no fidelity.

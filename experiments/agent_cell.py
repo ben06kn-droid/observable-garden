@@ -66,26 +66,43 @@ DEPTH = {"s0": 3, "s3": 3, "etf": 3}
 SEEDS = {"s0": 20260929, "s3": 20260930, "etf": 20261001}
 
 
-def reasoned_pick_runs() -> int:
-    """The reasoned-pick arm's registered run count, READ from the
-    pre-registration rather than written here.
-
-    `prereg/AGENT_PROMPTS_REAL.md` amendment 3 registers the **arm** and states no
-    count; the count is `prereg/agent-cell.md`'s check 2, which registers the
-    fidelity subsample as **10 runs per config**. Both files are named because a
-    reader chasing the number will start at amendment 3 and not find it there.
-
-    Parsed rather than copied, so a number changed in the file changes the run.
-    """
-    text = CELL_PREREG.read_text()
-    m = re.search(r"pre-registered subsample\s*—\s*(\d+)\s+runs per config", text)
+def _read_prereg(pattern: str, what: str) -> int:
+    """One registered number, parsed from the pre-registration rather than copied
+    here, so a number changed in the file changes the run."""
+    m = re.search(pattern, CELL_PREREG.read_text())
     if not m:
         raise SystemExit(
-            "cannot find the fidelity subsample's run count in "
-            f"{CELL_PREREG.name}. It is registered in check 2 as 'a "
-            "pre-registered subsample - N runs per config'; the runner reads it "
-            "rather than holding its own copy.")
+            f"cannot find {what} in {CELL_PREREG.name}. The runner reads it "
+            "rather than holding its own copy; if the wording moved, fix the "
+            "pattern here rather than hard-coding the number.")
     return int(m.group(1))
+
+
+def reasoned_pick_runs() -> int:
+    """The reasoned-pick ARM's registered run count: 20 per config.
+
+    `prereg/agent-cell.md` amendment 6. Distinct from the fidelity SUBSAMPLE below,
+    which the file previously let be read as the same quantity -- and this runner
+    read the subsample where it needed the arm until 2026-09-29.
+    `prereg/AGENT_PROMPTS_REAL.md` amendment 3 registers the arm and states no
+    count, which is why a reader chasing the number has to be sent here.
+    """
+    return _read_prereg(
+        r"reasoned-pick arm is (\d+) runs on `s0`",
+        "the reasoned-pick arm's run count (amendment 6)")
+
+
+def fidelity_subsample() -> int:
+    """Check 2's subsample: the FIRST n runs of each config, IN SEED ORDER.
+
+    Amendment 6 fixes the selection rule as well as the size. A subsample chosen
+    after seeing which runs produced picks would select on the outcome the
+    measurement is about, so it is determined by the seed order the runner draws
+    before anything runs and is checkable afterwards against `run_config.json`.
+    """
+    return _read_prereg(
+        r"pre-registered subsample\s*—\s*(\d+)\s+runs per config",
+        "check 2's fidelity subsample size")
 
 
 def simulated_panel(which: str, seed: int):
@@ -197,6 +214,8 @@ def main(argv=None) -> int:
     if runs is None:
         runs = (reasoned_pick_runs() if a.arm == "replay gate (reasoned pick)"
                 else 20)
+    # Amendment 6: which runs check 2 re-presents, fixed before anything runs.
+    fidelity_n = fidelity_subsample()
     prompts = read_prompts()
     seeds = [int(s) for s in np.random.default_rng(
         SEEDS[a.panel]).integers(0, 2**31 - 1, size=runs)]
@@ -225,6 +244,12 @@ def main(argv=None) -> int:
         "orientation_table_hashes": {e["run_id"]: e["orientation_table_hash"]
                                      for e in entries},
         "runs_index": entries,
+        # amendment 6: check 2's subsample is the FIRST n runs in seed order, so
+        # the selection is recorded here rather than made later on the outcome
+        "fidelity_subsample_size": fidelity_n,
+        "fidelity_subsample_run_ids": [e["run_id"] for e in entries[:fidelity_n]]
+                                      if a.arm == "replay gate (reasoned pick)"
+                                      else [],
     }
     (out / "run_config.json").write_text(json.dumps(config, indent=1, default=str))
     print(f"\nwrote {len(records)} runs and run_config.json to {out}")
