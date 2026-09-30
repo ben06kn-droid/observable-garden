@@ -658,3 +658,17 @@ def test_a_finished_run_written_before_the_in_file_self_check_is_not_redone(tmp_
     d2["events"] = [e for e in d2["events"] if e.get("kind") != "end"]
     files[1].write_text(json.dumps(d2, indent=1))
     assert ac.completion_of(files[1]) == "partial"
+
+
+def test_the_credential_is_written_onto_each_run_record(tmp_path):
+    """`--credential` reached the run config and never the run record, so every run
+    file written before 2026-09-30 says `unknown` -- the s0 replay cell's first
+    eleven among them. A per-run field is what cost attribution needs: a
+    directory-level config cannot describe a directory filled by more than one
+    invocation, which is exactly what a resumed cell is."""
+    ac.main(["--panel", "s0", "--arm", "control", "--runs", "2", "--dry-run",
+             "--credential", "seat", "--workers", "2", "--out", str(tmp_path)])
+    for f in sorted(tmp_path.glob("cell_*.json")):
+        assert json.loads(f.read_text())["credential"] == "seat", f.name
+    cfg = json.loads((tmp_path / "run_config.json").read_text())
+    assert [e["credential"] for e in cfg["runs_index"]] == ["seat", "seat"]

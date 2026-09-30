@@ -183,7 +183,8 @@ def _scripted(rec, handlers, arm: str) -> None:
 
 
 def run_one(arm: str, panel_name: str, seed: int, index: int, *,
-            prompts: dict, dry_run: bool = False) -> tuple[RunRecord, dict]:
+            prompts: dict, dry_run: bool = False,
+            credential: str = "unknown") -> tuple[RunRecord, dict]:
     """One run. Returns the record and the per-run config entry."""
     if panel_name == "etf":
         panel, cls, sandbox, table = etf_panel()
@@ -286,6 +287,15 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
         rec.log("self_check", replayable=None, check=None, basis=None,
                 reason="this arm has no session, so there is nothing to re-execute",
                 error=None)
+    # WHICH CREDENTIAL PAID FOR THIS RUN, on the record itself.
+    #
+    # `--credential` reached the run config and never the run record, so every run
+    # file written before 2026-09-30 says `unknown` -- the s0 replay cell's first
+    # eleven runs among them, which were seat runs by invocation. A per-run field
+    # is what cost attribution needs: a directory-level config cannot describe a
+    # directory that was filled by more than one invocation, which is exactly what
+    # a resumed cell is.
+    rec.credential = credential
     rec.endpoint = _served_model_assertion(rec)
     if not rec.submitted:
         rec.no_submit = True
@@ -357,9 +367,10 @@ def _task(payload) -> dict:
     touched by two searches at once, and a thread pool would make that an
     unreproducible bug rather than an impossible one.
     """
-    arm, panel, seed, index, out_dir, dry_run = payload
+    arm, panel, seed, index, out_dir, dry_run, credential = payload
     prompts = read_prompts()
-    rec, entry = run_one(arm, panel, seed, index, prompts=prompts, dry_run=dry_run)
+    rec, entry = run_one(arm, panel, seed, index, prompts=prompts, dry_run=dry_run,
+                         credential=credential)
     path = Path(out_dir) / f"{rec.run_id}.json"
     path.write_text(json.dumps(rec.to_json(), indent=1, default=str))
     entry["index"] = index
@@ -412,7 +423,8 @@ def main(argv=None) -> int:
         if state == "partial":
             path.unlink()
             redone.append(rid)
-        todo.append((a.arm, a.panel, seeds[i], i, str(out), a.dry_run))
+        todo.append((a.arm, a.panel, seeds[i], i, str(out), a.dry_run,
+                     a.credential))
     if skipped:
         print(f"  resuming: {len(skipped)} completed run(s) skipped", flush=True)
     if legacy:
@@ -453,6 +465,7 @@ def main(argv=None) -> int:
             "run_id": rid, "arm": a.arm, "panel": a.panel, "seed": seeds[i],
             "index": i,
             "orientation_table_hash": (ot[0].get("hash") if ot else None),
+            "credential": d.get("credential"),
             "self_check": ({k: v for k, v in sc[0].items() if k not in ("kind", "t")}
                            if sc else None)})
     records = entries

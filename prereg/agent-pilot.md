@@ -1190,3 +1190,61 @@ own harness verdict on replayability is not in the artifact; they are re-gradabl
 from their session logs, which they do carry. **Rule 5 governs them as it governs
 every run recorded in this file: no number from them enters a verdict, a rate, or
 any reading**, and that is unchanged by the interruption.
+
+#### The 11 legacy runs, re-graded 2026-09-30 — statuses only
+
+`experiments/regrade_pilot.py --panel s0 --dir runs/agent_cell_s0_replay`. **All
+eleven are re-gradable**, each rebuild reproducing its file's best record. Statuses
+only; no number from them is read.
+
+| run | INTEGRITY | COMMITMENT |
+|---|---|---|
+| 0 | PASS | PASS |
+| 1 | PASS | **FAIL** |
+| 2 | PASS | PASS |
+| 3 | PASS | PASS |
+| 4 | PASS | PASS |
+| 5 | PASS | PASS |
+| 6 | PASS | **FAIL** |
+| 7 | PASS | PASS |
+| 8 | PASS | **FAIL** |
+| 9 | PASS | PASS |
+| 10 | PASS | PASS |
+
+**INTEGRITY: 11 of 11. COMMITMENT: 8 of 11.**
+
+Each budget was **read from the log**, not reconstructed — these runs postdate
+amendment 10 and carry `declared_budget`. What they lack is only the in-file
+`self_check`, which is why the resume rule classes them `complete_legacy`.
+
+**The three COMMITMENT failures are the expected case, not a defect.** Runs 1, 6 and
+8 each carry **logged trigger changes** (2, 2 and 1) and each returned
+**DEPENDS_ON_JUDGMENT**. `prereg/unfaithful-searchers.md`'s rule 5 makes only a run
+that **certifies despite a binding change** a defect; none certified. A COMMITMENT
+failure with no logged change would have been the defect, and there is none.
+
+#### Runs 0–10 were seat runs, with the credential field absent through a writer defect
+
+**Recorded because the artifact does not say it.** Those eleven files carry
+`credential: "unknown"`. They were **seat runs by invocation** — the command that
+produced them passed `--credential seat` — but `agent_cell.py` wrote the flag into
+the **run config** and never onto the **run record**, so the per-run field kept its
+default.
+
+**Fixed for the remaining runs; the eleven files are left untouched.** The fix writes
+`credential` onto each record at the point the record is finished, and the run
+config's index carries it per run. Back-filling the eleven would mean editing a
+completed run file to assert something the run itself did not record, which is not a
+correction but a claim about the past written into evidence — so the claim lives here
+instead, where it is dated and attributable.
+
+**Why a per-run field and not a directory-level one.** A run config describes an
+invocation; a **resumed cell is filled by more than one**. The s0 replay cell will
+have at least two — the interrupted first and the 4-worker resume — so cost
+attribution cannot come from a single directory-level value without assuming every
+run in the directory was paid for the same way. Held by
+`tests/test_agent_cell.py`.
+
+**Rule 5 is unaffected.** Nothing about the credential enters a verdict or a rate; it
+is cost accounting, and it is recorded because an unrecorded fact about how a seat
+window was spent is one nobody can check later.
