@@ -3,10 +3,6 @@
 *He had read too many chivalric romances. Give him an inn and he saw a castle;
 give him a windmill and he saw a giant.*
 
-That is not a joke about the name. Quixote's failure was not stupidity — it was
-a rich prior fitted to sparse data, which is the failure this gate measures. A
-backtest that reports a Sharpe of 2.03 against a population ceiling of 1.00 is
-not a lie; it is a windmill seen by someone who came expecting giants.
 
 `quixote/` is the **agent-facing** form of the gate in `garden/`. Where `garden`
 audits a finished transcript, `quixote` sits inside the search while it happens.
