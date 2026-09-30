@@ -2,8 +2,9 @@
 
 **DRAFT STUB — committed but not live, and not built.** Belongs to 6.9. Design
 and pre-registration stub only; construction waits until after the paper, which
-is recorded in `ROADMAP.md`. Prior art not yet searched beyond the citation
-below. This item **changes a statistic** and is one of the authorised exceptions
+is recorded in `ROADMAP.md`. Literature search 2026-09-30 (`docs/RELATED_WORK_2026.md`) found no prior
+replay of an adaptive search's logged decisions inside a data-snooping null,
+and no mixed replay/max-over-alternatives pricing. Not a proof of absence. The citation below stands. This item **changes a statistic** and is one of the authorised exceptions
 to ROADMAP's no-new-estimator-variants rule.
 
 ## Question

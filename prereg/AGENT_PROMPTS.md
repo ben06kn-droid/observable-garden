@@ -232,3 +232,15 @@ Quixote runs do not use this fingerprint at all. They record their own, over
 `quixote` plus everything quixote imports, via `quixote/fingerprint.py`;
 `code_fingerprint` gained an optional `paths` argument so that is possible
 without widening `CODE_PATHS` further.
+
+**Related work on re-running agents, added by the 2026-09-30 literature search.**
+Rewolinski, Zane, Huang, Singh, Wang, Gao & Yu (2026), *Sanity Checks for Agentic
+Data Science* (arXiv:2604.11003), re-run agentic pipelines under perturbations of
+the data to screen whether the agent can tell signal from noise, and find
+self-reported confidence poorly calibrated to the empirical stability of the
+conclusions. It is the nearest neighbour to the twins here and to this file's
+prediction slot. **The hypothesis differs:** theirs concerns **stability** under
+perturbation, and this project's concerns **trial count** and whether a logged
+candidate set suffices when the search is adaptive. Read-level: abstract and
+listing metadata read 2026-09-30, full text not opened
+(`docs/RELATED_WORK_2026.md`).

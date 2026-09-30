@@ -61,6 +61,23 @@ it is the right tool. This project asks what a logged search lets you do with
 it. `SCOPE.md` has every number and caveat, `THEORY.md` the proofs, and
 `EXPERIMENTS.md` the commit each pre-registration was fixed at.
 
+Gençay (2026) and Kinlay (2026a) published the observation that an agent's trial
+count is observable by construction before this project's first record; this
+project reached it independently. Neither addresses whether the logged candidate
+set suffices when the search is adaptive, which is the subject here.
+
+Kinlay (2026b) is concurrent, independent work reaching two of the same
+conclusions: that data-snooping tests calibrated on a family fixed in advance are
+inflated when pointed at the search's own trace, and that a Deflated Sharpe fed an
+effective trial count passes too often. This project's records are earlier —
+`3446f10`, 2026-09-14 for the effective-N double-counting result, and `309332d`
+with `34934a1`, 2026-09-15 for the family-versus-trace distinction — and its
+account of the effective-N error derives it from `Var[SR_n]`, which that work does
+not contain.
+
+The full search, with read-levels for every reference, is
+`docs/RELATED_WORK_2026.md` (2026-09-30).
+
 ## Setup
 
 ```

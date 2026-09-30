@@ -320,6 +320,24 @@ What sits inside that framework and is not a replication:
   intended breadth can certify anything.
 - **The effective-N double-counting result**, a property of the closed-form
   baseline rather than of the Reality Check.
+- **Replay of a logged adaptive search inside the null**, and pricing that mixes
+  replay with a maximum over the alternatives an undeclared decision could have
+  taken (`quixote/`).
+
+**Novelty of the replay tier, at the strength the search supports.** Literature
+search 2026-09-30 (`docs/RELATED_WORK_2026.md`) found no prior replay of an
+adaptive search's logged decisions inside a data-snooping null, and no mixed
+replay/max-over-alternatives pricing. Not a proof of absence.
+
+**Two premises here were published earlier by others, and that is recorded rather
+than glossed.** Gençay (2026) and Kinlay (2026a) published the observation that an
+agent's trial count is observable by construction before this project's first
+record (`ed14594`, 2026-09-14); this project reached it independently, and neither
+work addresses whether the logged candidate set suffices when the search is
+adaptive, which is the subject here. Kinlay (2026b) is concurrent, independent work
+reaching the family-versus-trace and effective-trial-count conclusions, where this
+project's records are earlier — `3446f10`, 2026-09-14 and `309332d`/`34934a1`,
+2026-09-15 — and it contains no mechanism for the effective-N error.
 
 That the failure mode is real is not novel, and the theory naming it predates
 this work: Leeb & Pötscher (2005) prove post-selection distributions cannot be

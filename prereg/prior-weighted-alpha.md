@@ -1,8 +1,9 @@
 # prior-weighted-alpha (item 2): spending some of α on a declared short list
 
 **DRAFT — committed but not live.** Authorises nothing. A 7.2 slot, validated by
-scripted searchers in 7.3, and an arm in 7.4. Prior art not yet searched beyond
-the citation below.
+scripted searchers in 7.3, and an arm in 7.4. Literature search 2026-09-30 (`docs/RELATED_WORK_2026.md`) found no prior
+replay of an adaptive search's logged decisions inside a data-snooping null,
+and no mixed replay/max-over-alternatives pricing. Not a proof of absence. The item's own citation below stands.
 
 ## Question
 

@@ -394,3 +394,15 @@ file's **design** section, not its amendment log, so this edit **moves
 changed — and nothing is mid-flight: the first shake-out is recorded and closed, and
 7.3's agent cell has not started. The **shared** control and cost text is untouched,
 so the byte-identity guarantee across arms is unaffected and its tests pass.
+
+**Related work on re-running agents, added by the 2026-09-30 literature search.**
+Rewolinski, Zane, Huang, Singh, Wang, Gao & Yu (2026), *Sanity Checks for Agentic
+Data Science* (arXiv:2604.11003), re-run agentic pipelines under perturbations of
+the data to screen whether the agent can tell signal from noise, and find
+self-reported confidence poorly calibrated to the empirical stability of the
+conclusions. It is the nearest neighbour to the twins here and to this file's
+prediction slot. **The hypothesis differs:** theirs concerns **stability** under
+perturbation, and this project's concerns **trial count** and whether a logged
+candidate set suffices when the search is adaptive. Read-level: abstract and
+listing metadata read 2026-09-30, full text not opened
+(`docs/RELATED_WORK_2026.md`).

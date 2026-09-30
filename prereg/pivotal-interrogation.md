@@ -1,7 +1,9 @@
 # pivotal-interrogation (item 7): ask the agent only where its answer could change the verdict
 
 **DRAFT — committed but not live.** Authorises nothing. Depends on item 1's
-bracket. Prior art not yet searched beyond the note at the end.
+bracket. Literature search 2026-09-30 (`docs/RELATED_WORK_2026.md`) found no prior
+replay of an adaptive search's logged decisions inside a data-snooping null,
+and no mixed replay/max-over-alternatives pricing. Not a proof of absence. The note at the end stands.
 
 ## Question
 

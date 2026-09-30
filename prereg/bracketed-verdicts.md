@@ -1,7 +1,9 @@
 # bracketed-verdicts (item 1): two p-values for a decision that cannot be replayed
 
 **DRAFT — committed but not live.** Authorises nothing. Built in 7.2's verdict
-path; validated in 7.3. Prior art not yet searched for this item.
+path; validated in 7.3. Literature search 2026-09-30 (`docs/RELATED_WORK_2026.md`) found no prior
+replay of an adaptive search's logged decisions inside a data-snooping null,
+and no mixed replay/max-over-alternatives pricing. Not a proof of absence.
 
 ## Question
 

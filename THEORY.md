@@ -452,6 +452,15 @@ reach this case.
 
 ## Prior work checked for P4, P5 and the coupling κ
 
+**Novelty of the anchoring SIGN result, at the strength the search supports.**
+Literature search 2026-09-30 (`docs/RELATED_WORK_2026.md`) found no prior replay of
+an adaptive search's logged decisions inside a data-snooping null, and no mixed
+replay/max-over-alternatives pricing. Not a proof of absence. Restricted to P4's
+own claim: the search found nothing stating that **winner anchoring is
+anti-conservative and loser anchoring conservative**, which is the sign result and
+is what is claimed new here — not the existence of the failure mode, which is old
+and is attributed below and in `SCOPE.md`.
+
 Read from full text, not summaries:
 
 - **Nikolopoulos (2026)** scales the expected maximum over correlated
@@ -459,9 +468,26 @@ Read from full text, not summaries:
   as the right layer for a search-adjusted p-value. It does not analyze
   searches that build on their own best results, and it has no measure based
   on the order of evaluations.
+- **Nair & Janson (2023)** make a randomization test exactly valid on adaptively
+  collected data by reweighting, which is the closest statistical ancestor of
+  replaying a known policy on resampled data. There the policy governs **data
+  collection**; here it governs **selection** among specifications on data already
+  in hand, and the anchoring sign has no counterpart in it. (Added by the
+  2026-09-30 search; abstract read, full text not opened.)
+- **Markovic, Taylor & Taylor (2019)** re-run an executable selection algorithm on
+  perturbed data given in-silico access to it. The inference is selective and
+  all-or-nothing — it conditions on the selection event for one parameter — where
+  P4 concerns the sign of the error in a maximum over a declared class. (Added by
+  the 2026-09-30 search; abstract read, full text not opened.)
+- **Banerjee (2026)** bounds selected-target non-coverage by the fixed-target rate
+  plus an average total-variation distance, without executing the selection. It
+  gives no sign for anchoring. (Added by the 2026-09-30 search; abstract read, full
+  text not opened.)
 - **Miao, Pritchard & Zou (2026)** log AI agents' analysis paths and build a
   reference distribution, the m-value, from them. They run no data-snooping
   test and do not analyze the order in which agents try specifications.
+  (Read-level updated 2026-09-30: abstract and listing metadata read; full text
+  not opened.)
 - **Liu, Qu, Gaboardi, Garg & Ullman (2024)** define the adaptivity of a data
   analysis as its rounds of query dependence, bounded by static analysis of
   program code. That is a measure of depth, not of how strongly the next query
@@ -605,7 +631,10 @@ tags) except where an entry says otherwise:
   result; cite this ahead of the 2005 paper for post-selection inference.
 - Liu, J., Qu, W., Gaboardi, M., Garg, D. & Ullman, J. (2024). Program
   analysis for adaptive data analysis. *Proceedings of the ACM on Programming
-  Languages* 8(PLDI), 914–938.
+  Languages* 8(PLDI), Article 184. **Verified 2026-09-30**: resolves at
+  arXiv:2608.19575, whose journal reference confirms PACMPL, PLDI 2024, Article
+  184 (June 2024). The 2608 identifier is a 2026 posting of the 2024 paper, which
+  is why the pairing looked wrong; abstract read, full text not opened.
 - López de Prado, M. & Fabozzi, F.J. (2026). The false discovery rate in
   finance: identification failure and search-adjusted estimation. SSRN
   6450418, doi:10.2139/ssrn.6450418. Title and authors confirmed via Crossref;

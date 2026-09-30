@@ -1,8 +1,9 @@
 # twin-calibration (item 5): the agent as its own null
 
 **DRAFT — committed but not live.** Authorises nothing. A new Phase 7 item.
-**This one changes what certifies.** Prior art not yet searched beyond the note
-below.
+**This one changes what certifies.** Literature search 2026-09-30 (`docs/RELATED_WORK_2026.md`) found no prior
+replay of an adaptive search's logged decisions inside a data-snooping null,
+and no mixed replay/max-over-alternatives pricing. Not a proof of absence. The note below stands.
 
 ## Question
 

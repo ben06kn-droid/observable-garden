@@ -313,6 +313,50 @@ requires importing quixote.
 
 ---
 
+## Why the grammar exists: the replay objection, and a design alternative
+
+**The objection.** Gonuguntla (2026), *The Replay Gap* (arXiv:2608.08239, CoLM
+2026), shows that replaying a logged LLM trajectory becomes invalid as soon as
+policies diverge: substituting one model's outputs into a recorded trajectory
+assumes the downstream actions are unaffected, and they are not — 74–77% of early
+model swaps diverge at the first post-fork action, leaving only 3% of replayed
+states valid. On its own terms the result is correct, and it is the strongest
+published objection to anything called replay.
+
+**It does not reach Quixote, and the reason is the grammar.** Quixote **never
+replays the LLM.** What it replays is (i) **harness-executed typed moves** — the
+harness performs `init`, `extend_best`, `pick` and the rest, so a replayed move is
+a function of the data and not a re-prediction of a model's next token — and
+(ii) **declared triggers**, which are predicates fixed before the first evaluation
+and re-evaluated on each replicate. Judgment the agent did not declare is not
+replayed at all: it is **priced at the maximum over the alternatives** it could
+have taken, and the model itself is covered by **twins**. That division is the
+grammar's whole purpose. A gate that tried to replay the model would inherit
+exactly the invalidity Gonuguntla measures, which is why this one does not try.
+
+Two consequences worth stating. A move whose parameters are missing cannot be
+re-executed, which is why every accepted move carries them
+(`tests/test_move_completeness.py`). And a searcher whose moves name things by
+identity will see the fill take over on a replicate — recorded per replicate as
+the hand-over step rather than hidden, because that is the point at which the
+replay stops following the log.
+
+**A design alternative, for contrast.** Qu, Chen & Wang (2026), *Propose, Don't
+Judge* (arXiv:2609.27051), get validity from a frozen referee that scores each
+candidate only on outcomes revealed **after** submission, using online e-BH and
+e-processes. That is a real alternative to everything here and it avoids the
+replay question entirely. It pays in **waiting time** — roughly 500 trading days
+to admission — where Quixote certifies on the in-sample data already in hand and
+pays instead in the strength of what it may claim. Neither choice dominates; they
+buy different things.
+
+**Novelty, stated at the strength the search supports.** Literature search
+2026-09-30 (`docs/RELATED_WORK_2026.md`) found no prior replay of an adaptive
+search's logged decisions inside a data-snooping null, and no mixed
+replay/max-over-alternatives pricing. Not a proof of absence.
+
+---
+
 ## Reading order
 
 `ROADMAP.md` Phase 7 for where this sits and what gates what.
