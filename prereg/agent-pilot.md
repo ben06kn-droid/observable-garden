@@ -1143,3 +1143,50 @@ sufficient. **What is established is that the grammar accepted a pick from a mod
 for the first time.** The arm's yield at the cell's n = 20 per config is unmeasured,
 and if it comes back low the fallback is already registered and does not need
 deciding in the window.
+
+### The s0 replay cell, interrupted and resumable — recorded 2026-09-30
+
+**The `s0` replay-gate cell was interrupted after 11 completed runs**, of the 80 the
+ROADMAP's agent-cell sizing registers for that arm on that panel. They are indices
+**0–10, contiguous**, in `runs/agent_cell_s0_replay/`, on the pinned model.
+
+**It resumes at 4 workers on the same seeds, and that is a property of the design
+rather than a promise.** Seeds are drawn from the panel's registered block and
+assigned **by index**: index *i* always receives `seeds[i]`, and the run id contains
+*i*. So a resumed run is **the same run**, not a fresh draw filling a gap — which is
+what makes resuming legitimate instead of a quiet re-randomisation. Indices 11–79
+will be run; 0–10 will not be repeated.
+
+**Workers are processes, not threads.** Each builds its own panel, sandbox and
+`ToolSession` inside `run_one`, so workers share no mutable state. The sandbox, the
+grammar and the session are not designed to be touched by two searches at once, and
+a thread pool would make that an unreproducible bug rather than an impossible one.
+`tests/test_agent_cell.py` holds a 4-worker dry run **byte-identical** to a 1-worker
+one on the same seeds, after stripping wall-clock fields — two runs of one seed are
+the same search but not the same moment.
+
+**The resume rule, and a defect in its first form that would have destroyed these 11
+runs.** The rule was specified as "skip any run id whose file holds a completed run
+**with a self-check**, delete and redo any partial one". Implemented literally, it
+classed **all eleven finished runs as partial and would have deleted them**: they
+were written hours before the self-check moved into the run file, so they carry
+`end`, `session_log`, `verdict`, `declared_budget` and `trigger_changes` but no
+`self_check`.
+
+The rule is therefore:
+
+> **`end` is the completion marker**, written last. A file with `end` and a
+> `self_check` is `complete`; a file with `end` and no `self_check` is
+> `complete_legacy` — **finished work, skipped, never redone**, and counted in the
+> run config's `skipped_without_self_check`. Only a file **without `end`** is
+> partial, and only a partial file is deleted and redone.
+
+The self-check is evidence of **auditability**, not of completion. A resume rule that
+destroys completed seat runs to satisfy a newer schema is worse than no resume rule.
+Held by `tests/test_agent_cell.py`.
+
+**What the 11 legacy runs cannot do.** They carry no in-file self-check, so their
+own harness verdict on replayability is not in the artifact; they are re-gradable
+from their session logs, which they do carry. **Rule 5 governs them as it governs
+every run recorded in this file: no number from them enters a verdict, a rate, or
+any reading**, and that is unchanged by the interruption.

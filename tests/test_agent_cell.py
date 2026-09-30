@@ -504,3 +504,157 @@ def test_the_trigger_change_history_reaches_the_run_file_with_timestamps(tmp_pat
     for ch in ev[0]["changes"]:
         assert set(ch) == {"at_step", "trigger", "reason", "timestamp"}
         assert ch["timestamp"] is not None
+
+
+# -- --workers N, with resume --------------------------------------------------
+
+TIME_KEYS = {"t", "timestamp", "opened_at", "first_evaluation_at",
+             "trigger_stamped_at", "stamped_at", "duration_s", "usd", "usage"}
+
+
+def _strip_time(o):
+    """Everything but the wall clock. Two runs of the same seed are the same
+    search; they are not the same MOMENT, so timestamps differ by construction and
+    comparing them would test the clock rather than the run."""
+    if isinstance(o, dict):
+        return {k: _strip_time(v) for k, v in o.items() if k not in TIME_KEYS}
+    if isinstance(o, list):
+        return [_strip_time(x) for x in o]
+    return o
+
+
+def _canon(path):
+    return json.dumps(_strip_time(json.loads(path.read_text())), sort_keys=True)
+
+
+def test_four_workers_produce_byte_identical_logs_to_one(tmp_path):
+    """Run ids and seeds are fixed BY INDEX, and each worker builds its own
+    sandbox and `ToolSession` in its own process, so parallelism cannot reach the
+    search. If it could, the cell's results would depend on how many cores ran it.
+    """
+    one, four = tmp_path / "w1", tmp_path / "w4"
+    args = ["--panel", "s0", "--arm", "replay gate (reasoned pick)",
+            "--runs", "4", "--dry-run"]
+    ac.main(args + ["--workers", "1", "--out", str(one)])
+    ac.main(args + ["--workers", "4", "--out", str(four)])
+
+    a = sorted(p.name for p in one.glob("cell_*.json"))
+    b = sorted(p.name for p in four.glob("cell_*.json"))
+    assert a == b and len(a) == 4, (a, b)          # the same run ids, not just as many
+    for name in a:
+        assert _canon(one / name) == _canon(four / name), name
+
+
+def test_resume_skips_completed_ids_and_redoes_a_partial_one(tmp_path):
+    """An interrupted cell resumes on the SAME seeds. A completed run is skipped
+    rather than repeated, and a half-written one is deleted and redone rather than
+    kept -- a partial run is not a smaller run, its log stops at whatever move the
+    process died on."""
+    args = ["--panel", "s0", "--arm", "replay gate (reasoned pick)",
+            "--runs", "4", "--dry-run", "--out", str(tmp_path)]
+    ac.main(args + ["--workers", "1"])
+    files = sorted(tmp_path.glob("cell_*.json"))
+    assert len(files) == 4
+    before = {f.name: _canon(f) for f in files}
+
+    # run 2 is made PARTIAL: its tail markers are removed, as a crash would
+    partial = files[2]
+    d = json.loads(partial.read_text())
+    d["events"] = [e for e in d["events"]
+                   if e.get("kind") not in ("self_check", "end")]
+    partial.write_text(json.dumps(d, indent=1))
+    assert ac.completion_of(partial) == "partial"
+    # run 3 is MISSING entirely
+    files[3].unlink()
+    assert ac.completion_of(files[3]) == "missing"
+    assert ac.completion_of(files[0]) == "complete"
+
+    ac.main(args + ["--workers", "4"])
+
+    cfg = json.loads((tmp_path / "run_config.json").read_text())
+    assert len(cfg["resume"]["skipped_complete"]) == 2
+    assert len(cfg["resume"]["deleted_partial"]) == 1
+    assert cfg["resume"]["ran_now"] == [2, 3]
+
+    # the two untouched runs are byte-identical: they were skipped, not repeated
+    for name in (files[0].name, files[1].name):
+        assert _canon(tmp_path / name) == before[name], name
+    # and the redone pair matches what a fresh run produces, on the same seeds
+    for name in (partial.name, files[3].name):
+        assert _canon(tmp_path / name) == before[name], name
+    assert len(list(tmp_path.glob("cell_*.json"))) == 4
+
+
+def test_the_run_config_is_rebuilt_from_the_directory_not_the_invocation(tmp_path):
+    """A resumed cell's config must describe the WHOLE cell. If it described only
+    the tail, amendment 6's fidelity subsample -- the first n runs in seed order --
+    would be computed from whichever runs happened to be left."""
+    args = ["--panel", "s0", "--arm", "replay gate (reasoned pick)",
+            "--runs", "4", "--dry-run", "--out", str(tmp_path)]
+    ac.main(args + ["--workers", "1"])
+    (sorted(tmp_path.glob("cell_*.json"))[0]).unlink()
+    ac.main(args + ["--workers", "2"])
+
+    cfg = json.loads((tmp_path / "run_config.json").read_text())
+    assert len(cfg["runs_index"]) == 4
+    # ordered by run index, which completion order under a pool is not
+    assert [e["index"] for e in cfg["runs_index"]] == [0, 1, 2, 3]
+    assert cfg["fidelity_subsample_run_ids"][:4] == [
+        e["run_id"] for e in cfg["runs_index"]]
+    assert cfg["workers"] == 2
+
+
+def test_a_completed_run_file_is_one_that_carries_its_self_check(tmp_path):
+    """The completeness test reads the run file alone. A test that consulted the
+    shared index could not tell a finished run from one whose index entry was
+    written before it crashed -- and every arm carries a `self_check` event,
+    including one with no session, so the rule is uniform."""
+    ac.main(["--panel", "s0", "--arm", "control", "--runs", "1", "--dry-run",
+             "--out", str(tmp_path)])
+    f = sorted(tmp_path.glob("cell_*.json"))[0]
+    assert ac.completion_of(f) == "complete"
+    d = json.loads(f.read_text())
+    sc = [e for e in d["events"] if e.get("kind") == "self_check"]
+    assert sc and sc[0]["replayable"] is None      # no session on the control arm
+    assert "no session" in sc[0]["reason"]
+
+
+def test_a_finished_run_written_before_the_in_file_self_check_is_not_redone(tmp_path):
+    """The rule that nearly destroyed eleven seat runs.
+
+    `end` is the completion marker -- it is written last. A run finished before
+    2026-09-30 carries no `self_check` event because the field did not exist, and
+    requiring one for completeness would have classed eleven finished runs of the s0
+    replay cell as partial and DELETED them. The self-check is evidence of
+    auditability, not of completion, so such a run is `complete_legacy`: skipped,
+    recorded, never redone.
+    """
+    args = ["--panel", "s0", "--arm", "replay gate (reasoned pick)",
+            "--runs", "2", "--dry-run", "--out", str(tmp_path)]
+    ac.main(args + ["--workers", "1"])
+    files = sorted(tmp_path.glob("cell_*.json"))
+
+    # age one file: drop its self_check, as a pre-2026-09-30 run would have
+    aged = files[0]
+    d = json.loads(aged.read_text())
+    d["events"] = [e for e in d["events"] if e.get("kind") != "self_check"]
+    aged.write_text(json.dumps(d, indent=1))
+    assert ac.completion_of(aged) == "complete_legacy"
+    assert ac.is_complete("complete_legacy") and ac.is_complete("complete")
+    before = _canon(aged)
+
+    ac.main(args + ["--workers", "2"])
+
+    # it survived, byte for byte, and the resume says why it was skipped
+    assert aged.exists() and _canon(aged) == before
+    cfg = json.loads((tmp_path / "run_config.json").read_text())
+    assert len(cfg["resume"]["skipped_complete"]) == 2
+    assert len(cfg["resume"]["skipped_without_self_check"]) == 1
+    assert cfg["resume"]["deleted_partial"] == []
+    assert cfg["resume"]["ran_now"] == []
+
+    # and a file with NO `end` is still partial, so a real crash is still redone
+    d2 = json.loads(files[1].read_text())
+    d2["events"] = [e for e in d2["events"] if e.get("kind") != "end"]
+    files[1].write_text(json.dumps(d2, indent=1))
+    assert ac.completion_of(files[1]) == "partial"

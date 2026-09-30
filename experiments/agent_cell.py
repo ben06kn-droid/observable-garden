@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import json
 import re
 from dataclasses import replace
@@ -226,7 +227,12 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
                                     tools.session.log.declared_trigger_records]
         rec.triggers_changed = bool(tools.session.log.trigger_changes)
         # The close-time self-check, recorded in the log (the pre-agent-cell list)
-        tools.session.close()
+        check = tools.session.close()
+        # The self-check goes into the RUN FILE, not only into the run config: a
+        # resume decides run by run whether a file is complete, and a completeness
+        # test that has to consult a shared index cannot tell a finished run from
+        # one whose index entry was written before it crashed.
+        rec.log("self_check", **check)
         # THE SESSION LOG, ON DISK. The first shake-out found this missing from
         # this runner (`prereg/agent-pilot.md`, 2026-09-29): the records existed in
         # process and never reached the file, so those runs could not be re-graded
@@ -273,6 +279,13 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
             rec.submitted_sharpe = float(score)
         if not dry_run:
             _certify_run(rec, tools, sandbox, cls, table)
+    else:
+        # An arm with no session has no self-check, and the field says so rather
+        # than being absent -- the resume rule is "a completed file carries a
+        # self_check event", and it has to hold for every arm.
+        rec.log("self_check", replayable=None, check=None, basis=None,
+                reason="this arm has no session, so there is nothing to re-execute",
+                error=None)
     rec.endpoint = _served_model_assertion(rec)
     if not rec.submitted:
         rec.no_submit = True
@@ -282,6 +295,75 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
              "orientation_table_hash": ohash,
              "self_check": (tools.session.log.self_check if tools else None)}
     return rec, entry
+
+
+
+# -- resume, and the worker pool ---------------------------------------------
+#
+# Run ids and seeds are fixed BY INDEX: index i always gets `seeds[i]`, drawn from
+# the panel's registered block, and the run id contains i. So a resumed run is the
+# same run, not a fresh draw that happens to fill a gap -- which is what makes
+# resuming legitimate rather than a quiet re-randomisation.
+
+
+def run_id_for(arm: str, panel: str, seed: int, index: int) -> str:
+    return f"cell_{panel}_{index}_{arm.replace(' ', '_')}_{seed}"
+
+
+def completion_of(path: Path) -> str:
+    """`"missing"`, `"partial"`, `"complete"`, or `"complete_legacy"`.
+
+    **`end` is the completion marker.** It is written last, after the self-check,
+    the session log and the verdict, so a file carrying it is a run that finished.
+
+    **`complete`** additionally carries a `self_check` event, which is the evidence
+    that the run's own log re-executes. **`complete_legacy`** finished but predates
+    2026-09-30, when the self-check moved into the run file — it is finished work and
+    is **skipped, never redone**.
+
+    That distinction is not pedantry. Requiring `self_check` for completeness would
+    have classed **eleven finished seat runs of the s0 replay cell as partial and
+    deleted them**, because they were written hours before the field existed. A
+    resume rule that destroys completed work to satisfy a newer schema is worse than
+    no resume rule; the self-check is evidence of AUDITABILITY, not of completion.
+
+    **Partial** files are deleted and redone. A half-written run is not a smaller
+    run: its log stops at whatever move the process died on, and a cell that counted
+    it would be reading a search nobody ended.
+    """
+    if not path.exists():
+        return "missing"
+    try:
+        d = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return "partial"
+    kinds = {e.get("kind") for e in d.get("events", [])}
+    if "end" not in kinds:
+        return "partial"
+    return "complete" if "self_check" in kinds else "complete_legacy"
+
+
+def is_complete(state: str) -> bool:
+    """Both complete kinds count as done, so neither is redone on a resume."""
+    return state in ("complete", "complete_legacy")
+
+
+def _task(payload) -> dict:
+    """One run, in this process. Module-level so a process pool can pickle it.
+
+    Each call builds its OWN panel, sandbox and `ToolSession` inside `run_one`, so
+    workers share no mutable state -- which is why this is a process pool and not a
+    thread pool: the sandbox, the grammar and the session are not designed to be
+    touched by two searches at once, and a thread pool would make that an
+    unreproducible bug rather than an impossible one.
+    """
+    arm, panel, seed, index, out_dir, dry_run = payload
+    prompts = read_prompts()
+    rec, entry = run_one(arm, panel, seed, index, prompts=prompts, dry_run=dry_run)
+    path = Path(out_dir) / f"{rec.run_id}.json"
+    path.write_text(json.dumps(rec.to_json(), indent=1, default=str))
+    entry["index"] = index
+    return entry
 
 
 def main(argv=None) -> int:
@@ -295,6 +377,11 @@ def main(argv=None) -> int:
     ap.add_argument("--credential", default="seat", choices=("api", "seat"))
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--out", default=str(RUNS_ROOT))
+    ap.add_argument("--workers", type=int, default=1,
+                    help="processes, not threads; each builds its own sandbox and "
+                         "ToolSession. Completed run ids are skipped and partial "
+                         "ones are redone, so an interrupted cell resumes on the "
+                         "same seeds.")
     a = ap.parse_args(argv)
 
     runs = a.runs
@@ -309,21 +396,77 @@ def main(argv=None) -> int:
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    records, entries = [], []
+
+    # RESUME. Decide per run id, before anything starts, so the decision is
+    # visible in the log of the resumed run rather than inferred afterwards.
+    todo, skipped, redone, legacy = [], [], [], []
     for i in range(runs):
-        rec, entry = run_one(a.arm, a.panel, seeds[i], i, prompts=prompts,
-                             dry_run=a.dry_run)
-        records.append(rec)
-        entries.append(entry)
-        (out / f"{rec.run_id}.json").write_text(
-            json.dumps(rec.to_json(), indent=1, default=str))
-        print(f"  run {i} ({a.arm} on {a.panel}) done", flush=True)
+        rid = run_id_for(a.arm, a.panel, seeds[i], i)
+        path = out / f"{rid}.json"
+        state = completion_of(path)
+        if is_complete(state):
+            skipped.append(rid)
+            if state == "complete_legacy":
+                legacy.append(rid)
+            continue
+        if state == "partial":
+            path.unlink()
+            redone.append(rid)
+        todo.append((a.arm, a.panel, seeds[i], i, str(out), a.dry_run))
+    if skipped:
+        print(f"  resuming: {len(skipped)} completed run(s) skipped", flush=True)
+    if legacy:
+        print(f"  of those, {len(legacy)} predate the in-file self-check "
+              "(2026-09-30) and carry none; finished work, not redone", flush=True)
+    if redone:
+        print(f"  resuming: {len(redone)} partial run(s) deleted and redone: "
+              f"{', '.join(r.split('_')[2] for r in redone)}", flush=True)
+
+    workers = max(1, int(a.workers))
+    if workers == 1 or len(todo) <= 1:
+        fresh = [_task(t) for t in todo]
+        for t in todo:
+            print(f"  run {t[3]} ({a.arm} on {a.panel}) done", flush=True)
+    else:
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        fresh = []
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_task, t): t[3] for t in todo}
+            for fut in as_completed(futures):
+                fresh.append(fut.result())
+                print(f"  run {futures[fut]} ({a.arm} on {a.panel}) done", flush=True)
+
+    # The index is rebuilt from the DIRECTORY, not from this invocation, so a
+    # resumed cell's config describes the whole cell and not just the tail of it.
+    # Ordered by run index, because amendment 6's fidelity subsample is "the first
+    # n in seed order" and completion order is not seed order under a pool.
+    entries = []
+    for i in range(runs):
+        rid = run_id_for(a.arm, a.panel, seeds[i], i)
+        path = out / f"{rid}.json"
+        if not is_complete(completion_of(path)):
+            continue
+        d = json.loads(path.read_text())
+        sc = [e for e in d["events"] if e.get("kind") == "self_check"]
+        ot = [e for e in d["events"] if e.get("kind") == "orientation_table"]
+        entries.append({
+            "run_id": rid, "arm": a.arm, "panel": a.panel, "seed": seeds[i],
+            "index": i,
+            "orientation_table_hash": (ot[0].get("hash") if ot else None),
+            "self_check": ({k: v for k, v in sc[0].items() if k not in ("kind", "t")}
+                           if sc else None)})
+    records = entries
 
     config = {
         "panel": a.panel, "arm": a.arm, "runs": runs, "seeds": seeds,
         "seed_block": SEEDS[a.panel], "depth": DEPTH[a.panel],
         "model": MODEL, "max_turns": MAX_TURNS, "credential": a.credential,
         "code_state": code_state(), "dry_run": a.dry_run,
+        "workers": workers,
+        # what this invocation did, so a resume is on the record
+        "resume": {"skipped_complete": skipped, "deleted_partial": redone,
+                   "skipped_without_self_check": legacy,
+                   "ran_now": sorted(e["index"] for e in fresh)},
         "sim_config": SIM_CONFIGS.get(a.panel),
         # amendment 5 / AGENT_PROMPTS_REAL.md: the delivered table is hashed per
         # run and the hash is stored in the run config. Null for a non-orientation
@@ -339,7 +482,8 @@ def main(argv=None) -> int:
                                       else [],
     }
     (out / "run_config.json").write_text(json.dumps(config, indent=1, default=str))
-    print(f"\nwrote {len(records)} runs and run_config.json to {out}")
+    print(f"\n{len(records)} complete run(s) in {out}; "
+          f"{len(fresh)} written by this invocation")
     return 0
 
 
