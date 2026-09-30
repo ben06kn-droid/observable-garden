@@ -99,7 +99,7 @@ def regrade_one(path: Path, table, cls, ann: float, base: np.ndarray) -> dict:
         return out
 
     log = rebuild_log(records, d.get("triggers_predeclared") or [], None)
-    score_fn = table.scorer()
+    score_fn = None if table is None else table.scorer()
     # The faithfulness gate: does replaying the rebuild reproduce the file?
     #
     # Compared against the BEST recorded score, not the last. A replay tracks the
@@ -136,28 +136,69 @@ def regrade_one(path: Path, table, cls, ann: float, base: np.ndarray) -> dict:
     return out
 
 
+def _simulated_basis(seed: int):
+    """The basis for ONE simulated run, rebuilt from its own seed.
+
+    A real panel is the same for every run in a directory; a simulated draw is
+    not. So `s0` and `s3` are rebuilt per run, from the seed the run file records,
+    and a re-grade that could not reproduce the draw would show up as the
+    faithfulness gate failing rather than as a silent mismatch.
+    """
+    from experiments.agent_cell import simulated_panel
+
+    _data, _cfg, cls, sandbox, dgp = simulated_panel_for(seed)
+    return (None, cls, float(np.sqrt(dgp.periods_per_year)),
+            sandbox.base_feature_columns())
+
+
+def simulated_panel_for(seed: int):
+    """`agent_cell.simulated_panel` for whichever config the seed belongs to.
+
+    The run file records its panel, so the caller passes it in; this exists so the
+    import stays local and `regrade_pilot` does not import the runner at module
+    scope.
+    """
+    from experiments.agent_cell import simulated_panel
+    return simulated_panel(_PANEL[0], seed)
+
+
+_PANEL = ["s0"]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--panel", default="etf", choices=("adr", "etf"))
+    ap.add_argument("--panel", default="etf", choices=("adr", "etf", "s0", "s3"))
     ap.add_argument("--dir", required=True)
+    ap.add_argument("--glob", default=None,
+                    help="run-file pattern; defaults to the pilot's and the cell's")
     a = ap.parse_args(argv)
 
     from environments.class_table import build_class_table
     from garden.spec_class import SubsetClass
-    if a.panel == "etf":
-        from environments.real_panel import build_etf_panel
-        panel = build_etf_panel()
-        cls = SubsetClass(max_size=3, signed=True)
-    else:
-        from environments.real_panel import build_adr_panel
-        panel = build_adr_panel()
-        cls = SubsetClass(max_size=3, signed=True)
-    table = build_class_table(panel, cls, a.panel)
-    ann = float(np.sqrt(table.annualization))
-    base = np.asarray(panel.features, dtype=float)
 
-    rows = [regrade_one(p, table, cls, ann, base)
-            for p in sorted(Path(a.dir).glob("pilot_*_replay_gate_*.json"))]
+    patterns = ([a.glob] if a.glob else
+                ["pilot_*_replay_gate_*.json", "cell_*.json"])
+    files = sorted({p for pat in patterns for p in Path(a.dir).glob(pat)})
+
+    if a.panel in ("s0", "s3"):
+        _PANEL[0] = a.panel
+        rows = []
+        for path in files:
+            seed = int(json.loads(path.read_text()).get("seed"))
+            table, cls, ann, base = _simulated_basis(seed)
+            rows.append(regrade_one(path, table, cls, ann, base))
+    else:
+        if a.panel == "etf":
+            from environments.real_panel import build_etf_panel
+            panel = build_etf_panel()
+        else:
+            from environments.real_panel import build_adr_panel
+            panel = build_adr_panel()
+        cls = SubsetClass(max_size=3, signed=True)
+        table = build_class_table(panel, cls, a.panel)
+        ann = float(np.sqrt(table.annualization))
+        base = np.asarray(panel.features, dtype=float)
+        rows = [regrade_one(p, table, cls, ann, base) for p in files]
 
     print(f"RE-GRADE under the corrected indexing — {a.dir}")
     print("=" * 78)

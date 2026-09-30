@@ -25,7 +25,7 @@ Nothing here decides a rule. The cell's readouts are computed by
 from __future__ import annotations
 
 import argparse
-import hashlib
+import asyncio
 import json
 import re
 from dataclasses import replace
@@ -141,6 +141,46 @@ def orientation_for(X, seed: int) -> tuple[dict, str, str]:
     return table, render(table), table_hash(table)
 
 
+def _scripted(rec, handlers, arm: str) -> None:
+    """`--dry-run`'s policy: no model call, but REAL moves through the real tool
+    handlers, so the on-disk log path is exercised rather than skipped.
+
+    The first shake-out could not have caught the missing session log from a dry
+    run, because the dry run made no moves at all. It does now: an anchor, an
+    extension, a `pick` while the support still has room, and a stop that fires.
+    The pick is deliberately placed early -- that is the condition
+    `prereg/AGENT_PROMPTS_REAL.md` amendment 8's sentence of fact states, and a dry
+    run that picked at a full support would exercise the refusal rather than the
+    acceptance this path exists to test.
+    """
+    by = {h.name: h for h in handlers}
+
+    def call(name, args):
+        return asyncio.run(by[name].handler(args))
+
+    # The control and declared-class-gate arms have no grammar: their tools are
+    # `evaluate` and `submit`, so a scripted run evaluates and submits.
+    if "declare_triggers" not in by:
+        for feats in ([0], [0, 1], [0, 1, 2]):
+            call("evaluate", {"features": feats, "signs": [1] * len(feats)})
+        call("submit", {})
+        return
+
+    call("declare_triggers", {"triggers": [
+        {"trigger": "failures_at_least", "param": 2.0, "action": "stop"}]})
+    if True:
+        call("init", {})
+        # a pick with room in the support: one candidate is added, so it is
+        # accepted, which is what the on-disk `shown` round trip needs to check
+        call("pick", {"among": [0, 1, 2, 3, 4], "statistic": "autocorr_1",
+                      "reason": "dry run"})
+        call("extend_best", {})
+        for _ in range(4):
+            call("swap_worst", {})
+        call("stop", {"trigger": "failures_at_least", "param": 2.0})
+    call("submit", {})
+
+
 def run_one(arm: str, panel_name: str, seed: int, index: int, *,
             prompts: dict, dry_run: bool = False) -> tuple[RunRecord, dict]:
     """One run. Returns the record and the per-run config entry."""
@@ -174,7 +214,9 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
         tools = ToolSession(session)
         handlers = replay_tools(tools, rec, K)
 
-    if not dry_run:
+    if dry_run:
+        _scripted(rec, handlers, arm)
+    else:
         _drive_model(arm, rec, handlers, panel, sandbox, K, prompt=prompt,
                      depth=DEPTH[panel_name])
 
@@ -184,6 +226,37 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
         rec.triggers_changed = bool(tools.session.log.trigger_changes)
         # The close-time self-check, recorded in the log (the pre-agent-cell list)
         tools.session.close()
+        # THE SESSION LOG, ON DISK. The first shake-out found this missing from
+        # this runner (`prereg/agent-pilot.md`, 2026-09-29): the records existed in
+        # process and never reached the file, so those runs could not be re-graded
+        # and amendment 8's round trip could not be audited from the artifact.
+        #
+        # Every move carries its PARAMETERS and its `shown` payload. Parameters
+        # because a `flip` without its feature is a different move on re-execution
+        # (the ADR seat runs could not be re-graded for exactly that reason);
+        # `shown` because `prereg/agent-cell.md` amendment 8 registers that
+        # re-rendering it reproduces the payload sent, byte for byte, and an
+        # invariant that cannot be checked from the stored run is not one a reader
+        # can rely on.
+        rec.log("session_log", records=[
+            {"step": r.step, "kind": r.move.kind, "support": list(r.support_after),
+             "score": r.score_after, "n_candidates": r.n_candidates,
+             "trigger": r.trigger, "trigger_value": r.trigger_value,
+             "replayable": r.replayable, "contradicted": r.contradicted,
+             "move": {"kind": r.move.kind, "statistic": r.move.statistic,
+                      "feature": r.move.feature, "note": r.move.note,
+                      "among": list(r.move.among or ()),
+                      "else_statistic": r.move.else_statistic,
+                      "choice": r.move.choice},
+             "shown": ([list(pair) for pair in r.information.shown]
+                       if r.information is not None else []),
+             "information": (r.information.as_context()
+                             if r.information is not None else None)}
+            for r in tools.session.log.records])
+        if not rec.submitted:
+            support, score = tools.session.submission()
+            rec.submitted_support = [[int(k), float(s)] for k, s in support]
+            rec.submitted_sharpe = float(score)
         if not dry_run:
             _certify_run(rec, tools, sandbox, cls, table)
     rec.endpoint = _served_model_assertion(rec)

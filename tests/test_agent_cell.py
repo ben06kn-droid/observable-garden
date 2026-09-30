@@ -316,3 +316,99 @@ def test_a_pick_shows_the_candidate_statistics_it_will_be_measured_against():
         assert f"{label}={value:.4f}" in payload.text, label
     # ranked by the statistic the move NAMED, not by sharpe
     assert rec.move.statistic == "autocorr_1"
+
+
+# -- the on-disk log path: the first shake-out found it missing ----------------
+
+def _finished_run_dir(tmp_path, arm="replay gate (reasoned pick)", panel="s0"):
+    """One finished run directory, written by the real runner through the real
+    tool handlers. `--dry-run` makes REAL moves, so this exercises the on-disk
+    path rather than skipping it -- which is why the first shake-out's dry runs
+    could not have caught the missing session log."""
+    ac.main(["--panel", panel, "--arm", arm, "--runs", "1",
+             "--dry-run", "--out", str(tmp_path)])
+    files = sorted(tmp_path.glob("cell_*.json"))
+    assert len(files) == 1
+    return files[0]
+
+
+def test_a_finished_run_directory_carries_its_session_log(tmp_path):
+    """`experiments/agent_cell.py` wrote no `session_log` event until 2026-09-30,
+    so the records existed in process and never reached the file. Those runs could
+    not be re-graded at all (`prereg/agent-pilot.md`, the first shake-out)."""
+    d = json.loads(_finished_run_dir(tmp_path).read_text())
+    kinds = {e.get("kind") for e in d["events"]}
+    assert "session_log" in kinds, sorted(kinds)
+    records = [e for e in d["events"] if e["kind"] == "session_log"][0]["records"]
+    assert records, "a finished run's log must hold its moves"
+    # every move carries its PARAMETERS, or it is a different move on re-execution
+    for r in records:
+        assert "move" in r and r["move"]["kind"] == r["kind"]
+        if r["kind"] == "pick":
+            assert r["move"]["among"], "a pick without its candidate set"
+            assert r["move"]["statistic"]
+        if r["kind"] == "flip":
+            assert r["move"]["feature"] is not None
+
+
+def test_a_finished_run_directory_re_grades(tmp_path):
+    """The point of storing the log: the run can be replayed later, when the
+    replay is fixed or changed. Three ADR pilot runs could not be, and that is why
+    this is a test rather than a convention."""
+    from experiments.regrade_pilot import main as regrade
+
+    _finished_run_dir(tmp_path)
+    assert regrade(["--panel", "s0", "--dir", str(tmp_path)]) == 0
+    rows = json.loads((tmp_path / "regrade_2026-09-28.json").read_text())
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["regradable"] is True, row.get("why")
+    assert row["rebuild_support_matches"] is True
+    assert row["rebuild_score_gap"] == pytest.approx(0.0, abs=1e-12)
+    assert row["integrity_ok"] and row["commitment_ok"]
+
+
+def test_every_stored_shown_re_renders_FROM_DISK_to_the_sent_payload(tmp_path):
+    """`prereg/agent-cell.md` amendment 8's invariant, checked against the
+    ARTIFACT rather than against the adapter's return values.
+
+    The first shake-out could confirm only half of it: the payloads reached disk
+    through the `tool_result` events, but the stored pairs did not, so the round
+    trip was unverifiable from the run file. Both halves are on disk now, and this
+    compares them to each other with nothing held in memory.
+    """
+    from quixote.log import render_shown
+
+    d = json.loads(_finished_run_dir(tmp_path).read_text())
+    records = [e for e in d["events"] if e["kind"] == "session_log"][0]["records"]
+    payloads = [e for e in d["events"]
+                if e.get("kind") == "tool_result" and e.get("ok")
+                and "| shown: " in (e.get("text") or "")]
+    assert records and payloads
+
+    # one payload per logged move, in order
+    assert len(payloads) == len(records), (
+        f"{len(records)} logged moves against {len(payloads)} shown-bearing "
+        "payloads; they must correspond one to one")
+
+    for rec, payload in zip(records, payloads):
+        shown = [tuple(pair) for pair in rec["shown"]]
+        assert shown, f"{rec['kind']} at step {rec['step']} stored no shown pairs"
+        rendered = render_shown(shown)
+        assert f"| shown: {rendered}" in payload["text"], (
+            f"{rec['kind']} at step {rec['step']}:\n"
+            f"  re-rendered from disk: {rendered!r}\n"
+            f"  payload on disk:       {payload['text']!r}")
+
+
+def test_the_dry_run_pick_is_accepted_so_the_path_is_actually_exercised(tmp_path):
+    """A pick refused would leave no pick record, and the round-trip test above
+    would pass vacuously on the moves that remained. The first shake-out's picks
+    were ALL refused -- at a full support, under a firing rule, and after stop --
+    so this asserts the dry run's pick is the accepted case."""
+    d = json.loads(_finished_run_dir(tmp_path).read_text())
+    records = [e for e in d["events"] if e["kind"] == "session_log"][0]["records"]
+    picks = [r for r in records if r["kind"] == "pick"]
+    assert picks, "the dry run must land an accepted pick"
+    # a pick adds ONE candidate, and its shown holds one pair per candidate scored
+    assert len(picks[0]["shown"]) >= len(picks[0]["move"]["among"])

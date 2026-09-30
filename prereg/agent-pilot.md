@@ -973,3 +973,51 @@ read.** Fault (2) is a serialization gap and is fixed in code. Fault (1) needs a
 amendment to the arm before the cell runs, and **the cell does not start until it
 has one** — a fidelity cell whose picks are all refused measures nothing, which is
 the situation amendment 3 was written to prevent and did not.
+
+### The second shake-out attempt, registered 2026-09-30 — before it runs
+
+**What runs: 1 orientation and 2 reasoned-pick, all on `s0`, seat credential.**
+Three runs. `etf` is not repeated: the first attempt's `etf` orientation run passed
+every condition, and the real-X table path it existed to exercise is unchanged by
+either fix.
+
+**Purpose — two things the first attempt could not establish:**
+
+1. **The on-disk log path.** `experiments/agent_cell.py` wrote no `session_log`
+   event, so the first attempt's five runs cannot be re-graded and amendment 8's
+   round trip could not be audited from the artifact. The runner now writes the
+   full records — parameters and the `shown` payload — and
+   `experiments/regrade_pilot.py` accepts the simulated panels, rebuilding each
+   run's draw from the seed the run file records. What this attempt asks is whether
+   that holds on a **model-driven** log, which is longer, contains refusals, and
+   may contain a trigger change.
+2. **Pick acceptance.** `prereg/AGENT_PROMPTS_REAL.md` amendment 8 appended one
+   sentence of fact to the reasoned-pick paragraph: a pick adds one candidate to
+   the support, so it is accepted only while the support has room and no declared
+   rule is firing. The first attempt's picks were **all refused** — at a full
+   support, under a firing rule, and after `stop`. What this attempt asks is
+   whether the sentence is enough.
+
+**Rule 5 applies, standing and unweakened: no number from these three runs enters a
+verdict, a rate, or any reading of the agent cell.** In particular an accepted pick
+here is not evidence about pick behaviour at n = 3; it is evidence that the grammar
+can accept one.
+
+**What would stop the cell**, the first attempt's four conditions plus two:
+
+| condition | why |
+|---|---|
+| a refusal outside the registered kinds | rule 1 |
+| a run config lacking the delivered table's hash | amendment 8 of `agent-cell.md` |
+| a served model other than the pinned string | `AGENT_PROMPTS_REAL.md` §3 |
+| a self-check not replayable on a run that made moves | the pre-agent-cell list |
+| **a run directory that does not re-grade** | **new** — the fault this attempt exists to close |
+| **a stored `shown` that does not re-render to the payload on disk** | **new** — amendment 8's invariant, on the artifact |
+
+**Pick acceptance is a readout, not a stop condition.** If every pick is refused
+again, nothing is broken — the registered fallback in `AGENT_PROMPTS_REAL.md`
+amendment 8 applies and the paragraph asks for the pick before the support is full,
+at the stated cost that the arm's picks are then scheduled by the prompt. That
+decision is already registered, so it does not need to be taken in the window.
+
+**Cost:** three runs against the $0.268 stored mean, so about **$0.80** on the seat.

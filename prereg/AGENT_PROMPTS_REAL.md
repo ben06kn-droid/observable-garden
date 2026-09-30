@@ -74,11 +74,12 @@ The trigger list in the prompt is the library in `quixote/triggers.py` and is
 generated from it in the test, so prompt and library cannot drift.
 
 **replay gate (reasoned pick)** — tools as the replay gate. Added by amendment 3
-for 7.3's fidelity measurement, which has no data without picks. Appended after
-the replay block:
+for 7.3's fidelity measurement, which has no data without picks. **Amended
+2026-09-30 with one sentence of fact** — see amendment 8 below for why, and for
+what happens if it is not enough. Appended after the replay block:
 
 ```
-At least once during your search, use `pick`: name the candidate features you are choosing between, name the statistic that decides among them, and state in one sentence why that statistic is the right one for that choice. The harness will perform the rule you named and tell you whether the feature you expected is the one it selected.
+At least once during your search, use `pick`: name the candidate features you are choosing between, name the statistic that decides among them, and state in one sentence why that statistic is the right one for that choice. The harness will perform the rule you named and tell you whether the feature you expected is the one it selected. A `pick` adds one candidate to the support, so it is accepted only while the support has room and no declared rule is firing.
 ```
 
 **orientation** — tools as the replay gate. Added by amendment 6 for
@@ -351,3 +352,45 @@ the arm is about whether the agent finds a use, not about being told one.
 **Nothing runs on this amendment.** `prereg/agent-cell.md` is committed-not-live,
 and its cell 2 exists precisely to measure how much of any effect is the
 paragraph rather than the table.
+**8 — 2026-09-30, after the first shake-out and before 7.3's agent cell. One
+sentence of fact in the reasoned-pick paragraph, and the fallback if it is not
+enough.**
+
+The first shake-out (`prereg/agent-pilot.md`, 2026-09-29) found that the arm's
+sentence **works** and its picks **do not**: the agent called `pick` in both runs —
+three times in one — and **every call was refused**. Three structural causes, none
+of them disobedience: the support was already **full at depth 3**, so every
+candidate would leave the declared class; a **declared rule was firing**, which
+decision (b) makes a refusal; and in one run the pick came **after `stop`**.
+
+So the agent puts its pick where a researcher naturally would — after exploring —
+which is the one place the grammar cannot accept it. Check 2's unit of analysis was
+empty for a reason amendment 3 did not anticipate.
+
+**The fix is one sentence of FACT, appended to the paragraph above:**
+
+> A `pick` adds one candidate to the support, so it is accepted only while the
+> support has room and no declared rule is firing.
+
+**It is deliberately not a timing instruction.** It says what the move *is*, not
+when to make it. The distinction matters for what the arm measures: a prompt that
+said "pick early" would be choosing the agent's search order, and the fidelity
+measurement would then be of a decision the prompt scheduled rather than one the
+agent placed. Amendment 3's own reasoning applies — "it names no statistic in
+particular, so which rule the agent chooses is still the agent's" — and the same
+restraint is kept about *when*.
+
+**The fallback, registered now rather than after seeing the re-shake:**
+
+> **If the second shake-out shows every `pick` refused again, the paragraph asks
+> for the pick before the support is full.** That is a timing instruction, it is a
+> cost to what the arm measures, and it is paid only when the sentence of fact has
+> been shown to be insufficient. The write-up then states that the arm's picks were
+> scheduled by the prompt.
+
+**What this changes in the fingerprint.** The reasoned-pick block sits in this
+file's **design** section, not its amendment log, so this edit **moves
+`real_prereg_design_md5`**. That is correct — the prompt an agent receives has
+changed — and nothing is mid-flight: the first shake-out is recorded and closed, and
+7.3's agent cell has not started. The **shared** control and cost text is untouched,
+so the byte-identity guarantee across arms is unaffected and its tests pass.
