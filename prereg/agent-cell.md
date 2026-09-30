@@ -649,3 +649,110 @@ absence as a gap. `log.trigger_changes` now reaches the run file **with its
 timestamps**, alongside the committed rules. A change is a data-dependent decision
 and its **timing** is the whole reason the verdict prices it, so the timing belongs
 in the artifact rather than in a boolean.
+
+**Related work on re-running agents, added by the 2026-09-30 literature search.**
+Rewolinski, Zane, Huang, Singh, Wang, Gao & Yu (2026), *Sanity Checks for Agentic
+Data Science* (arXiv:2604.11003), re-run agentic pipelines under perturbations of
+the data to screen whether the agent can tell signal from noise, and find
+self-reported confidence poorly calibrated to the empirical stability of the
+conclusions. It is the nearest neighbour to the twins here and to this file's
+prediction slot. **The hypothesis differs:** theirs concerns **stability** under
+perturbation, and this project's concerns **trial count** and whether a logged
+candidate set suffices when the search is adaptive. Read-level: abstract and
+listing metadata read 2026-09-30, full text not opened
+(`docs/RELATED_WORK_2026.md`).
+
+**11 — 2026-09-30, before any number from the s0 replay arm is seen. Check 1's
+type-I rate is a false-certification rate over all 80 runs.**
+
+The s0 replay-gate arm completed 80 runs. **20 of them carry no certifying-null
+p-value**, because `quixote/certify.py` does not price that null on a run with a
+logged trigger change: the pre-change rule is what replays, so the search after the
+change is a decision the null cannot price, and the verdict is
+`DEPENDS_ON_JUDGMENT` with the bracket reported instead. The reader refused to read
+check 1, correctly, because check 1's wording asked for a **position** for every
+run and only 60 runs have one.
+
+**What broke is the wording, not the rule.** Check 1's rule is a validity rule about
+**false certification**. It was written assuming every run carries a position,
+because when it was drafted nothing suggested a quarter of runs would be bracketed.
+The assumption is what the 25% bracket rate broke.
+
+**Registered, before any number is seen:**
+
+> **Check 1's type-I rate is the false-certification rate over all n = 80 runs.** A
+> run **rejects** at α iff it **issued a certificate** at α — that is, it carries a
+> certifying-null p-value and that p-value is below α. A run that issued no
+> certificate counts as a **non-rejection**: `DEPENDS_ON_JUDGMENT`, `UNDECIDABLE`,
+> or any run with no position certified nothing, **which is what it does in
+> deployment**. The denominator is 80.
+>
+> The rule is unchanged in form: it **fails high iff the LOWER end of the Wilson 95%
+> interval for that rate exceeds nominal**, at α = 0.05 and α = 0.01. **The n = 80
+> detectability statement stands for the rate** — it detects a true rate near 13% or
+> worse, and rules out gross leakage and no more.
+
+This is the quantity the cell was always about. A gate that brackets a run has not
+certified it, and a reader asking "how often does this gate certify noise" must count
+that run as a non-certification rather than drop it. Dropping it would condition the
+answer on agent behaviour; counting it as a rejection would charge the gate for a
+certificate it refused to issue.
+
+**The KS and per-kind readouts need a position, and are read on the 60 that have
+one — as descriptive shape readouts, with the conditioning stated.** They are not
+the rule and they gate nothing. What they describe is **the distribution of positions
+among runs that did not change a trigger**, and every report of them says so. A
+uniformity statement about 60 selected runs is not a uniformity statement about the
+arm, and the difference is recorded rather than smoothed over.
+
+**One descriptive readout is added, on all 80: the declared-class p-value's rejection
+rate at α = 0.05 and 0.01.** It is the bracket's **upper** end, it exists for **every
+run** whatever the agent declared or changed, and it is **expected conservative** —
+the class tier charges the class maximum whatever route reached it, so it is the one
+null that needs no position and no cooperation from the log. Descriptive, no
+threshold, no branch.
+
+**Not yet computed, and that is stated rather than implied.** The 80 recorded verdicts
+carry `p_frozen` but **no `p_upper`**: `experiments/agent_backend.py`'s
+`_certify_run` never passed a declared-class p-value, so the declared-class null was
+never computed for this arm. The readout therefore requires a **local computation** on
+the simulated panel — no model, no seat — and until it is done the reader reports it as
+unavailable rather than silently omitting it.
+
+**The 25% bracket rate is a check-3 readout, not a check-1 problem.** How often an
+agent changes a declared rule is behaviour, and check 3 is where behaviour is
+reported. It is noted here only because it is what exposed check 1's wording.
+
+#### Check 1, read once, 2026-09-30 — HOLDS
+
+Read under amendment 11 by `experiments/agent_cell_read.py`; output at
+`runs/agent_cell_s0_replay/check1_read.txt`. The refusal produced before amendment 11
+is kept beside it as `check1_read_REFUSED_pre_amendment11.txt`, so the correction is
+visible rather than silent.
+
+**The rule — false certification over all 80 runs:** 2 of 80 = 0.0250 at α = 0.05,
+Wilson [0.0069, 0.0866]; 1 of 80 = 0.0125 at α = 0.01, Wilson [0.0022, 0.0675].
+Neither lower end exceeds nominal. **VERDICT: HOLDS.** Twenty runs counted as
+non-rejections, all `DEPENDS_ON_JUDGMENT` with a logged trigger change.
+
+**Detectability at n = 80, as registered:** the rule fires at 8 or more of 80 at
+α = 0.05 and at 3 or more at α = 0.01. It detects a true rate near 13% or worse and
+**rules out gross leakage and no more**; the scripted arms carry the calibration
+claim and this pass is not a calibration result.
+
+**Descriptive, positions only (60 runs, conditioning stated):** KS against U(0,1)
+gives D = 0.1065, p = 0.4724 — no rejection; positions run from 0.0050 to 1.0000
+with a median of 0.5746.
+
+**Two limitations of the per-kind readout, recorded because they are structural and
+not a property of this draw.** All four kinds present among the priced runs —
+`init`, `extend_best`, `refine`, `stop` — appear in **every** priced run, so their
+lowest-decile fractions are computed on the same 60 runs and are **identical by
+construction** (5/60 each). And `swap_worst` and `restart` appear **only in runs that
+issued no certificate**, so **no position exists for them at all** and the readout is
+blind to exactly the two kinds a reader would most want it to examine. The per-kind
+readout therefore names no suspect kind here, and could not have.
+
+**Still pending:** the declared-class readout amendment 11 registers. `p_upper` was
+never computed for this arm, so it is reported as unavailable; it needs a local
+computation on the simulated panel, with no model and no seat.

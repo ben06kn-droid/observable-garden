@@ -1,10 +1,13 @@
 prereg/agent-cell.md, CHECK 1 — CALIBRATION
 ==============================================================================
-  Registered: each s0 run's submitted Sharpe is placed within its own replay
-  null; the position is the certifying null's p-value for that run. If the
-  gate reproduces what the agent does on noise, those positions are uniform.
+  Registered (amendment 4, quantity fixed by amendment 11): check 1's type-I
+  rate is the FALSE-CERTIFICATION RATE over all runs. A run rejects at alpha
+  iff it ISSUED A CERTIFICATE at alpha — it carries a certifying-null p-value
+  and that p-value is below alpha. A run that issued none counts as a
+  NON-REJECTION: a bracketed or undecidable run certified nothing, which is
+  what it does in deployment. The denominator is every run.
   Rule (validity, one-sided): FAILS HIGH iff the LOWER end of the Wilson 95%
-  interval for the type-I rate exceeds nominal, at alpha = 0.05 and 0.01.
+  interval for that rate exceeds nominal, at alpha = 0.05 and 0.01.
     Holds: no gross leakage, and the per-kind fractions are reported flat.
     Fails high: the per-kind fractions name the suspect kind, and NO
       behavioural readout from the cell is reported as a finding until it is
@@ -12,31 +15,60 @@ prereg/agent-cell.md, CHECK 1 — CALIBRATION
     KS rejects with the rate inside its interval: reported as a shape
       departure with the ECDF, not as a size failure.
 
-  Registered n: 80. Runs found: 80.
-  Runs carrying a certifying-null p-value: 60.
+  Runs: 80 (registered n = 80).
+  Issued a certificate-eligible position: 60. Issued none: 20.
+    20 run(s) counted as NON-REJECTIONS: status DEPENDS_ON_JUDGMENT, triggers_changed=True
 
-  REFUSED — THE REGISTERED n IS NOT AVAILABLE, AND THE SHORTFALL IS NOT
-  RANDOM.
+  THE RULE — false certification over every run
+  --------------------------------------------------------------------------
+    alpha = 0.05  certified   2/80  =  0.0250   Wilson [0.0069, 0.0866]   does not fail high
+    alpha = 0.01  certified   1/80  =  0.0125   Wilson [0.0022, 0.0675]   does not fail high
 
-  20 of 80 runs carry no certifying-null p-value, so
-  they have no position to place. `quixote/certify.py` does not price the
-  certifying null on a run with a logged trigger change: the pre-change
-  rule is what replays, so the search after the change is a decision the
-  null cannot price, and the verdict is DEPENDS_ON_JUDGMENT with the
-  fixed-sequence null reported as the bracket's liberal end instead.
-    20 run(s): status DEPENDS_ON_JUDGMENT, triggers_changed=True
-    indices: [1, 6, 8, 12, 17, 18, 20, 23, 27, 36, 39, 48, 55, 61, 64, 65, 66, 74, 77, 79]
+  Detectability, stated so a pass is not over-read
+  --------------------------------------------------------------------------
+    alpha = 0.05: fires at 8 or more of 80 (0.1000); Wilson [0.0515, 0.1851]
+    alpha = 0.01: fires at 3 or more of 80 (0.0375); Wilson [0.0128, 0.1045]
+    At n = 80 this detects a true rate near 13% or worse. It rules out
+    GROSS LEAKAGE AND NO MORE; the scripted arms of
+    prereg/unfaithful-searchers.md carry the calibration claim, and a pass
+    here is not a calibration result.
 
-  WHY THIS IS NOT A MATTER OF READING AT A SMALLER n. The missing runs are
-  exactly the runs in which the AGENT CHANGED A RULE. Reading the
-  remaining ones conditions the uniformity check on agent behaviour — on
-  'runs that did not change a trigger' — which is not the population
-  check 1 registered, and the direction of any resulting bias is not
-  known. The detectability statement registered with the check ('at
-  n = 80 this detects a true rate near 13% or worse') does not
-  hold at a smaller n either.
+  VERDICT, CHECK 1: HOLDS
 
-  NOTHING IS READ. Check 1 remains unread, and a decision is needed before
-  it can be: read at the reduced n with the exclusion recorded as a
-  deviation and the conditioning stated; or register how a bracketed run's
-  position is to be defined; or record check 1 as unreadable on this arm.
+  DESCRIPTIVE, all runs: the declared-class p-value (the bracket's upper end)
+  --------------------------------------------------------------------------
+    One null for every run, whatever the agent declared or changed, and
+    expected conservative: the class tier charges the class maximum whatever
+    route reached it. Descriptive — no threshold, no branch.
+    NOT AVAILABLE on these runs. `_certify_run` passed no declared-class
+    p-value, so `p_upper` was never computed for this arm (amendment 11
+    records this). It needs a local computation on the simulated panel —
+    no model, no seat — and is reported as pending rather than omitted.
+
+  DESCRIPTIVE, positions only: shape of the certifying-null p-values
+  --------------------------------------------------------------------------
+    Read on the 60 runs that carry a position, NOT on all 80.
+    CONDITIONING, stated: these are the positions among runs that DID NOT
+    change a trigger. A uniformity statement about them is not a uniformity
+    statement about the arm. These readouts gate nothing.
+    KS against U(0,1): D = 0.1065   p = 0.4724   does not reject at 0.05
+    positions: min 0.0050  median 0.5746  max 1.0000
+
+    Per decision kind, the fraction whose position is in the lowest decile.
+    Skew toward small p means a decision kind is leaking, and these say which.
+    LIMITATION: every kind below appears in EVERY priced run, so each
+    fraction is computed on the same 60 runs and they are identical by
+    construction. The readout cannot distinguish kinds on this arm; it
+    would only do so where kinds differ across runs.
+    KINDS WITH NO POSITION AT ALL: restart, swap_worst. They appear only
+    in runs that issued no certificate, so no position exists for them and
+    this readout is blind to them — which matters, because those are the
+    kinds a reader would most want it to examine.
+      extend_best      5/60  =  0.0833   Wilson [0.0361, 0.1807]
+      init             5/60  =  0.0833   Wilson [0.0361, 0.1807]
+      refine           5/60  =  0.0833   Wilson [0.0361, 0.1807]
+      stop             5/60  =  0.0833   Wilson [0.0361, 0.1807]
+      (a flat reading is 0.10 per kind)
+
+  The 25% bracket rate is a CHECK-3 readout — how often an agent changes a
+  declared rule is behaviour — and is not read here (amendment 11).
