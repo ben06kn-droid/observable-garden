@@ -1021,3 +1021,85 @@ at the stated cost that the arm's picks are then scheduled by the prompt. That
 decision is already registered, so it does not need to be taken in the window.
 
 **Cost:** three runs against the $0.268 stored mean, so about **$0.80** on the seat.
+
+### Shake-out attempt 2, 2026-09-30 — recorded, rule 5 standing
+
+Three runs on the seat as registered: 1 orientation and 2 reasoned-pick, all on
+`s0`. All three completed, submitted, and returned no error. **Counts only; no
+number enters a verdict, a rate, or any reading.**
+
+**Rule 1 — refusals inside the registered set: PASSES.** `unregistered_refusals` is
+empty on all three. Kinds seen: `trigger_is_firing`, `trigger_did_not_fire`,
+`inapplicable_move`, `after_stop`.
+
+**The six conditions:**
+
+| condition | outcome |
+|---|---|
+| a refusal outside the registered kinds | **clear** |
+| a run config lacking the delivered table's hash | **clear** — present on the orientation run, `null` on the reasoned-pick runs, which carry no table |
+| a served model other than the pinned string | **clear** — `models_seen` is `['claude-sonnet-5']`, `served_is_pinned` true on all three |
+| a self-check not replayable on a run that made moves | **TRIGGERED — one run** |
+| a run directory that does not re-grade | **clear** — all three re-grade; the rebuild reproduces each file's best record at a score gap of 0.00e+00 |
+| a stored `shown` that does not re-render to the payload on disk | **clear** — every record on all three runs, nothing empty, nothing mismatched |
+
+**The on-disk `shown` round trip — both fixes hold.** Records on disk: 8, 5 and 14.
+Shown-bearing payloads: 8, 5 and 14. **Every record carries a non-empty `shown`, and
+every one re-renders from disk to the payload on disk.** The long run exercised
+`restart`, `pick` and `flip` records — the kinds attempt 1 could not reach — and all
+three round-tripped.
+
+**Trigger-change records, specifically.** The long run called `change_trigger` **8
+times** and the orientation run twice. A change is **not a move record**: it appends
+to `log.trigger_changes`, so it carries no `shown` and none is expected. Two facts
+follow, both recorded rather than left to be discovered:
+
+- The move records that **follow** a change carry `shown` and round-trip normally,
+  so a change does not interrupt the invariant.
+- The **change history itself is not serialized.** The run file carries
+  `triggers_predeclared` (the committed rules, which is what the commitment replay
+  needs, so re-grading is unaffected) and a `triggers_changed` boolean — but not the
+  list of changes with their timestamps. A reader cannot see **what** was changed or
+  **when** from the artifact. Not a stop condition, and not something any registered
+  rule reads; recorded as a gap.
+
+**Accepted picks, per reasoned-pick run: 0 and 1.** The sentence of fact
+(`AGENT_PROMPTS_REAL.md` amendment 8) produced **one accepted pick in two runs**,
+against **zero in two** before it. Run 0's pick was refused `after_stop` again; run
+1 landed one, with `picks_contradicted` at 0.
+
+**This does not trigger the registered fallback, and it does not clear it either.**
+The fallback fires on "every `pick` refused"; one was accepted, so the paragraph is
+not rewritten. But **1 of 2 is not evidence that the sentence is sufficient** —
+`prereg/README.md`'s low-n rule puts n = 2 far below anything reportable, and rule 5
+forbids reading it as a rate. The honest statement is that **the grammar accepted a
+pick from a model for the first time**, and the arm's pick yield at the cell's n is
+unmeasured.
+
+**Condition 4 triggered, and the cause is a harness fault, not the agent.**
+
+The long run's in-session self-check returned **not replayable**, and the later
+re-grade agrees — which is the close-time self-check doing precisely the job it was
+added for on 2026-09-28, catching the fault while the session existed.
+
+**The cause: no agent declares a budget.** `LoggedPolicy` falls back to
+`searchers.meta_adaptive.BUDGET = 12` when a log declares none, and that run's log
+holds **14 records**. The replay is therefore **2 steps short**: support and score
+agree **exactly** (0.00e+00) while the action sequences differ in length, 11 against
+13. The check reports a structural failure and refuses to price the run, correctly —
+it cannot tell a short bound from a wrong basis.
+
+**This is the same defect class as the one 7.3's scripted arm hit** and fixed by
+calling `declare_budget` in the searcher (`prereg/unfaithful-searchers.md` amendment
+3). On the agent path nothing declares one, `MAX_TURNS` is 60, and the two
+short runs here passed only because they happened to stay under 12 records.
+
+**Consequence for the cell: every agent run longer than 12 moves fails INTEGRITY
+and is UNDECIDABLE for a reason that has nothing to do with the agent.** At
+`MAX_TURNS = 60` that is not an edge case. **The cell does not start until this is
+fixed**, and the fix is a decision rather than a detail, so it is not taken here:
+either the harness requires or defaults a budget for an agent session, or
+`LoggedPolicy` bounds a frozen-action replay by the **log's own length** when no
+budget was declared — which is safe for the integrity check, whose log is finite,
+but changes what the bound means past the realized length in the nulls. Whichever is
+chosen is registered before it is written.
