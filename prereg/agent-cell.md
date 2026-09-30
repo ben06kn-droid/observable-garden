@@ -756,3 +756,79 @@ readout therefore names no suspect kind here, and could not have.
 **Still pending:** the declared-class readout amendment 11 registers. `p_upper` was
 never computed for this arm, so it is reported as unavailable; it needs a local
 computation on the simulated panel, with no model and no seat.
+
+#### Amendment 11's declared-class readout, computed 2026-09-30
+
+`experiments/agent_cell_class_p.py`, locally — no model, no seat. B = 200 per run,
+matching each run's certifying null so the granularity is the same; the class-maximum
+null and the submitted specification are both computed on the panel's **base feature
+columns**, so observed and replicate statistics share one basis. Output at
+`runs/agent_cell_s0_replay/class_p_readout.txt`, per-run values in `class_p.json`.
+
+**The readout, descriptive, all 80 runs:** **3 of 80 = 0.0375** at α = 0.05, Wilson
+[0.0128, 0.1045]; **2 of 80 = 0.0250** at α = 0.01, Wilson [0.0069, 0.0866].
+`p_upper` runs from 0.0050 to 1.0000, median 0.5522. No variance-floor or Sharpe-cap
+guard fired on any run.
+
+**It is not conservative relative to the certifying null, and the reason is a finding
+about the searcher rather than about the tiers.** On the 60 runs carrying both,
+`p_upper − p_certifying` has mean **+0.0002**, median **0.0000**, maximum **+0.0050**,
+and the two are **exactly equal on 58 of 60**.
+
+**Why: the agent submitted the class maximum in 80 of 80 runs.** Not approximately —
+the submitted score equals `full_class_observed_max` to within 1e-9 on every run, and
+on five runs checked by **support** rather than by score the submitted specification
+**is** the argmax over all 82,240 members. So both tiers price the same statistic, and
+the bracket collapses to a point.
+
+**What this means for the cell, stated plainly.** On `s0` the replay tier buys
+**nothing** over the declared-class tier, because this searcher **saturates the
+declared class**: greedy `init` → `extend_best` → `extend_best` → `refine` at depth 3
+reaches the global argmax every time on this panel. Consequences that follow and are
+not optional:
+
+- **Check 4's power comparison is predetermined on this arm.** CERTIFIED rate under
+  replay against PASS rate under the class gate cannot differ when the statistic and
+  the maxima coincide. Any difference that appears would be bootstrap noise, and the
+  check is read that way or not at all.
+- **Check 1's pass is weaker than it looks.** It says the gate does not certify noise
+  often — but against a searcher whose submission the class tier already prices
+  exactly, which is the easiest case for the gate, not a hard one.
+- **It does not invalidate anything.** No rule referred to a gap between the tiers,
+  and 7.0 already measured replay and class as indistinguishable at matched actual
+  size (+0.0003, straddling zero). This is the mechanism behind that, seen directly.
+- **It is a property of this class and this panel**, not of agents: at `max_size = 3`
+  over `K = 40` a greedy path with `refine` is evidently enough. A deeper class, or
+  one where the objective is less nearly modular, would separate the tiers — and
+  whether it does is a question for a later experiment, not a repair to this one.
+
+**12 — 2026-09-30, registered before the remaining arms run. The per-kind decile
+readout is replaced.**
+
+Check 1's per-kind lowest-decile readout was **structurally blind on the s0 replay
+arm**, for two reasons recorded with that read: all four kinds present among the
+priced runs appeared in **every** priced run, so their fractions were identical by
+construction; and `swap_worst` and `restart` appeared **only** in runs that issued no
+certificate, so no position existed for them at all. It named no suspect kind and
+could not have.
+
+**Registered in its place, for the remaining arms:**
+
+> **Spearman rank correlation of the position with, per run, (i) the count of each
+> move kind and (ii) the number of trigger changes** — computed on the runs that
+> carry a position, reported with the correlation, its two-sided p-value and n, one
+> row per move kind plus one for trigger changes.
+
+**Why this is the right shape.** A decile fraction asks whether *runs containing a
+kind* skew low, which is a question about **presence**; when a kind is present in every
+run the question is empty. A rank correlation asks whether *more of a kind* goes with a
+**lower position**, which is a question about **dose**, and it survives a kind being
+ubiquitous — indeed it is at its most informative there. It is also the natural
+readout for the trigger-change count, which is a number rather than a presence.
+
+**Descriptive, no threshold, no branch, and it gates nothing.** The conditioning is
+stated wherever it is reported: these are positions among runs that issued a
+certificate-eligible position, which is not the whole arm. A kind with too few
+distinct counts to rank is reported as **unmeasured with its count**, never as a null
+result. **Sign convention, fixed now:** a **negative** correlation means more of that
+kind goes with a smaller p-value, which is the direction that would indicate leakage.

@@ -804,7 +804,26 @@ run itself.
 
 **The agent cell does not start until `prereg/agent-cell.md` has had its full read,
 and nothing runs on the seat before that.** The five pre-agent-cell quixote changes
-listed at the end of this file land first.
+listed at the end of this file land first. **All five are implemented and tested.**
+
+**CHECK 1 IS READ, AND HOLDS (2026-09-30).** The `s0` replay-gate arm ran its
+registered 80. False certification over all 80 runs: **2/80 = 0.0250** at α = 0.05,
+Wilson [0.0069, 0.0866]; **1/80 = 0.0125** at α = 0.01, [0.0022, 0.0675]. Neither
+lower end exceeds nominal. The read is at
+`runs/agent_cell_s0_replay/check1_read.txt`; `prereg/agent-cell.md` amendment 11
+fixed the quantity — a bracketed run issued no certificate and counts as a
+non-rejection — before any number was seen, and amendment 4's n = 80 detectability
+stands: it rules out gross leakage and no more.
+
+**Read with three caveats, all recorded in `prereg/agent-cell.md`.** The per-kind
+decile readout was **structurally blind** on this arm and named no suspect kind
+(amendment 12 replaces it with a Spearman dose readout for the remaining arms). The
+declared-class readout came back **not conservative** relative to the certifying
+null. And the reason is the finding that matters: **the agent submitted the class
+maximum in 80 of 80 runs**, so on `s0` the replay tier buys nothing over the class
+tier and **check 4's power comparison is predetermined on this arm**. That is a
+property of this class and panel — depth 3 over K = 40, where greedy plus `refine`
+reaches the argmax — not of agents.
 
 
 **Amendment, 2026-09-24: a 5-run pilot precedes this section, and why.**
@@ -1394,3 +1413,60 @@ and `prereg/agent-pilot.md`'s 2026-09-28 re-grade.
 
 
 **Status 2026-09-29: all five are IMPLEMENTED and tested.** Item 1 in `quixote/certify.py` and `quixote/verdict.py` (`p_certifying` is the submitted specification, `p_procedure` beside it, `declares_stop_rule` and the no-stop-rule notice), tested in `tests/test_quixote_certify.py`. Items 2, 3 and 5 in `quixote/session.py` (`resolved_trigger`, `close`, `_refuse_restart_under_a_firing_stop`) and `quixote/log.py` (`self_check`), tested in `tests/test_pre_agent_cell.py`. Item 4 in `tests/test_move_completeness.py`, on the accepted-move path. The verdict block also carries the hand-over share as a per-run line. **The agent cell does not start until `prereg/agent-cell.md` has had its full read, and nothing runs on the seat before that.**
+
+**Amendment, 2026-09-30: a literature search, and what it changed.** Recorded
+here because Phase 7 is where the replay tier is built and a novelty claim about it
+would be made. The full search, with a read-level for every reference, is
+`docs/RELATED_WORK_2026.md`.
+
+**Two premises of this project were published earlier by others.** Gençay (2026,
+arXiv:2608.27734, 27 Aug) and Kinlay (2026a, 2 Sep) both published the observation
+that an agent's trial count is observable by construction **before this
+repository's first commit** (`ed14594`, 2026-09-14). This project reached it
+independently, and that is the wording used: neither work addresses whether the
+logged candidate set suffices when the search is **adaptive**, which is the subject
+here. **No finding of this project is described as derived from, following, or
+building on either.** Recorded in `README.md`, `SCOPE.md` and
+`docs/RELATED_WORK_2026.md`.
+
+**One work is concurrent and independent.** Kinlay (2026b, 22 Sep) reaches the
+family-versus-search-trace conclusion and the effective-trial-count conclusion;
+this project's records are earlier — `3446f10`, 2026-09-14 for the effective-N
+double-counting result, `309332d` and `34934a1`, 2026-09-15 for the
+family-versus-trace distinction — and it contains no mechanism for the effective-N
+error, which here comes from `Var[SR_n]`.
+
+**The replay objection is answered where the grammar is documented.**
+Gonuguntla (2026, arXiv:2608.08239, CoLM 2026) shows replaying a logged LLM
+trajectory is invalid once policies diverge — 74–77% of early swaps diverge at the
+first post-fork action, leaving 3% of replayed states valid. **Quixote never
+replays the LLM**: it replays harness-executed typed moves and declared triggers,
+prices undeclared judgment at the maximum over alternatives, and covers the model
+with twins. That is why the grammar exists, and it is written up in
+`quixote/README.md`. A gate that replayed the model would inherit exactly the
+invalidity that paper measures.
+
+**A design alternative is recorded rather than dismissed.** Qu, Chen & Wang (2026,
+arXiv:2609.27051) get validity from a frozen referee scoring only post-submission
+outcomes, at a cost of roughly 500 trading days to admission. Quixote certifies on
+data in hand and pays in claim strength instead. Neither dominates.
+
+**Novelty wording, fixed at the strength the search supports**, and used verbatim
+wherever a Quixote novelty line appears (`SCOPE.md`, `quixote/README.md`,
+`THEORY.md` P4 restricted to the anchoring sign, and five Phase 7 pre-registrations
+that previously read "prior art not yet searched"): *Literature search 2026-09-30
+(`docs/RELATED_WORK_2026.md`) found no prior replay of an adaptive search's logged
+decisions inside a data-snooping null, and no mixed replay/max-over-alternatives
+pricing. Not a proof of absence.* **No stronger novelty claim is made anywhere.**
+
+**Citation hygiene closed on one item.** Liu, Qu, Gaboardi, Garg & Ullman,
+*Program analysis for adaptive data analysis*, PACMPL 8(PLDI) Article 184 (2024),
+resolves at arXiv:2608.19575 — a 2026 posting of the 2024 paper, which is why the
+identifier looked wrong. Marked verified in `THEORY.md`.
+
+**Staged, not yet written: the note.** Items directed at the note's §4, §5 and §8 —
+the replay objection and the design alternative — have **no target in this
+repository**, because no note draft exists yet. The material is written in
+`quixote/README.md` and here, and is to be carried into the note's §4/§5 (the
+objection) and §8 (the alternative) when the note is drafted. Recorded so the
+instruction is not lost.
