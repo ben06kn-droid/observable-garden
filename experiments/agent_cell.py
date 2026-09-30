@@ -211,7 +211,8 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
         handlers, tools = control_tools(sandbox, rec, K), None
     else:
         session = Session.on_sandbox(sandbox, cls, name_prefix=rec.run_id)
-        tools = ToolSession(session)
+        # the harness's turn limit becomes the declared budget at open
+        tools = ToolSession(session, max_turns=MAX_TURNS)
         handlers = replay_tools(tools, rec, K)
 
     if dry_run:
@@ -238,6 +239,9 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
         # re-rendering it reproduces the payload sent, byte for byte, and an
         # invariant that cannot be checked from the stored run is not one a reader
         # can rely on.
+        # the declared budget, so a re-grade reads the bound the search ran under
+        # instead of reconstructing it (amendment 10)
+        rec.log("declared_budget", budget=tools.session.log.budget)
         rec.log("session_log", records=[
             {"step": r.step, "kind": r.move.kind, "support": list(r.support_after),
              "score": r.score_after, "n_candidates": r.n_candidates,
@@ -250,9 +254,19 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
                       "choice": r.move.choice},
              "shown": ([list(pair) for pair in r.information.shown]
                        if r.information is not None else []),
+             "trigger_stamped_at": r.trigger_stamped_at,
              "information": (r.information.as_context()
                              if r.information is not None else None)}
             for r in tools.session.log.records])
+        # The CHANGE HISTORY, with timestamps. Attempt 2 recorded its absence as a
+        # gap: the file carried a `triggers_changed` boolean and the committed
+        # rules, so re-grading worked, but a reader could not see WHAT was changed
+        # or WHEN. A change is a data-dependent decision and its timing is the
+        # whole reason it is priced, so the timing belongs in the artifact.
+        rec.log("trigger_changes", changes=[
+            {"at_step": ch.get("at_step"), "trigger": dict(ch.get("trigger") or {}),
+             "reason": ch.get("reason"), "timestamp": ch.get("timestamp")}
+            for ch in (tools.session.log.trigger_changes or ())])
         if not rec.submitted:
             support, score = tools.session.submission()
             rec.submitted_support = [[int(k), float(s)] for k, s in support]

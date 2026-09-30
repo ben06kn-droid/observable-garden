@@ -118,6 +118,11 @@ class SessionLog:
     # replayed a log much later. A check at close catches them while the session
     # that produced them still exists.
     self_check: dict | None = None
+    # True for a log opened through `quixote.agent_adapter.ToolSession`, i.e. the
+    # AGENT path. Such a log must carry a declared budget: the harness's own turn
+    # limit is that budget and is written at session open, so a replay has no
+    # business guessing one (`prereg/agent-cell.md` amendment 10).
+    agent_driven: bool = False
 
     # -- append-only ------------------------------------------------------
 

@@ -109,6 +109,21 @@ class LoggedPolicy:
         # whose triggers never fire runs away. 7.1's own hard cap is the bound,
         # for the reason it exists: `searchers/meta_adaptive.BUDGET = 12`, "so a
         # replicate can never run away". A declared budget always wins.
+        #
+        # THERE IS NO SUCH FALLBACK ON THE AGENT PATH. An agent log carries the
+        # harness's turn limit as its declared budget, written at session open, and
+        # a log that does not is a log whose bound is unknown — so the replay
+        # raises rather than substituting a different searcher's cap. Attempt 2 of
+        # `prereg/agent-pilot.md` is why: 7.1's 12 against a 14-record agent log
+        # made the integrity check report a structural failure on a search that had
+        # not diverged, at a score gap of exactly zero.
+        if getattr(log, "agent_driven", False) and log.budget is None:
+            raise ValueError(
+                "this agent log declares no budget. The harness writes its turn "
+                "limit as the budget at session open; a log without one cannot be "
+                "replayed, because the bound the search ran under is not "
+                "recoverable and 7.1's cap of 12 is a different searcher's bound. "
+                "See prereg/agent-cell.md amendment 10.")
         from searchers.meta_adaptive import BUDGET as _DEFAULT_BUDGET
         self.budget = log.budget if log.budget is not None else _DEFAULT_BUDGET
         self.budget_declared = log.budget is not None

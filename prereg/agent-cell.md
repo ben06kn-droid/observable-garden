@@ -595,3 +595,57 @@ this rules out a hole.
 **What it does not extend to.** The orientation arm's own rule is unchanged, and
 nothing here is read on `s3`, where the null is not true and a rejection rate is
 not a size.
+
+**10 — 2026-09-30, after shake-out attempt 2 and before the cell. The agent's
+budget is the harness's turn limit, written at session open.**
+
+Attempt 2 (`prereg/agent-pilot.md`) triggered condition 4 on its longest run: the
+integrity check reported a **structural failure** while the support and the score
+agreed to **exactly zero**, and the action sequences differed only in **length** —
+11 replayed against 13 realized. The cause was a bound, not a divergence. No agent
+declares a budget, so `LoggedPolicy` fell back to `searchers.meta_adaptive.BUDGET =
+12`, and that log held 14 records.
+
+**Registered:**
+
+> **The harness writes `MAX_TURNS` into the log at session open as the declared
+> budget.** `LoggedPolicy` reads the budget from the log. **An agent log without one
+> raises**, and there is **no fallback to `meta_adaptive.BUDGET` on the agent
+> path.**
+
+**Why the turn limit is the right bound, and not an arbitrary one.** An agent's
+procedure ends at **a declared trigger or at the harness's turn limit**, whichever
+comes first. The limit is therefore *part of the procedure* — the search genuinely
+cannot continue past it — so a null that runs the same procedure must run to the
+same bound. 7.1's cap of 12 is a different searcher's bound and belongs to a
+different procedure; substituting it prices a search nobody ran.
+
+**Why NOT bounding by the realized length, which is the tempting alternative.**
+Taking the bound from how long the log happened to be would make **the bound a
+function of the realized data** — a longer search on a lucky draw would license a
+longer null, and a replicate would be allowed exactly as many steps as the realized
+run took because the realized run took them. That is the **data-dependent-length
+error**, and it is the same mistake `SCOPE.md`'s obliviousness condition forbids in
+the choice of menu: the bound must be measurable with respect to a σ-field
+independent of the return-generating randomness. `MAX_TURNS` is a constant fixed
+before any data is seen; the realized length is not.
+
+**Why it raises rather than defaulting.** A log whose bound cannot be recovered
+cannot be replayed, and a replay that silently substitutes some other bound produces
+a number that looks like a p-value and is not one. Attempt 2's run is the
+demonstration: had the check not been structural, a 12-step replay of a 14-step
+search would have been priced and reported. **The two short runs of attempt 2 passed
+only because they happened to stay under 12 records**, which is not a property any
+future run has.
+
+**Runs written before this amendment.** Their budget is **reconstructed** as
+`MAX_TURNS`, because the turn limit was in force during them even though it was not
+written down. `experiments/regrade_pilot.py` reports which of the two it used —
+`"read from the log"` or `"reconstructed"` — because a reconstructed bound is a
+weaker claim than a read one, and a reader should not have to assume.
+
+**Also registered: the change history is serialized.** Attempt 2 recorded its
+absence as a gap. `log.trigger_changes` now reaches the run file **with its
+timestamps**, alongside the committed rules. A change is a data-dependent decision
+and its **timing** is the whole reason the verdict prices it, so the timing belongs
+in the artifact rather than in a boolean.

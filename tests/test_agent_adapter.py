@@ -14,6 +14,7 @@ import pytest
 from environments.dgp import DGPConfig, generate
 from environments.sandbox import Sandbox
 from garden.spec_class import SubsetClass
+from experiments.agent_backend import MAX_TURNS
 from quixote.agent_adapter import (CONTENT_TOOLS, META_TOOLS, TOOLS, QuixoteAgent,
                                    ToolRefused, ToolSession)
 from quixote.grammar import Move
@@ -157,7 +158,8 @@ def test_the_tool_list_is_the_grammar_plus_the_declaration_slots():
 
 def test_an_unknown_tool_is_refused_with_the_list():
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     with pytest.raises(ToolRefused, match="unknown tool"):
         tools.call("evaluate")             # llm_agent.py's tool, deliberately absent
     with pytest.raises(ToolRefused, match="unknown tool"):
@@ -166,7 +168,8 @@ def test_an_unknown_tool_is_refused_with_the_list():
 
 def test_every_tool_has_a_schema_taken_from_its_own_implementation():
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     schemas = tools.tool_schemas()
     assert [s["name"] for s in schemas] == list(TOOLS)
     assert all(s["description"] for s in schemas)
@@ -179,7 +182,8 @@ def test_a_meta_move_whose_trigger_does_not_fire_is_refused():
     """'A meta move is taken because a declared trigger fired.' A stop the agent
     merely prefers is refused, and nothing is recorded."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     before = len(tools.session.log.records)
     with pytest.raises(ToolRefused, match="does not fire"):
@@ -189,7 +193,8 @@ def test_a_meta_move_whose_trigger_does_not_fire_is_refused():
 
 def test_a_meta_move_with_an_unknown_trigger_is_refused_with_the_library():
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     with pytest.raises(ToolRefused, match="unknown trigger"):
         tools.call("stop", trigger="i_feel_done", param=0.0)
@@ -199,7 +204,8 @@ def test_the_trigger_is_stamped_before_the_move_it_justifies():
     """`Session.evaluate_trigger` takes the stamp; the adapter must pass that
     stamp through rather than taking a fresh one after the move."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     tools.call("stop", trigger="best_so_far_above", param=-99.0)
     rec = tools.session.log.records[-1]
@@ -212,7 +218,8 @@ def test_a_declaration_after_the_first_evaluation_is_refused():
     """The slots are pre-evaluation by construction (`SessionLog.refuse_if_late`),
     and the adapter does not soften that."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     with pytest.raises(ValueError):
         tools.call("pick_prior", support=[[0, 1.0]])
@@ -225,7 +232,8 @@ def test_a_move_outside_the_declared_class_is_refused_by_the_harness():
     undefined by the state, so it is `outside_class` and not
     `inapplicable_move`. The audit maps each precondition to its kind."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     tools.call("extend_best")
     tools.call("extend_best")               # support is now full at max_size 3
@@ -236,7 +244,8 @@ def test_a_move_outside_the_declared_class_is_refused_by_the_harness():
 
 def test_nothing_is_taken_after_submit():
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     tools.call("submit")
     with pytest.raises(ToolRefused, match="has submitted"):
@@ -248,7 +257,8 @@ def test_nothing_is_taken_after_submit():
 def test_a_discarded_proposal_is_recorded_as_computed_and_not_taken():
     """Breadth is what was evaluated, not what was kept."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     sb_calls = len(tools.session.sandbox.transcript)
     res = tools.call("extend_best", keep=False)
@@ -262,7 +272,8 @@ def test_a_discarded_proposal_is_recorded_as_computed_and_not_taken():
 
 def test_a_contradicted_pick_runs_the_rule_and_says_so_to_the_agent():
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     from quixote.grammar import Grammar
     g = tools.session.grammar
     chosen, _ = g.pick_choice((), Move("pick", statistic="sharpe", among=(0, 1, 2)))
@@ -279,7 +290,8 @@ def test_the_submission_is_the_best_pair_after_a_restart():
     """A restart keeps the best pair; the submission must not mix the current
     support with another's score."""
     data, cfg, cls = _fixture(seed=7)
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     best_before = tools.session.best_score
     res = tools.call("restart", trigger="failures_at_least", param=0.0)
@@ -305,7 +317,8 @@ def test_a_stop_ends_the_search():
     in one log, and trigger replay is told how many moves the realized search
     took. Found by the pilot's dry run, before any model-backed run."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     tools.call("stop", trigger="best_so_far_above", param=-99.0)
     assert tools.stopped
@@ -375,7 +388,8 @@ def test_a_stop_may_only_fire_a_trigger_that_was_declared_up_front():
     does not satisfy. A declared trigger is a commitment the search runs under,
     so a stop must name one already on record."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("declare_triggers",
                triggers=[{"trigger": "last_gain_at_most", "param": 0.0}])
     tools.call("init")
@@ -387,7 +401,8 @@ def test_a_stop_may_only_fire_a_trigger_that_was_declared_up_front():
 
 def test_triggers_declared_after_the_first_evaluation_are_refused():
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     with pytest.raises(ValueError):
         tools.call("declare_triggers",
@@ -398,7 +413,8 @@ def test_a_session_that_declared_nothing_is_the_pre_amendment_path():
     """Scripted searchers and logs written before the slot existed are
     untouched: their policy IS code, so declaration and use coincide."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("init")
     assert tools.call("stop", trigger="best_so_far_above", param=-99.0).ok
 
@@ -407,7 +423,8 @@ def test_changing_a_trigger_is_allowed_logged_and_priced():
     """The licensed exception: allowed, timestamped, and every move after it is
     not replayable, which is what puts the run in the bracket."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("declare_triggers",
                triggers=[{"trigger": "best_so_far_above", "param": 1e9}])
     tools.call("init")
@@ -434,7 +451,8 @@ def test_the_pre_change_trigger_is_what_replays():
     decision.' The log keeps both, so a replay can take the first and the
     verdict can price the rest."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("declare_triggers",
                triggers=[{"trigger": "last_gain_at_most", "param": 0.25}])
     first = list(tools.session.log.declared_trigger_records)
@@ -455,7 +473,8 @@ def test_a_firing_trigger_refuses_every_content_move_until_it_is_resolved():
     on, and the guard refused two runs of three.
     """
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("declare_triggers",
                triggers=[{"trigger": "best_so_far_above", "param": -99.0}])
     # the rule fires immediately: best_so_far is -inf until the first move, so it
@@ -474,7 +493,8 @@ def test_a_firing_trigger_refuses_every_content_move_until_it_is_resolved():
 
 def test_changing_the_rule_is_the_other_way_out_and_is_priced():
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("declare_triggers",
                triggers=[{"trigger": "best_so_far_above", "param": -99.0}])
     tools.call("init")
@@ -500,7 +520,8 @@ def test_changing_the_rule_is_the_other_way_out_and_is_priced():
 def test_a_session_with_no_declared_trigger_is_never_interrupted():
     """7.1's scripted searchers and every pre-amendment log keep their path."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     for _ in range(3):
         assert tools.call("extend_best").ok or True
     assert tools.session.fired_triggers() == []
@@ -513,7 +534,8 @@ def test_the_declaration_replays_and_the_change_lives_beside_it():
     overwritten it, so the replay ran under a rule the search never committed
     to."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("declare_triggers",
                triggers=[{"trigger": "best_so_far_above", "param": 1e9}])
     tools.call("init")
@@ -532,7 +554,8 @@ def test_a_move_undefined_in_this_state_is_refused_as_inapplicable():
     move has no meaning in the current state. Distinct from malformed_arguments
     and from outside_class, because the three are different facts about a run."""
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     with pytest.raises(ToolRefused, match="is not defined in this state"):
         tools.call("refine")                          # empty support
     with pytest.raises(ToolRefused, match="is not defined in this state"):
@@ -592,7 +615,8 @@ def test_the_commitment_check_replays_the_COMMITTED_rule_not_the_active_one():
     replay the rule the search committed to (`log.declared_triggers()`)."""
     from quixote.replay import LoggedPolicy
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("declare_triggers",
                triggers=[{"trigger": "last_gain_at_most", "param": 0.25}])
     tools.call("init")
@@ -614,7 +638,8 @@ def test_changes_that_never_bound_do_not_bracket_the_run():
     so the tagging moved to the verdict."""
     from quixote.certify import certify
     data, cfg, cls = _fixture()
-    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls))
+    tools = ToolSession(Session.on_sandbox(_sandbox(data, cfg), cls),
+                        max_turns=MAX_TURNS)
     tools.call("declare_triggers",
                triggers=[{"trigger": "best_so_far_above", "param": 1e9}])
     tools.call("init")

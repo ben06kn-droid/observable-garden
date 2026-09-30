@@ -1103,3 +1103,43 @@ either the harness requires or defaults a budget for an agent session, or
 budget was declared — which is safe for the integrity check, whose log is finite,
 but changes what the bound means past the realized length in the nulls. Whichever is
 chosen is registered before it is written.
+
+#### Attempt 2, re-graded under the amendment-10 fix, 2026-09-30
+
+The three directories re-graded after the fix. **Counts only.**
+
+| run | records | INTEGRITY | COMMITMENT | actions realized/replayed |
+|---|---|---|---|---|
+| orientation | 8 | **PASS** | FAIL | 7 / 7 |
+| reasoned-pick, run 0 | 5 | **PASS** | PASS | 4 / 4 |
+| reasoned-pick, run 1 | 14 | **PASS** | FAIL | **13 / 13** |
+
+**The long run's self-check and action-sequence lengths, which is what the fault
+showed up in.** Its stored in-session self-check says **not replayable** — that
+value was written before the fix and stands as the record of what the defect looked
+like. Under the fix the same log **re-grades INTEGRITY PASS**, with **13 realized
+actions against 13 replayed**, where before it was **11 against 13**. The support and
+score were identical throughout, at a gap of exactly zero; only the bound was wrong.
+**Condition 4 is cleared by the fix and not by a reinterpretation.**
+
+Both runs' budgets were **reconstructed** as `MAX_TURNS = 60`, not read: these three
+runs predate the amendment, and `regrade_pilot` labels which of the two it used.
+Runs made from now on record it.
+
+**COMMITMENT FAIL on two of the three is expected and is not a condition.** The
+orientation run changed a trigger twice and the long run eight times; a change that
+**bound** is what the bracket exists for, and `prereg/unfaithful-searchers.md`'s rule
+5 registers that only a run certifying *despite* a binding change is a defect.
+Neither certified.
+
+**The pick yield, as measured: 1 accepted pick in 2 reasoned-pick runs.** Against 0
+in 2 before `AGENT_PROMPTS_REAL.md` amendment 8's sentence of fact. Run 0's pick was
+refused `after_stop`; run 1's was accepted, with `picks_contradicted` at 0. **That is
+the measurement and it is not a rate:** n = 2 is below what `prereg/README.md`'s
+low-n rule permits to be read as one, and rule 5 forbids it entering any reading of
+the cell. The registered fallback does not fire, because it fires on *every* pick
+refused; it is also not cleared, because 1 of 2 does not show the sentence is
+sufficient. **What is established is that the grammar accepted a pick from a model
+for the first time.** The arm's yield at the cell's n = 20 per config is unmeasured,
+and if it comes back low the fallback is already registered and does not need
+deciding in the window.

@@ -126,9 +126,22 @@ class ToolSession:
     call count.
     """
 
-    def __init__(self, session: Session, short_list_cap: int = 5):
+    def __init__(self, session: Session, short_list_cap: int = 5,
+                 max_turns: int | None = None):
         self.session = session
         self.short_list_cap = short_list_cap
+        # AT SESSION OPEN: the harness's turn limit IS the declared budget.
+        #
+        # An agent's procedure ends at a declared trigger or at the turn limit,
+        # whichever comes first, so the limit is part of the procedure and not an
+        # accident of the run. Writing it here — before any evaluation, which is
+        # what `declare_budget` requires — means a replay reads the bound the search
+        # actually ran under instead of falling back to 7.1's cap of 12, which is a
+        # different searcher's bound and shorter than most agent logs.
+        # `prereg/agent-cell.md` amendment 10 registers why.
+        self.session.log.agent_driven = True
+        if max_turns is not None and session.log.budget is None:
+            session.declare_budget(int(max_turns))
         self.n_calls = 0
         self.submitted = False
         # A stop ends the search. Without this latch an agent can call `stop`

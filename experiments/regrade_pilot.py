@@ -48,14 +48,16 @@ def rebuildable(records: list[dict]) -> tuple[bool, str]:
     return True, ""
 
 
-def rebuild_log(records: list[dict], declared: list[dict], budget: int | None):
-    """A SessionLog carrying the recorded moves, triggers and supports."""
+def rebuild_log(records: list[dict], declared: list[dict], budget: int | None,
+                agent_driven: bool = True):
+    """A SessionLog carrying the recorded moves, triggers, supports and budget."""
     from quixote.grammar import Move
     from quixote.session import MoveRecord, SessionLog
 
     log = SessionLog()
     log.declared_trigger_records = [dict(d) for d in declared]
     log.budget = budget
+    log.agent_driven = bool(agent_driven)
     for r in records:
         m = r.get("move")
         if m:
@@ -98,7 +100,22 @@ def regrade_one(path: Path, table, cls, ann: float, base: np.ndarray) -> dict:
         out["why"] = why
         return out
 
-    log = rebuild_log(records, d.get("triggers_predeclared") or [], None)
+    # The BOUND the search ran under. Runs written after 2026-09-30 record it
+    # (`declared_budget`); earlier agent runs do not, and for those the harness's
+    # turn limit was in force even though it was not written down, so it is
+    # RECONSTRUCTED from MAX_TURNS rather than guessed. The distinction is
+    # reported, because a reconstructed bound is a weaker claim than a read one.
+    from experiments.agent_backend import MAX_TURNS
+
+    declared = [e for e in d["events"] if e.get("kind") == "declared_budget"]
+    budget = declared[0].get("budget") if declared else None
+    out["budget_source"] = "read from the log" if budget is not None else (
+        f"reconstructed as MAX_TURNS = {MAX_TURNS}; this run predates 2026-09-30 "
+        "and did not record its budget")
+    if budget is None:
+        budget = MAX_TURNS
+    out["budget"] = int(budget)
+    log = rebuild_log(records, d.get("triggers_predeclared") or [], int(budget))
     score_fn = None if table is None else table.scorer()
     # The faithfulness gate: does replaying the rebuild reproduce the file?
     #
@@ -132,6 +149,10 @@ def regrade_one(path: Path, table, cls, ann: float, base: np.ndarray) -> dict:
         "replayed_support": list(integrity.replayed_support),
         "realized_score": float(integrity.realized_score),
         "replayed_score": float(integrity.replayed_score),
+        # a short bound shows up here and nowhere else: the supports agree and the
+        # sequences differ in LENGTH
+        "n_actions_realized": len(integrity.realized_actions),
+        "n_actions_replayed": len(integrity.replayed_actions),
     })
     return out
 
@@ -217,6 +238,9 @@ def main(argv=None) -> int:
             continue
         print(f"  INTEGRITY  {'PASS' if r['integrity_ok'] else 'FAIL'}")
         print(f"  COMMITMENT {'PASS' if r['commitment_ok'] else 'FAIL'}")
+        print(f"  budget: {r['budget']} ({r['budget_source']})")
+        print(f"  actions: realized {r['n_actions_realized']}, "
+              f"replayed {r['n_actions_replayed']}")
         print(f"  realized {r['realized_support']} score {r['realized_score']:.6f}")
         print(f"  replayed {r['replayed_support']} score {r['replayed_score']:.6f}")
     out = Path(a.dir) / "regrade_2026-09-28.json"

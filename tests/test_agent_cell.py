@@ -412,3 +412,95 @@ def test_the_dry_run_pick_is_accepted_so_the_path_is_actually_exercised(tmp_path
     assert picks, "the dry run must land an accepted pick"
     # a pick adds ONE candidate, and its shown holds one pair per candidate scored
     assert len(picks[0]["shown"]) >= len(picks[0]["move"]["among"])
+
+
+# -- amendment 10: the budget is the turn limit, written at open ---------------
+
+def test_the_adapter_declares_the_turn_limit_as_the_budget_at_session_open():
+    """`prereg/agent-cell.md` amendment 10. An agent's procedure ends at a declared
+    trigger or at the harness's turn limit, so the limit is part of the procedure
+    and a null must run to the same bound."""
+    from quixote.agent_adapter import ToolSession
+    from quixote.session import Session
+
+    _d, _c, cls, sb, _dgp = ac.simulated_panel("s0", 31)
+    sess = Session.on_sandbox(sb, cls, name_prefix="budget")
+    assert sess.log.budget is None
+    ts = ToolSession(sess, max_turns=ac.MAX_TURNS)
+    assert ts.session.log.budget == ac.MAX_TURNS
+    assert ts.session.log.agent_driven is True
+    # and it is declared before any evaluation, which is what makes it a
+    # declaration rather than a description
+    assert sess.log.first_evaluation_at is None
+
+
+def test_an_agent_log_without_a_budget_raises_rather_than_falling_back():
+    """No fallback to `meta_adaptive.BUDGET` on the agent path. Attempt 2 is why:
+    7.1's cap of 12 against a 14-record agent log made the integrity check report a
+    structural failure on a search that had not diverged, at a score gap of exactly
+    zero. A replay that silently substitutes another bound produces a number that
+    looks like a p-value and is not one."""
+    from quixote.agent_adapter import ToolSession
+    from quixote.replay import LoggedPolicy
+    from quixote.session import Session
+
+    _d, _c, cls, sb, _dgp = ac.simulated_panel("s0", 31)
+    sess = Session.on_sandbox(sb, cls, name_prefix="nobudget")
+    ToolSession(sess)                      # agent path, no turn limit passed
+    assert sess.log.agent_driven is True and sess.log.budget is None
+    with pytest.raises(ValueError, match="declares no budget"):
+        LoggedPolicy(sess.log, cls)
+
+    # a NON-agent log still gets 7.1's bound, so scripted searchers are unaffected
+    plain = Session.on_sandbox(sb, cls, name_prefix="scripted")
+    assert plain.log.agent_driven is False
+    from searchers.meta_adaptive import BUDGET
+    assert LoggedPolicy(plain.log, cls).budget == BUDGET
+
+
+def test_a_finished_run_records_its_declared_budget_on_disk(tmp_path):
+    """So a re-grade READS the bound instead of reconstructing it. A reconstructed
+    bound is a weaker claim, and `regrade_pilot` says which it used."""
+    d = json.loads(_finished_run_dir(tmp_path).read_text())
+    declared = [e for e in d["events"] if e.get("kind") == "declared_budget"]
+    assert declared and declared[0]["budget"] == ac.MAX_TURNS
+
+    from experiments.regrade_pilot import main as regrade
+    assert regrade(["--panel", "s0", "--dir", str(tmp_path)]) == 0
+    row = json.loads((tmp_path / "regrade_2026-09-28.json").read_text())[0]
+    assert row["budget"] == ac.MAX_TURNS
+    assert row["budget_source"] == "read from the log"
+    # the symptom a short bound produced is gone: the sequences match in LENGTH
+    assert row["n_actions_realized"] == row["n_actions_replayed"]
+
+
+# -- amendment 10: the change history is serialized ---------------------------
+
+def test_the_trigger_change_history_reaches_the_run_file_with_timestamps(tmp_path):
+    """Attempt 2 recorded the gap: the file carried a `triggers_changed` boolean
+    and the committed rules, so re-grading worked, but a reader could not see what
+    was changed or when. A change is a data-dependent decision and its timing is
+    why the verdict prices it."""
+    from quixote.agent_adapter import ToolSession
+    from quixote.session import Session
+
+    # a session that actually changes a trigger, driven through the tools
+    _d, _c, cls, sb, _dgp = ac.simulated_panel("s0", 33)
+    sess = Session.on_sandbox(sb, cls, name_prefix="chg")
+    ts = ToolSession(sess, max_turns=ac.MAX_TURNS)
+    ts.call("declare_triggers", triggers=[
+        {"trigger": "failures_at_least", "param": 2.0, "action": "stop"}])
+    ts.call("init")
+    ts.call("change_trigger", trigger="failures_at_least", param=9.0, action="stop")
+    changes = sess.log.trigger_changes
+    assert len(changes) == 1
+    assert changes[0]["timestamp"] is not None
+    assert changes[0]["at_step"] is not None
+
+    # and the runner serializes exactly those fields
+    d = json.loads(_finished_run_dir(tmp_path).read_text())
+    ev = [e for e in d["events"] if e.get("kind") == "trigger_changes"]
+    assert ev, "a finished run must carry a trigger_changes event, even if empty"
+    for ch in ev[0]["changes"]:
+        assert set(ch) == {"at_step", "trigger", "reason", "timestamp"}
+        assert ch["timestamp"] is not None
