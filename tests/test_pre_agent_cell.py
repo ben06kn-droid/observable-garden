@@ -189,3 +189,76 @@ def test_close_is_idempotent_and_never_raises():
     assert out["replayable"] is False
     assert out["error"] is not None
     assert "self-check itself failed" in out["reason"]
+
+
+# -- the two trigger evaluators must agree on every registered predicate -------
+
+def test_session_and_replay_evaluate_every_registered_predicate_identically():
+    """The defect this pins: `active_trigger_records` keyed by ACTION alone, so three
+    declared stop rules collapsed to the last one. The live session then ran under one
+    rule while `LoggedPolicy` replayed all three, the two evaluators disagreed on the
+    same state, and the commitment check reported a divergence the agent had not made
+    -- 15 runs of the 7.3 agent cell, 8 of 20 on the s3 orientation arm.
+
+    A declared rule that is never evaluated is not a declaration, so this walks a
+    SHARED trace and requires the two evaluators to fire identically at every step,
+    for every predicate in the registered library.
+    """
+    from quixote.replay import LoggedPolicy
+    from quixote.triggers import PREDICATES, Trigger
+
+    sess, _sb, _cls, _ann = _session(seed=41)
+    cls = SubsetClass(max_size=10, signed=True)
+
+    # one rule per registered predicate, all sharing the `stop` action -- the case
+    # that collapsed. Parameters chosen so each can fire somewhere on a real trace.
+    declared = [Trigger("best_so_far_above", 0.2, "stop"),
+                Trigger("failures_at_least", 2.0, "stop"),
+                Trigger("last_gain_at_most", 0.01, "stop")]
+    assert {t.kind for t in declared} == set(PREDICATES), (
+        f"the registered library is {sorted(PREDICATES)}; this test must cover all of "
+        "it, or a new predicate can be dropped by the live evaluator unnoticed")
+
+    sess.declare_budget(24)
+    sess.declare_triggers(declared)
+    # the live evaluator must hold every declared rule, not one per action
+    assert len(sess.active_trigger_records) == len(declared)
+
+    lp = LoggedPolicy(sess.log, cls)
+    assert len(lp.triggers) == len(declared)
+    assert ({(t.kind, t.param, t.action) for t in lp.triggers}
+            == {(t.kind, t.param, t.action) for t in declared})
+
+    # and on a SHARED state, both sides fire the same set
+    for state in ({"step": 0, "best": -float("inf"), "failures": 0,
+                   "last_gain": float("inf"), "budget_left": 24},
+                  {"step": 3, "best": 0.5, "failures": 0, "last_gain": 0.2,
+                   "budget_left": 21},
+                  {"step": 4, "best": 0.5, "failures": 1, "last_gain": 0.0,
+                   "budget_left": 20},
+                  {"step": 5, "best": 0.1, "failures": 2, "last_gain": 0.3,
+                   "budget_left": 19}):
+        live = {(Trigger.from_record(r).kind, Trigger.from_record(r).action)
+                for r in sess.active_trigger_records
+                if Trigger.from_record(r).evaluate(state)[0]}
+        replayed = {(t.kind, t.action) for t in lp.triggers if t.evaluate(state)[0]}
+        assert live == replayed, (state, live, replayed)
+
+
+def test_a_change_trigger_replaces_only_the_rule_it_names():
+    """Keying by (kind, action) keeps `change_trigger` a REPLACEMENT rather than an
+    addition, while leaving the other declared rules standing -- which is what
+    "replace the rule I named" means once more than one rule is declared."""
+    from quixote.triggers import Trigger
+
+    sess, _sb, _cls, _ann = _session(seed=42)
+    sess.declare_budget(24)
+    sess.declare_triggers([Trigger("best_so_far_above", 1.2, "stop"),
+                           Trigger("last_gain_at_most", 0.02, "stop")])
+    sess.change_trigger(Trigger("last_gain_at_most", -1e9, "stop"), reason="t")
+
+    recs = {(r["kind"], r["param"]) for r in sess.active_trigger_records}
+    assert ("best_so_far_above", 1.2) in recs          # untouched
+    assert ("last_gain_at_most", -1e9) in recs         # replaced
+    assert ("last_gain_at_most", 0.02) not in recs     # and not duplicated
+    assert len(sess.active_trigger_records) == 2

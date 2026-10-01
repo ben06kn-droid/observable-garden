@@ -161,11 +161,28 @@ class Session:
         the whole content of the priced exception: the run is replayed under the
         rule it committed to, and everything after a change is bracketed.
         """
-        active = {r.get("action", "stop"): dict(r)
-                  for r in self.log.declared_trigger_records}
+        # Keyed by (KIND, ACTION), not by action alone.
+        #
+        # Keying by action collapsed every rule sharing one: an agent declaring
+        # `best_so_far_above(1.2) -> stop`, `failures_at_least(3) -> stop` and
+        # `last_gain_at_most(0.02) -> stop` ran under only the LAST of them, while
+        # `LoggedPolicy` replayed all three. The two evaluators then disagreed on the
+        # same state and the commitment check reported a divergence the agent had not
+        # made -- 15 runs of the 7.3 agent cell, every one UNDECIDABLE, including
+        # eight of twenty on the s3 orientation arm. The live evaluator was the wrong
+        # one: a declared rule that is never evaluated is not a declaration.
+        #
+        # A `change_trigger` still REPLACES rather than adds, for the same (kind,
+        # action): changing the `last_gain` stop leaves the `best_so_far` stop
+        # standing, which is what "replace the rule I named" means when more than one
+        # rule is declared.
+        def key(rec):
+            return (rec.get("kind"), rec.get("action", "stop"))
+
+        active = {key(r): dict(r) for r in self.log.declared_trigger_records}
         for ch in self.log.trigger_changes:
             rec = dict(ch["trigger"])
-            active[rec.get("action", "stop")] = rec
+            active[key(rec)] = rec
         return list(active.values())
 
     def fired_triggers(self) -> list:

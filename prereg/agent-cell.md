@@ -903,12 +903,16 @@ s0 orientation 1 of 20, **s3 orientation 8 of 20**, s3 reasoned-pick 2 of 20. Al
 are `UNDECIDABLE` rather than `DEPENDS_ON_JUDGMENT`, so none was priced and none
 entered any rate — **the readings of cells 1–2 and checks 1 and 4 stand unchanged.**
 
-What they are: **the agent searched past its own declared rule without declaring a
-change.** s3 replay run 19 replays as `[continue, stop]` against a realized
-`[continue, continue, continue, stop]` — two further moves after the committed rule
-would have fired, with no `change_trigger` logged. This is the unfaithfulness U3 was
-constructed to model, **occurring naturally in a model-driven run**, and the harness
-caught it: not a defect but the commitment check doing its work. It is recorded as a
+**RETRACTED 2026-09-30, pending diagnosis.** This paragraph previously read that the
+agent had "searched past its own declared rule without declaring a change" and that
+this was "U3's unfaithfulness occurring naturally". **That attribution was premature.**
+The observation is only that the committed-rule replay diverges from the realized
+search: s3 replay run 19 replays as `[continue, stop]` against a realized
+`[continue, continue, continue, stop]`. Whether the cause is the AGENT departing from
+its rule or the two TRIGGER EVALUATORS — the live session's and `LoggedPolicy`'s —
+disagreeing on the same state was not established, and a divergence between evaluators
+would be a harness defect rather than agent behaviour. The diagnosis is below; nothing
+is claimed about the agent until it concludes. It is recorded as a
 check-3 behavioural readout, and it means the honest statement of how often an agent
 departs from its committed rule on s3 is **19 bound changes plus 4 silent
 divergences**, not 15 logged changes.
@@ -978,3 +982,78 @@ something to resolve.
 was 7.3's scripted half and is unaffected. The tier-selection rule and the no-fall-through
 rule are registered in `ROADMAP.md` and `prereg/bracketed-verdicts.md` on this cell's
 evidence, and they make **6.5's headline a class-tier verdict**.
+
+#### The diagnosis of the 15, 2026-09-30 — a harness defect, and it is not repairable retroactively
+
+**Checked in the registered order.** (i) *Refused proposals counted as failures on one
+side only* — not the cause; no run among the 15 carries a rejected proposal at the
+divergence. (ii) **Declaration text parsed differently by the live evaluator and
+`LoggedPolicy` — THIS IS THE CAUSE.** (iii) *`last_gain` over different move kinds* —
+not reached; the divergence is explained before it.
+
+**The defect.** `Session.active_trigger_records` built its dict keyed by **action
+alone**:
+
+    active = {r.get("action", "stop"): dict(r) for r in declared_trigger_records}
+
+Every rule sharing an action therefore **overwrote the previous one**, and the live
+session ran under the **last** rule declared. Run 19 declared three stop rules —
+`best_so_far_above(1.2)`, `failures_at_least(3.0)`, `last_gain_at_most(0.02)` — and
+the live evaluator held **one**: `last_gain_at_most(0.02)`. `LoggedPolicy` reads
+`log.declared_triggers()` and held all **three**.
+
+**The first divergence, named.** Run 19's live trace crosses `best = 1.2312` at record
+step 2, so `best_so_far_above(1.2)` is firing from that point. Decision (b) should have
+suspended content moves there. It did not, because the live evaluator could not see
+that rule, and the search took two further moves (`extend_best`, `refine`) before
+stopping on `last_gain = 0.0`. The replay, seeing all three rules, stops at step 2 —
+hence replayed `[continue, stop]` against realized
+`[continue, continue, continue, stop]`. The eight s3 orientation runs are the same
+shape: three stop rules declared, one evaluated.
+
+**Which evaluator was wrong: the LIVE one.** A declared rule that is never evaluated is
+not a declaration. `LoggedPolicy` was correct throughout.
+
+**Fixed:** `active_trigger_records` is keyed by **(kind, action)**, so distinct
+predicates survive and a `change_trigger` still *replaces* the rule it names rather
+than adding to it. Verified live: a session declaring those same three rules now shows
+`last_gain_at_most` firing to the live evaluator where it previously did not.
+`tests/test_pre_agent_cell.py` requires the session and the replay to fire **identically
+on a shared state for every predicate in the registered library**, and asserts the test
+covers all of `PREDICATES` so a new predicate cannot be dropped unnoticed.
+
+**0 of the 15 become PASS on re-grade, and that is the correct outcome rather than a
+disappointment.** The defect was in **execution**, not in grading: re-grading replays a
+stored log against the full declaration, which is what already happened. Those 15 logs
+are faithful records of searches that **were allowed to continue past a rule the agent
+had declared**, because the harness never evaluated it. Nothing retroactive can undo
+that, and the commitment check is right to refuse them.
+
+**What this means for the retracted claim.** The retraction stands and is now
+explained: these 15 are **not** U3's unfaithfulness occurring naturally. The agent
+declared three rules and obeyed the one it was held to; **the harness is responsible
+for the divergence**. No statement about agent fidelity rests on them.
+
+**What does not move.** All 15 were `UNDECIDABLE` and unpriced, so cells 1–2 and checks
+1, 3 and 4 are unchanged. The 25% / 47.5% bound-change headline is unchanged, since
+those are runs with logged changes. **What is now known to be contaminated** is any
+reading of how often an agent departs from its committed rule *without* declaring a
+change: on this cell that number is **not measurable**, because the harness was not
+enforcing the full declaration. It is a question for a future cell run under the fix.
+
+**11 — amended 2026-09-30. The fidelity pick subsample is every accepted pick.**
+
+Amendment 6 set check 2's subsample at the first 10 runs of each config in seed order.
+The cell measured **3 accepted picks per config** in that subsample — too few to report
+a per-kind rate under `prereg/README.md`'s low-n rule.
+
+> **For `pick` decisions the subsample is EVERY ACCEPTED PICK in the reasoned-pick
+> arm**, both configs, not the first 10 runs' worth. **Meta moves keep the first-10
+> rule**, since they are plentiful (12 and 15 in the subsample) and widening them would
+> buy nothing.
+
+Taking every accepted pick is **not** selection on an outcome: acceptance is a harness
+decision about whether the move was legal in that state, fixed before any fidelity
+measurement and independent of what the re-presentation will find. The count is
+recorded with the rate either way, and if it remains below what the low-n rule permits
+the readout stays **unmeasured with its count**.
