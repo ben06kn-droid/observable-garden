@@ -957,7 +957,7 @@ every run, every arm recording HEAD's design hashes with `dirty=False`.
 | **Check 3** behaviour | **READ.** Headline: trigger changes bound on 25% of s0 and 47.5% of s3 runs, plus 15 silent divergences |
 | **Check 4** power | **READ**, with the caveat that the gap is the bracket's price and not tier power |
 | **Check 2** fidelity | **PENDING THE TOOL.** The re-presentation tool does not exist (amendment 7), and the subsample holds only 3 pick decisions per config |
-| **Cell 3** ETF behaviour | **PENDING 6.5.** That arm has not run; the holdout opens once |
+| **Cell 3** ETF behaviour | **READ 2026-10-01 — NO DIFFERENCE.** 3 of 5 predictions in direction, none distinguishable (all U p ≥ 0.54); net of priming 1 of 3; failure mode not observed. See "Cell 3, read once" below |
 
 **What the cell establishes.** The identity checks do not harm an honest agent arm, at
 the resolution n = 20 and n = 80 allow — gross leakage and nothing finer. A bracketed
@@ -1380,3 +1380,60 @@ is run 1's, and that run's session overlapped too.
 **All six are redone at their indices** by the resume: same seeds, under
 `--defer-pricing`, against the rebuilt and verified table, which the fixed loader now
 memmaps read-only instead of rewriting.
+
+#### Cell 3, read once, 2026-10-01 — NO DIFFERENCE, and the panel left nothing to orient toward
+
+Output at `runs/agent_cell_read_cell3.txt`, reader `experiments/agent_cell_cell3_read.py`.
+Orientation (`runs/etf_orientation`, n = 20) against replay gate (`runs/etf_replay`,
+n = 20), both under the fixed harness and deferred pricing, integrity clean on all 40.
+
+**Measurements the registration names without fixing, operationalised in the reader
+before computing:** a feature is *evaluated* when it appears in a support the search
+scored (candidates scored inside a move are not counted: `extend_best` scores every
+extension, so that reading hits every pair on every run); the near-duplicate pairs are
+the twenty (z, rank) pairs (2j, 2j + 1); *stated confidence* is the stated sd, lower
+being more confident; the deflation gap is `analyze_agent`'s, with `sr_deflated` taken
+against the run's own declared-class null maxima; *net of priming* is (ETF orientation −
+ETF replay) − (s3 orientation − s3 replay) in means. Mann-Whitney U, two-sided,
+descriptive, as cell 2.
+
+| prediction | orientation | replay | direction | U p |
+|---|---|---|---|---|
+| fewer near-duplicate pairs evaluated | 1.55 | 1.75 | agrees | 0.6526 |
+| fewer moves to submit | 8.50 | 8.70 | agrees | 0.9769 |
+| more `pick_prior` | 0.60 | 0.50 | agrees | 0.5406 |
+| fewer trigger changes | 1.80 | 1.00 | **opposite** | 0.5456 |
+| more accepted picks | 0 | 0 | equal | degenerate |
+
+**READ: NO DIFFERENCE on any measure.** Three of five go the predicted way, by margins
+of 0.1–0.2 per run, and none is distinguishable at n = 20 against 20, which sees only a
+large difference. This is not read as equivalence.
+
+**Net of priming, as cell 2 requires**, on the three measures cell 2 read a difference
+on: moves **+0.400** (does not agree), `pick_prior` **+0.375** (agrees), trigger changes
+**+1.475** (does not agree). On s3 the paragraph alone shortened searches and cut trigger
+changes by more than the paragraph with information does on the ETF panel, so on those
+two measures **nothing is left once priming is taken out**, and on trigger changes the
+ETF arm moved the other way.
+
+**Registered failure mode: NOT OBSERVED.** Stated sd 0.236 against 0.216 (U p = 0.5045),
+the opposite of rising confidence; stated mean 0.165 against 0.162; deflation gap
++0.530 (n = 19, one orientation run made no prediction) against +0.526, U p = 0.6734.
+Both arms state a mean near 0.16 for a submission whose `sr_deflated` is −0.36: **both
+overstate by about half a Sharpe unit**, equally.
+
+**Haircut regression, beside the replay arm** (6.5's control, declared-class and
+prior-weighted arms have not run): orientation b = −2.10 [−5.54, +1.34], c = +0.021;
+replay b = +1.49 [+0.30, +2.68], c = −0.017; R² 0.10 and 0.30. **Not interpretable as a
+haircut**: every run submits one of three members, so `sr_is` spans 0.027 Sharpe and b
+is a slope across three points.
+
+**Why the panel could not show an orientation effect, stated as fact and not as
+excuse.** The class maximum is **0.3159 at `(18+, 19−)`, which is itself a z/rank
+near-duplicate pair** (vol252_z long, vol252_rank short): readout 1's predicted
+direction is away from the best member. Every agent in both arms submitted one of three
+specifications, all sharing feature 19 — `[32+, 19−]` 12 and 13, `[18+, 19−]` 4 and 5,
+`[18+, 19−, 35−]` 4 and 2 — and the whole search space tops out at half the
+null-maximum level (0.64–0.68). Like the simulated cell, this panel is **too uniform in
+what it rewards** for a search-shaping intervention to separate. That is the same
+lesson the CLOSED section draws for the next cell, now from real data.
