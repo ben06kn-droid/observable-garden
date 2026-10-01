@@ -672,3 +672,30 @@ def test_the_credential_is_written_onto_each_run_record(tmp_path):
         assert json.loads(f.read_text())["credential"] == "seat", f.name
     cfg = json.loads((tmp_path / "run_config.json").read_text())
     assert [e["credential"] for e in cfg["runs_index"]] == ["seat", "seat"]
+
+
+# -- every arm runs on exactly its registered tools ---------------------------
+
+@pytest.mark.parametrize("arm", ac.ARMS)
+def test_every_arm_is_built_with_exactly_its_registered_tools(arm):
+    """Routing by `arm == "control"` handed the declared-class gate the replay
+    grammar under an evaluate/submit prompt (found 2026-10-01, before that arm
+    ran). An arm's tools are now its registered tools or the arm is refused."""
+    from experiments.agent_backend import RunRecord
+    from experiments.real_prompts import TOOLS_FOR
+
+    if not ac.buildable(arm):
+        assert arm == "prior-weighted", f"{arm} unexpectedly unbuildable"
+        return
+    _d, _c, cls, sb, _dgp = ac.simulated_panel("s0", 7)
+    rec = RunRecord(run_id=f"tools_{arm}", arm=arm, seed=7)
+    handlers, _ = ac.handlers_for(arm, sb, cls, rec, sb.num_features)
+    assert sorted(h.name for h in handlers) == sorted(TOOLS_FOR[arm])
+
+
+def test_an_unbuilt_arm_is_refused_before_anything_is_created(tmp_path):
+    out = tmp_path / "pw"
+    with pytest.raises(SystemExit, match="does not build"):
+        ac.main(["--panel", "s0", "--arm", "prior-weighted", "--runs", "1",
+                 "--dry-run", "--out", str(out)])
+    assert not out.exists()

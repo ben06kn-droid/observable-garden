@@ -25,19 +25,28 @@ ARMS = ("control", "declared-class gate", "prior-weighted", "replay gate",
 
 # §2, pinned: which tools each arm gets. The replay arm's list is the adapter's
 # own grammar, so a move added there cannot be missing here.
+#
+# `declare_triggers` and `change_trigger` are registered by amendment 4 (2026-09-24)
+# and stated to the agent in §2's replay block, and every grammar-arm run since has
+# had them. This table did not list them until 2026-10-01, when
+# `experiments/agent_cell.handlers_for` began checking built tools against it; the
+# surface was right and the table was stale.
+TRIGGER_TOOLS = ("declare_triggers", "change_trigger")
 TOOLS_FOR = {
     "control": ("evaluate", "submit"),
     "declared-class gate": ("evaluate", "submit"),
     "prior-weighted": ("short_list", "evaluate", "submit"),
     # `pick_prior` by amendment 1 of AGENT_PROMPTS_REAL.md, before any run.
-    "replay gate": ("pick_prior",) + CONTENT_TOOLS + META_TOOLS + ("predict", "submit"),
+    "replay gate": ("pick_prior",) + TRIGGER_TOOLS + CONTENT_TOOLS + META_TOOLS
+    + ("predict", "submit"),
     # amendment 3: the same tools; the difference is that the prompt ASKS for a
     # reasoned pick, because 7.3's fidelity measurement has no unit without one.
-    "replay gate (reasoned pick)": ("pick_prior",) + CONTENT_TOOLS + META_TOOLS
+    "replay gate (reasoned pick)": ("pick_prior",) + TRIGGER_TOOLS + CONTENT_TOOLS
+    + META_TOOLS
     + ("predict", "submit"),
     # amendment 6: the same tools again. Orientation changes what the agent is
     # TOLD before it starts, not what it can do.
-    "orientation": ("pick_prior",) + CONTENT_TOOLS + META_TOOLS
+    "orientation": ("pick_prior",) + TRIGGER_TOOLS + CONTENT_TOOLS + META_TOOLS
     + ("predict", "submit"),
 }
 

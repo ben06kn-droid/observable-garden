@@ -355,3 +355,48 @@ of `agent-cell.md`, and 6.5's own launch decision is unchanged by it.
   `critical_value`, and no null draws), so the coverage check is prospective.
 - **Whether 7.2 part two exists** when this goes live decides whether the replay
   arm runs.
+
+## The prior-weighted arm is DEFERRED to the next agent cell, unbuilt — 2026-10-01
+
+**Recorded after the replay-gate and orientation arms were read and before any further
+arm runs.** 6.5 runs **three of its four registered arms**: control, declared-class
+gate and replay gate, with orientation as the amendment's fourth. The prior-weighted
+α arm is not run on this panel and is not built.
+
+**What it would need, both new:**
+- **a grammar element**: a `short_list` tool, declaring up to 5 specifications before
+  the first `evaluate` and refused if late. It is listed in
+  `experiments/real_prompts.TOOLS_FOR` and nothing builds it;
+- **a pricing path**: the short list tested by Reality Check at α_prior = 0.04 and the
+  search tested against the class at α_search = 0.01. Neither `price_runs` nor
+  `certify` computes it.
+
+**The reason it is deferred rather than built now: on this panel no verdict can
+differ.** Both of the arm's tests are bounded by measurements already made.
+- **The search test** is against the class at α_search = 0.01. The class maximum is
+  **0.3159** and the declared-class null maximum averages **0.64–0.68**: all 40 priced
+  runs have p = 1.0000 at the class tier. Nothing can reject at 0.01.
+- **The short-list test** is a Reality Check at α_prior = 0.04 over at most five
+  pre-declared members. Its most favourable case is a list of **one**, the class
+  maximum itself, declared in advance. That single test was computed on 2026-10-01
+  from the class table, with the gate's own stationary bootstrap, block length 9,
+  B = 5,000 and seed 20261001: **p = 0.0580**, above 0.04. A longer list can only enlarge
+  the null maximum, and no member scores above 0.3159. The margin is not wide
+  (0.058 against 0.04), so this is stated as a measurement of the best case and not as
+  a theorem for every list.
+
+Building a new grammar element and a new pricing path to produce a verdict fixed in
+advance would spend seat runs and code on a known answer.
+
+**What this does not settle.** Whether a pre-declared short list buys power is the
+arm's question, and it stays open. It needs a panel where the class maximum clears the
+null, and the next agent cell is where the arm is built, tested and run, under a
+registration written before it.
+
+**Recorded with it: a routing defect fixed before the declared-class gate arm ran.**
+`experiments/agent_cell.py` chose an arm's tools by `arm == "control"`, so the
+declared-class gate arm, registered for `evaluate` and `submit` exactly as control is,
+would have received the replay grammar under a prompt describing `evaluate` and
+`submit`. Tools are now chosen from the registered table and checked against it on
+every build, and an arm whose tools are not built is refused before anything is
+created (`tests/test_agent_cell.py`). No run was made under the defect.

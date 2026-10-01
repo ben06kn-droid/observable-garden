@@ -46,7 +46,7 @@ from experiments.agent_backend import (
     _served_model_assertion, control_tools, replay_tools,
 )
 from experiments.code_state import code_state
-from experiments.real_prompts import ARMS, read_prompts, system_prompt_for
+from experiments.real_prompts import ARMS, TOOLS_FOR, read_prompts, system_prompt_for
 from garden.spec_class import SubsetClass
 from quixote.agent_adapter import ToolSession
 from quixote.orientation import orientation_table, render, table_hash
@@ -186,6 +186,47 @@ def _scripted(rec, handlers, arm: str) -> None:
     call("submit", {})
 
 
+# The tool surfaces this runner can build, keyed by the registered tool set they
+# serve. An arm is routed by WHICH TOOLS IT IS REGISTERED FOR in
+# `experiments/real_prompts.TOOLS_FOR`, never by its name.
+#
+# Until 2026-10-01 the routing was `if arm == "control"`, so the declared-class
+# gate arm -- registered for `evaluate` and `submit`, exactly as control is --
+# would have been handed the replay grammar under a prompt describing
+# `evaluate` and `submit`. No such run was made; the defect was caught before
+# 6.5's declared-class arm was launched.
+_EVALUATE_SUBMIT = frozenset({"evaluate", "submit"})
+_GRAMMAR = frozenset(TOOLS_FOR["replay gate"])
+
+
+def buildable(arm: str) -> bool:
+    """Whether this runner can give `arm` exactly its registered tools."""
+    return frozenset(TOOLS_FOR[arm]) in (_EVALUATE_SUBMIT, _GRAMMAR)
+
+
+def handlers_for(arm: str, sandbox, cls, rec, K: int):
+    """`(handlers, ToolSession or None)` for `arm`, checked against the registered
+    tool table before a single call is made."""
+    registered = frozenset(TOOLS_FOR[arm])
+    if registered == _EVALUATE_SUBMIT:
+        handlers, tools = control_tools(sandbox, rec, K), None
+    elif registered == _GRAMMAR:
+        session = Session.on_sandbox(sandbox, cls, name_prefix=rec.run_id)
+        # the harness's turn limit becomes the declared budget at open
+        tools = ToolSession(session, max_turns=MAX_TURNS)
+        handlers = replay_tools(tools, rec, K)
+    else:
+        raise SystemExit(
+            f"arm {arm!r} is registered for tools {sorted(registered)}, which this "
+            "runner does not build. Refused rather than run on a different surface.")
+    built = frozenset(h.name for h in handlers)
+    if built != registered:
+        raise SystemExit(
+            f"arm {arm!r}: built tools {sorted(built)} differ from the registered "
+            f"{sorted(registered)} (experiments/real_prompts.TOOLS_FOR)")
+    return handlers, tools
+
+
 def run_one(arm: str, panel_name: str, seed: int, index: int, *,
             prompts: dict, dry_run: bool = False,
             credential: str = "unknown",
@@ -220,13 +261,7 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
     prompt = system_prompt_for(arm, sandbox.num_assets, K, DEPTH[panel_name],
                                prompts, orientation_table=orendered)
 
-    if arm == "control":
-        handlers, tools = control_tools(sandbox, rec, K), None
-    else:
-        session = Session.on_sandbox(sandbox, cls, name_prefix=rec.run_id)
-        # the harness's turn limit becomes the declared budget at open
-        tools = ToolSession(session, max_turns=MAX_TURNS)
-        handlers = replay_tools(tools, rec, K)
+    handlers, tools = handlers_for(arm, sandbox, cls, rec, K)
 
     if dry_run:
         _scripted(rec, handlers, arm)
@@ -418,6 +453,12 @@ def main(argv=None) -> int:
                          "ones are redone, so an interrupted cell resumes on the "
                          "same seeds.")
     a = ap.parse_args(argv)
+    if not buildable(a.arm):
+        # before seeds, directories or the pool: nothing is spent on an arm whose
+        # registered tools do not exist
+        raise SystemExit(
+            f"arm {a.arm!r} is registered for {list(TOOLS_FOR[a.arm])}, which this "
+            "runner does not build; see prereg/agent-on-real-data.md.")
 
     runs = a.runs
     if runs is None:
