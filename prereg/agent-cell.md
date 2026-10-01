@@ -1324,3 +1324,59 @@ verified table:
 
 **Disposition of runs 0 and 1 is not decided here.** Recorded so it is decided
 before the remaining runs are read, not after.
+
+#### Disposition of `runs/etf_replay` 0–5, by timestamp, 2026-10-01
+
+**Rule, set before applying it:** a run whose **session** window overlapped a
+class-table rebuild is **void** and redone at the same index (same seed); a run whose
+session was clean but whose **pricing** window touched the damaged table is
+**re-priced** from its log. No runner logs survive, so the windows come from the run
+files' own event timestamps, the table's mtimes before it was rebuilt, and the one
+pool worker still alive from those invocations.
+
+**How a rebuild is located.** A run rebuilds the table inside `etf_panel()`, before
+its `start` event, so **each `start` is the end of a rebuild**. Run 5's `start`
+(15:24:03) equals the manifest mtime to the second, which confirms the reading. A
+rebuild costs **205 s of CPU** (measured: 8 chunks of 512 rows, 10.2 s CPU,
+extrapolated), so each window opens at least about 3.5 min before it closes. A
+rebuild opens the file `w+`, which **truncates all of it at the moment it starts**,
+and rows stay zero until that rebuild or another one rewrites them.
+
+| rebuild | window | evidence |
+|---|---|---|
+| R2 (run 2's) | ≤ 13:32:26 – 13:35:51 | run 2 `start` |
+| R1 (run 1's) | ≤ 13:32:42 – 13:36:07 | run 1 `start` |
+| R0 (run 0's) | ≤ 13:32:55 – 13:36:20 | run 0 `start` |
+| Ra, never finished | 13:36:34 – ≥ 13:37:20 | run 2's worker took its next task as run 2 ended; **run 0 read 0.0000 at depth 1–2 from 13:36:40** (true −0.32 to −1.82) |
+| Rb, never finished | 13:36:43 – ? | run 1's worker took its next task as run 1 ended |
+| R3 (run 3's) | 13:39:22 – 13:44:25 | the second invocation's pool started 13:39:22 (the surviving worker's start time) |
+| Rx, never finished | **unknown**, inside the 13:39:22 invocation | the surviving worker (pid 59332, spawned 13:39:22) has **94 s of CPU**: less than one rebuild and no completed run, so it started a rebuild and never finished |
+| R4 (run 4's) | ≤ 13:47:30 – 13:50:55 | run 4 `start` |
+| R5 (run 5's) | ≤ 15:20:38 – 15:24:03 | run 5 `start` = manifest mtime |
+| Ry, never finished | **unknown start** – 15:51:26 | `.npy` last written 15:51:26 and found half zeros (rows 41,472+) |
+
+| run | session | pricing | overlap | disposition |
+|---|---|---|---|---|
+| 0 | 13:36:26 – 13:37:20 | – 13:39:17 | Ra, Rb; **zeros observed** | **VOID** |
+| 1 | 13:36:11 – 13:36:38 | 13:36:39 – 13:36:43 | R0, Ra; its pricing is the UNDECIDABLE artefact | **VOID** |
+| 2 | 13:35:57 – 13:36:19 | 13:36:19 – 13:36:34 | R1, R0 | **VOID** |
+| 3 | 13:44:29 – 13:45:34 | – 13:47:09 | **cannot be excluded**: Rx | **VOID** |
+| 4 | 13:51:02 – 13:51:30 | – 13:51:45 | **cannot be excluded**: Rx, whose invocation's end is unknown | **VOID** |
+| 5 | 15:24:10 – 15:33:35 | – 15:46:13 | **cannot be excluded**: Ry's start is unknown, and the session (9.5 min) and pricing (12.6 min) ran roughly 9× and 8–50× slower than runs 3–4, which concurrent load would explain | **VOID** |
+
+**Runs 0–2 are void on overlap shown. Runs 3–5 are void because overlap cannot be
+excluded,** which is the rule applied conservatively, not overlap demonstrated: each
+of those invocations left a rebuild that never finished, at a time the record does
+not fix. Wall-clock gaps cannot stand in for rebuild durations either; the 88-minute
+gap before run 5 is longer than any rebuild. For 3–5 the content is recorded beside
+the disposition and changes nothing: every recorded score matches the verified
+table, and each in-line verdict reproduces from the log against it. Redoing them
+costs three seat runs; admitting one search made on a truncated table into the
+headline would cost more.
+
+**None falls in the re-price branch.** The only pricing window known to touch damage
+is run 1's, and that run's session overlapped too.
+
+**All six are redone at their indices** by the resume: same seeds, under
+`--defer-pricing`, against the rebuilt and verified table, which the fixed loader now
+memmaps read-only instead of rewriting.
