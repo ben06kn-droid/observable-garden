@@ -1405,6 +1405,14 @@ descriptive, as cell 2.
 | fewer trigger changes | 1.80 | 1.00 | **opposite** | 0.5456 |
 | more accepted picks | 0 | 0 | equal | degenerate |
 
+**THE HEADLINE BEHAVIOURAL RESULT, ranked above the FAIL verdicts: the agents overstate
+what they found by about half a Sharpe unit, in both arms alike.** The deflation gap is
+**+0.53** in each (orientation +0.530, n = 19; replay +0.526, n = 20): the agents state
+an expected out-of-sample Sharpe of about **+0.16** for submissions whose `sr_deflated`
+is about **−0.36**. The FAIL verdicts (class tier 0/40, every p = 1.0000) say the panel
+holds nothing the gate can certify; the gap says the agent does not know that. That is
+the finding a practitioner acts on, and an orientation table does not move it.
+
 **READ: NO DIFFERENCE on any measure.** Three of five go the predicted way, by margins
 of 0.1–0.2 per run, and none is distinguishable at n = 20 against 20, which sees only a
 large difference. This is not read as equivalence.
@@ -1437,3 +1445,19 @@ specifications, all sharing feature 19 — `[32+, 19−]` 12 and 13, `[18+, 19�
 null-maximum level (0.64–0.68). Like the simulated cell, this panel is **too uniform in
 what it rewards** for a search-shaping intervention to separate. That is the same
 lesson the CLOSED section draws for the next cell, now from real data.
+
+**Choices to pre-register in the next agent cell.** This read fixed three measurements
+the registration named without defining, in the reader and before computing. They
+were reasonable here and are still choices made at read time, so the next cell
+registers them, or replacements, **before it runs**:
+
+1. **"Evaluated".** A feature counts as evaluated when it appears in a support the
+   search scored (any logged `support_after`), not a candidate scored inside a move.
+   The rejected reading is degenerate: `extend_best` scores every extension.
+2. **"Stated confidence".** The stated sd of `predict`, lower being more confident,
+   with a difference read at U p < 0.05. The stated mean is reported beside it but is
+   not the confidence measure.
+3. **"Net of priming".** A difference in differences of means, (ETF orientation − ETF
+   replay) − (placebo orientation − placebo replay), descriptive with no test of its
+   own. A next cell that wants a test on the net registers one, for example a
+   bootstrap over runs on the difference in differences.
