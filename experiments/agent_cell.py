@@ -19,6 +19,10 @@ drifts. `agent_pilot.py` is frozen at the pilot's behaviour; new work lands here
     python -m experiments.agent_cell --panel s0 --arm "replay gate" --runs 80 \\
         --credential seat --out runs/agent_cell_s0_replay
 
+`--defer-pricing` writes the complete log and stops before the certifying null;
+`experiments/price_runs.py` prices the committed files later, elsewhere, through
+the same `certify_log`.
+
 Nothing here decides a rule. The cell's readouts are computed by
 `experiments/analyze_agent.py` afterwards.
 """
@@ -184,8 +188,15 @@ def _scripted(rec, handlers, arm: str) -> None:
 
 def run_one(arm: str, panel_name: str, seed: int, index: int, *,
             prompts: dict, dry_run: bool = False,
-            credential: str = "unknown") -> tuple[RunRecord, dict]:
-    """One run. Returns the record and the per-run config entry."""
+            credential: str = "unknown",
+            defer_pricing: bool = False) -> tuple[RunRecord, dict]:
+    """One run. Returns the record and the per-run config entry.
+
+    `defer_pricing` runs the session and writes the complete log, close-time
+    self-check included, and stops there: no certifying null and no verdict. The
+    file says so in a `pricing_deferred` event, and `experiments/price_runs.py`
+    prices it later from the file through the same `certify_log`.
+    """
     if panel_name == "etf":
         panel, cls, sandbox, table = etf_panel()
         X = panel.features
@@ -278,7 +289,16 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
             support, score = tools.session.submission()
             rec.submitted_support = [[int(k), float(s)] for k, s in support]
             rec.submitted_sharpe = float(score)
-        if not dry_run:
+        if defer_pricing:
+            # The log above is everything pricing needs; the certifying null is
+            # the expensive part of a run and the part that needs no model, so it
+            # moves to wherever the compute is (prereg/agent-cell.md, 2026-10-01).
+            rec.log("pricing_deferred",
+                    priced_by="experiments/price_runs.py",
+                    reason="the session and its log are written here; the "
+                           "certifying null and the class p are computed later "
+                           "from this file, by the same certify_log")
+        elif not dry_run:
             _certify_run(rec, tools, sandbox, cls, table)
     else:
         # An arm with no session has no self-check, and the field says so rather
@@ -367,10 +387,10 @@ def _task(payload) -> dict:
     touched by two searches at once, and a thread pool would make that an
     unreproducible bug rather than an impossible one.
     """
-    arm, panel, seed, index, out_dir, dry_run, credential = payload
+    arm, panel, seed, index, out_dir, dry_run, credential, defer = payload
     prompts = read_prompts()
     rec, entry = run_one(arm, panel, seed, index, prompts=prompts, dry_run=dry_run,
-                         credential=credential)
+                         credential=credential, defer_pricing=defer)
     path = Path(out_dir) / f"{rec.run_id}.json"
     path.write_text(json.dumps(rec.to_json(), indent=1, default=str))
     entry["index"] = index
@@ -387,6 +407,10 @@ def main(argv=None) -> int:
                          "count read from the pre-registration")
     ap.add_argument("--credential", default="seat", choices=("api", "seat"))
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--defer-pricing", action="store_true",
+                    help="write the complete log and self-check, skip the "
+                         "certifying null; price later with "
+                         "experiments/price_runs.py")
     ap.add_argument("--out", default=str(RUNS_ROOT))
     ap.add_argument("--workers", type=int, default=1,
                     help="processes, not threads; each builds its own sandbox and "
@@ -424,7 +448,7 @@ def main(argv=None) -> int:
             path.unlink()
             redone.append(rid)
         todo.append((a.arm, a.panel, seeds[i], i, str(out), a.dry_run,
-                     a.credential))
+                     a.credential, a.defer_pricing))
     if skipped:
         print(f"  resuming: {len(skipped)} completed run(s) skipped", flush=True)
     if legacy:
@@ -475,6 +499,10 @@ def main(argv=None) -> int:
         "seed_block": SEEDS[a.panel], "depth": DEPTH[a.panel],
         "model": MODEL, "max_turns": MAX_TURNS, "credential": a.credential,
         "code_state": code_state(), "dry_run": a.dry_run,
+        # this INVOCATION's setting; whether a given run was priced in-line is on
+        # the run file itself (a `pricing_deferred` event), since a resumed
+        # directory can mix the two
+        "defer_pricing": a.defer_pricing,
         "workers": workers,
         # what this invocation did, so a resume is on the record
         "resume": {"skipped_complete": skipped, "deleted_partial": redone,

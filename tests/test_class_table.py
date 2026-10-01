@@ -354,3 +354,70 @@ def test_integrity_is_checked_on_every_run_even_when_a_trigger_changed(tmp_path)
     assert v2.status == "UNDECIDABLE"
     assert any("Integrity check" in r and "STRUCTURAL" in r for r in v2.reasons)
     assert v2.p_frozen is None                 # nothing was priced
+
+
+# -- the cache: built once, memmapped on every later load --------------------
+
+def test_a_second_load_is_a_cache_hit_and_computes_nothing(tmp_path):
+    """Until 2026-10-01 the manifest wrote `[T, N]` and the check compared
+    `[N, T]`, so this was always a miss and every agent run rebuilt the ETF table."""
+    panel = _panel()
+    calls = []
+    first = build_class_table(panel, CLS, "synthetic", path=tmp_path / "t.npy",
+                              progress=lambda done, n: calls.append(done))
+    assert calls, "the first load builds"
+    mtime = (tmp_path / "t.npy").stat().st_mtime_ns
+    calls.clear()
+    again = build_class_table(panel, CLS, "synthetic", path=tmp_path / "t.npy",
+                              progress=lambda done, n: calls.append(done))
+    assert calls == [], "a second load must not rebuild"
+    assert (tmp_path / "t.npy").stat().st_mtime_ns == mtime
+    assert isinstance(again.streams, np.memmap) and again.streams.mode == "r"
+    np.testing.assert_array_equal(np.asarray(again.streams), np.asarray(first.streams))
+
+
+def test_a_legacy_manifest_is_not_trusted_and_the_table_is_rebuilt(tmp_path):
+    """A pre-format-2 manifest cannot tell a finished file from one a crashed
+    rebuild left half-written, so it forces one rebuild."""
+    import json
+    panel = _panel()
+    build_class_table(panel, CLS, "synthetic", path=tmp_path / "t.npy")
+    man_path = tmp_path / "t.json"
+    man = json.loads(man_path.read_text())
+    man.pop("format")
+    man_path.write_text(json.dumps(man))
+    calls = []
+    build_class_table(panel, CLS, "synthetic", path=tmp_path / "t.npy",
+                      progress=lambda done, n: calls.append(done))
+    assert calls, "a legacy manifest must force a rebuild"
+    assert json.loads(man_path.read_text())["format"] >= 2
+
+
+def test_a_file_whose_header_disagrees_with_the_class_is_rebuilt(tmp_path):
+    """The shape is read from the .npy header, so a manifest cannot vouch for a
+    file of the wrong shape."""
+    panel = _panel()
+    t = build_class_table(panel, CLS, "synthetic", path=tmp_path / "t.npy")
+    np.save(tmp_path / "t.npy", np.zeros((t.N - 1, t.T)))
+    rebuilt = build_class_table(panel, CLS, "synthetic", path=tmp_path / "t.npy")
+    assert rebuilt.streams.shape == (t.N, t.T)
+
+
+def test_a_build_leaves_no_temporary_file_behind(tmp_path):
+    build_class_table(_panel(), CLS, "synthetic", path=tmp_path / "t.npy")
+    assert sorted(p.name for p in tmp_path.iterdir()
+                  if not p.name.endswith(".lock")) == ["t.json", "t.npy"]
+
+
+def test_null_max_agrees_with_max_sharpe_per_replicate(tmp_path):
+    """`null_max` prices every replicate from a count matrix in one pass; it must
+    give `max_sharpe(rows, demeaned=True)`'s value for each replicate, to a
+    tolerance -- the reduction order differs, so bit-identity is not claimed."""
+    from estimator.bootstrap import stationary_bootstrap_indices
+    table, _ = _table(tmp_path)
+    rng = np.random.default_rng(3)
+    rows_list = [stationary_bootstrap_indices(table.T, 5, rng) for _ in range(12)]
+    want = np.array([table.max_sharpe(rows=r, demeaned=True)[0] for r in rows_list])
+    for chunk in (7, 512):
+        np.testing.assert_allclose(table.null_max(rows_list, chunk=chunk), want,
+                                   rtol=1e-10, atol=0)

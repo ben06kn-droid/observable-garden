@@ -1243,3 +1243,84 @@ side.
 Saturation is near-total but no longer total: **19 of 20** runs submit the class maximum
 exactly, against 40 of 40 in the cell. Descriptive, no rule, and at n = 20 the intervals
 are wide enough that only the direction is readable.
+
+#### 6.5's remaining runs: deferred pricing, priced on the compute box, 2026-10-01
+
+**Recorded before the remaining runs are launched.** Cell 3's (6.5's) remaining runs
+are executed with `experiments/agent_cell.py --defer-pricing` and priced afterwards,
+on the compute box, from their **committed** run files by
+`experiments/price_runs.py`. Nothing about what is priced changes; where and when
+it is computed does.
+
+**The reason.** On the ETF panel the session and the pricing want different
+machines. The session is a seat call and needs almost no local compute; the pricing
+needs no model and is almost all compute — the certifying null (B = 200 trigger
+replays against the 82,240-member class table) and the declared-class p, which is
+the registered certifying tier on this panel (ROADMAP, "What this makes the ETF
+verdict") and takes a class maximum over all 82,240 stored net streams on every
+replicate. In-line, each worker prices before it can start its next session, so the
+seat's throughput is bounded by pricing on an 8 GB laptop against a 2.8 GB table.
+Deferred, the sessions run back to back and the pricing runs in parallel where the
+cores and the memory are. Committing the logs **before** pricing has a second
+benefit: the log a verdict is computed from is fixed in history before the verdict
+exists.
+
+**Why this is the same computation and not a second one.**
+- `--defer-pricing` writes the complete log — every move with its parameters and
+  `shown`, the declared rules, the change history, the declared budget — **and the
+  close-time self-check**, then a `pricing_deferred` event in place of the verdict.
+  The completion rule is unchanged: `end` is still written last.
+- `price_runs` rebuilds the session log from the file and prices it through
+  `experiments.agent_backend.certify_log`, **the function the in-line path calls**,
+  on the panel rebuilt as the runner builds it. One function, not two copies.
+- **Checked on committed s0 logs before use:** `price_runs --check` re-priced all 20
+  runs of `runs/reanchor_s0_replay` (priced in-line under the fixed harness; FAIL 10,
+  DEPENDS_ON_JUDGMENT 9, CERTIFIED 1) and reproduced **20/20 verdicts identically**,
+  field for field, `certifying_null_computable` and the verdict event included.
+  `tests/test_price_runs.py` holds the same equality on a scripted run, both ways:
+  in-line against `--check`, and in-line against deferred-then-priced.
+- A run priced in-line keeps its verdict: `price_runs` writes a verdict only into a
+  file carrying `pricing_deferred`, and adds the class p to every complete run.
+
+**The ETF class p.** Computed from the class table on the **certifying null's own
+replicates** — the same block length, `default_rng(seed)`, the same draw order — so a
+run's replay-tier and class-tier p-values are paired on identical resamples.
+`ClassTable.null_max` reads the table once per run and prices all replicates of a
+member chunk from a count matrix, as `garden/_full_class_engine.py` does for the
+simulated panels. It agrees with `max_sharpe(rows, demeaned=True)` per replicate to
+1e-10 relative (`tests/test_class_table.py`), **not bit for bit**: the reduction
+order differs.
+
+**A defect found while building this, and what it did to the six ETF runs already
+made.** `environments/class_table.build_class_table` wrote its manifest shape as
+`[T, N]` and checked it against `[N, T]`, so **the cache never hit**: every ETF run
+rebuilt the 2.8 GB table at start, opening the shared file `w+` — which truncates
+it — while other `--workers` processes were reading it. Fixed: the shape is read
+from the `.npy` header; a build writes a private file and renames it into place, so
+a partial table is never visible under its name; a lock makes concurrent callers
+build once; a manifest from before the fix is not trusted, so every existing table
+is rebuilt once. Found because the table on disk at 15:51 was **half zeros** (rows
+41,472–82,239, the tail of the depth-3 members) from a rebuild that never finished.
+Rebuilt and verified row for row against direct computation; true class maximum
+**0.3159**, `(18, +)(19, −)`.
+
+The six in-line ETF runs in `runs/etf_replay` (uncommitted), audited against the
+verified table:
+
+| run | search's recorded scores | in-line verdict | re-priced from log |
+|---|---|---|---|
+| 0 | **4 records read 0.0000 where the true Sharpe is −0.32 to −1.82** (rows 44, 164, 5241, 7281) | DEPENDS_ON_JUDGMENT | identical |
+| 1 | all true | **UNDECIDABLE** | **FAIL**, p = 0.9950 |
+| 2–5 | all true | FAIL, DEPENDS, FAIL, FAIL | identical |
+
+- **Run 0's search ran on a truncated table**: it was shown false zeros for four
+  supports, so its log is not a record of a search on this panel, although its
+  submission is the true class maximum. Its verdict reproduces, which certifies the
+  arithmetic and not the search.
+- **Run 1's in-line verdict is an artefact**: its integrity check failed against the
+  damaged table; against the true one it prices to FAIL.
+- **Class p, all six: 1.0000** at B = 200 — every replicate's class maximum exceeds
+  the submitted 0.29–0.32, consistent with the preflight bar of 1.14 on this class.
+
+**Disposition of runs 0 and 1 is not decided here.** Recorded so it is decided
+before the remaining runs are read, not after.

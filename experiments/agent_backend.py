@@ -350,7 +350,17 @@ CERTIFY_B = 200
 
 
 def _certify_run(rec: RunRecord, tools: ToolSession, sandbox, cls, table=None) -> None:
+    """The in-line path: price the live session's log as the run closes."""
+    certify_log(rec, tools.session.log, sandbox, cls, table)
+
+
+def certify_log(rec: RunRecord, log, sandbox, cls, table=None) -> None:
     """Can trigger replay be computed from this run's log at all?
+
+    Takes the LOG, not the live session, so `experiments/price_runs.py` prices a
+    run rebuilt from its committed file through this same function. One function
+    is what makes deferred pricing and in-line pricing the same computation rather
+    than two copies that are hoped to agree.
 
     **What it prices on this panel, stated rather than assumed.** `certify` works
     from `base_feature_columns`, which `environments/real_sandbox.py` documents as
@@ -363,7 +373,7 @@ def _certify_run(rec: RunRecord, tools: ToolSession, sandbox, cls, table=None) -
     base = sandbox.base_feature_columns()
     ann = float(np.sqrt(sandbox.periods_per_year))
     try:
-        v = certify(tools.session.log, cls, base, ann, alpha=0.05, B=CERTIFY_B,
+        v = certify(log, cls, base, ann, alpha=0.05, B=CERTIFY_B,
                     seed=rec.seed, table=table)
     except Exception as e:
         rec.certifying_null_computable = False

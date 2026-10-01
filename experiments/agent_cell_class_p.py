@@ -41,11 +41,18 @@ ALPHAS = (0.05, 0.01)
 def class_p_for_run(panel_name: str, seed: int, support, B: int) -> dict:
     """One run's declared-class p-value, on the run's own draw."""
     from experiments.agent_cell import simulated_panel
-    from quixote.grammar import Grammar
 
     _data, _cfg, cls, sandbox, dgp = simulated_panel(panel_name, seed)
+    return class_p_on(sandbox, cls, float(np.sqrt(dgp.periods_per_year)), seed,
+                      support, B)
+
+
+def class_p_on(sandbox, cls, ann: float, seed: int, support, B: int) -> dict:
+    """`class_p_for_run` on a draw the caller has already built, so
+    `experiments/price_runs.py` does not generate each simulated panel twice."""
+    from quixote.grammar import Grammar
+
     base = np.asarray(sandbox.base_feature_columns(), dtype=float)
-    ann = float(np.sqrt(dgp.periods_per_year))
     L = int(select_block_length(base - base.mean(axis=0)))
     M_b, _, n_floor, n_cap = full_class_null_max(
         base, cls, B=B, block_length=L, annualization=ann, seed=seed)

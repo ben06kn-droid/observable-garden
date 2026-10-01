@@ -212,6 +212,43 @@ class ClassTable:
                 best, best_j = float(s[j]), start + j
         return best, best_j
 
+    def null_max(self, rows_list, chunk: int = CHUNK) -> np.ndarray:
+        """The class maximum of the demeaned Sharpe on every resample in
+        `rows_list`: what `max_sharpe(rows, demeaned=True)` returns for each, in ONE
+        pass over the table.
+
+        A resample of rows only reweights them, so a member's mean and variance
+        on replicate b are its stream against the replicate's COUNT vector. For a
+        chunk of members that is two matrix products against a `(T, B)` count
+        matrix -- every member, every replicate -- instead of B fancy-indexed
+        copies of the chunk. On the ETF table that is about 15 core-minutes per
+        run (B = 200) down to seconds.
+
+        **Agreement, stated rather than claimed exact.** The reduction order
+        differs from `max_sharpe`'s, so the two agree to about 1e-12 relative and
+        not bit for bit (`tests/test_class_table.py` holds them to 1e-10). The statistic is the sandbox's, unguarded, as
+        `_sharpe_of` explains; `garden/_full_class_engine.py` prices the simulated
+        panels by the same count-matrix device.
+        """
+        rows_list = [np.asarray(r) for r in rows_list]
+        B, T = len(rows_list), self.T
+        C = np.empty((T, B))
+        for b, rows in enumerate(rows_list):
+            C[:, b] = np.bincount(rows, minlength=T)
+        n = C.sum(axis=0)                                   # resample sizes
+        best = np.full(B, float("-inf"))
+        for start in range(0, self.N, chunk):
+            stop = min(start + chunk, self.N)
+            x = np.asarray(self.streams[start:stop], dtype=float)
+            x = x - x.mean(axis=1, keepdims=True)
+            mean = (x @ C) / n
+            var = ((x * x) @ C - n * mean * mean) / (n - 1)
+            pos = var > 0
+            s = np.where(pos, mean / np.sqrt(np.where(pos, var, 1.0)), 0.0) \
+                * self.annualization
+            best = np.maximum(best, s.max(axis=0))
+        return best
+
 
 def streams_for(panel, supports) -> np.ndarray:
     """`(n, T)` net streams for `n` members, in ONE pass over the panel.
@@ -285,15 +322,66 @@ def table_path(name: str, spec_class, K: int) -> Path:
     return TABLES_DIR / f"{name}_{spec_class.name.replace(':', '_')}_K{K}.npy"
 
 
+# Bumped when the on-disk contract changes. A manifest without it, or with an
+# older one, is not trusted and the table is rebuilt -- see `build_class_table`.
+FORMAT = 2
+
+
+def _load_cached(path: Path, manifest_path: Path, spec_class, N: int, T: int,
+                 ph: str):
+    """The cached table as a read-only memmap, or None if it cannot be trusted.
+
+    **The shape is read from the `.npy` header, not from the manifest.** Until
+    2026-10-01 the manifest wrote `[T, N]` and this check compared `[N, T]`, so a
+    cache hit was impossible and every caller rebuilt the table -- for the ETF
+    panel, 82,240 net streams and a 2.8 GB rewrite per agent run. Under
+    `agent_cell --workers N` that rewrite reopened the shared file `w+`
+    (truncating it) while other workers were reading it.
+
+    **A manifest older than `FORMAT` is rejected**, which forces one rebuild of
+    every table written before the fix. That is deliberate: under the old writer a
+    crashed rebuild left the previous manifest beside a half-written file, and
+    nothing in a legacy manifest distinguishes that file from a finished one.
+    """
+    if not (path.exists() and manifest_path.exists()):
+        return None
+    try:
+        man = json.loads(manifest_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+    if (man.get("format") != FORMAT or man.get("panel_hash") != ph
+            or man.get("class") != spec_class.name):
+        return None
+    try:
+        streams = np.lib.format.open_memmap(path, mode="r")
+    except (ValueError, OSError):
+        return None
+    if tuple(streams.shape) != (N, T) or streams.dtype != np.float64:
+        return None
+    return streams
+
+
 def build_class_table(panel, spec_class, name: str, path: Path | None = None,
                       chunk: int = CHUNK, rebuild: bool = False,
                       progress=None) -> ClassTable:
-    """Compute every member's net stream once, into a memmap, with a manifest.
+    """Compute every member's net stream once, into a memmap, with a manifest;
+    on every later call, open that memmap read-only and compute nothing.
 
     The manifest carries the panel's hash, so a table built on one panel can
     never be silently reused on another; a mismatch rebuilds rather than
     returning the wrong numbers.
+
+    **A table appears under its name only when it is complete.** The build writes
+    to a private temporary file and `os.replace`s it into place, then writes the
+    manifest. A reader therefore sees either the old complete file or the new
+    complete one, never a partial one; a reader already holding a memmap of the
+    old file keeps its inode. **Concurrent callers build once**: an exclusive lock
+    beside the table serialises the build, and a caller that waited re-checks the
+    cache before building, so N workers starting together cost one build.
     """
+    import fcntl
+    import os
+
     K = panel.features.shape[2]
     path = Path(path) if path is not None else table_path(name, spec_class, K)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -303,32 +391,53 @@ def build_class_table(panel, spec_class, name: str, path: Path | None = None,
     T, N = panel.returns.shape[0], len(members)
     ph = _panel_hash(panel)
 
-    if path.exists() and manifest_path.exists() and not rebuild:
-        man = json.loads(manifest_path.read_text())
-        if (man.get("panel_hash") == ph and man.get("shape") == [N, T]
-                and man.get("class") == spec_class.name):
-            streams = np.lib.format.open_memmap(path, mode="r")
-            return ClassTable(streams=streams, members=members, index=index,
-                              panel_hash=ph,
-                              periods_per_year=float(panel.periods_per_year),
-                              path=str(path))
+    def table(streams):
+        return ClassTable(streams=streams, members=members, index=index,
+                          panel_hash=ph,
+                          periods_per_year=float(panel.periods_per_year),
+                          path=str(path))
 
-    streams = np.lib.format.open_memmap(path, mode="w+", dtype=np.float64,
-                                        shape=(N, T))
-    for start in range(0, N, chunk):
-        stop = min(start + chunk, N)
-        streams[start:stop] = streams_for(panel, members[start:stop])
-        streams.flush()
-        if progress is not None:
-            progress(stop, N)
-    manifest_path.write_text(json.dumps(
-        {"name": name, "class": spec_class.name, "K": K, "shape": [T, N],
-         "panel_hash": ph, "periods_per_year": float(panel.periods_per_year),
-         "dtype": "float64", "bytes": int(T * N * 8),
-         "sha256_first_mb": hashlib.sha256(
-             np.ascontiguousarray(streams[:min(N, 64)]).tobytes()[:1 << 20]
-         ).hexdigest()[:16]}, indent=1))
-    streams.flush()
-    return ClassTable(streams=np.lib.format.open_memmap(path, mode="r"),
-                      members=members, index=index, panel_hash=ph,
-                      periods_per_year=float(panel.periods_per_year), path=str(path))
+    if not rebuild:
+        streams = _load_cached(path, manifest_path, spec_class, N, T, ph)
+        if streams is not None:
+            return table(streams)
+
+    with open(path.with_suffix(".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not rebuild:
+            # another process may have finished the build while this one waited
+            streams = _load_cached(path, manifest_path, spec_class, N, T, ph)
+            if streams is not None:
+                return table(streams)
+        tmp = path.with_name(f".{path.stem}.{os.getpid()}.tmp.npy")
+        try:
+            streams = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.float64,
+                                                shape=(N, T))
+            for start in range(0, N, chunk):
+                stop = min(start + chunk, N)
+                streams[start:stop] = streams_for(panel, members[start:stop])
+                if progress is not None:
+                    progress(stop, N)
+            streams.flush()
+            sha_first = hashlib.sha256(
+                np.ascontiguousarray(streams[:min(N, 64)]).tobytes()[:1 << 20]
+            ).hexdigest()[:16]
+            del streams
+            # the old manifest is withdrawn BEFORE the table is swapped and the
+            # new one written AFTER, so a crash anywhere in between leaves no
+            # manifest and the next caller rebuilds rather than trusting a
+            # manifest that describes a different file
+            manifest_path.unlink(missing_ok=True)
+            os.replace(tmp, path)
+        finally:
+            tmp.unlink(missing_ok=True)
+        man_tmp = manifest_path.with_name(f".{manifest_path.name}.{os.getpid()}.tmp")
+        man_tmp.write_text(json.dumps(
+            {"format": FORMAT, "name": name, "class": spec_class.name, "K": K,
+             # (N, T): member-major, the layout of the file itself
+             "shape": [N, T],
+             "panel_hash": ph, "periods_per_year": float(panel.periods_per_year),
+             "dtype": "float64", "bytes": int(T * N * 8),
+             "sha256_first_mb": sha_first}, indent=1))
+        os.replace(man_tmp, manifest_path)
+    return table(np.lib.format.open_memmap(path, mode="r"))
