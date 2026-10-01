@@ -880,3 +880,101 @@ declines to certify because the agent changed a declared rule. So the measured g
 **the price of the bracket** — the power the replay tier forgoes by refusing a run
 whose rule changed — and it is consistent with 7.0's finding that the two tiers are
 indistinguishable at matched actual size, which held on runs both tiers priced.
+
+#### Check 3 headline, and two readouts added 2026-09-30
+
+**HEADLINE: trigger changes bound on 25% of s0 runs and 47.5% of s3 runs.**
+20 of 80 on the s0 replay arm, 19 of 40 on s3 — the rate **nearly doubles** when there
+is signal to find. That is the single most consequential behavioural number in the
+cell: it is the share of runs the replay tier declines to certify, it is what check 4's
+apparent power gap turned out to be made of, and it is the agent behaviour that
+`prereg/bracketed-verdicts.md` amendment 1 and the ROADMAP's tier rule are written
+against.
+
+**Stated precisely, because two rates differ and the smaller one is not the headline.**
+The 25% / 47.5% figures are **changes that BOUND** — the commitment check fails, so the
+committed rule does not reproduce the search that ran. The share of runs with **any
+logged change** is 26.3% on s0 and 37.5% on s3. On s3 the bound rate **exceeds** the
+logged-change rate, which is not a contradiction and is the next finding.
+
+**A second class of divergence, found while checking the headline: 15 runs across four
+arms fail the commitment check with NO logged change at all.** s3 replay 4 of 40,
+s0 orientation 1 of 20, **s3 orientation 8 of 20**, s3 reasoned-pick 2 of 20. All 15
+are `UNDECIDABLE` rather than `DEPENDS_ON_JUDGMENT`, so none was priced and none
+entered any rate — **the readings of cells 1–2 and checks 1 and 4 stand unchanged.**
+
+What they are: **the agent searched past its own declared rule without declaring a
+change.** s3 replay run 19 replays as `[continue, stop]` against a realized
+`[continue, continue, continue, stop]` — two further moves after the committed rule
+would have fired, with no `change_trigger` logged. This is the unfaithfulness U3 was
+constructed to model, **occurring naturally in a model-driven run**, and the harness
+caught it: not a defect but the commitment check doing its work. It is recorded as a
+check-3 behavioural readout, and it means the honest statement of how often an agent
+departs from its committed rule on s3 is **19 bound changes plus 4 silent
+divergences**, not 15 logged changes.
+
+**(4) Two readouts added.**
+
+**The orientation arm's s3 CERTIFIED rate under replay, beside the replay-gate arm's:**
+orientation **7/20 = 0.3500**, replay gate **12/40 = 0.3000**, reasoned-pick
+**2/20 = 0.1000**. The orientation arm is not lower, so on s3 the paragraph does not
+cost power; the reasoned-pick arm's 0.10 is the arm that brackets most (18 of 20), and
+is low for that reason rather than for a statistical one. Descriptive, no rule — s3
+carries signal, so these are power readouts and not size.
+
+**Pick and meta-move decisions in the registered fidelity subsample** — the first 10
+runs of each config in seed order (amendment 6):
+
+| config | subsample | `pick` decisions | meta-move decisions | total |
+|---|---|---|---|---|
+| s0 reasoned-pick | 10 runs | **3** | 12 | **15** |
+| s3 reasoned-pick | 10 runs | **3** | 15 | **18** |
+
+**Three picks per config is the number check 2 would have to work with.** At ~20
+re-presentations each that is 60 presentations per config for the kind whose fidelity
+the cell exists to measure, and a per-kind rate on 3 instances is below what
+`prereg/README.md`'s low-n rule permits to be reported. **Recorded now, before the tool
+is built**, so the measurement's unit count is known in advance rather than discovered
+after the seat is spent: on this evidence check 2 would report `pick` fidelity as
+**unmeasured with its count**, which is the branch amendment 4 already registers for a
+kind with too few instances.
+
+## CLOSED — the 7.3 agent cell, 2026-09-30
+
+240 runs, seven arms, the registered sizing. Harness integrity clean on all 240:
+240/240 submitted, zero errors, zero unregistered refusals, the pinned model served on
+every run, every arm recording HEAD's design hashes with `dirty=False`.
+
+| item | status |
+|---|---|
+| **Check 1** calibration | **READ — HOLDS.** 2/80 = 0.0250 at α = 0.05, 1/80 = 0.0125 at α = 0.01; neither lower Wilson end above nominal |
+| **Cell 1** s0 validity | **READ — HOLDS** for orientation (0/20) and reasoned-pick (1/20); no arm withdrawn, no audit |
+| **Cell 2** s3 placebo | **READ — A DIFFERENCE** on 3 of 6 measures, read as priming by the paragraph; it bounds how much of any ETF effect is priming |
+| **Check 3** behaviour | **READ.** Headline: trigger changes bound on 25% of s0 and 47.5% of s3 runs, plus 15 silent divergences |
+| **Check 4** power | **READ**, with the caveat that the gap is the bracket's price and not tier power |
+| **Check 2** fidelity | **PENDING THE TOOL.** The re-presentation tool does not exist (amendment 7), and the subsample holds only 3 pick decisions per config |
+| **Cell 3** ETF behaviour | **PENDING 6.5.** That arm has not run; the holdout opens once |
+
+**What the cell establishes.** The identity checks do not harm an honest agent arm, at
+the resolution n = 20 and n = 80 allow — gross leakage and nothing finer. A bracketed
+run issues no certificate and that is the right accounting, registered before any
+number was seen (amendment 11).
+
+**What it found that nobody registered a rule for, and which matters more than the
+rules it passed.** The agent reached the **class argmax in 120 of 120 runs** across both
+panels. So on this class the replay tier is **redundant**: both tiers price the same
+statistic against near-identical nulls, and they differ only in what they **refuse**.
+Every localising diagnostic the cell registered came back structurally uninformative
+for the same underlying reason — the per-kind decile fractions, then amendment 12's
+Spearman replacement — because these searches are too uniform in shape to carry a dose.
+That is a finding about the arm design, not about the agents, and it is the thing to fix
+before a cell like this is run again: a deeper class, or a panel where the Sharpe
+objective is less nearly modular, would separate the tiers and give the diagnostics
+something to resolve.
+
+**What it licenses.** `p_upper` and the two pricing flags were 7.3's to license.
+**Check 2 has not reported, so fidelity-driven pricing stays OFF and unlicensed** — as
+`prereg/agent-cell.md`'s own "What these two license" requires. The local-max conjecture
+was 7.3's scripted half and is unaffected. The tier-selection rule and the no-fall-through
+rule are registered in `ROADMAP.md` and `prereg/bracketed-verdicts.md` on this cell's
+evidence, and they make **6.5's headline a class-tier verdict**.

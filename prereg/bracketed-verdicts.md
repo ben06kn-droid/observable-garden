@@ -75,3 +75,37 @@ beside each.
 Free. Both ends are computed from nulls the gate already prices; no additional
 bootstrap and no agent calls. The `DEPENDS_ON_JUDGMENT` path costs one extra
 field in the Verdict.
+
+## Amendment 1 — 2026-09-30, registered before 6.5. No fall-through to the class tier at α
+
+**Registered:**
+
+> **A `DEPENDS_ON_JUDGMENT` verdict does not fall through to the declared-class tier
+> at α.** A bracketed run is not re-tested against the class gate and certified if
+> that passes. **The holdout tier is the resolution**, not the other in-sample tier.
+
+**The argument, which is about selection and not about either test's validity.**
+Both tiers are valid tests on their own. An **OR** of them is not, once the choice of
+which to apply is made **after seeing the data** — and that is exactly what
+fall-through is: the class tier is consulted *because* the replay tier declined.
+
+Consider the agent the rule has to survive: one that **follows its declared rule when
+the rule is clearing, and rewrites it when the rule is about to stop a search that
+looks promising.** Under fall-through that agent gets the replay tier when its rule
+held and the class tier when it did not. Each test alone rejects a true null with
+probability α; the agent faces the **union**, and because it chooses which branch it
+lands in by looking at the data, its false-certification probability approaches
+**2α**. Nothing in either tier's construction prevents this — the leakage is in the
+disjunction, not in the tests.
+
+**The 7.3 agent cell shows the agent that does this is not hypothetical.** Trigger
+changes bound on **25% of s0 runs and 47.5% of s3 runs**, and check 4's decomposition
+found that the class tier's entire apparent power advantage lay on exactly the runs
+the replay tier declined — 14 of its extra rejections on the 19 bracketed s3 runs,
+against 12 rejections on the 21 runs both tiers priced. **Fall-through would have
+converted that decline into a certificate on about half the arm.**
+
+**What replaces it.** A bracketed run reports its bracket — the fixed-sequence p as
+the liberal end, the declared-class p as the conservative end — and the commitment
+result beside it, and it is **resolved out of sample**. That is slower and it is the
+only resolution that does not buy certainty with size.

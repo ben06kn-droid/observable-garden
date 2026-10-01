@@ -1470,3 +1470,51 @@ repository**, because no note draft exists yet. The material is written in
 `quixote/README.md` and here, and is to be carried into the note's §4/§5 (the
 objection) and §8 (the alternative) when the note is drafted. Recorded so the
 instruction is not lost.
+
+**Amendment, 2026-09-30, registered before 6.5: the certifying tier is chosen by a
+data-independent rule.**
+
+**Registered:**
+
+> **The certifying tier is fixed before the data by one question about the harness,
+> not about the run: can the harness ENUMERATE the declared class?**
+>
+> - **Yes → the declared-class tier certifies.** The class maximum is the statistic,
+>   priced against the class-maximum null.
+> - **No → the replay tier certifies.** The logged search is re-executed inside the
+>   null.
+>
+> **The other tier's p-value, the bracket and the commitment result are reported
+> BESIDE the verdict as an audit**, never as an alternative route to a certificate.
+> `prereg/bracketed-verdicts.md` amendment 1 forbids the fall-through that would make
+> the pair an OR selected on the data.
+
+**Why a data-independent rule at all.** Choosing the tier per run, by anything the run
+did, makes the pair a disjunction selected on the data, whose false-certification
+probability approaches **2α**. Enumerability is a property of the **class and the
+harness**, fixed before a single draw, so a rule keyed to it cannot be influenced by
+what any search found.
+
+**The evidence, and it is two experiments rather than an argument.** **7.0** measured
+replay and declared-class as **indistinguishable at matched actual size** (+0.0003,
+straddling zero), so the choice costs no power where both are available. **The 7.3
+agent cell** showed why the choice must still be made in advance: the agent submitted
+the class maximum in **120 of 120 runs** across both panels, so the two tiers priced
+the **same statistic** against near-identical nulls — p-values equal on 58 of 60 s0 and
+19 of 21 s3 runs — and the only thing separating them was that the replay tier
+**declined** 25% of s0 and 47.5% of s3 runs whose declared rule had changed. Where
+both tiers can run, they agree; the tiers differ in what they refuse, and a rule that
+let the refusal be overridden would be the 2α disjunction.
+
+**What this makes the ETF verdict.** The ETF panel's declared class is
+`SubsetClass(max_size=3, signed=True)` over K = 40 — **82,240 members, enumerable**,
+and already built and stored as a class table (`data/class_tables/`). So:
+
+> **On the ETF panel the DECLARED-CLASS TIER certifies.** The replay tier's p, the
+> bracket and the commitment result are reported beside it as audit. 6.5's headline
+> verdict is a class-tier verdict.
+
+That is settled **before** 6.5 opens its holdout, by the rule above and not by which
+tier looks better on the day. It also means 6.5's verdict does not depend on the
+agent's trigger discipline: a run whose rule changed still has a class-tier p, which
+is the property the agent cell showed matters most in practice.
