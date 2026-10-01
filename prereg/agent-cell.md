@@ -1057,3 +1057,103 @@ decision about whether the move was legal in that state, fixed before any fideli
 measurement and independent of what the re-presentation will find. The count is
 recorded with the rate either way, and if it remains below what the low-n rule permits
 the readout stays **unmeasured with its count**.
+
+#### Check 3, exploratory: the self-enforcement natural experiment (NO CLAIM)
+
+**Provenance, which is the whole caveat.** The pre-2026-09-30 defect enforced only the
+last declared rule per action. The others were **declared, logged, and present in the
+agent's own prompt** — the harness simply never checked them. That accident is a natural
+experiment nobody designed: for each unenforced rule, `experiments/self_enforcement.py`
+asks when it *would* have fired on the per-step trigger state the harness stored in each
+move's `shown`, and what the agent did at that point.
+
+**Result, across every pre-fix agent run: 345 unenforced rules in 203 runs, of which 28
+would have fired. Of those, the agent stopped on 18 and continued on 10** — a
+self-enforcement share of **0.64 (18/28)**. By predicate: `best_so_far_above` 12 stopped
+against 7 continued; `failures_at_least` 6 against 3. Almost every firing is on **s3**
+(25 of 28), which follows from `best_so_far_above` needing a high Sharpe to trigger.
+
+**EXPLORATORY, AND IT CARRIES NO CLAIM.** The population is whatever pre-fix runs exist;
+the rules examined are whichever the keying happened to drop; the agent never knew which
+of its rules were live; n = 28 firings is far below what `prereg/README.md`'s low-n rule
+permits to be read as a rate, and no interval is given for that reason. It is recorded
+because the data exists and deleting it would be worse, **not** as evidence that agents
+self-enforce. Nothing downstream may cite it.
+
+**What it would take to turn this into a claim**, stated so the gap is visible: an arm
+where unenforced rules are *registered* as unenforced in advance, with the agent told
+which rules bind, so that continuing is a choice rather than a possibility. That is not
+registered and is not proposed here.
+
+#### 13 — 2026-09-30, registered before it runs. A check-3 re-anchor under the fixed harness
+
+Every agent run to date executed under a partially-enforced declaration. Check 3's
+behavioural numbers are therefore facts about **those runs**, not about agents under the
+harness as it now stands. One arm re-anchors them.
+
+> **20 replay-gate runs on `s0` and 20 on `s3`, under the fixed harness, read ONCE
+> against the cell's bound-change rates of 25% (s0) and 47.5% (s3).**
+>
+> **Prediction, registered before the runs: the rates RISE.** Under the fix every
+> declared rule is evaluated, so a rule that previously went unchecked now fires and
+> suspends the search; an agent that wants to continue must call `change_trigger`, and a
+> change that binds is what the bracket counts. More rules enforced means more firings
+> means more changes that bind.
+> - *Rates rise:* the cell's figures were an **underestimate**, and the re-anchored
+>   numbers replace them for any forward-looking statement. The cell's own readings are
+>   not restated — they describe runs made under the old harness and are labelled so.
+> - *Rates unchanged or fall:* the prediction is wrong and the reason is investigated
+>   before the numbers are used, because the mechanism above says they should rise.
+> - *n = 20 per config* detects only a large shift: at 25% the Wilson interval for 20
+>   runs is wide, so this re-anchors an order of magnitude and not a second decimal.
+>   Stated here so the re-anchored figures are not over-read either.
+
+Descriptive for check 3; it gates nothing and certifies nothing. Rule 5 of
+`prereg/agent-pilot.md` does not apply — these are agent-cell runs, not pilot runs — but
+no verdict is read from them and the s3 arm carries signal, so its rates are behaviour
+and not size.
+
+#### Check 2's tool, built 2026-09-30 — `experiments/fidelity.py`, dry run only
+
+Amendment 7's two open questions are settled in the implementation and recorded here.
+
+**What the resampling resamples: the candidate statistics, recomputed on a stationary
+block bootstrap replicate of the streams** — the gate's own bootstrap and block length.
+Not noise added to a number: the figures the agent sees are what the *same*
+specifications would have produced on a resampled history, so they are jointly plausible
+and carry the panel's dependence. A meta move's state has its data-dependent parts
+(`best`, `last_gain`) recomputed on the replicate and its counters kept.
+
+**Presentations are stateless**, and the transcript prefix is **byte-identical to the
+original except the replaced numbers** — built with `quixote.log.render_shown`, the same
+renderer the adapter used, which is why amendment 8's round trip had to exist. A
+continuing session would let presentation *k* see presentation *k − 1*, and the
+measurement would be of adaptation rather than of fidelity.
+
+**The information set is the prompt plus `shown[0..k-1]`**: a decision's own `shown` is
+excluded from its own presentation, because including it would hand the agent the answer
+— the candidate statistics are exactly what the declared rule ranks by.
+
+**Subsamples as amended:** every accepted `pick`; meta moves from the first 10 runs in
+seed order.
+
+**Dry run on the shake-out and both reasoned-pick arms.** The responder answers **by the
+declared rule**, so the rate is 1.0000 by construction and the report says so: it shows
+the harness is **consistent**, not that any agent is faithful. Decision counts:
+
+| arm | `pick` | `restart` | `stop` |
+|---|---|---|---|
+| s0 reasoned-pick | 5 | 5 | 7 |
+| s3 reasoned-pick | 6 | 7 | 8 |
+| shake-out 2 | 1 | 1 | 1 |
+
+**Every kind is below 10 decisions, so every kind reports UNMEASURED with its count** —
+the branch amendment 4 registers. Widening the pick subsample to *every* accepted pick
+raised it from 3 to 5 and 6, which is more and still not enough.
+
+**So check 2 cannot be measured on the runs that exist, and this is now a counted fact
+rather than an expectation.** `--live` is deliberately not wired: the tool refuses
+anything but `--dry-run`, because putting it on the seat is a separate registered
+decision and the decision now has a number attached to it — at 20 presentations a config
+would cost roughly 100–160 model calls to produce a rate the low-n rule forbids
+reporting. **Fidelity-driven pricing stays off and unlicensed.**
