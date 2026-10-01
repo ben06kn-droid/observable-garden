@@ -1157,3 +1157,67 @@ anything but `--dry-run`, because putting it on the seat is a separate registere
 decision and the decision now has a number attached to it — at 20 presentations a config
 would cost roughly 100–160 model calls to produce a rate the low-n rule forbids
 reporting. **Fidelity-driven pricing stays off and unlicensed.**
+
+#### Amendment 13 read once, 2026-09-30 — the prediction is RIGHT on s0 and WRONG on s3
+
+20 replay-gate runs per config under the fixed harness. Integrity clean on both: 20/20
+submitted, zero errors, zero unregistered refusals, pinned model on all 40, self-check
+replayable on all 40, one prompt sha per arm, seat throughout, HEAD's design hashes.
+
+**The arms draw from the same registered seed block by index, so the first 20 seeds are
+the SAME DRAWS the cell used. The comparison is paired, which is stronger than
+registered** and is how it is read:
+
+| config | bound-change rate, old harness | under the fix | paired, same 20 seeds |
+|---|---|---|---|
+| s0 | 20/80 = 0.2500 | **9/20 = 0.4500** [0.2582, 0.6579] | 6/20 → **9/20** |
+| s3 | 19/40 = 0.4750 | **3/20 = 0.1500** [0.0524, 0.3604] | 11/20 → **3/20** |
+
+**s0: the prediction holds.** The rate rises, the old full-arm baseline falls outside the
+new interval, and 11 of 20 pairs are discordant.
+
+**s3: the prediction is CONTRADICTED**, and amendment 13's own branch requires the reason
+before the numbers are used. **The reason, and it is not seed noise:** the comparison is
+paired on identical draws, 11/20 → 3/20, with 8 discordant pairs almost all in the
+direction old-had-changes → new-has-none.
+
+**The mechanism.** The prediction assumed more rules enforced ⇒ more firings ⇒ more
+changes. The missing step is **what the agent wants when a rule fires**. Under the fix
+`best_so_far_above` is enforced for the first time and fires first on **3 of 20** s3 runs
+(it fired first on **0 of 40** before, being the dropped rule). On a panel with signal,
+when that rule fires the agent has **already found something good**, so it **stops** —
+and a run that stops changes nothing, so the bound-change rate falls. The logged-change
+rate falls with it, 0.375 → 0.150, while log length barely moves (5.70 → 5.10). On `s0`
+the opposite: nothing clears the bar, the firing rule is `last_gain_at_most` on a
+non-improving move, stopping forfeits a search that has found nothing, and the agent
+**changes the rule and continues** — log length rises 6.00 → 7.65 and changes rise.
+
+**So the re-anchored figures are 0.45 on s0 and 0.15 on s3**, and the direction of the
+correction depends on the panel. The cell's 25% / 47.5% are **not** uniformly
+underestimates: they understated s0 and overstated s3. Any forward-looking statement uses
+the re-anchored pair with the mechanism attached, and **not** a single rate across panels.
+At n = 20 these re-anchor an order of magnitude, as registered.
+
+**What this says about the bracket's cost.** The fall on s3 means enforcing a declaration
+properly makes agents **stop earlier on panels with signal** rather than argue with their
+rules — which lowers the bracket rate and therefore the number of runs the replay tier
+declines. That is the opposite of the pessimistic reading, and it was not predicted.
+
+#### Check 2 — DEFERRED to the next agent cell, 2026-09-30
+
+**Deferred, not pending.** `experiments/fidelity.py` is built and its dry run counted the
+decisions that exist: `pick` **5** on s0 and **6** on s3; `restart` 5 and 7; `stop` 7 and
+8 — **every kind below 10**, so every kind reports **unmeasured with its count**, which is
+the branch amendment 4 registers. Widening the pick subsample to every accepted pick took
+it from 3 to 5 and 6: more, and still not enough.
+
+**The reason is the arm's yield, not the tool.** At these rates a config needs roughly
+**40 reasoned-pick runs** to clear 10 pick decisions, and the next agent cell is where an
+arm can be sized in **decisions** rather than runs. Measuring it on the seat now would
+spend roughly 100–160 model calls per config to produce a rate the low-n rule forbids
+reporting.
+
+**Fidelity-driven pricing stays OFF and unlicensed**, as `prereg/agent-cell.md`'s "What
+these two license" requires: check 2 is what would license it and check 2 has not
+reported. `--live` is not wired in the tool, so the flag cannot be switched on by
+accident.
