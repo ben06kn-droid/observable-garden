@@ -1221,3 +1221,25 @@ reporting.
 these two license" requires: check 2 is what would license it and check 2 has not
 reported. `--live` is not wired in the tool, so the flag cannot be switched on by
 accident.
+
+#### Check 4 under the fix, descriptive — the s3 re-anchor's two tiers on the same 20 runs
+
+Computed locally; no model, no seat. Both tiers on the same 20 re-anchor runs, which are
+the same seeds as the cell's first 20 s3 draws.
+
+| α | replay CERTIFIED | declared class | difference |
+|---|---|---|---|
+| 0.05 | **14/20 = 0.7000** [0.4810, 0.8545] | **15/20 = 0.7500** [0.5313, 0.8881] | **−0.0500** |
+| 0.01 | 10/20 = 0.5000 [0.2993, 0.7007] | 11/20 = 0.5500 [0.3421, 0.7418] | −0.0500 |
+
+**This is the under-the-fix figure, and it replaces the cell's −0.3250 for any
+forward-looking statement.** The gap nearly closes, and the decomposition says why: only
+**3 of 20** runs are bracketed under the fix, against 19 of 40 in the cell, and **on the
+17 runs both tiers price, both certify 14**. The cell's apparent power gap was the
+bracket's cost, and the bracket got cheaper when the harness began enforcing the whole
+declaration — the same mechanism amendment 13's s3 fall identified, seen from the other
+side.
+
+Saturation is near-total but no longer total: **19 of 20** runs submit the class maximum
+exactly, against 40 of 40 in the cell. Descriptive, no rule, and at n = 20 the intervals
+are wide enough that only the direction is readable.
