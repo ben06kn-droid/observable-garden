@@ -832,3 +832,51 @@ certificate-eligible position, which is not the whole arm. A kind with too few
 distinct counts to rank is reported as **unmeasured with its count**, never as a null
 result. **Sign convention, fixed now:** a **negative** correlation means more of that
 kind goes with a smaller p-value, which is the direction that would indicate leakage.
+
+#### Cells 1–2 and checks 3–4, read once, 2026-09-30
+
+Output at `runs/agent_cell_read_cells12_checks34.txt`. Quantities follow amendment
+11. **Cell 3 is not readable: the ETF arm has not run.**
+
+**CELL 1 — HOLDS for both arms.** Orientation s0 **0/20 = 0.0000** at both levels,
+Wilson [0.0000, 0.1611]; reasoned-pick s0 **1/20 = 0.0500**, [0.0089, 0.2361].
+Neither lower end exceeds nominal, so neither arm is withdrawn and no audit is
+triggered. Comparator: replay gate s0 0.0250 at α = 0.05. At n = 20 the rule fires
+at 3 or more of 20 at α = 0.05 — **gross leakage and nothing finer**.
+
+**CELL 2 — A DIFFERENCE, read as priming.** On s3, orientation against replay gate:
+moves to submit 5.10 against 5.70 (U p = 0.0376), `pick_prior` used 0.05 against
+0.325 (p = 0.0191), trigger changes 0.10 against 0.775 (p = 0.0091). No difference in
+accepted picks (both zero), `trigger_is_firing` refusals (p = 0.0529) or engagement
+(p = 0.3585). At `rho = 0` the table carries **no information**, so this is
+**priming by the paragraph** and it **bounds how much of any ETF effect is priming**;
+the ETF readout is reported net of it. At 20 against 40 only a large difference is
+visible, which is stated rather than read as equivalence.
+
+**CHECK 3 — behaviour, descriptive.** The reasoned-pick arms are the outliers:
+**accepted picks 5/20 on s0 and 6/20 on s3** (zero in every other arm), trigger
+changes averaging 2.50 and 2.95 per run against 0.39–0.78 elsewhere, and the lowest
+engagement (0.708, 0.671 against 0.83–0.99). They are also the only arms producing
+`pick` and `flip` moves. Control engagement is 0.990 with no grammar. **Amendment
+12's Spearman readout is almost entirely UNMEASURED**: nearly every move kind has a
+single distinct count across the priced runs, so there is no dose to correlate. Only
+`trigger changes` on s0 reasoned-pick was measurable — ρ = +0.5226, p = 0.1212,
+n = 10 — and positive is the opposite of the leakage direction. The replacement
+readout is therefore **no more informative than the decile readout it replaced**, for
+the same underlying reason: these searches are too uniform in shape to carry a dose.
+
+**CHECK 4 — the gap is the bracket, not tier power.** At matched actual size 0.05
+(thresholds replay 0.0647, class 0.0597, both at s0 actual size 0.0375): s3 power
+**replay 13/40 = 0.3250** [0.2008, 0.4798] against **class 26/40 = 0.6500**
+[0.4951, 0.7787]. At 0.01 both are 0/40.
+
+**That difference is not a statistical deficit, and the decomposition says so.** The
+agent submitted the class maximum **exactly** in 80 of 80 s0 runs and **40 of 40** s3
+runs, verified by support and not only by score, so both tiers price the **same
+statistic** against near-identical nulls — p-values equal on 58 of 60 s0 runs and 19
+of 21 s3 runs. On the **21 s3 runs both tiers price, replay certifies 13 and class
+12**; the class tier's extra 14 rejections are **all** on the 19 runs the replay tier
+declines to certify because the agent changed a declared rule. So the measured gap is
+**the price of the bracket** — the power the replay tier forgoes by refusing a run
+whose rule changed — and it is consistent with 7.0's finding that the two tiers are
+indistinguishable at matched actual size, which held on runs both tiers priced.

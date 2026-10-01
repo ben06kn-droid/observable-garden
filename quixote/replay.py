@@ -613,7 +613,23 @@ def _compare(log: SessionLog, spec_class, base: np.ndarray,
     realized_score = taken[best_i].score_after if taken else float("-inf")
     t = LoggedPolicy(log, spec_class).trace(base, annualization, frozen=frozen,
                                            score_fn=score_fn, cap_to_log=cap_to_log)
-    same_support = tuple(t.support) == tuple(realized_support)
+    # A specification is a SET of (feature, sign) pairs, so the comparison
+    # canonicalises order. A restart or a swap can reach the same specification by a
+    # different insertion order, and comparing ordered tuples then reported a
+    # STRUCTURAL failure on a search that had not diverged: the agent cell's
+    # s0 reasoned-pick run 5 failed INTEGRITY with 10 actions against 10, a score gap
+    # of exactly 0.0, and supports ((14,1),(30,1),(34,1)) against
+    # ((34,1),(14,1),(30,1)).
+    #
+    # This is monotone: it can only turn an order-only FAIL into a PASS. A genuine
+    # difference in membership or sign still fails, and a difference in the ACTION
+    # sequence is compared separately below and is untouched -- which is why the 82
+    # commitment failures across the agent cell, every one of them an action
+    # divergence from a bound trigger change, do not move.
+    def _canon_support(sup):
+        return frozenset((int(k), float(v)) for k, v in sup)
+
+    same_support = _canon_support(t.support) == _canon_support(realized_support)
 
     # The ACTION SEQUENCE is compared on every log, not only on a budgeted one.
     # A search that stopped in a different place is a different search even when

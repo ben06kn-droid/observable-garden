@@ -131,8 +131,12 @@ def regrade_one(path: Path, table, cls, ann: float, base: np.ndarray) -> dict:
     best = max(scored, key=lambda r: float(r["score"]))
     trace = LoggedPolicy(log, cls).trace(base, ann, score_fn=score_fn,
                                          frozen=LoggedPolicy(log, cls).frozen_actions())
-    recorded_support = tuple((int(k), float(s)) for k, s in best["support"])
-    out["rebuild_support_matches"] = tuple(trace.support) == recorded_support
+    # Compared as a SET, for the reason `quixote/replay.py`'s `_compare` is: a
+    # specification is a set of (feature, sign) pairs, and a restart or a swap can
+    # reach the same one by a different insertion order.
+    recorded_support = frozenset((int(k), float(s)) for k, s in best["support"])
+    out["rebuild_support_matches"] = (
+        frozenset((int(k), float(v)) for k, v in trace.support) == recorded_support)
     out["rebuild_score"] = float(trace.score)
     out["rebuild_score_gap"] = float(trace.score) - float(best["score"])
     out["recorded_best_score"] = float(best["score"])

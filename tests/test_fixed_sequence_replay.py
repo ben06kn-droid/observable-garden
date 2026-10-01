@@ -197,3 +197,52 @@ def test_an_identity_named_flip_truncates_no_replicate_and_records_handover():
     assert handovers, "the identity-named flip must be inapplicable on some replicate"
     # the handover lands on the flip, which is the fourth content move (index 3)
     assert min(handovers) >= 3
+
+
+# -- a specification is a SET of (feature, sign) pairs -------------------------
+
+def test_support_comparison_ignores_order_but_not_membership_or_sign():
+    """`_compare` canonicalises support order, exercised through the real defect.
+
+    A restart or a swap can reach the same specification by a different insertion
+    order. Comparing ordered tuples reported a STRUCTURAL failure on a search that had
+    not diverged: the agent cell's s0 reasoned-pick run 5, at 10 actions against 10
+    and a score gap of exactly 0.0, with supports ((14,1),(30,1),(34,1)) against
+    ((34,1),(14,1),(30,1)).
+
+    This runs `integrity_check` on that committed run and requires it to PASS, so the
+    fix is pinned by the artifact that exposed it rather than by a restatement of the
+    rule. The second half requires a genuine difference to still FAIL.
+    """
+    import json
+    from pathlib import Path
+
+    import numpy as np
+    import pytest
+
+    from experiments.agent_cell import simulated_panel
+    from experiments.regrade_pilot import rebuild_log
+    from quixote.replay import integrity_check
+
+    path = next(Path("runs/agent_cell_s0_reasoned").glob("cell_s0_5_*.json"), None)
+    if path is None:
+        pytest.skip("the run that exposed the defect is not present")
+    d = json.loads(path.read_text())
+    records = [e for e in d["events"] if e["kind"] == "session_log"][0]["records"]
+    budget = [e for e in d["events"] if e["kind"] == "declared_budget"][0]["budget"]
+    log = rebuild_log(records, d.get("triggers_predeclared") or [], int(budget))
+
+    _dt, _cfg, cls, sb, dgp = simulated_panel("s0", int(d["seed"]))
+    base = np.asarray(sb.base_feature_columns(), dtype=float)
+    chk = integrity_check(log, cls, base, float(np.sqrt(dgp.periods_per_year)))
+
+    assert chk.agrees, (
+        f"order-only difference still fails: realized {chk.realized_support} "
+        f"against replayed {chk.replayed_support}, score gap "
+        f"{chk.realized_score - chk.replayed_score:+.2e}")
+    # the supports are the same SET, and that is the whole point
+    assert (frozenset(chk.realized_support) == frozenset(chk.replayed_support))
+    # and a genuine difference must still fail: perturb one sign
+    bad = tuple((k, -v) if i == 0 else (k, v)
+                for i, (k, v) in enumerate(chk.realized_support))
+    assert frozenset(bad) != frozenset(chk.realized_support)
