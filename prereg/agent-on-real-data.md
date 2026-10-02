@@ -520,3 +520,49 @@ differently from the in-sample features the agents searched, so a submission con
 either is graded on a feature that differs, on tie days, from the one it was chosen on.
 **That is control run 8 alone**, and its grade is reported with this note. No other
 submission contains either feature.
+
+## Deviation, recorded 2026-10-02: three arms registered at 40 ran at 20
+
+**What.** "Arms, matching Phase 7 as amended" registers **40 runs per arm**. Control,
+declared-class gate and replay gate each ran **20** (`runs/etf_control`,
+`runs/etf_declared_class`, `runs/etf_replay`). The orientation arm's 20 is its own
+registration (`prereg/agent-cell.md`, twenty per cell). **6.5 therefore holds 80 runs**,
+not the 120 registered for the three original arms, and 6.9 grades 80 submissions.
+
+**Why.** `experiments/agent_cell.py` defaults to `--runs 20`, and the launch lines given
+for these arms — `--runs <N>` for replay and orientation, filled with 20; `--runs 20`
+written out for control and declared-class — were not checked against this file's 40.
+The close-out of 2026-10-01 then recorded "four arms of 20" without flagging it. **An
+error in the run lines, not a decision**, and it was not recorded when it happened.
+
+**The stop was not data-dependent.** Each arm's count was fixed on its command line
+before its first run, and each ran to exactly that count: `run_config.json` shows
+`runs: 20` and 20 indices run in each directory, with no early stop and no extension.
+The replay arm's 20 was set at its first launch, before any 6.5 verdict existed, and
+kept when the voided runs were redone. The orientation, control and declared-class arms
+were launched later — after the six voided replay runs had been priced in-line, and
+control and declared-class after the replay and orientation arms had been priced — so
+verdicts existed when their 20 was typed. Their 20 copies the replay arm's and the
+runner's default; no rule, script or command read a result to set it, and no arm's
+count differs from another's. No run was dropped, and none was added after a look.
+
+**What it costs: detectability at n = 20 against the registered n = 40.**
+
+| readout | at n = 20 per arm (as run) | at n = 40 (as registered) |
+|---|---|---|
+| verdict distribution: upper Wilson end when 0 of n certify | 0.161 | 0.088 |
+| smallest true certification rate giving at least one certificate with 80% probability | 0.077 | 0.039 |
+| width of the Wilson interval at a 50% rate | 0.40 | 0.30 |
+| deflation gap, one-sample, detectable mean (sd 0.035, as measured) | 0.023 | 0.016 |
+| arm against arm (Mann-Whitney, two-sided 0.05, 80%), detectable effect in sd | 0.91 | 0.64 |
+| orientation (20, as registered) against an arm at n, detectable effect in sd | 0.91 | 0.79 |
+| PASS against FAIL holdout mean, standard error over runs (one future; per-run SE 0.58) | 0.130 | 0.092 |
+
+**What it does not change.** No verdict differs because of it: every one of the 80
+runs is p = 1.0000 at the class tier, against a class maximum at half the null level,
+and no run count reaches a certificate on this panel. The deflation gap's headline
+(+0.53 in every arm) sits far above the 0.023 detectable at n = 20. **What it does
+change is resolution**: every interval in the 6.5 read is wider than registered, by the
+factors above, and the arm comparisons see only effects about 1.4 times larger than
+the registration sized for. Whether to run the missing 60 runs is a separate decision,
+and this note does not make it.
