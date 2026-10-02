@@ -163,3 +163,133 @@ Sized from the 661 stored agent runs: **mean $0.268 per run** (median $0.220,
   4.5 seat-hours**, which is affordable and is the registered budget.
 - K = 99 is **not** budgeted for routine use. It is reserved for a single
   headline certification if one is wanted at α = 0.01.
+
+## Amendment — 2026-10-02, still not live. A scripted twin cell on planted panels
+
+**Not live; nothing runs on it.** It adds a scripted cell on **real features**, where
+rule 1 above ("scripted twins hit nominal") has so far only an s0 statement. It goes
+live by a dated commit, which needs one input this file cannot supply: the planted
+level, below.
+
+### Panels
+
+`environments/planted_panel.py` (7.5's generator, `prereg/planted-edge.md`): the real
+ETF feature matrix X, 2006-01-04 to 2017-12-29, and a resampled real residual with one
+depth-3 member planted. **Two levels per panel, paired on one seed**: **level 0**, the
+unplanted panel (`c = 0`), where every member's population Sharpe is negative; and
+**one planted level, fixed as 7.5 stage 1's nearest-the-bar** by the dated commit that
+makes this cell live. That level is not chosen here and cannot be chosen after this
+cell's data. **Panel seeds 650000–650999**, replication 660000–660999, smoke and
+scaling 985000–985999 (cost only). All three were checked on 2026-10-02 against every
+pre-registration, live and removed, `planted-edge.md`'s blocks included
+(`python -m experiments.seed_block_check --exclude prereg/twin-calibration.md --ranges
+650000-650999,660000-660999,985000-985999`: **NO COLLISION**, 34 files, 100 ranges, 8
+masters).
+
+### Per panel
+
+The real panel and **K = 19 twins under each of `joint_time_permutation` and
+`block_permutation`** (`quixote/twins.py`, block 21), seeded by `SeedSequence(seed)`'s
+children [3] and [4]. Children [0]–[2] are the panel's own, and the same permutations
+serve both levels. **Each of the six registered scripted searchers**
+(`registered_71`, class-capped to signed depth 3) runs on the real panel and on all
+38 twins. **The statistic is the class tier's p** (the certifying tier, ROADMAP
+2026-09-30), at **B = 1,000**. **p is the registered rank**,
+`(1 + #{twins with p_k ≤ p_real}) / (K + 1)`, with ties counted against the real run
+as registered; tie counts are reported. Only α = 0.05 is attainable at K = 19.
+Driver: `experiments/planted_twins.py`, with `tests/test_planted_twins.py`.
+
+**What a twin is on this panel.** A twin permutes the **rows of the panel's return
+matrix against X**, which stays in calendar order. Positions are a function of X
+alone, so **every member's cost and borrow path is identical in the real panel and
+in every twin**, and only the gross return differs (tested). The rule above that
+"any return-derived feature is recomputed from the permuted returns" is **vacuous
+here**: X comes from real prices, not from the panel's returns, in the real panel as
+much as in a twin. **Each matrix is priced by one procedure**: its own null block
+length from its own depth-1 (+) streams, and its own B replicates from
+`default_rng(panel seed)`. The real panel's statistic is not computed differently from
+a twin's, which exchangeability needs.
+
+### What each construction destroys on this panel, and the predicted direction
+
+| | destroys | keeps |
+|---|---|---|
+| `joint_time_permutation` | the alignment of `X_t` with `r_t` (the null under test, including the planted signal's timing); **all serial structure of the returns** — the residual's autocorrelation and volatility clustering, which the stationary bootstrap carries within its blocks (mean 7 days) | each day's cross-section; every member's cost path exactly; the time-mean return vector — at a planted level, the static part of the planted signal |
+| `block_permutation` (21-day blocks) | the alignment, across about 144 block seams; serial structure only at the seams | within-block serial structure (blocks three times the bootstrap's mean block length); the cross-section; costs; the time mean |
+
+**Predicted, at level 0.** The real panel and its twins differ only in serial
+structure, since the alignment they also differ in is null there. **The direction of
+any departure from 1/20 follows the sign of the real streams' short-lag
+autocorrelation.** Positive autocorrelation makes the real panel's Sharpes more
+dispersed than its joint-time twins', so the real run ranks extreme too often:
+**liberal**. Negative makes it **conservative**. The sign is recorded per panel (the
+median lag-1 autocorrelation of the real panel's member streams in the first chunk) and
+read with the rule. It is not chosen after it: the prediction is the mechanism, and the
+read says which sign the panel had. **Predicted small either way**, and **closer to
+1/20 under `block_permutation`** than under `joint_time_permutation`, because blocks
+keep the serial structure the mechanism runs through.
+
+**Predicted, at the planted level: twin power below the class tier's on the same
+panels.** Both constructions keep the time-mean return vector, so the **static
+part** of the planted signal survives into every twin: a member whose positions hold
+a persistent average aligned with the planted member's average earns in the twins too,
+and the real run's statistic stands out only by the time-varying part. The gap is
+predicted larger for planted members built on slow features (252-day horizons), and
+similar under the two constructions, since both shuffle offsets far longer than those
+features' persistence.
+
+### Rules
+
+**(T1) False certification at level 0. One-sided, on the lower Wilson end.** Per
+searcher and construction: twin rejections at α = 0.05 (`p_twin ≤ 1/20`), over **all**
+panels. At level 0 every member's population Sharpe is negative, so every rejection is
+false. **Fails high iff the lower end of the Wilson 95% interval exceeds 0.05.**
+- *At or below nominal:* twins are exchangeable with the real panel on real features,
+  to this rule's resolution. Reported with the upper end as the largest liberality
+  not ruled out, and with the attainable grid (multiples of 1/20; counted ties make it
+  conservative) so that "below" is not read as conservatism when it is discreteness.
+- *Fails high:* **one-shot replication** on 660000–660999, same n and settings, for
+  the **first** failure among the twelve rules. Fails again: the twins are not
+  exchangeable with the real panel on real features — the serial-structure mechanism
+  is checked first, against the recorded autocorrelation sign — and **twin
+  certification is not used on real-feature panels** until it is explained.
+  Replication holds: reported as one failure of two.
+- *Detectable at n:*
+
+  | n panels | fires at | passes if exactly 1/20 | 80% detects a true rate of |
+  |---|---|---|---|
+  | 500 | k ≥ 35 (0.070) | 0.9697 | 0.0795 |
+  | **1,000** | **k ≥ 64 (0.064)** | **0.9716** | **0.0705** |
+
+- *Family:* 6 searchers × 2 constructions = 12 rules on the same panels. If every one
+  is exactly valid and they were independent, all pass **0.69–0.71** of the time,
+  **0.99** with the replication branch; they are positively correlated, so the true
+  family pass rate is higher.
+
+**(T2) Power at the planted level, reported beside the class tier's on the same
+panels. Descriptive; no rule.** Per searcher and construction: **correct** twin
+rejections — those whose submission has population Sharpe > 0, following
+`planted-edge.md`'s definition — over all panels, beside the class tier's correct
+certifications over the **same** panels, with the paired discordance (twin rejects
+and class does not, and the reverse). *Predicted:* twin below class, for the
+static-part reason above.
+
+### Cost, and the proposed n
+
+**Measured on this laptop, as a component estimate, labelled as one** (2026-10-02): one
+512-member chunk of the class pass for all 39 matrices takes **2.3 s** (1.2 s for
+positions and streams, 1.1 s for the nulls), and building the 39 count matrices takes
+**42 s** per level. So about **410 s per level, about 820 s per panel**, single process
+and uncontended. **The end-to-end smoke did not complete**: it was stopped at 10 minutes
+of 13, with the laptop on battery at 11%, and its partial record was discarded. Peak
+memory per worker is about **1.5 GB** (39 streams of the chunk, 0.48 GB; 39 count
+matrices, 0.94 GB). **The box smoke on 985000–985999, at the registered worker count,
+is the sizing measurement** (`prereg/README.md`), and it must complete before the live
+commit.
+
+**Proposed n: 1,000 panels, the whole registered block.** Under contention at about
+1.4× the uncontended figure, that is roughly **320 CPU-hours, about 10 h on 31 workers,
+about $17**, and it brings T1's detectable liberality down to **0.0705**. At 31 workers
+the memory is about 47 GB of 64. **Lever, registered now:** if the box smoke projects
+more than **$30**, n drops to **500** (detectable 0.0795), with the reason recorded.
+B, K, the constructions and the searchers are never levers.
