@@ -254,12 +254,13 @@ def run_level_score(base, seed: int, beta: float) -> dict:
 def run_seed(payload) -> dict:
     seed, levels, B, cell = payload
     base = pp.load_base()
-    t0 = time.time()
+    t0, c0 = time.time(), time.process_time()
     fn = (lambda b: run_level_score(base, seed, b)) if cell == "score" else \
         (lambda b: run_level(base, seed, b, B))
     out = {"seed": seed, "cell": cell, "levels": [fn(b) for b in levels]}
     out["secs"] = time.time() - t0
-    out["cpu_secs"] = time.process_time()             # unaffected by sleep
+    # this seed's own CPU seconds: unaffected by sleep, which wall time is not
+    out["cpu_secs"] = time.process_time() - c0
     out["peak_rss_mb"] = peak_rss_mb()
     return out
 
@@ -305,7 +306,8 @@ def main(argv=None) -> int:
         if path.exists() else set()
     todo = [(seed0 + i, levels, a.B, a.cell) for i in range(n) if seed0 + i not in done]
     print(f"{'SMOKE (cost only)' if smoke else 'REGISTERED'}: seeds {seed0}-{seed0 + n - 1}, "
-          f"levels {levels}, K {K} x {len(CONSTRUCTIONS)}, B {a.B}, {len(todo)} to run",
+          f"levels {levels}, K {K} x {len(CONSTRUCTIONS)}, "
+          f"{'no bootstrap' if a.cell == 'score' else f'B {a.B}'}, {len(todo)} to run",
           flush=True)
     power_start = power_state()
     print(f"  power at start: {power_start}", flush=True)
@@ -334,8 +336,13 @@ def main(argv=None) -> int:
              f"{1 + 2 * K} return matrices per level, "
              f"{'no bootstrap' if a.cell == 'score' else f'B {a.B}'}, workers {a.workers}, "
              f"wall {wall:.0f}s",
-             f"  per seed (both levels): mean {per.mean():.0f}s wall  max {per.max():.0f}s; "
-             f"CPU {np.mean([r['cpu_secs'] for r in recs]):.0f}s per worker process",
+             f"  per seed (both levels): wall mean {per.mean():.0f}s median "
+             f"{np.median(per):.0f}s max {per.max():.0f}s; CPU mean "
+             f"{np.mean([r['cpu_secs'] for r in recs]):.0f}s median "
+             f"{np.median([r['cpu_secs'] for r in recs]):.0f}s max "
+             f"{max(r['cpu_secs'] for r in recs):.0f}s",
+             f"  wall/CPU ratio max {max(r['secs'] / r['cpu_secs'] for r in recs):.2f} "
+             "(well above 1 means the machine slept or was contended during that seed)",
              "  per level, by stage (median s): " + ", ".join(
                  f"{k} {np.median(v):.1f}" for k, v in stages.items()),
              f"  peak RSS per worker: max {max(r['peak_rss_mb'] for r in recs):.0f} MB",
