@@ -648,10 +648,11 @@ readout**: power reported again against each panel's class-maximum `SR_pop`, bin
 so the curve can be read in the units of the edge the class actually holds. No rule
 reads it.
 
-## Proposed, not adopted: a two-stage live commit — 2026-10-02
+## Adopted: a two-stage live commit — proposed and adopted 2026-10-02
 
-**Proposed for approval; this file stays not live until it is adopted by a dated
-commit.**
+**Adopted as the plan for going live, by draft revision. Adopting it makes nothing
+live: stage 1 goes live only by its own dated commit, after the box smoke, and stage 2
+by a second one.** Until stage 1's commit, the whole file remains a draft.
 
 - **Stage 1, the scripted half, live now-ish.** Its build items are done — **1** (the
   generator) and **1b** (the scripted driver), both tested, with the smoke measured.
