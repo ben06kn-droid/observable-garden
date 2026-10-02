@@ -48,6 +48,39 @@ def test_a_level_gives_registered_rank_p_values(base, monkeypatch):
 
 def test_the_smoke_record_carries_no_rule_quantity(base, monkeypatch):
     monkeypatch.setattr(pp, "load_base", lambda: base)
-    text = json.dumps(tw.cost_only(tw.run_seed((985000, [0.0, 1.0], 20))))
-    for word in ("p_twin", "p_class", "score", "truth", "support", "ties", "autocorr"):
-        assert word not in text, word
+    for cell in ("prank", "score"):
+        text = json.dumps(tw.cost_only(tw.run_seed((985000, [0.0, 1.0], 20, cell))))
+        for word in ("p_twin", "p_class", "p_score", "score_real", "truth", "support",
+                     "ties", "autocorr"):
+            assert word not in text, word
+
+
+def test_the_score_rank_is_the_registered_form_with_ties_against_the_real_run():
+    assert tw.score_rank_p(1.0, [0.5] * 19) == 1 / 20
+    assert tw.score_rank_p(1.0, [1.0] + [0.5] * 18) == 2 / 20       # a tie counts against
+    assert tw.score_rank_p(0.0, [1.0] * 19) == 1.0
+
+
+def test_a_score_level_ranks_every_searcher_under_both_constructions(base):
+    r = tw.run_level_score(base, 6, 0.0)
+    attainable = {k / 20 for k in range(1, 21)}
+    for s in r["searchers"]:
+        for c in tw.CONSTRUCTIONS:
+            assert min(abs(s[f"p_score_{c}"] - a) for a in attainable) < 1e-12
+        assert s["truth_in_sample"] < 0
+
+
+def test_the_multi_cache_scores_equal_the_sandboxs_sharpe(base):
+    from experiments.planted_edge import _sharpe_rows
+    d = pp.make_draw(base, 7, 1.0)
+    R = np.stack([d.in_sample.returns, d.in_sample.returns[::-1]], axis=2)
+    ann = np.sqrt(d.in_sample.periods_per_year)
+    cache = tw.MultiCache(d.in_sample, R, ann)
+    sup = base.members[40]
+    direct = _sharpe_rows(streams_for(d.in_sample, [sup, sup]), ann)[0]
+    assert cache.get(sup)[0] == pytest.approx(direct, abs=1e-12)
+
+
+def test_the_score_cell_refuses_a_level_other_than_its_fixed_two():
+    with pytest.raises(SystemExit, match="fixed at 0 and 1.0"):
+        tw.main(["--cell", "score", "--planted", "0.5", "--smoke", "1"])

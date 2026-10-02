@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -63,6 +64,23 @@ def streams_multi(panel, supports, R_stack: np.ndarray) -> np.ndarray:
 
     pp._positions_loop(panel, supports, step)
     return out
+
+
+def power_state() -> str:
+    """Power source and Low Power Mode, for a smoke's cost to be read against
+    (`pmset` on macOS; elsewhere not applicable). A throttled machine measures a
+    different cost, which is how a 2026-10-02 smoke was confounded."""
+    if sys.platform != "darwin":
+        return "n/a (not macOS)"
+    import subprocess
+    try:
+        g = subprocess.run(["pmset", "-g"], capture_output=True, text=True).stdout
+        b = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True).stdout
+    except OSError:
+        return "unknown (pmset unavailable)"
+    lpm = next((ln.split()[-1] for ln in g.splitlines() if "lowpowermode" in ln), "?")
+    src = "mains" if "AC Power" in b else ("battery" if "Battery Power" in b else "?")
+    return f"source {src}, Low Power Mode {'ON' if lpm == '1' else 'off' if lpm == '0' else lpm}"
 
 
 def _count_matrix(T, L, B, seed):
@@ -150,11 +168,96 @@ def run_level(base, seed: int, beta: float, B: int) -> dict:
             "median_lag1_autocorr_real": lag1, "searchers": out, "secs": t}
 
 
+# -- the score-rank cell: runs first --------------------------------------------
+#
+# The statistic is the searcher's submitted realized net Sharpe, ranked among its K
+# twins in the registered form with ties against the real run. No class pass and no
+# bootstrap: a searcher scores only the supports it visits, so streams are computed
+# on demand, a prefix batch at a time, for all 39 matrices at once, and shared by every
+# search on the panel. This tests the TWIN CONSTRUCTIONS; the registered p-rank
+# statistic (`run_level` above) is a later cell.
+
+SCORE_LEVELS = (0.0, 1.0)            # fixed, independent of 7.5's curve
+
+
+class MultiCache:
+    """Sharpe of a support on every return matrix, computed per depth-(d-1) prefix
+    batch (every signed extension at once), through `streams_multi`."""
+
+    def __init__(self, panel, R_stack, ann):
+        self.panel, self.R, self.ann = panel, R_stack, ann
+        self.K = panel.features.shape[2]
+        self.sr: dict = {}
+        self.batches = 0
+
+    def get(self, support) -> np.ndarray:
+        key = canonical(support)
+        if key not in self.sr:
+            prefix = key[:-1]
+            held = {k for k, _ in prefix}
+            batch = [prefix + ((j, s),) for j in range(self.K) if j not in held
+                     for s in (1.0, -1.0)]
+            X = streams_multi(self.panel, batch, self.R)              # (J, n, T)
+            S = np.stack([_sharpe_rows(X[j], self.ann) for j in range(X.shape[0])])
+            for i, sup in enumerate(batch):
+                self.sr[canonical(sup)] = S[:, i]
+            self.batches += 1
+        return self.sr[key]
+
+
+def score_rank_p(real: float, twin_scores) -> float:
+    """`(1 + #{twins scoring >= the real run}) / (K + 1)`: the registered rank, with a
+    higher score the more extreme and ties counted against the real run."""
+    twin_scores = list(twin_scores)
+    return (1 + sum(1 for x in twin_scores if x >= real)) / (len(twin_scores) + 1)
+
+
+def run_level_score(base, seed: int, beta: float) -> dict:
+    t = {}
+    t0 = time.time()
+    draw = pp.make_draw(base, seed, beta)
+    panel = draw.in_sample
+    T, M, Kf = panel.features.shape
+    ann = float(np.sqrt(panel.periods_per_year))
+    ch = np.random.SeedSequence(int(seed)).spawn(5)
+    R0 = panel.returns
+    mats = [R0]
+    for c, cs in zip(CONSTRUCTIONS, (ch[3], ch[4])):
+        mats += twins(R0, K, seed=cs, construction=c)
+    J = len(mats)
+    cache = MultiCache(panel, np.stack(mats, axis=2), ann)
+    t["generate"] = time.time() - t0
+
+    t0 = time.time()
+    out = []
+    for srch in _searchers(seed, T, panel.periods_per_year):
+        score, sub = np.empty(J), None
+        for j in range(J):
+            tr = srch._search(Kf, lambda k, j=j: float(cache.get(((k, 1.0),))[j]),
+                              lambda sup, j=j: float(cache.get(sup)[j]))
+            score[j] = tr.score
+            if j == 0:
+                sub = canonical(tuple(tr.support))
+        rec = {"searcher": srch.name, "support": [list(q) for q in sub],
+               "score_real": float(score[0]),
+               "truth_in_sample": pp.truth(base, draw, sub)["in_sample"]}
+        for c_i, c in enumerate(CONSTRUCTIONS):
+            sk = score[1 + c_i * K: 1 + (c_i + 1) * K]
+            rec[f"p_score_{c}"] = score_rank_p(score[0], sk)
+            rec[f"ties_{c}"] = int(np.sum(sk == score[0]))
+        out.append(rec)
+    t["searches"] = time.time() - t0
+    return {"seed": seed, "beta": beta, "c": draw.c, "prefix_batches": cache.batches,
+            "searchers": out, "secs": t}
+
+
 def run_seed(payload) -> dict:
-    seed, levels, B = payload
+    seed, levels, B, cell = payload
     base = pp.load_base()
     t0 = time.time()
-    out = {"seed": seed, "levels": [run_level(base, seed, b, B) for b in levels]}
+    fn = (lambda b: run_level_score(base, seed, b)) if cell == "score" else \
+        (lambda b: run_level(base, seed, b, B))
+    out = {"seed": seed, "cell": cell, "levels": [fn(b) for b in levels]}
     out["secs"] = time.time() - t0
     out["cpu_secs"] = time.process_time()             # unaffected by sleep
     out["peak_rss_mb"] = peak_rss_mb()
@@ -162,9 +265,10 @@ def run_seed(payload) -> dict:
 
 
 def cost_only(rec: dict) -> dict:
-    return {"seed": rec["seed"], "secs": rec["secs"], "cpu_secs": rec.get("cpu_secs"),
-            "peak_rss_mb": rec["peak_rss_mb"],
-            "stage_secs": [lv["secs"] for lv in rec["levels"]]}
+    return {"seed": rec["seed"], "cell": rec["cell"], "secs": rec["secs"],
+            "cpu_secs": rec.get("cpu_secs"), "peak_rss_mb": rec["peak_rss_mb"],
+            "stage_secs": [lv["secs"] for lv in rec["levels"]],
+            "prefix_batches": [lv.get("prefix_batches") for lv in rec["levels"]]}
 
 
 def main(argv=None) -> int:
@@ -176,26 +280,35 @@ def main(argv=None) -> int:
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     ap.add_argument("--out", default="runs/planted_twins")
     ap.add_argument("--smoke", type=int, default=0)
+    ap.add_argument("--cell", choices=("score", "prank"), default="score",
+                    help="score: the score-rank cell, runs first, levels 0 and 1.0 fixed; "
+                         "prank: the registered p-rank cell, a later cell")
     a = ap.parse_args(argv)
     smoke = a.smoke > 0
-    if smoke:
-        planted = 1.0 if a.planted is None else a.planted   # cost does not depend on it
-        seed0, n = SEED0_SMOKE, a.smoke
+    if a.cell == "score":
+        if a.planted is not None:
+            raise SystemExit("the score-rank cell's levels are fixed at 0 and 1.0")
+        levels = list(SCORE_LEVELS)
+    elif smoke:
+        levels = [0.0, 1.0 if a.planted is None else a.planted]   # cost is level-free
     else:
         if a.planted is None:
-            raise SystemExit("--planted is required: stage 1's nearest-the-bar, fixed by "
-                             "dated commit before this cell is live")
-        planted, seed0, n = a.planted, SEED0, a.draws
-    levels = [0.0, planted]
-    out = Path("runs/_smoke/planted_twins" if smoke else a.out)
+            raise SystemExit("--planted is required for the p-rank cell: stage 1's "
+                             "nearest-the-bar, fixed by dated commit before it is live")
+        levels = [0.0, a.planted]
+    seed0, n = (SEED0_SMOKE, a.smoke) if smoke else (SEED0, a.draws)
+    suffix = "" if a.cell == "prank" else "_score"
+    out = Path(f"runs/_smoke/planted_twins{suffix}" if smoke else a.out + suffix)
     out.mkdir(parents=True, exist_ok=True)
     path = out / "draws.jsonl"
     done = {json.loads(l)["seed"] for l in path.read_text().splitlines() if l} \
         if path.exists() else set()
-    todo = [(seed0 + i, levels, a.B) for i in range(n) if seed0 + i not in done]
+    todo = [(seed0 + i, levels, a.B, a.cell) for i in range(n) if seed0 + i not in done]
     print(f"{'SMOKE (cost only)' if smoke else 'REGISTERED'}: seeds {seed0}-{seed0 + n - 1}, "
           f"levels {levels}, K {K} x {len(CONSTRUCTIONS)}, B {a.B}, {len(todo)} to run",
           flush=True)
+    power_start = power_state()
+    print(f"  power at start: {power_start}", flush=True)
     t0 = time.time()
     from concurrent.futures import ProcessPoolExecutor, as_completed
     with ProcessPoolExecutor(max_workers=a.workers) as pool, open(path, "a") as fh:
@@ -214,17 +327,20 @@ def main(argv=None) -> int:
             for lv in r["stage_secs"]:
                 for k, v in lv.items():
                     stages.setdefault(k, []).append(v)
-        L = ["scripted twin cell — SMOKE, cost only (no rule quantity is written or shown)",
+        L = [f"scripted twin cell ({a.cell}) — SMOKE, cost only (no rule quantity is "
+             "written or shown)",
              "=" * 78,
              f"  panels {len(recs)} (seeds {seed0}-{seed0 + n - 1}), 2 levels, "
-             f"{1 + 2 * K} return matrices per level, B {a.B}, workers {a.workers}, "
+             f"{1 + 2 * K} return matrices per level, "
+             f"{'no bootstrap' if a.cell == 'score' else f'B {a.B}'}, workers {a.workers}, "
              f"wall {wall:.0f}s",
              f"  per seed (both levels): mean {per.mean():.0f}s wall  max {per.max():.0f}s; "
              f"CPU {np.mean([r['cpu_secs'] for r in recs]):.0f}s per worker process",
              "  per level, by stage (median s): " + ", ".join(
                  f"{k} {np.median(v):.1f}" for k, v in stages.items()),
              f"  peak RSS per worker: max {max(r['peak_rss_mb'] for r in recs):.0f} MB",
-             f"  CPU-seconds per panel: {per.mean():.0f} (this machine, {a.workers} workers)"]
+             f"  CPU-seconds per panel: {per.mean():.0f} (this machine, {a.workers} workers)",
+             f"  power: at start {power_start}; at end {power_state()}"]
         text = "\n".join(L)
         print("\n" + text)
         (out / "smoke_cost.txt").write_text(text + "\n")
