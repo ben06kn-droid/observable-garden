@@ -1,10 +1,11 @@
 """The Verdict Don Quixote returns.
 
 It carries item 1's bracket and item 6's bits. Both are **declared here and
-computed elsewhere**: the bracket's ends are licensed by experiments that have
-not reported (7.1 for the lower, 7.3 for the upper), and filling them in now
-would be asserting the thing under test. Fields that part two populates are
-`None` and say so.
+computed elsewhere**. The bracket's lower end is fixed-sequence replay, licensed by
+7.1, which measured freezing as liberal; its upper end is the declared-class p-value,
+supplied by the caller when computed. Local-max pricing is **not** an upper end: 7.3
+reported without testing the conjecture it rests on, so it stays unlicensed. Fields a
+verdict was not given are `None` and say so.
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ class QuixoteVerdict:
     # prereg/bracketed-verdicts.md.
     p_frozen: float | None = None
     p_upper: float | None = None
-    bracket_source: str = "unbuilt: 7.2 part two, pending 7.1 and 7.3"
+    bracket_source: str = "not computed for this verdict"
     responsible_decision: str | None = None     # named when DEPENDS_ON_JUDGMENT
     # Picks whose named choice was not their rule's. The harness ran the rule, so
     # these are REPLAYABLE and do not bracket the run; they are reported because
@@ -113,11 +114,13 @@ class QuixoteVerdict:
         out.append("Bits are descriptive. They report how much the search "
                    "absorbed and never enter the correction.")
         if self.bracket is None and self.p_frozen is None:
-            out.append("No bracket: its ends are licensed by fixed-sequence-replay "
-                       "(lower) and 7.3's conjecture test (upper), neither of which "
-                       "has reported. This build does not compute it.")
+            out.append("No bracket: neither end was computed for this verdict. The "
+                       "lower end would be fixed-sequence replay, licensed by 7.1; the "
+                       "upper end the declared-class p-value.")
         elif self.bracket is None:
             out.append("Half a bracket: the lower end is fixed-sequence replay, which "
-                       "7.1 licensed by measuring freezing as liberal. The upper end "
-                       "waits on 7.3's local-max pricing and is not computed.")
+                       "7.1 licensed by measuring freezing as liberal. The upper end, "
+                       "the declared-class p-value, was not supplied; local-max "
+                       "pricing is not used for it, being unlicensed (7.3 reported "
+                       "without testing it).")
         return out

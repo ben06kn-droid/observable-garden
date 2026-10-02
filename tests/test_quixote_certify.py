@@ -67,7 +67,9 @@ def test_a_verdict_names_its_null_reports_the_other_two_and_prices_a_signal():
     assert 0.0 < v.p_certifying <= 1.0 and 0.0 < v.p_policy <= 1.0
     assert v.p_frozen is not None                    # the bracket's lower end is filled in
     assert v.p_upper is None                         # 7.3 has not licensed the upper end
-    assert v.bracket is None and "waits on 7.3" in " ".join(v.standard_reasons())
+    reasons = " ".join(v.standard_reasons())
+    assert v.bracket is None and "Half a bracket" in reasons
+    assert "local-max pricing is not used" in reasons and "unlicensed" in reasons
     assert v.exit_code == EXIT_CODES[v.status]
     assert any("7.1 measured this null at or below nominal" in r for r in v.reasons)
 
