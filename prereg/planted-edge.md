@@ -51,9 +51,15 @@ index sequence `idx` (`estimator.bootstrap.stationary_bootstrap_indices`) select
 whole days, so every asset moves with the same day and the cross-section's
 correlation, dispersion and co-movement are carried as they occurred. Block length
 **L = `select_block_length(E_in-sample)` = 7** (measured on the in-sample E,
-2026-10-01). The same L is used for the holdout. Features are **not** resampled: X
-stays in calendar order, so the residual is independent of X by construction, and
-no real feature–return relation survives into the panel.
+2026-10-01). The same L is used for the holdout.
+
+**Stated, and checked in code: the generator resamples return blocks independently
+of X, and X stays in its original calendar order.** It does **not** resample joint
+(X, r) rows. Row t of the panel pairs the real features `X_t` with the residual row
+`E[idx_t]` from some other day, so the residual is independent of X by construction,
+no real feature–return relation survives into the panel, and the only feature–return
+relation present is the planted one. `tests/test_planted_panel.py` asserts the panel's
+features are byte-identical to X's rows in order, whatever the seed.
 
 ### The planted signal
 
@@ -69,9 +75,16 @@ gross 1.
 so `m*` earns `c_β·‖w*_t‖²` gross per period above the residual, and every other
 member earns `c_β·⟨w_m,t, w*_t⟩` through its overlap with `m*`.
 
-**β is set ex ante, as a population net Sharpe.** For any member m on a segment,
-with `Σ` the residual covariance of E and the registered cost model (ETF one-way
-cost and borrow, as 6.5):
+**β is set ex ante, as a population net Sharpe.** The population Sharpe of a
+specification is **the ratio of the expectation of its per-period net return to its
+standard deviation under the planted DGP** — t uniform over the segment's rows, the
+residual row drawn from the pool — **computed analytically for any specification**,
+not estimated. It is not the expectation of a realized Sharpe ratio. Because the
+stationary bootstrap's marginal draw is uniform over the pool (uniform block starts,
+circular wrap) and E is demeaned, `E[⟨w_m,t, e⟩] = 0` and
+`Var[⟨w_m,t, e⟩] = w_m,t' Σ w_m,t` exactly, with **`Σ = E'E / T`, the pool's own
+covariance at ddof = 0**. With the registered cost model (ETF one-way cost and borrow,
+as 6.5):
 
     d_t = c·⟨w_m,t, w*_t⟩ − cost_m,t − borrow_m,t
     SR_pop(m) = mean_t(d_t) / sqrt( mean_t(w_m,t' Σ w_m,t) + var_t(d_t) ) · sqrt(252)
@@ -88,23 +101,31 @@ in-sample and holdout Sharpe of `m*`.
 `c_β` differs between levels. Every contrast between levels is therefore paired on
 the same residual draw and the same planted member.
 
-**The truth for every specification.** `SR_pop` is defined for **any** member, so
-every submission has an exact population Sharpe on each segment: no sampling
-noise, computed from X, Σ, c and the cost model. That is the outcome readouts 4
-and 5 use.
+**The truth for every specification, and the noise.** `SR_pop` is defined for
+**any** member, so every submission has an exact population Sharpe on each segment:
+no sampling noise, computed from X, Σ, c and the cost model. That is the outcome
+readouts 4 and 5 use. **A member's realized Sharpe on one panel is `SR_pop` plus the
+noise of that panel's residual draw — and that noise is exactly what the gate
+prices.** Every figure below is labelled population (analytic, no draw) or realized
+(one panel's draw).
 
 **Is β = 0 a global null? Measured, not assumed.** Planting `c_0 > 0` gives every
 member overlapping `m*` a gross edge, and a member with lower turnover than `m*`
-could net positive. **It does.** On 7 design panels (640000–640006, 2026-10-01,
-`runs/planted_edge_null_check.json`), with `c_0` set so that `SR_pop(m*) = 0`, the
-largest population net Sharpe in the class is **+0.03 to +0.91**, and **62 to
-23,022 members** are positive. A high-turnover `m*` needs a large `c_0` to cover its
+could net positive. **It does, in population.** On 7 design panels (640000–640006,
+2026-10-01, `runs/planted_edge_null_check.json`), with `c_0` set so that
+`SR_pop(m*) = 0`, the largest **population** net Sharpe in the class is **+0.03 to
++0.91**, and **62 to 23,022 members** are positive. **These are population figures,
+computed analytically with no residual draw** (`null_check` never samples), not
+realized ones: the positive members are a property of the DGP at that `c_0`, not
+noise. A high-turnover `m*` needs a large `c_0` to cover its
 own cost, and lower-turnover neighbours collect that gross edge more cheaply.
 **"β = 0" defined as `SR_pop(m*) = 0` is not a null.**
 
 **So the β = 0 level is the unplanted panel, `c = 0`** — the residual alone, where
 every member has zero gross edge and positive cost, hence `SR_pop < 0` for every
-member: a global null by construction. The planted levels 0.5, 1.0 and 1.5 keep the
+member: **a null for every member**, by construction. Realized member Sharpes on a
+β = 0 panel are pure noise around those negative population values, which is what the
+gate must refuse to certify. The planted levels 0.5, 1.0 and 1.5 keep the
 population-Sharpe definition. **This departs from setting every level by `SR_pop(m*)`,
 and is recorded as the reason.** Rule 1's definition of false certification is
 nonetheless per specification, so it stays correct if any level's null is partial: **a certificate is false when the certified
@@ -129,6 +150,20 @@ associations — momentum works, low volatility works — that the planted proce
 not honour, and an agent following them would be measured on its priors about
 markets rather than on its search. Labels are `F00`–`F39` by a seeded permutation
 per panel (child [1]'s stream, after the member draw).
+
+**The confound this removes, and the readout that measures it.** In 6.5, with real
+names, agents converged on one feature: **`beta252_z+` in 47 of 80 submissions**, and
+`vol252_rank−` in 40, across arms whose prompts differed. Real names, real in-sample
+returns and the panel's structure are confounded there. Here returns carry no real
+relation and names are masked, so **convergence on a fixed feature is measured, as a
+descriptive readout**: per arm and level, the share of submissions containing
+`beta252_z` (true index 32, either sign) **on panels whose `m*` does not contain it**,
+against its base rate (a uniformly random depth-3 member contains a given feature with
+probability 3/40 = 0.075) and against 6.5's 47/80 = 0.59.
+- *Near the base rate:* 6.5's convergence was names or real returns, not the features'
+  structure. *Well above it:* something in X's structure (its correlations, turnover,
+  autocorrelation) draws agents to that feature regardless of name — reported as a
+  property of X.
 
 ### Scripted half, first
 
@@ -208,15 +243,26 @@ reported as a descriptive readout beside check 4. (ii) **Even the uncapped proxy
 saturates only 0.40–0.50 here**, so the replay-gate arm may itself be unsaturated on
 this panel; check 4 is then read on both arms, the capped one being the arm whose
 non-saturation is designed rather than hoped for. (iii) The preflight ran at β = 1.0
-and 1.5 because nearest-the-bar is not yet known. **It is re-run at nearest-the-bar on
-the design block after the scripted half**; if the capped proxy's saturation there
-exceeds **0.50**, the deeper class (signed depth 4) is preflighted the same way
-before any agent run, and its outcome is recorded by a dated commit.
+and 1.5 because nearest-the-bar is not yet known; it is re-run at nearest-the-bar on
+the design block after the scripted half, as information.
 
-**Recorded beside it, because it changes rule 3:** the realized class argmax is the
-planted member on only **2/20 (β = 1.0) and 3/20 (β = 1.5)** panels. A correlated
-neighbour of `m*`, with a luckier residual draw, usually tops the class: class
-maximum 1.21 against `m*`'s realized 0.93 at β = 1.0. **Even an exhaustive search
+**The fallback, registered: the cap is read on the agent, not the proxy.** If the
+unsaturable arm's **agent** saturation — submissions equal to the realized class
+argmax — **exceeds one half at cap 3** at nearest-the-bar, **check 4 is read as
+uninformative** on this arm (both tiers would again be pricing one statistic), and the
+next step is registered now: **a signed depth-4 class priced by the moment engine**
+(`garden/_full_class_engine.py`). Recorded with it, so the step is not taken blind:
+the moment engine prices **linear base columns**, and on a net-of-cost panel the base
+basis is diagnostic — positions are normalised and costs are not linear in the weights
+— so a depth-4 extension needs its own registration of what statistic it prices
+before it runs.
+
+**Recorded beside it, because it changes rule 3. All preflight figures are
+REALIZED** — one residual draw per panel — except the planted scale and `SR_pop(m*)`,
+which are population. The **realized** class argmax is the planted member on only
+**2/20 (β = 1.0) and 3/20 (β = 1.5)** panels: a correlated neighbour of `m*`, with a
+luckier residual draw, usually tops the class — **realized** class maximum 1.21
+against `m*`'s **realized** 0.93 at β = 1.0 (population 1.00). **Even an exhaustive search
 recovers `m*` exactly on about one panel in eight.**
 
 **The tier rule applies.** The class is enumerable, so **the declared-class tier
@@ -230,8 +276,14 @@ the stationary bootstrap with the certifying null's block length chosen on the
 panel's demeaned base columns, replicate RNG seeded by the panel seed, so the two
 tiers of one run price on identical resamples. The class null is the class maximum
 of the demeaned net Sharpe over all 82,240 members, **streamed chunk by chunk from
-the panel without materialising a table** (`ClassTable.null_max`'s count-matrix
-device applied per chunk), so no worker holds the 2 GB a table would need.
+the panel without materialising a table of streams** (`ClassTable.null_max`'s
+count-matrix device applied per chunk), so no worker holds the 2 GB a table would
+need. **In the scripted half** the pass keeps what it computes per member — the
+realized Sharpe and the Sharpe on each of the B replicates, an 82,240 × 1,000 matrix
+(about 660 MB) — and the searchers, realized and under trigger replay, score by lookup
+into those same arrays (`experiments/planted_edge.py`). A searcher's score is then that
+member's value in the class pass exactly, and both tiers price one replicate with one
+number.
 
 **Seeds are shared across arms by index**, as in 7.3, so arm contrasts are paired
 on the same panel.
@@ -327,10 +379,13 @@ against the scripted rate (known to ±0.011 at n = 2,000).
 depth ≤ 3, as **sharing at least two of `m*`'s three signed features**. Rates per
 level and arm, Wilson intervals, each beside its **exhaustive-search base rate**:
 the share of panels whose realized class argmax equals or contains `m*`, measured
-on the scripted half's draws. The preflight puts "equals" at **2–3 of 20** for the
-class argmax itself, so "equals" is reported but **"contains" is the readout**.
-- *Predicted:* "contains" rising in β, near zero at β = 0, and at or below the
-  exhaustive base rate.
+on the scripted half's draws. **Both are registered readouts**, each with both
+branches below. The preflight puts "equals" at **2–3 of 20** (realized) for the class
+argmax itself, so "equals" is expected to be small for every searcher, and its
+detectability is stated accordingly.
+- *Predicted:* both rising in β, near zero at β = 0, and at or below the exhaustive
+  base rate. "Equals" at n = 20 can only show a rate near zero against one well above
+  it: at 0/20 the upper Wilson end is 0.161.
 - *Recovery near the base rate:* the agent finds what the class's own maximum would.
   *Well below it:* the agent misses the edge's neighbourhood. *Recovery low where
   certification is high:* the gate certifies neighbours of the edge, a finding about
@@ -400,13 +455,15 @@ them with measured rates on this panel.
 
 ## Cost
 
-- **Scripted half, box.** 6 searchers × 4 levels × 2,000 panels, each priced at the
-  class tier over 82,240 members on T = 3,019. The class maximum is the cost:
-  **150 s of CPU per panel** measured alone, **250 s** median with 7 workers on an
-  8-core laptop (the preflight). Planted panels at
-  different levels share the residual draw but not the streams, so 8,000 class
-  passes ≈ **333 CPU-hours**; on the c7a.8xlarge (32 cores) about **10–12 hours**,
-  about **$15–20**. The searchers' own scoring is small against that.
+- **Scripted half, box. Measured, not projected from components:** the smoke on
+  980000–980007 (8 panels × 4 levels, B = 1,000, 4 workers on an 8-core laptop,
+  2026-10-01, `runs/_smoke/planted_edge/smoke_cost.txt`, cost only) took **808 s per
+  seed** for all four levels: class pass 164 s and trigger nulls 39 s per level, the
+  rest negligible; peak RSS **846 MB per worker**. For 2,000 seeds that is **449
+  CPU-hours** at the laptop's contended per-core speed — about **14.5 h on 31 workers,
+  about $24** on the c7a.8xlarge (memory ≈ 26 GB of 64). **Below the $40 threshold,
+  so no lever is taken.** The README's sizing rule still applies: it is re-measured on
+  the box, at 31 workers, on the same smoke block, before the registered launch.
 - **Agent half, seat.** 60 + 42–60 + 60 = **162–180 runs**, at 6.5's measured
   $0.075–0.123 per run: **$12–22**. Check 2's re-presentations: about 10 picks
   and 30–40 meta decisions × 20 presentations ≈ **800–1,000 model calls**,
@@ -453,9 +510,14 @@ The class, B and the levels used by the agent half are never levers.
 
 ## Build items, before the live commit
 
-1. `environments/planted_panel.py`: the registered generator, reproducing
-   `experiments/planted_edge_preflight.py`'s planted scale and `SR_pop` on the
-   design seeds to 1e-12.
+1. **BUILT 2026-10-01.** `environments/planted_panel.py`, the registered generator,
+   with `tests/test_planted_panel.py`: X unchanged and in order whatever the seed;
+   levels paired; level 0 the residual alone; the scale solving its target; the
+   analytic moments matching 4,000-draw Monte Carlo; level 0 a null for every member;
+   and, on the ETF data, the preflight's planted member exactly and its scale to within
+   the ddof difference (2/T relative).
+1b. **BUILT 2026-10-01.** `experiments/planted_edge.py`, the scripted driver, with
+   `tests/test_planted_edge_driver.py`; `--smoke` on 980000–980999, cost only.
 2. The sealed holdout generator and archive, with its SHA-256 in this file.
 3. Feature-name masking in the agent-facing view, with a test that no real name
    crosses.
@@ -464,3 +526,19 @@ The class, B and the levels used by the agent half are never levers.
 5. `fidelity.py --live`, for check 2.
 6. If it is to run: `short_list` and the prior-weighted pricing.
 7. The unsaturable arm's cap in the harness, with a refusal test.
+
+## Draft revisions
+
+**2026-10-01, four, before anything registered runs.** (1) Population Sharpe defined
+as the ratio of the expectation to the standard deviation of the per-period net
+return under the planted DGP, analytic for any specification, with the pool's ddof = 0
+covariance — the preflight's prototype used ddof = 1, a relative difference of 1/3,019
+in the variance term; the β = 0 panel (`c = 0`) is a null for every member; realized
+member Sharpes are the noise the gate prices; the generator resamples return blocks
+independently of X in original order, not joint (X, r) rows, stated and tested;
+preflight figures labelled realized, and the null check's labelled population, which
+is what it computed. (2) Recovery: exact match and two-of-three signed overlap both
+registered. (3) Masking stands; the departure from §4, its reason, and 6.5's
+convergence on `beta252_z+` (47/80) as a readout. (4) Cap 3 by rule, with the fallback
+read on the agent: saturation above one half reads check 4 as uninformative and
+registers a depth-4 class via the moment engine as the next step.
