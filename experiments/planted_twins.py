@@ -205,6 +205,52 @@ class MultiCache:
         return self.sr[key]
 
 
+def median_lag1_signed_singles(panel) -> float:
+    """The score-rank cell's autocorrelation sign: the median, over the real panel's 80
+    signed depth-1 members (every feature at +1 and at -1), of each net stream's
+    demeaned lag-1 autocorrelation, sum_{t>=2} x_t x_{t-1} / sum_t x_t^2.
+
+    Deliberately NOT the p-rank cell's figure (`run_level`), which is the median over the
+    first class-pass chunk's 512 members -- the depth-1 members and the first depth-2
+    ones in enumeration order. The two answer the same question from different member
+    sets and are not interchangeable."""
+    from environments.class_table import streams_for
+    K = panel.features.shape[2]
+    X = streams_for(panel, [((k, s),) for k in range(K) for s in (1.0, -1.0)])
+    x0 = X - X.mean(axis=1, keepdims=True)
+    num = (x0[:, 1:] * x0[:, :-1]).sum(axis=1)
+    den = (x0 * x0).sum(axis=1)
+    return float(np.median(np.where(den > 0, num / np.where(den > 0, den, 1.0), 0.0)))
+
+
+def load_done(path: Path) -> set:
+    """Seeds already on record, for resume. A process killed mid-write leaves a
+    TRUNCATED LAST LINE with no newline: it is removed, and the file rewritten without
+    it, so the next record is not glued onto it. A malformed line anywhere else is real
+    corruption and raises."""
+    if not path.exists():
+        return set()
+    text = path.read_text()
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines = lines[:-1]
+    done, keep = set(), []
+    for i, ln in enumerate(lines):
+        try:
+            rec = json.loads(ln)
+        except json.JSONDecodeError:
+            if i == len(lines) - 1:
+                print(f"  resume: dropped a truncated last line ({len(ln)} chars); "
+                      "its seed is redone", flush=True)
+                path.write_text("".join(k + "\n" for k in keep))
+                break
+            raise SystemExit(f"{path}: line {i + 1} is malformed and is not the last line; "
+                             "that is corruption, not an interrupted write")
+        done.add(rec["seed"])
+        keep.append(ln)
+    return done
+
+
 def score_rank_p(real: float, twin_scores) -> float:
     """`(1 + #{twins scoring >= the real run}) / (K + 1)`: the registered rank, with a
     higher score the more extreme and ties counted against the real run."""
@@ -253,6 +299,7 @@ def run_level_score(base, seed: int, beta: float) -> dict:
         out.append(rec)
     t["searches"] = time.time() - t0
     return {"seed": seed, "beta": beta, "c": draw.c, "prefix_batches": cache.batches,
+            "median_lag1_autocorr_signed_singles": median_lag1_signed_singles(panel),
             "searchers": out, "secs": t}
 
 
@@ -307,8 +354,7 @@ def main(argv=None) -> int:
     out = Path(f"runs/_smoke/planted_twins{suffix}" if smoke else a.out + suffix)
     out.mkdir(parents=True, exist_ok=True)
     path = out / "draws.jsonl"
-    done = {json.loads(l)["seed"] for l in path.read_text().splitlines() if l} \
-        if path.exists() else set()
+    done = load_done(path)
     todo = [(seed0 + i, levels, a.B, a.cell) for i in range(n) if seed0 + i not in done]
     print(f"{'SMOKE (cost only)' if smoke else 'REGISTERED'}: seeds {seed0}-{seed0 + n - 1}, "
           f"levels {levels}, K {K} x {len(CONSTRUCTIONS)}, "

@@ -104,3 +104,61 @@ def test_an_empty_real_submission_is_recorded_and_never_rejects(base, monkeypatc
     assert s["support"] is None and s["truth_in_sample"] is None
     for c in tw.CONSTRUCTIONS:
         assert s[f"p_score_{c}"] == 1.0
+
+
+def test_the_score_cell_records_the_signed_singles_lag1_autocorrelation(base):
+    r = tw.run_level_score(base, 10, 0.0)
+    v = r["median_lag1_autocorr_signed_singles"]
+    assert -1.0 <= v <= 1.0
+    d = pp.make_draw(base, 10, 0.0)
+    assert v == tw.median_lag1_signed_singles(d.in_sample)
+    # and it is NOT the cost record's: no rule quantity, but a property of the panel
+    assert "autocorr" not in json.dumps(tw.cost_only(
+        {"seed": 1, "cell": "score", "secs": 1.0, "cpu_secs": 1.0, "peak_rss_mb": 1.0,
+         "levels": [{"secs": {}, "prefix_batches": 1}]}))
+
+
+def test_resume_drops_a_truncated_last_line_and_keeps_the_file_appendable(tmp_path):
+    f = tmp_path / "draws.jsonl"
+    f.write_text('{"seed": 1}\n{"seed": 2}\n{"seed": 3, "lev')
+    assert tw.load_done(f) == {1, 2}
+    assert f.read_text() == '{"seed": 1}\n{"seed": 2}\n'
+    with open(f, "a") as fh:
+        fh.write('{"seed": 3}\n')
+    assert tw.load_done(f) == {1, 2, 3}
+
+
+def test_resume_refuses_a_malformed_line_that_is_not_the_last(tmp_path):
+    f = tmp_path / "draws.jsonl"
+    f.write_text('{"seed": 1}\n{"se\n{"seed": 3}\n')
+    with pytest.raises(SystemExit, match="corruption"):
+        tw.load_done(f)
+
+
+def test_an_empty_twin_submission_never_counts_against_the_real_run(base, monkeypatch):
+    """A twin whose search submits nothing scores -inf, which is never >= a real
+    run's finite score: so it never raises the real run's p."""
+    assert tw.score_rank_p(0.3, [float("-inf")] * 19) == 1 / 20
+    assert tw.score_rank_p(-5.0, [float("-inf")] * 19) == 1 / 20
+
+    from searchers.meta_adaptive import Trace
+    first = {}
+
+    class EmptyOnTwins:
+        """Searches the real panel (the first matrix it sees) normally, and submits
+        nothing on every twin."""
+        name = "empty-on-twins"
+
+        def _search(self, K, single, support_score, **kw):
+            v = single(0)
+            first.setdefault("v", v)
+            if v != first["v"]:
+                return Trace(support=(), score=float("-inf"))
+            return Trace(support=((0, 1.0),), score=v)
+
+    monkeypatch.setattr(tw, "_searchers", lambda seed, T, ppy: [EmptyOnTwins()])
+    r = tw.run_level_score(base, 11, 1.0)
+    (s,) = r["searchers"]
+    assert s["support"] == [[0, 1.0]]
+    for c in tw.CONSTRUCTIONS:
+        assert s[f"p_score_{c}"] == 1 / 20 and s[f"ties_{c}"] == 0
