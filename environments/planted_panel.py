@@ -241,3 +241,120 @@ def truth(base: Base, draw: PlantedDraw, support) -> dict:
             "holdout": population_sharpe(base.holdout, base.Sigma_ho,
                                          member_weights(base.holdout, support),
                                          draw.w_star_ho, draw.c)}
+
+
+# -- every member's population Sharpe, once per seed, in closed form ----------
+#
+# For member m with weights w_t, overlap a_t = <w_t, w*_t> and cost-plus-borrow k_t:
+#     d_t(c) = c a_t - k_t
+#     mean(c) = c E[a] - E[k]
+#     var(c)  = E[w' Sigma w] + c^2 Var(a) - 2c Cov(a, k) + Var(k)
+# (t uniform over the segment, population moments). E[k], E[k^2] and E[w' Sigma w]
+# depend only on X, Sigma and the costs: PANEL-INVARIANT, computed once per run.
+# E[a], E[a^2] and E[a k] depend on w*, so once per SEED, and they are accumulated
+# inside the class pass's own position loop (`streams_with_overlap`). Every level then
+# follows in closed form, with no further pass.
+
+def _positions_loop(panel, supports, on_step):
+    """`environments.class_table.streams_for`'s position loop, verbatim, calling
+    `on_step(t, new, prev)` each period. Kept identical so that anything computed
+    beside the streams sees exactly the positions the streams were made from."""
+    T, M, K = panel.features.shape
+    n = len(supports)
+    Wf = np.zeros((K, n))
+    for j, sup in enumerate(supports):
+        for k, s in sup:
+            Wf[int(k), j] = float(s)
+    held = np.zeros((n, M))
+    prev = np.zeros((n, M))
+    flat = bool(panel.flat_overnight)
+    for t in range(T):
+        free = panel.tradable[t]
+        if flat and panel.session_start[t]:
+            held = np.zeros((n, M))
+        target = np.where(free, (panel.features[t] @ Wf).T, 0.0)
+        if free.any():
+            target = target - target[:, free].mean(axis=1, keepdims=True) * free
+            gross = np.abs(target[:, free]).sum(axis=1, keepdims=True)
+            nz = gross[:, 0] > 0
+            target[nz] = target[nz] / gross[nz]
+        new = np.where(free, target, held)
+        if flat and panel.session_end[t]:
+            new = np.zeros((n, M))
+        on_step(t, new, prev)
+        held = prev = new
+
+
+def invariant_moments(panel, Sigma, supports) -> dict:
+    """E[k], E[k^2] and E[w' Sigma w] per member: the panel-invariant moments."""
+    n = len(supports)
+    Lc = np.linalg.cholesky(Sigma)
+    sk, sk2, sq = np.zeros(n), np.zeros(n), np.zeros(n)
+
+    def step(t, new, prev):
+        k = ((np.abs(new - prev) * panel.cost_rate[t]).sum(axis=1)
+             + (np.clip(-new, 0, None) * panel.borrow_rate[t]).sum(axis=1))
+        sk[:] += k
+        sk2[:] += k * k
+        P = new @ Lc
+        sq[:] += (P * P).sum(axis=1)
+
+    _positions_loop(panel, supports, step)
+    T = panel.features.shape[0]
+    return {"Ek": sk / T, "Ek2": sk2 / T, "Eq": sq / T}
+
+
+def streams_with_overlap(panel, supports, w_star):
+    """(streams, E[a], E[a^2], E[a k]) for a batch of members. The streams are
+    `streams_for`'s, bit for bit: the same loop and the same expression, evaluated
+    in the same order (`tests/test_planted_panel.py`)."""
+    T = panel.features.shape[0]
+    n = len(supports)
+    out = np.empty((n, T))
+    sa, sa2, sak = np.zeros(n), np.zeros(n), np.zeros(n)
+
+    def step(t, new, prev):
+        gross = (new * panel.returns[t]).sum(axis=1)
+        cost = (np.abs(new - prev) * panel.cost_rate[t]).sum(axis=1)
+        borrow = (np.clip(-new, 0, None) * panel.borrow_rate[t]).sum(axis=1)
+        out[:, t] = gross - cost - borrow
+        a = new @ w_star[t]
+        sa[:] += a
+        sa2[:] += a * a
+        sak[:] += a * (cost + borrow)
+
+    _positions_loop(panel, supports, step)
+    return out, sa / T, sa2 / T, sak / T
+
+
+def population_from_moments(Ea, Ea2, Eak, inv: dict, c: float, ppy: float) -> np.ndarray:
+    """Every member's population Sharpe at planted scale c, in closed form."""
+    mean = c * Ea - inv["Ek"]
+    var = (inv["Eq"] + c * c * (Ea2 - Ea * Ea) - 2 * c * (Eak - Ea * inv["Ek"])
+           + (inv["Ek2"] - inv["Ek"] ** 2))
+    return mean / np.sqrt(var) * np.sqrt(ppy)
+
+
+def invariants_for(base: Base, chunk: int = 512, cache_dir=None) -> dict:
+    """The panel-invariant moments for every class member, cached on disk keyed by
+    the in-sample panel's hash and Sigma, so a run computes them once and every
+    worker loads them."""
+    import hashlib
+    from pathlib import Path
+    from environments.class_table import _panel_hash
+    key = hashlib.sha256((_panel_hash(base.in_sample) + CLS.name).encode()
+                         + np.ascontiguousarray(base.Sigma_is).tobytes()).hexdigest()[:16]
+    d = Path(cache_dir) if cache_dir else Path(__file__).resolve().parent.parent / \
+        "data" / "planted_cache"
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / f"invariants_{key}.npz"
+    if f.exists():
+        z = np.load(f)
+        return {k: z[k] for k in ("Ek", "Ek2", "Eq")}
+    parts = [invariant_moments(base.in_sample, base.Sigma_is, base.members[s:s + chunk])
+             for s in range(0, len(base.members), chunk)]
+    inv = {k: np.concatenate([p[k] for p in parts]) for k in ("Ek", "Ek2", "Eq")}
+    tmp = f.with_name(f".{f.stem}.{__import__('os').getpid()}.tmp.npz")
+    np.savez(tmp, **inv)
+    __import__("os").replace(tmp, f)
+    return inv

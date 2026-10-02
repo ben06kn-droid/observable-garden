@@ -142,3 +142,38 @@ def test_the_registered_generator_reproduces_the_preflights_scale():
         r = pre[(seed, 1.0)]
         assert [list(p) for p in d.m_star] == r["planted"]
         assert d.c == pytest.approx(r["c"], rel=2.0 / 3019)
+
+
+def test_streams_with_overlap_are_streams_for_bit_for_bit(base):
+    from environments.class_table import streams_for
+    d = pp.make_draw(base, 12, 1.0)
+    sups = base.members[:40]
+    S, *_ = pp.streams_with_overlap(d.in_sample, sups, d.w_star_is)
+    assert np.array_equal(S, streams_for(d.in_sample, sups))
+
+
+def test_closed_form_population_equals_the_direct_pass_at_every_level(base, tmp_path):
+    """Invariant moments once, overlap moments once per seed, every level in closed
+    form: equal to the per-level batched pass."""
+    inv = pp.invariants_for(base, cache_dir=tmp_path)
+    for seed in (13, 14):
+        d0 = pp.make_draw(base, seed, 0.0)
+        _, Ea, Ea2, Eak = pp.streams_with_overlap(d0.in_sample, base.members, d0.w_star_is)
+        for beta in pp.LEVELS:
+            d = pp.make_draw(base, seed, beta)
+            cf = pp.population_from_moments(Ea, Ea2, Eak, inv, d.c,
+                                            base.in_sample.periods_per_year)
+            direct = pp.population_sharpes(base.in_sample, base.Sigma_is, d.w_star_is,
+                                           d.c, base.members)
+            np.testing.assert_allclose(cf, direct, rtol=1e-9, atol=1e-12)
+            if beta > 0:
+                j = base.members.index(d.m_star)
+                assert cf[j] == pytest.approx(beta, abs=1e-8)
+
+
+def test_the_invariants_are_cached_and_reloaded(base, tmp_path):
+    a = pp.invariants_for(base, cache_dir=tmp_path)
+    assert len(list(tmp_path.glob("invariants_*.npz"))) == 1
+    b = pp.invariants_for(base, cache_dir=tmp_path)
+    for k in a:
+        assert np.array_equal(a[k], b[k])

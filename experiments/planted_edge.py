@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import resource
+import sys
 import time
 from pathlib import Path
 
@@ -84,7 +85,17 @@ def _searchers(seed: int, T: int, ppy: float):
     return [s.set_class(pp.CLS) for s in registered_71(seed, se)]
 
 
-def run_level(base, seed: int, beta: float, B: int) -> dict:
+def peak_rss_mb() -> float:
+    """`ru_maxrss` is BYTES on macOS and KILOBYTES on Linux."""
+    r = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return r / 2**20 if sys.platform == "darwin" else r / 2**10
+
+
+def run_level(base, seed: int, beta: float, B: int, inv: dict,
+              overlap: tuple | None = None) -> dict:
+    """One level of one seed. `overlap` is the seed's (E[a], E[a^2], E[a k]); the
+    first level computes it inside its class pass and every later level of the same
+    seed reuses it, since positions and w* do not change with the level."""
     t = {}
     t0 = time.time()
     draw = pp.make_draw(base, seed, beta)
@@ -112,8 +123,18 @@ def run_level(base, seed: int, beta: float, B: int) -> dict:
     N = len(members)
     obs = np.empty(N)
     rep = np.empty((N, B))
+    first = overlap is None
+    if first:
+        Ea, Ea2, Eak = np.empty(N), np.empty(N), np.empty(N)
+    else:
+        Ea, Ea2, Eak = overlap
     for s in range(0, N, CHUNK):
-        X = streams_for(panel, members[s:s + CHUNK])
+        if first:
+            # streams_for's streams bit for bit, plus the seed's overlap moments
+            X, Ea[s:s + CHUNK], Ea2[s:s + CHUNK], Eak[s:s + CHUNK] = \
+                pp.streams_with_overlap(panel, members[s:s + CHUNK], draw.w_star_is)
+        else:
+            X = streams_for(panel, members[s:s + CHUNK])
         obs[s:s + len(X)] = _sharpe_rows(X, ann)
         X0 = X - X.mean(axis=1, keepdims=True)
         mean = (X0 @ C) / T
@@ -153,20 +174,33 @@ def run_level(base, seed: int, beta: float, B: int) -> dict:
     t["trigger_nulls"] = t_null
     del rep
 
-    # 4. truths, recovery and the realized holdout
+    # 4. truths, recovery and the realized holdout. Every member's population Sharpe
+    # in closed form from the pass's overlap moments and the run's invariants.
     t0 = time.time()
+    pop = pp.population_from_moments(Ea, Ea2, Eak, inv, draw.c, panel.periods_per_year)
     star = canonical(draw.m_star)
     star_set = set(star)
+    if beta > 0:
+        assert abs(pop[index[star]] - beta) < 1e-8, "closed form disagrees with the scale"
+    jp = int(np.argmax(pop))
+    plus = canonical(members[jp])
+
+    def overlap(sup, ref):
+        cs = set(canonical(sup)) if sup else set()
+        need = 2 if len(ref) == 3 else len(ref)
+        return len(cs & set(ref)) >= need
 
     def recovery(sup):
-        cs = set(canonical(sup)) if sup else set()
         return {"equals": canonical(sup) == star if sup else False,
-                "two_of_three": len(cs & star_set) >= 2}
+                "two_of_three": overlap(sup, star),
+                "equals_pop_best": canonical(sup) == plus if sup else False,
+                "two_of_three_pop_best": overlap(sup, plus)}
 
     ho_cache = StreamCache(draw.holdout)
     for r in out_s:
         sup = r["support"]
-        r["truth"] = pp.truth(base, draw, sup) if sup else None
+        r["truth"] = ({"in_sample": float(pop[index[canonical(sup)]]),
+                       "holdout": pp.truth(base, draw, sup)["holdout"]} if sup else None)
         r["holdout_realized"] = _sharpe(ho_cache.get(sup), ann) if sup else None
         r.update(recovery(sup))
         r["support"] = [list(p) for p in canonical(sup)] if sup else None
@@ -178,20 +212,30 @@ def run_level(base, seed: int, beta: float, B: int) -> dict:
            "class_argmax_truth": pp.truth(base, draw, best_m),
            "class_argmax_recovery": recovery(best_m),
            "null_max_mean": float(M_b.mean()),
+           "pop_best": [list(p) for p in plus], "pop_best_sr": float(pop[jp]),
+           "pop_n_positive": int((pop > 0).sum()),
+           "planted_rank": int((pop > pop[index[star]]).sum()) + 1,
            "null_max_q": {str(a): float(np.quantile(M_b, 1 - a)) for a in ALPHAS},
            "searchers": out_s}
     t["finalise"] = time.time() - t0
     rec["secs"] = t
+    rec["_overlap"] = (Ea, Ea2, Eak)
     return rec
 
 
 def run_seed(payload) -> dict:
     seed, levels, B = payload
     base = pp.load_base()
+    inv = pp.invariants_for(base)          # computed once by the parent, loaded here
     t0 = time.time()
-    out = {"seed": seed, "levels": [run_level(base, seed, b, B) for b in levels]}
+    recs, overlap = [], None
+    for b in levels:
+        r = run_level(base, seed, b, B, inv, overlap)
+        overlap = r.pop("_overlap")
+        recs.append(r)
+    out = {"seed": seed, "levels": recs}
     out["secs"] = time.time() - t0
-    out["peak_rss_mb"] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**20
+    out["peak_rss_mb"] = peak_rss_mb()
     return out
 
 
@@ -229,6 +273,12 @@ def main(argv=None) -> int:
     print(f"{'SMOKE (cost only)' if smoke else 'REGISTERED'}: seeds {seed0}-{seed0 + n - 1},"
           f" levels {levels}, B {a.B}, {len(todo)} to run, {len(done)} done", flush=True)
 
+    # the panel-invariant population moments: once per run, in the parent, cached
+    ti = time.time()
+    pp.invariants_for(pp.load_base())
+    t_inv = time.time() - ti
+    print(f"  invariant population moments ready in {t_inv:.0f}s (0 if cached)", flush=True)
+
     t0 = time.time()
     from concurrent.futures import ProcessPoolExecutor, as_completed
     with ProcessPoolExecutor(max_workers=a.workers) as pool, open(path, "a") as fh:
@@ -259,6 +309,8 @@ def main(argv=None) -> int:
              "  per level, by stage (median s): " + ", ".join(
                  f"{k} {np.median(v):.1f}" for k, v in stages.items()),
              f"  peak RSS per worker: max {max(r['peak_rss_mb'] for r in recs):.0f} MB",
+             f"  invariant population moments, once per run: {t_inv:.0f}s this invocation"
+             " (0 when the cache already held them)",
              f"  projection for 2,000 seeds: {cpu_h:.0f} CPU-hours at this machine's "
              f"per-core speed under {a.workers} workers;",
              f"    on 31 workers ~{cpu_h / 31:.1f} h wall, ~${cpu_h / 31 * PRICE_PER_HOUR:.0f}"

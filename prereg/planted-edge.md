@@ -135,10 +135,17 @@ submission's in-sample `SR_pop ≤ 0`**, whatever the level.
 
 The planted process continues into 2018–2022: the same `m*` and `c_β`, the holdout
 segment's own residual pool `E_holdout` (demeaned over 2018–2022), resampled with
-child [2]. **Every registered panel's holdout returns are generated at the live
-commit**, before any run, for every seed and level, written to an archive that is
+child [2]. **The seal covers the agent seeds only.** Every
+agent panel's holdout returns are generated at the live commit of the agent half,
+before any agent run, for every seed and level, written to an archive that is
 encrypted and moved off the machine as 6.5's holdout was, with its SHA-256 recorded
-in this file. Opened once, after every run is priced.
+in this file, and opened once, after every agent run is priced.
+
+**The scripted half computes its holdout inline**: each scripted panel's holdout
+returns are generated from child [2] inside the draw that prices it, used for the
+secondary readout, and not stored. Nothing is sealed for it because nothing needs to
+be: a scripted searcher is code with no path to the holdout, and its submission is
+fixed before the holdout is generated in the same process.
 
 ### Masking
 
@@ -464,6 +471,16 @@ them with measured rates on this panel.
   about $24** on the c7a.8xlarge (memory ≈ 26 GB of 64). **Below the $40 threshold,
   so no lever is taken.** The README's sizing rule still applies: it is re-measured on
   the box, at 31 workers, on the same smoke block, before the registered launch.
+- **Re-measured 2026-10-02**, after every member's `SR_pop` moved into the run
+  (invariants once per run, 87 s, cached; overlap moments once per seed in the first
+  level's class pass; every level in closed form). Same block, same 8 panels, same 4
+  workers: **1,170 s per seed**, peak RSS 866 MB, projecting 650 CPU-hours and about
+  **$34** on the box (`runs/_smoke/planted_edge/smoke_cost.txt`). **That run was
+  confounded: the laptop was in Low Power Mode** (on battery charge 21%). Every stage
+  slowed by the same factor — generation 1.44×, trigger nulls 1.41× (code unchanged),
+  class pass 1.43× (the stage that changed) — so the code itself costs about 1–2 % more
+  per seed at equal machine speed, roughly 820–830 s, not 1,170. Both figures are under
+  the $40 threshold; the box's own smoke decides.
 - **Agent half, seat.** 60 + 42–60 + 60 = **162–180 runs**, at 6.5's measured
   $0.075–0.123 per run: **$12–22**. Check 2's re-presentations: about 10 picks
   and 30–40 meta decisions × 20 presentations ≈ **800–1,000 model calls**,
@@ -518,7 +535,8 @@ The class, B and the levels used by the agent half are never levers.
    the ddof difference (2/T relative).
 1b. **BUILT 2026-10-01.** `experiments/planted_edge.py`, the scripted driver, with
    `tests/test_planted_edge_driver.py`; `--smoke` on 980000–980999, cost only.
-2. The sealed holdout generator and archive, with its SHA-256 in this file.
+2. The sealed holdout generator and archive for the **agent** seeds, with its SHA-256
+   in this file.
 3. Feature-name masking in the agent-facing view, with a test that no real name
    crosses.
 4. `price_runs` for planted panels: per-run class table built on the box, the
@@ -556,6 +574,14 @@ certificate. Rule 1 is read with this definition at **every level**:
   design panels is **51,520–77,402 of 82,240** (table below), so the rule has content
   there too. It is read per level with the same one-sided lower-Wilson rule, the same
   replication branch, and the same detectability at its n.
+- **The false-certification rate is per run**: false certificates over **all runs at
+  the level, per arm** — a run that issued no certificate counts in the denominator as
+  a non-rejection (as `prereg/agent-cell.md` amendment 11 has it), and the scripted
+  half reads it per searcher in place of per arm.
+- **Power counts correct certificates**: certificates whose submission has
+  `SR_pop > 0`, over all runs at the level, per arm (per searcher, scripted). A false
+  certificate at a planted level is never counted as power, so rules 1 and 2 partition
+  the certificates at every level.
 - *Predicted at or below nominal at every level.* The class tier's null is the class
   maximum with **every** member demeaned, which stochastically dominates the maximum
   over the members whose null is true; so a certificate on any `SR_pop ≤ 0` member has
@@ -590,11 +616,16 @@ nothing. Rule 5's comparison is unchanged, since it already scores each submissi
 its own `SR_pop`.
 
 *Build item this adds, recorded so it is not hidden in cost:* `m⁺` needs every member's
-`SR_pop` at every panel and level. It is to be computed **inside the class pass's own
-position loop** — the positions are the same, and `SR_pop` adds the deterministic
-term `c⟨w, w*⟩` and the quadratic `w'Σw` to what `streams_for` already accumulates —
-and the smoke re-measured. A separate pass would cost about as much again as the
-class pass; if the re-measured cost exceeds $40, the registered lever order applies.
+`SR_pop` at every panel and level. **Built 2026-10-02**: the panel-invariant moments
+(`E[k]`, `E[k²]`, `E[w'Σw]`) are computed **once per run** and cached
+(`planted_panel.invariants_for`, 87 s on the laptop); the overlap moments (`E[a]`,
+`E[a²]`, `E[ak]`, with `a = ⟨w, w*⟩`) are accumulated **inside the class pass's own
+position loop** (`streams_with_overlap`, whose streams are `streams_for`'s bit for
+bit); and every level's `SR_pop` follows **in closed form**
+(`population_from_moments`), equal to the direct per-level pass to 1e-9
+(`tests/test_planted_panel.py`) and reproducing
+`runs/planted_edge_population_levels.json` exactly on seeds 640004 and 640001. The
+re-measured smoke is under Cost.
 
 **3. What the grid is denominated in.** **β is the planted member `m*`'s in-sample
 population net Sharpe**: annualised by √252, net of the registered ETF cost and
@@ -616,3 +647,26 @@ by β as registered, and nearest-the-bar is still chosen by β. **Added as a des
 readout**: power reported again against each panel's class-maximum `SR_pop`, binned,
 so the curve can be read in the units of the edge the class actually holds. No rule
 reads it.
+
+## Proposed, not adopted: a two-stage live commit — 2026-10-02
+
+**Proposed for approval; this file stays not live until it is adopted by a dated
+commit.**
+
+- **Stage 1, the scripted half, live now-ish.** Its build items are done — **1** (the
+  generator) and **1b** (the scripted driver), both tested, with the smoke measured.
+  A dated commit makes the scripted half live: the design as it stands, the scripted
+  rules (1, 2, 3, 5 per searcher, and the standing check), seeds 600000–601999 and
+  replication 610000–611999, B = 1,000. The curve then runs on the box.
+- **Stage 2, the agent half, by a second dated commit after the scripted read** and
+  after build items **2–7** exist and pass their tests. It fixes what only the
+  scripted half can supply — nearest-the-bar, the measured standing check, rule 5's
+  detectable difference, the exhaustive base rates for recovery — and the sealed
+  holdout archive for the agent seeds with its SHA-256.
+
+**Why split.** The agent half's design inputs are outputs of the scripted half, so a
+single live commit would either fix them before they exist or leave them to be chosen
+after data. Two commits let each half go live with everything it reads already on
+record. **What stage 1 must not do:** change anything the agent half registers; a
+change found necessary there is a stage-2 amendment, dated, before the agent seeds
+are generated.
