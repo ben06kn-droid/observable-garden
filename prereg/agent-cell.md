@@ -1507,3 +1507,21 @@ and the evaluate arms 7; control's fit (b = +0.533, R² 0.999) is run 8's levera
 Evaluation counts are different units across the two kinds of arm and are not pooled.
 
 **Cell 3 is closed.** Its readings are this section and "Cell 3, read once" above.
+
+#### Correction, 2026-10-02: 7.3's scripted half did not test the local-max conjecture
+
+Two places above say it did. **"What these two license"** says "the local-max
+conjecture is 7.3's scripted half", and **the CLOSED section** says "The local-max
+conjecture was 7.3's scripted half and is unaffected." **Both are wrong.** The
+scripted half's own registration says the opposite: it "says nothing about local
+pricing, which 7.2 built behind a flag and which this experiment no longer needs, since
+a contradicted pick is replayable" (`prereg/unfaithful-searchers.md`). Its rule 3 found
+a contradicted `pick` costs exactly nothing, so local pricing was never needed as a
+remedy, and no rule there tests P4.
+
+**The corrected statement:** neither half of 7.3 tested the local-max conjecture. This
+cell deferred check 2, and the scripted half did not address local pricing. **Both
+pricing flags remain unlicensed**, and the declared-class tier is the fallback. Nothing
+read in this file rested on the wrong sentence: it was an attribution, and no rule,
+verdict or flag depended on it. The same correction is in `quixote/pricing.py`,
+`certify.py`, `__init__.py`, `README.md` and `verdict.py`.

@@ -28,8 +28,9 @@ class QuixoteVerdict:
 
     # -- item 1: the bracket ---------------------------------------------
     # p_frozen is licensed by 7.1's rule 2 (freezing must be liberal for it to
-    # be a lower bound). p_upper is the declared-class p-value until 7.3
-    # confirms local-max pricing; see prereg/bracketed-verdicts.md.
+    # be a lower bound). p_upper is the declared-class p-value: 7.3 reported without
+    # testing local-max pricing, so it stays unlicensed; see
+    # prereg/bracketed-verdicts.md.
     p_frozen: float | None = None
     p_upper: float | None = None
     bracket_source: str = "unbuilt: 7.2 part two, pending 7.1 and 7.3"
@@ -69,7 +70,8 @@ class QuixoteVerdict:
 
     # -- local-max and fidelity-driven pricing (quixote/pricing.py) ---------
     # Empty unless a flag is on, and a flag being on makes the verdict
-    # unlicensed: 7.3 has not tested the conjecture both rules rest on.
+    # unlicensed: 7.3 reported without testing the conjecture both rules rest on
+    # (its scripted half did not address it; its agent cell deferred check 2).
     locally_priced_steps: tuple = ()
     pricing_licensed: bool | None = None
 
