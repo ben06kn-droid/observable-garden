@@ -162,3 +162,10 @@ def test_an_empty_twin_submission_never_counts_against_the_real_run(base, monkey
     assert s["support"] == [[0, 1.0]]
     for c in tw.CONSTRUCTIONS:
         assert s[f"p_score_{c}"] == 1 / 20 and s[f"ties_{c}"] == 0
+
+
+def test_every_record_carries_its_platform(base, monkeypatch):
+    monkeypatch.setattr(pp, "load_base", lambda: base)
+    rec = tw.run_seed((985000, [0.0], 10, "score"))
+    for r in (rec, tw.cost_only(rec)):
+        assert set(r["platform"]) >= {"machine", "system", "python", "numpy"}

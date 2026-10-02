@@ -355,3 +355,48 @@ about 108 CPU-hours, **about 3.5 h on the box at 31 workers and about $6**, if a
 core matches a laptop core; the box smoke would settle that. **n stays 1,000**: well
 under the $30 lever, and it gives T1 its registered detectability, a true rate of
 0.0705 at 80%.
+
+## Amendment — 2026-10-02, not live. Both twin cells run on the pinned X
+
+**The finding.** `environments/real_panel._rank` ranks each period's cross-section with
+`np.argsort(np.argsort(row))`, numpy's default **unstable** sort. Where values tie
+exactly, the order it assigns depends on the sort implementation, and numpy's x86 and
+arm64 builds differ. Found 2026-10-02, when the planted generator's real-data test failed
+on a c7a.48xlarge (x86_64, Python 3.14.7, numpy 2.5.3) against the laptop (arm64, Python
+3.14.2, numpy 2.5.3). The two builds of the ETF feature matrix from **byte-identical
+input data** (combined SHA-256 of the 40 in-sample CSVs `ce4bc21e…`) differ materially in
+**two features**:
+
+| feature | segment | cells differing | days differing | largest difference |
+|---|---|---|---|---|
+| `ret1_rank` (1) | whole panel, 2006-01-04 – 2022-12-28 | **512** of 171,040 | **237** of 4,276 | 0.154 |
+| | 2006–2017 | 421 | 196 of 3,019 | 0.154 |
+| | 2018–2022 | 91 | 41 of 1,257 | 0.154 |
+| `drawdown_rank` (31) | whole panel | **12,022** of 171,040 | **1,823** of 4,276 | 1.231 |
+| | 2006–2017 | 9,033 | 1,330 of 3,019 | 1.179 |
+| | 2018–2022 | 2,989 | 493 of 1,257 | 1.231 |
+
+Both are ties in the underlying signal: `drawdown` is exactly 0 for every name at its
+252-day high, and `ret1` exactly 0 on unchanged prices; on every day checked where
+`drawdown_rank` differs, `drawdown` has exact ties. Seven z-score features also differ,
+by at most **8.1e-14** (floating-point reduction order), which moves no rank and no
+decision. A rebuild on the laptop is byte-identical to the pinned file, so each platform
+is deterministic; they disagree with each other.
+
+**Checked, between the features and a member's net stream, for any other sort or rank:**
+`real_panel` (`_etf_base_signals`, `_zscore`, `_roll`, `weights_from`, `net_stream`),
+`class_table.streams_for`, `planted_panel` (residual, weights, population moments,
+planted scale) and `estimator/bootstrap.py`. **`_rank` is the only order statistic over
+values.** The other sorts order strings or distinct integers — tickers, dates, a
+support's feature indices — and cannot tie. Rolling `max` (drawdown, maxret21) is exact
+in any reduction order. `select_block_length` takes a median of per-column block lengths
+and rounds it, which a 1e-14 difference could flip only at an exact .5. Downstream of the
+streams, the searchers' anchor ranking (`argsort` of single-feature Sharpes) is a sort,
+but over computed Sharpes, which do not tie exactly in practice.
+
+**Both cells read X through `environments/planted_panel.load_base`, which now loads the
+pinned file** (SHA-256 `4b4610704db0042c514c8ee4f230b239942d4b15be87d07188be3f0e7600b7ba`)
+and refuses anything else, with no rebuild. The laptop smoke on 985000–985013 ran on the
+laptop's own build, which is byte-identical to the pinned file, so its cost stands. A
+box run copies the pinned file with the ETF data; every record carries its platform.
+The score-rank cell's live patch names the code commit that includes this.

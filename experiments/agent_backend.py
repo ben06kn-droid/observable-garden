@@ -121,6 +121,8 @@ class RunRecord:
     verdict: dict | None = None
     no_submit: bool = False
     credential: str = "unknown"
+    # where the run executed (experiments.code_state.platform_info), from 2026-10-02
+    platform: dict | None = None
     # Which endpoint answered, and whether the model it served is the pinned one.
     # §3's exclusion rule ("a run whose usage log reports any other string is
     # excluded from analysis and noted") rests on the model STRING; until

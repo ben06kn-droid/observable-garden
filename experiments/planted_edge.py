@@ -236,6 +236,8 @@ def run_seed(payload) -> dict:
     out = {"seed": seed, "levels": recs}
     out["secs"] = time.time() - t0
     out["peak_rss_mb"] = peak_rss_mb()
+    from experiments.code_state import platform_info
+    out["platform"] = platform_info()
     return out
 
 
@@ -244,7 +246,8 @@ COST_ONLY = ("seed", "secs", "peak_rss_mb")
 
 def cost_only(rec: dict) -> dict:
     return {"seed": rec["seed"], "secs": rec["secs"], "peak_rss_mb": rec["peak_rss_mb"],
-            "stage_secs": [lv["secs"] for lv in rec["levels"]]}
+            "stage_secs": [lv["secs"] for lv in rec["levels"]],
+            "platform": rec.get("platform")}
 
 
 def main(argv=None) -> int:

@@ -451,3 +451,72 @@ The gate's presence does not change it, and neither does an orientation table.
 
 **What remains of 6.5: the holdout, at 6.9.** 2023-01-01 to 2025-12-31, sealed, opened
 once, grading all 80 submissions gross and net. Nothing else in 6.5 runs.
+
+## Recorded 2026-10-02: rank ties are platform-dependent, and what that means for 6.9
+
+**The finding.** `environments/real_panel._rank` ranks each period's cross-section with
+`np.argsort(np.argsort(row))`, numpy's default **unstable** sort. Where values tie
+exactly, the order it assigns depends on the sort implementation, and numpy's x86 and
+arm64 builds differ. Found 2026-10-02, when the planted generator's real-data test failed
+on a c7a.48xlarge (x86_64, Python 3.14.7, numpy 2.5.3) against the laptop (arm64, Python
+3.14.2, numpy 2.5.3). The two builds of the ETF feature matrix from **byte-identical
+input data** (combined SHA-256 of the 40 in-sample CSVs `ce4bc21e…`) differ materially in
+**two features**:
+
+| feature | segment | cells differing | days differing | largest difference |
+|---|---|---|---|---|
+| `ret1_rank` (1) | whole panel, 2006-01-04 – 2022-12-28 | **512** of 171,040 | **237** of 4,276 | 0.154 |
+| | 2006–2017 | 421 | 196 of 3,019 | 0.154 |
+| | 2018–2022 | 91 | 41 of 1,257 | 0.154 |
+| `drawdown_rank` (31) | whole panel | **12,022** of 171,040 | **1,823** of 4,276 | 1.231 |
+| | 2006–2017 | 9,033 | 1,330 of 3,019 | 1.179 |
+| | 2018–2022 | 2,989 | 493 of 1,257 | 1.231 |
+
+Both are ties in the underlying signal: `drawdown` is exactly 0 for every name at its
+252-day high, and `ret1` exactly 0 on unchanged prices; on every day checked where
+`drawdown_rank` differs, `drawdown` has exact ties. Seven z-score features also differ,
+by at most **8.1e-14** (floating-point reduction order), which moves no rank and no
+decision. A rebuild on the laptop is byte-identical to the pinned file, so each platform
+is deterministic; they disagree with each other.
+
+**Checked, between the features and a member's net stream, for any other sort or rank:**
+`real_panel` (`_etf_base_signals`, `_zscore`, `_roll`, `weights_from`, `net_stream`),
+`class_table.streams_for`, `planted_panel` (residual, weights, population moments,
+planted scale) and `estimator/bootstrap.py`. **`_rank` is the only order statistic over
+values.** The other sorts order strings or distinct integers — tickers, dates, a
+support's feature indices — and cannot tie. Rolling `max` (drawdown, maxret21) is exact
+in any reduction order. `select_block_length` takes a median of per-column block lengths
+and rounds it, which a 1e-14 difference could flip only at an exact .5. Downstream of the
+streams, the searchers' anchor ranking (`argsort` of single-feature Sharpes) is a sort,
+but over computed Sharpes, which do not tie exactly in practice.
+
+**Where 6.5 ran.** Every 6.5 agent session ran on the laptop (arm64), and **all four arms
+were priced on the laptop** by `experiments/price_runs.py` (`--workers 2`, from this
+machine's shell history), against the ETF class table built on the laptop
+(`data/class_tables/`, 2026-10-01). The re-grades ran there too. **6.5's in-sample record
+is therefore one platform's throughout**, and its verdicts stand as recorded.
+
+**Submissions and logs touching the two features.**
+- **One submission uses either: control run 8**, `[ret1_rank −, mom5_rank +]` (`mom5_rank` itself matches across platforms). Control has
+  no session log, so there is no log re-execution to pass or fail. What exists was
+  checked: all of its `evaluate` results, and its submitted score, equal the laptop's
+  class table exactly. That is part of the 4,567 evaluations checked on 2026-10-01 with
+  no mismatch.
+- **All 40 runs of the two evaluate/submit arms** (control, declared-class) evaluated
+  some specification containing feature 1 or 31; all equal the laptop's table.
+- **The grammar arms** (replay, orientation) hold neither feature in any logged support.
+  Their `extend_best` and `swap_worst` moves score every extension, so both features were
+  scored as candidates. **Log re-execution passed on all 40** (integrity PASS,
+  `regrade_2026-09-28.json`), on the laptop.
+
+**6.9 grading must build in-sample and holdout features on one pinned platform.** The
+holdout is opened only on a machine where no agent session is running, and it is never
+on the agent's machine (above), so grading runs on the x86 holdout host. There it
+rebuilds the features for the whole span, in-sample lookback and holdout together, on one
+platform, records that platform and the matrix's SHA-256 beside the grades, and grades
+every submission against that one build. **What this changes, stated before the
+holdout opens:** on the holdout host `ret1_rank` and `drawdown_rank` break ties
+differently from the in-sample features the agents searched, so a submission containing
+either is graded on a feature that differs, on tie days, from the one it was chosen on.
+**That is control run 8 alone**, and its grade is reported with this note. No other
+submission contains either feature.

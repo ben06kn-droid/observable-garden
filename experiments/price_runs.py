@@ -200,6 +200,8 @@ def _write(path: Path, d: dict, result: dict) -> None:
         return
     new.append({"t": time.time(), "kind": "priced_from_log",
                 "by": "experiments/price_runs.py", "code_state": code_state(),
+                "platform": __import__("experiments.code_state",
+                                       fromlist=["platform_info"]).platform_info(),
                 "verdict_written": bool(result.get("needs_verdict")),
                 "class_p_written": "class_p" in [e["kind"] for e in new]})
     d["events"] = ev[:end_at] + new + ev[end_at:]

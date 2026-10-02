@@ -699,3 +699,9 @@ def test_an_unbuilt_arm_is_refused_before_anything_is_created(tmp_path):
         ac.main(["--panel", "s0", "--arm", "prior-weighted", "--runs", "1",
                  "--dry-run", "--out", str(out)])
     assert not out.exists()
+
+
+def test_a_run_record_carries_its_platform():
+    rec, _ = ac.run_one("replay gate", "s0", 20260929, 0, prompts=ac.read_prompts(),
+                        dry_run=True, credential="seat")
+    assert set(rec.platform) >= {"machine", "system", "python", "numpy"}

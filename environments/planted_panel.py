@@ -24,6 +24,7 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, replace
 from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 from scipy.optimize import brentq
@@ -39,6 +40,39 @@ LEVELS = (0.0, 0.5, 1.0, 1.5)
 # select_block_length on the in-sample E, measured 2026-10-01 and registered; fixed
 # here rather than recomputed so a change to the selector cannot move the DGP
 BLOCK_LENGTH = 7
+
+# THE PINNED FEATURE MATRIX. `environments.real_panel._rank` breaks exact ties with
+# numpy's default (unstable) argsort, whose tie order differs between platforms: on
+# 2026-10-02 an x86 build (c7a.48xlarge) and the arm64 laptop build differed in
+# `ret1_rank` and `drawdown_rank`. So "the real ETF feature matrix" is a FILE, built on
+# the laptop (arm64, Python 3.14.2, numpy 2.5.3) -- the X the preflight, the design
+# analysis and every smoke used -- and identified by its SHA-256. The generator loads it
+# and REFUSES on a missing file or a hash mismatch; there is no rebuild fallback, because
+# a rebuild on another platform is a different panel that would pass every other check.
+PINNED_X = Path(__file__).resolve().parent.parent / "data" / "pinned" / "etf_features_X.npy"
+PINNED_X_SHA256 = "4b4610704db0042c514c8ee4f230b239942d4b15be87d07188be3f0e7600b7ba"
+PINNED_X_SHAPE = (4276, 40, 40)
+
+
+def pinned_features(path=None, sha256: str = PINNED_X_SHA256,
+                    shape: tuple = PINNED_X_SHAPE) -> np.ndarray:
+    """The pinned X, or a refusal. Never rebuilds."""
+    import hashlib
+    path = Path(path) if path is not None else PINNED_X
+    if not path.exists():
+        raise SystemExit(
+            f"pinned feature matrix missing: {path}. It is not rebuilt here, because a "
+            "rebuild on another platform breaks rank ties differently and is a different "
+            "panel (prereg/planted-edge.md). Copy the pinned file; its SHA-256 is "
+            f"{sha256}.")
+    got = hashlib.sha256(path.read_bytes()).hexdigest()
+    if got != sha256:
+        raise SystemExit(f"pinned feature matrix {path} has SHA-256 {got}, not the "
+                         f"registered {sha256}. Refused; there is no rebuild fallback.")
+    X = np.load(path)
+    if tuple(X.shape) != tuple(shape):
+        raise SystemExit(f"pinned feature matrix has shape {X.shape}, not {shape}")
+    return X
 
 
 # -- segments and the residual ---------------------------------------------
@@ -190,8 +224,13 @@ class Base:
 
 @lru_cache(maxsize=1)
 def load_base() -> Base:
+    """The ETF panel with its features REPLACED by the pinned X. Returns, costs and
+    dates come from the build (element-wise arithmetic on the same prices, with no
+    sort); only the features carry the platform-dependent ties, and they are pinned."""
     from environments.real_panel import build_etf_panel
-    return base_from(build_etf_panel())
+    panel = build_etf_panel()
+    X = pinned_features(shape=panel.features.shape)
+    return base_from(replace(panel, features=X))
 
 
 def base_from(panel) -> Base:

@@ -194,3 +194,18 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def platform_info() -> dict:
+    """Where a run executed: machine architecture, OS, Python and numpy.
+
+    Recorded on every run record from 2026-10-02, after an x86 and an arm64 build of
+    the ETF panel were found to break rank ties differently (`prereg/planted-edge.md`):
+    two runs on different platforms can be running different panels, and the record
+    has to say which platform it was."""
+    import platform
+
+    import numpy as np
+    return {"machine": platform.machine(), "system": platform.system(),
+            "python": platform.python_version(), "numpy": np.__version__,
+            "node": platform.node()}

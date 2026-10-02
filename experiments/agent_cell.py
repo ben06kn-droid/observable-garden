@@ -351,6 +351,8 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
     # directory that was filled by more than one invocation, which is exactly what
     # a resumed cell is.
     rec.credential = credential
+    from experiments.code_state import platform_info
+    rec.platform = platform_info()
     rec.endpoint = _served_model_assertion(rec)
     if not rec.submitted:
         rec.no_submit = True
@@ -540,6 +542,8 @@ def main(argv=None) -> int:
         "seed_block": SEEDS[a.panel], "depth": DEPTH[a.panel],
         "model": MODEL, "max_turns": MAX_TURNS, "credential": a.credential,
         "code_state": code_state(), "dry_run": a.dry_run,
+        "platform": __import__("experiments.code_state",
+                               fromlist=["platform_info"]).platform_info(),
         # this INVOCATION's setting; whether a given run was priced in-line is on
         # the run file itself (a `pricing_deferred` event), since a resumed
         # directory can mix the two

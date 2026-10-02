@@ -313,6 +313,8 @@ def run_seed(payload) -> dict:
     out["secs"] = time.time() - t0
     # this seed's own CPU seconds: unaffected by sleep, which wall time is not
     out["cpu_secs"] = time.process_time() - c0
+    from experiments.code_state import platform_info
+    out["platform"] = platform_info()
     out["peak_rss_mb"] = peak_rss_mb()
     return out
 
@@ -321,7 +323,8 @@ def cost_only(rec: dict) -> dict:
     return {"seed": rec["seed"], "cell": rec["cell"], "secs": rec["secs"],
             "cpu_secs": rec.get("cpu_secs"), "peak_rss_mb": rec["peak_rss_mb"],
             "stage_secs": [lv["secs"] for lv in rec["levels"]],
-            "prefix_batches": [lv.get("prefix_batches") for lv in rec["levels"]]}
+            "prefix_batches": [lv.get("prefix_batches") for lv in rec["levels"]],
+            "platform": rec.get("platform")}
 
 
 def main(argv=None) -> int:

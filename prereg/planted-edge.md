@@ -671,3 +671,61 @@ after data. Two commits let each half go live with everything it reads already o
 record. **What stage 1 must not do:** change anything the agent half registers; a
 change found necessary there is a stage-2 amendment, dated, before the agent seeds
 are generated.
+
+## Amendment — 2026-10-02, the draft not live. The feature matrix is a pinned file
+
+**The finding.** `environments/real_panel._rank` ranks each period's cross-section with
+`np.argsort(np.argsort(row))`, numpy's default **unstable** sort. Where values tie
+exactly, the order it assigns depends on the sort implementation, and numpy's x86 and
+arm64 builds differ. Found 2026-10-02, when the planted generator's real-data test failed
+on a c7a.48xlarge (x86_64, Python 3.14.7, numpy 2.5.3) against the laptop (arm64, Python
+3.14.2, numpy 2.5.3). The two builds of the ETF feature matrix from **byte-identical
+input data** (combined SHA-256 of the 40 in-sample CSVs `ce4bc21e…`) differ materially in
+**two features**:
+
+| feature | segment | cells differing | days differing | largest difference |
+|---|---|---|---|---|
+| `ret1_rank` (1) | whole panel, 2006-01-04 – 2022-12-28 | **512** of 171,040 | **237** of 4,276 | 0.154 |
+| | 2006–2017 | 421 | 196 of 3,019 | 0.154 |
+| | 2018–2022 | 91 | 41 of 1,257 | 0.154 |
+| `drawdown_rank` (31) | whole panel | **12,022** of 171,040 | **1,823** of 4,276 | 1.231 |
+| | 2006–2017 | 9,033 | 1,330 of 3,019 | 1.179 |
+| | 2018–2022 | 2,989 | 493 of 1,257 | 1.231 |
+
+Both are ties in the underlying signal: `drawdown` is exactly 0 for every name at its
+252-day high, and `ret1` exactly 0 on unchanged prices; on every day checked where
+`drawdown_rank` differs, `drawdown` has exact ties. Seven z-score features also differ,
+by at most **8.1e-14** (floating-point reduction order), which moves no rank and no
+decision. A rebuild on the laptop is byte-identical to the pinned file, so each platform
+is deterministic; they disagree with each other.
+
+**Checked, between the features and a member's net stream, for any other sort or rank:**
+`real_panel` (`_etf_base_signals`, `_zscore`, `_roll`, `weights_from`, `net_stream`),
+`class_table.streams_for`, `planted_panel` (residual, weights, population moments,
+planted scale) and `estimator/bootstrap.py`. **`_rank` is the only order statistic over
+values.** The other sorts order strings or distinct integers — tickers, dates, a
+support's feature indices — and cannot tie. Rolling `max` (drawdown, maxret21) is exact
+in any reduction order. `select_block_length` takes a median of per-column block lengths
+and rounds it, which a 1e-14 difference could flip only at an exact .5. Downstream of the
+streams, the searchers' anchor ranking (`argsort` of single-feature Sharpes) is a sort,
+but over computed Sharpes, which do not tie exactly in practice.
+
+**So X is pinned.** The generator (`environments/planted_panel.load_base`) loads
+`data/pinned/etf_features_X.npy` — the laptop's build, the X the preflight, the design
+analysis and every smoke used — and **refuses on a missing file or a hash mismatch, with
+no rebuild fallback**: a rebuild on another platform is a different panel that would
+pass every other check. Returns, costs and dates still come from the build: element-wise
+arithmetic on the same prices, with no sort.
+
+| | |
+|---|---|
+| file | `data/pinned/etf_features_X.npy` (gitignored; copied to any box with the ETF data) |
+| **SHA-256** | **`4b4610704db0042c514c8ee4f230b239942d4b15be87d07188be3f0e7600b7ba`** |
+| shape | (4276, 40, 40), float64, rows 2006-01-04 – 2022-12-28 |
+| built on | arm64 (Apple M3), Python 3.14.2, numpy 2.5.3 |
+
+Tested both ways (`tests/test_planted_panel.py`): a matching hash loads and is what
+`load_base` serves; a mismatch, a missing file and a wrong shape are each refused.
+**Every run record now carries its platform** (`experiments.code_state.platform_info`),
+so a run on another machine says so. Stage 1's live patch names the code commit that
+includes this.

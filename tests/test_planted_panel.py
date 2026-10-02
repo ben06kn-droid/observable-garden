@@ -177,3 +177,45 @@ def test_the_invariants_are_cached_and_reloaded(base, tmp_path):
     b = pp.invariants_for(base, cache_dir=tmp_path)
     for k in a:
         assert np.array_equal(a[k], b[k])
+
+
+# -- the pinned feature matrix: loaded, or refused; never rebuilt -------------
+
+def test_a_pinned_matrix_with_the_registered_hash_is_loaded(tmp_path):
+    import hashlib
+    X = np.arange(24, dtype=float).reshape(2, 3, 4)
+    f = tmp_path / "X.npy"
+    np.save(f, X)
+    sha = hashlib.sha256(f.read_bytes()).hexdigest()
+    assert np.array_equal(pp.pinned_features(f, sha, X.shape), X)
+
+
+def test_a_hash_mismatch_is_refused_with_no_rebuild(tmp_path):
+    X = np.zeros((2, 3, 4))
+    f = tmp_path / "X.npy"
+    np.save(f, X)
+    with pytest.raises(SystemExit, match="no rebuild fallback"):
+        pp.pinned_features(f, "0" * 64, X.shape)
+
+
+def test_a_missing_pinned_matrix_is_refused_with_no_rebuild(tmp_path):
+    with pytest.raises(SystemExit, match="not rebuilt"):
+        pp.pinned_features(tmp_path / "absent.npy")
+
+
+def test_a_wrong_shape_is_refused(tmp_path):
+    import hashlib
+    f = tmp_path / "X.npy"
+    np.save(f, np.zeros((2, 3, 4)))
+    sha = hashlib.sha256(f.read_bytes()).hexdigest()
+    with pytest.raises(SystemExit, match="shape"):
+        pp.pinned_features(f, sha, (2, 3, 5))
+
+
+@ETF
+def test_load_base_uses_the_pinned_matrix_not_the_build():
+    base = pp.load_base()
+    X = pp.pinned_features()
+    n_is = base.in_sample.features.shape[0]
+    assert np.array_equal(base.in_sample.features, X[:n_is])
+    assert np.array_equal(base.holdout.features, X[n_is:n_is + base.holdout.features.shape[0]])
