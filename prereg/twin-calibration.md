@@ -400,3 +400,26 @@ and refuses anything else, with no rebuild. The laptop smoke on 985000–985013 
 laptop's own build, which is byte-identical to the pinned file, so its cost stands. A
 box run copies the pinned file with the ETF data; every record carries its platform.
 The score-rank cell's live patch names the code commit that includes this.
+
+### Stated departure, 2026-10-02: the raw in-sample ETF data was copied to a compute box
+
+**What.** `data/raw/etf_insample` — **40 CSV files**, combined SHA-256
+**`ce4bc21e64b47d09714308560fa25f39540714dcfba6fb89ab3ee2d34e69df2a`** (the SHA-256 of
+`sha256sum *.csv`'s output, one `hash  filename` line per file in name order),
+identical on both machines — was copied by `rsync` from the laptop to an EC2
+c7a.48xlarge (x86_64, instance `i-0e0c1484de3c755ad`) on 2026-10-02, together with
+`data/pinned/etf_features_X.npy`, whose SHA-256 the box computed as
+`4b4610704db0042c514c8ee4f230b239942d4b15be87d07188be3f0e7600b7ba`, the registered value.
+
+**Why it is a departure.** The ETF data protocol (`prereg/etf-universe.md`,
+`prereg/agent-on-real-data.md`) has one fetch, on the holdout host, and exports the
+in-sample rows to the agent's machine only. A copy to a third machine is not in that
+protocol. **No holdout row moved**: these files end on 2022-12-31,
+`data/etf_loader.py` refuses any row on or after 2023-01-01, and no agent session runs
+on the box.
+
+**Why it was needed.** The planted generator builds returns, costs and dates from these
+files, and loads the pinned X beside them. The box's real-data tests pass on them
+(`test_the_registered_generator_reproduces_the_preflights_scale`,
+`test_load_base_uses_the_pinned_matrix_not_the_build`), so a box run and a laptop run are
+the same panel.
