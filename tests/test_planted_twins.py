@@ -84,3 +84,23 @@ def test_the_multi_cache_scores_equal_the_sandboxs_sharpe(base):
 def test_the_score_cell_refuses_a_level_other_than_its_fixed_two():
     with pytest.raises(SystemExit, match="fixed at 0 and 1.0"):
         tw.main(["--cell", "score", "--planted", "0.5", "--smoke", "1"])
+
+
+def test_an_empty_real_submission_is_recorded_and_never_rejects(base, monkeypatch):
+    """The empty-support guard: no support, no truth, and p = 1 under both
+    constructions, whatever the twins scored."""
+    from searchers.meta_adaptive import Trace
+
+    class Empty:
+        name = "empty"
+
+        def _search(self, K, single, support_score, **kw):
+            single(0)                                     # it looks, and finds nothing
+            return Trace(support=(), score=float("-inf"))
+
+    monkeypatch.setattr(tw, "_searchers", lambda seed, T, ppy: [Empty()])
+    r = tw.run_level_score(base, 9, 1.0)
+    (s,) = r["searchers"]
+    assert s["support"] is None and s["truth_in_sample"] is None
+    for c in tw.CONSTRUCTIONS:
+        assert s[f"p_score_{c}"] == 1.0

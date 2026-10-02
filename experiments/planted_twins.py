@@ -237,10 +237,15 @@ def run_level_score(base, seed: int, beta: float) -> dict:
                               lambda sup, j=j: float(cache.get(sup)[j]))
             score[j] = tr.score
             if j == 0:
-                sub = canonical(tuple(tr.support))
-        rec = {"searcher": srch.name, "support": [list(q) for q in sub],
+                sub = canonical(tuple(tr.support)) if tr.support else None
+        # EMPTY-SUPPORT GUARD: a real run that submits nothing has no specification to
+        # price and no population Sharpe (a zero weight path has zero variance). It is
+        # recorded with support and truth None and its score as found (-inf), so the
+        # registered rank places it at p = 1: a non-rejection, never a certificate.
+        rec = {"searcher": srch.name,
+               "support": [list(q) for q in sub] if sub else None,
                "score_real": float(score[0]),
-               "truth_in_sample": pp.truth(base, draw, sub)["in_sample"]}
+               "truth_in_sample": pp.truth(base, draw, sub)["in_sample"] if sub else None}
         for c_i, c in enumerate(CONSTRUCTIONS):
             sk = score[1 + c_i * K: 1 + (c_i + 1) * K]
             rec[f"p_score_{c}"] = score_rank_p(score[0], sk)
