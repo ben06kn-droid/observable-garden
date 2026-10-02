@@ -24,9 +24,11 @@ and masking exist so a run can be scored against placebo datasets.
 
 **Built but not licensed** (`quixote/pricing.py`): local-max pricing and
 fidelity-driven pricing, both behind flags that default to off. Both rest on the
-conjecture that anchoring later moves on a local maximum is conservative, which
-7.3 tests and which has not reported, so a verdict that used either says it is
-unlicensed and names what would license it.
+conjecture that anchoring later moves on a local maximum is conservative. 7.3
+reported and licensed neither: its scripted half did not test the conjecture, and its
+agent cell deferred the fidelity check (check 2) for too few decisions. A verdict that
+used either flag says it is unlicensed and names what would license it; the
+declared-class tier is the fallback.
 
 **Part one is complete.** The consistency check (`quixote/consistency.py`),
 `pick` with its statistic library and `else` branch (`quixote/statistics.py`,

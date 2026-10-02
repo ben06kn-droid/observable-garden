@@ -24,7 +24,10 @@ content move over extend, swap and flip. 7.1 measured that move's direction, and
 `FILL_NOTE` states it on **every verdict whose replicates used it**.
 
 The upper end of the bracket stays the declared-class p-value and is not
-computed here: 7.3 has not confirmed local-max pricing.
+computed here. 7.3 reported and did not license local-max pricing: its scripted half
+did not test the conjecture and its agent cell deferred the fidelity check. The
+declared-class tier is the fallback, and the certifying tier wherever the class is
+enumerable (ROADMAP, the tier rule of 2026-09-30).
 """
 from __future__ import annotations
 
@@ -233,7 +236,8 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         bracket_source=("lower end: fixed-sequence replay, licensed by 7.1's rule 2 "
                         "(freezing is liberal, +0.0120 at alpha = 0.05); upper end: "
                         + ("the declared-class p-value" if p_declared_class is not None
-                           else "not computed, 7.3 has not confirmed local-max pricing")),
+                           else "not computed; local-max pricing is unlicensed "
+                                "(7.3 reported without testing it)")),
         n_moves=log.n_moves,
         n_candidates=log.total_candidates(),
         unreplayable_decisions=tuple(r.move.kind for r in log.unreplayable()),

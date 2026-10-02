@@ -1,4 +1,4 @@
-"""Local-max pricing and fidelity-driven pricing, both off until 7.3 licenses them.
+"""Local-max pricing and fidelity-driven pricing, both off and unlicensed.
 
 Two rules from ROADMAP 7.2 that price a decision the gate cannot take at face
 value, by replacing it in every replicate with the best of its admissible
@@ -11,8 +11,8 @@ alternatives at that step and replaying the rest of the sequence normally:
   below a pre-registered tolerance (7.3's check 2).
 
 **Neither is licensed.** Both rest on the conjecture that anchoring later moves
-on a local maximum is conservative (P4), and **7.3 tests that conjecture; it has
-not reported.** So:
+on a local maximum is conservative (P4). 7.3 has reported, in two halves, and **licensed neither flag**. The scripted half (`prereg/unfaithful-searchers.md`, read 2026-09-29) found that a contradicted `pick` costs exactly nothing (rule 3, an identity), registered that local pricing is not needed as its remedy, and **did not test the local-max conjecture**. The agent cell (`prereg/agent-cell.md`, closed 2026-09-30) **deferred check 2**: every move kind had fewer than 10 decisions, so no fidelity rate exists to price from.
+Nothing has since tested P4 for pricing. So:
 
 - both flags default to **off**, and with them off nothing here changes a null;
 - with a flag **on**, every verdict says the pricing is unlicensed, names the
@@ -26,15 +26,17 @@ no-op, exactly as 7.1 found for the fill against greedy continuations
 (`tests/test_quixote_pricing.py` pins this). These rules bite on a continuation
 the local max does not dominate, which is the case 7.3 is built to exercise.
 
-Nothing in this module asserts the conjecture. If 7.3 finds local-max pricing
-liberal anywhere, ROADMAP 7.2 already registers the consequence: rejected picks
-drop the run to the declared-class tier instead.
+Nothing in this module asserts the conjecture. **The declared-class tier is the
+fallback** (ROADMAP 7.2) wherever a decision cannot be priced, and since 2026-09-30 it
+is the certifying tier wherever the harness can enumerate the class (ROADMAP, the tier
+rule). If a later experiment finds local-max pricing liberal anywhere, ROADMAP 7.2
+already registers the consequence: the run drops to the declared-class tier.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-LICENSED_BY = None          # 7.3 has not reported; nothing licenses these yet
+LICENSED_BY = None          # 7.3 reported and licensed neither (P4 untested, check 2 deferred)
 UNLICENSED_NOTE = (
     "{which} priced {n} step(s) locally: at each, every replicate takes the best "
     "admissible one-step move instead of the logged one. THIS IS NOT LICENSED. It "

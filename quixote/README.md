@@ -7,14 +7,16 @@ give him a windmill and he saw a giant.*
 `quixote/` is the **agent-facing** form of the gate in `garden/`. Where `garden`
 audits a finished transcript, `quixote` sits inside the search while it happens.
 
-**Status: 7.2 part one and part two are built; 7.3 has not reported.** Part one's
+**Status: 7.2 part one and part two are built; 7.3 has reported and licensed neither
+pricing flag.** Part one's
 items — the information-set log, the typed grammar, the consistency check, `pick`
 with its statistic library and `else` branch, and the twin generator with
 identifier masking — are built and tested. Part two is built on 7.1's reading:
 trigger replay is the certifying null (`quixote/certify.py`), and local-max and
-fidelity-driven pricing exist **behind flags that default to off**, because both
-rest on a conjecture 7.3 tests and 7.3 has not run. **Nothing switches a flag on
-before it reports.**
+fidelity-driven pricing exist **behind flags that default to off**, and they stay
+off. 7.3 has reported, in two halves, and **licensed neither flag**. The scripted half (`prereg/unfaithful-searchers.md`, read 2026-09-29) found that a contradicted `pick` costs exactly nothing (rule 3, an identity), registered that local pricing is not needed as its remedy, and **did not test the local-max conjecture**. The agent cell (`prereg/agent-cell.md`, closed 2026-09-30) **deferred check 2**: every move kind had fewer than 10 decisions, so no fidelity rate exists to price from. **Both flags remain unlicensed, and nothing switches one on.** The
+declared-class tier is the fallback (ROADMAP 7.2), and since 2026-09-30 it certifies
+wherever the harness can enumerate the class (the tier rule).
 
 Several deliberate holes remain and are listed at the bottom: IC, sequential twin
 stopping, and the living verdict. Nothing here is claimed to be novel; prior art
