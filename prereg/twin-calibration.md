@@ -333,3 +333,25 @@ on the same panels so the two are paired, and goes live by its own dated commit 
 **Cost and n** are measured by the laptop smoke on 985000–985999, run to completion,
 and recorded by a dated addendum. The proposed n stays **1,000** unless that
 measurement says otherwise.
+
+### Addendum, 2026-10-02 — the score-rank cell's cost, measured
+
+**Laptop smoke on 985000–985013, run to completion, cost only** (Apple M3, 8 cores, 7
+workers; `runs/_smoke/planted_twins_score/smoke_cost.txt`). **Mains power and Low Power
+Mode off at both start and end**, recorded by the smoke; run under `caffeinate`.
+Per panel, both levels, 39 return matrices each: **wall median 486 s (mean 448, max 548),
+CPU median 416 s (mean 388, max 500)**; the largest wall/CPU ratio is 1.31, which is
+contention on 7 workers over 4 performance and 4 efficiency cores, not sleep. **Peak
+memory 295 MB per worker.** Throughput: 14 panels in 1,015 s, **about 50 panels an
+hour**.
+
+Two earlier attempts are not counted, and are recorded so their absence is not
+mistaken for a clean first run: one ran without `caffeinate`, and the laptop
+idle-slept mid-run; one was stopped at launch because the machine had gone to
+battery with Low Power Mode on. Neither produced a cost line.
+
+**At the proposed n = 1,000:** about **20 hours** wall on this laptop at 7 workers, or
+about 108 CPU-hours, **about 3.5 h on the box at 31 workers and about $6**, if a box
+core matches a laptop core; the box smoke would settle that. **n stays 1,000**: well
+under the $30 lever, and it gives T1 its registered detectability, a true rate of
+0.0705 at 80%.

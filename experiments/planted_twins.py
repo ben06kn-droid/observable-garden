@@ -346,7 +346,8 @@ def main(argv=None) -> int:
              "  per level, by stage (median s): " + ", ".join(
                  f"{k} {np.median(v):.1f}" for k, v in stages.items()),
              f"  peak RSS per worker: max {max(r['peak_rss_mb'] for r in recs):.0f} MB",
-             f"  CPU-seconds per panel: {per.mean():.0f} (this machine, {a.workers} workers)",
+             f"  throughput: {len(recs) / wall * 3600:.1f} panels per hour wall "
+             f"({a.workers} workers, this machine)",
              f"  power: at start {power_start}; at end {power_state()}"]
         text = "\n".join(L)
         print("\n" + text)
