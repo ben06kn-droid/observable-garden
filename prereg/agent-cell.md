@@ -1461,3 +1461,49 @@ registers them, or replacements, **before it runs**:
    replay) − (placebo orientation − placebo replay), descriptive with no test of its
    own. A next cell that wants a test on the net registers one, for example a
    bootstrap over runs on the difference in differences.
+
+#### Cell 3 completed with the control baseline and the declared-class arm, 2026-10-01
+
+Same reader, extended (`experiments/agent_cell_cell3_read.py`, `read_four`); the
+earlier cell-3 output is reproduced line for line above the new section in
+`runs/agent_cell_read_cell3.txt`. Control and declared-class gate ran at `95da44b`,
+20 runs each, integrity clean (40/40 submitted, zero errors and unregistered refusals,
+pinned model, only `evaluate` and `submit` used, all 4,567 evaluated scores equal to
+the verified table). **They received the byte-identical prompt** — the gate is the
+harness's, never shown to the agent — so they are one population of agent behaviour.
+
+**THE DEFLATION GAP BY ARM — the headline behavioural line, and it does not move with
+the gate:**
+
+| arm | n | mean gap | median | stated mean | `sr_deflated` |
+|---|---|---|---|---|---|
+| control | 20 | +0.603 [+0.463, +0.744] | **+0.539** | +0.060 | −0.544 |
+| declared-class gate | 20 | +0.539 [+0.528, +0.550] | **+0.538** | +0.137 | −0.402 |
+| replay gate | 20 | +0.526 [+0.517, +0.535] | **+0.526** | +0.162 | −0.364 |
+| orientation | 19 | +0.530 [+0.505, +0.554] | **+0.522** | +0.165 | −0.365 |
+
+**Control has no gate to be deaf to, and overstates by the same half Sharpe unit.**
+The medians agree within 0.017. Control's mean is lifted by one run (index 8), which
+submitted a specification at in-sample Sharpe **−2.616** and stated **−1.40**: the
+agent screened features by the magnitude of their Sharpe and submitted a large
+negative one as found. Not an exclusion category under §3, so retained; **without it
+(post hoc sensitivity, labelled) control's mean is +0.537**, and the four arms sit at
+0.526–0.539. Kruskal-Wallis across the four is p = 0.0425, with replay and orientation
+against control at U p = 0.053 and 0.048 and declared-class against control at 0.85;
+three comparisons near 0.05 on a 0.013 spread are **not read as an arm effect**.
+
+**So the overstatement is the agent's, not the gate's.** Stated means differ by arm
+(+0.06 to +0.17), but so does what was submitted: control and declared-class
+submitted weaker members (mean in-sample Sharpe 0.12 with run 8, 0.26 without; 0.26)
+than the grammar arms (0.30), and stated correspondingly less. **The gap — belief
+minus what search alone explains — is the same in all four.**
+
+**Saturation, for the record:** control and declared-class reached the class maximum
+on **0/20** each, replay 5/20, orientation 4/20; all four certified 0/20 at the class
+tier.
+
+**Haircut:** not interpretable in any arm. The grammar arms submit 3 distinct members
+and the evaluate arms 7; control's fit (b = +0.533, R² 0.999) is run 8's leverage.
+Evaluation counts are different units across the two kinds of arm and are not pooled.
+
+**Cell 3 is closed.** Its readings are this section and "Cell 3, read once" above.

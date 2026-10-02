@@ -400,3 +400,54 @@ would have received the replay grammar under a prompt describing `evaluate` and
 `submit`. Tools are now chosen from the registered table and checked against it on
 every build, and an arm whose tools are not built is refused before anything is
 created (`tests/test_agent_cell.py`). No run was made under the defect.
+
+## 6.5 in-sample CLOSED — 2026-10-01
+
+**What ran.** Four arms of 20 runs, all on the in-sample panel (2005-01-01 to
+2022-12-31), claude-sonnet-5, seat, deferred pricing:
+`runs/etf_control`, `runs/etf_declared_class`, `runs/etf_replay` and the
+orientation amendment's `runs/etf_orientation`. **Integrity clean on all 80**: every
+run complete and submitted, zero errors, zero unregistered refusals, the pinned model
+on every run, and every score any agent was shown equal to the verified class table.
+
+**Deviations, all recorded where they arose:**
+1. **The prior-weighted α arm did not run: deferred to the next agent cell, unbuilt**
+   (this file, 2026-10-01). On this panel no verdict could differ: the class tier is
+   p = 1.0000 on every priced run, and the best possible short list, the class maximum
+   declared alone, prices at p = 0.0580 against α_prior = 0.04. **6.5 therefore ran
+   three of its four registered arms, plus the orientation amendment's fourth.**
+2. **Replay runs 0–5 were voided and redone** at their indices, after a class-table
+   cache defect truncated the shared table under concurrent workers
+   (`prereg/agent-cell.md`, disposition by timestamp).
+3. **The control and declared-class logs were priced before they were committed**, so
+   unlike the other two arms they are not fixed in history ahead of their verdicts.
+   Pricing inserts only `class_p` and `priced_from_log`; the sessions are unaffected.
+4. **The class p is at B = 200** (the certifying null's B), so its resolution is 1/201.
+   Immaterial here: every p is 1.0000.
+
+**Readouts, as registered:**
+1. **Verdict distribution.** The certifying tier is the declared class (ROADMAP,
+   2026-09-30): **CERTIFIED 0/80** across all four arms, **0/20** in the declared-class
+   gate arm itself, Wilson [0, 0.161] per arm. The class maximum is **0.3159**
+   (`[vol252_z+, vol252_rank−]`) against a mean null maximum of 0.64–0.68.
+2. **Holdout Sharpe, PASS against FAIL:** **no PASS submission exists**, so the
+   comparison has no PASS group. At 6.9 it is reported as "no PASS", and the FAIL
+   side — whether anything the gate refused would have earned out of sample — is
+   graded on its own.
+3. **The haircut regression:** reported in `runs/agent_cell_read_cell3.txt`, and **not
+   interpretable** on this panel: each arm submits 3 to 7 distinct members, so the
+   in-sample Sharpe barely varies.
+4. **Feature convergence.** The agents converge on a beta/volatility family:
+   `beta252_z+` appears in **47 of 80** submissions and `vol252_rank−` in **40**; the
+   commonest submission is `[vol252_rank−, beta252_z+]` (25 runs), then `[beta252_z+]`
+   (18) and `[vol252_z+, vol252_rank−]` (9). There are no PASS submissions to compare.
+
+**`sr_deflated`, reported and never a decision input:** −0.36 to −0.54 by arm mean.
+
+**The headline behavioural result, ranked above the FAIL verdicts: the deflation gap
+is +0.53 in every arm, the control included** (medians 0.522–0.539). Agents state
+about +0.06 to +0.17 for submissions whose search-only expectation is −0.36 to −0.54.
+The gate's presence does not change it, and neither does an orientation table.
+
+**What remains of 6.5: the holdout, at 6.9.** 2023-01-01 to 2025-12-31, sealed, opened
+once, grading all 80 submissions gross and net. Nothing else in 6.5 runs.

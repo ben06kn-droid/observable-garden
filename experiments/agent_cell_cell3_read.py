@@ -198,11 +198,108 @@ def read() -> str:
     return "\n".join(L)
 
 
+# -- completed 2026-10-01: all four of 6.5's arms that ran ----------------------
+
+ARMS4 = (("control", "etf_control"), ("declared-class gate", "etf_declared_class"),
+         ("replay gate", "etf_replay"), ("orientation", "etf_orientation"))
+
+
+def arm_rows(arm_dir: str) -> list[dict]:
+    """Per run, from the run file alone: stated belief, submitted score and the
+    run's own class-null level, for arms with and without a session log."""
+    out = []
+    for f in sorted((ROOT / arm_dir).glob("cell_*.json"),
+                    key=lambda q: int(q.name.split("_")[2])):
+        x = json.loads(f.read_text())
+        cp = x["class_p"]
+        pred = x.get("prediction") or {}
+        sr = cp["submitted_score"]
+        defl = sr - cp["null_max_mean"]
+        sl = [e for e in x["events"] if e["kind"] == "session_log"]
+        if sl:
+            count = sum(int(r["n_candidates"] or 0) for r in sl[0]["records"])
+        else:
+            count = sum(1 for e in x["events"]
+                        if e["kind"] == "tool_result" and e.get("tool") == "evaluate")
+        out.append({"stated_mean": pred.get("mean"), "stated_sd": pred.get("sd"),
+                    "sr_is": sr, "sr_deflated": defl,
+                    "gap": (pred["mean"] - defl) if pred.get("mean") is not None else None,
+                    "count": count, "p_class": cp["p_upper"],
+                    "at_class_max": abs(sr - cp["class_max"]) < 1e-12,
+                    "submitted": tuple(tuple(q) for q in x["submitted_support"] or [])})
+    return out
+
+
+def read_four() -> str:
+    from estimator.metrics import wilson_ci
+    L: list[str] = []
+    A = L.append
+    rows = {name: arm_rows(d) for name, d in ARMS4}
+    A("")
+    A("COMPLETED 2026-10-01 — ALL FOUR ARMS THAT RAN (6.5's prior-weighted arm is deferred)")
+    A("=" * 78)
+    A("  control and declared-class gate received the BYTE-IDENTICAL prompt (the gate is")
+    A("  applied by the harness, not shown to the agent), so they are one population of")
+    A("  agent behaviour: any difference between them is noise by design.")
+    A("")
+    A("THE DEFLATION GAP BY ARM — stated mean minus sr_deflated (submitted SR - mean null max)")
+    A("-" * 78)
+    for name, rs in rows.items():
+        g = np.array([r["gap"] for r in rs if r["gap"] is not None])
+        se = g.std(ddof=1) / np.sqrt(len(g))
+        tcrit = stats.t.ppf(0.975, len(g) - 1)
+        A(f"    {name:<20} n {len(g):>2}   mean {g.mean():+.3f} [{g.mean() - tcrit * se:+.3f}, "
+          f"{g.mean() + tcrit * se:+.3f}]   median {np.median(g):+.3f}   "
+          f"stated {np.mean([r['stated_mean'] for r in rs if r['stated_mean'] is not None]):+.3f}"
+          f"   deflated {np.mean([r['sr_deflated'] for r in rs]):+.3f}")
+    gaps = [[r["gap"] for r in rs if r["gap"] is not None] for rs in rows.values()]
+    kw = stats.kruskal(*gaps)
+    A(f"    across the four arms: Kruskal-Wallis p = {kw.pvalue:.4f}")
+    ctrl = gaps[0]
+    for (name, _), g in zip(list(rows.items())[1:], gaps[1:]):
+        u = stats.mannwhitneyu(g, ctrl, alternative="two-sided")
+        A(f"    {name:<20} against control: U p = {u.pvalue:.4f}")
+    neg = {name: [i for i, r in enumerate(rs) if r["sr_is"] < 0] for name, rs in rows.items()}
+    A("    SENSITIVITY, post hoc and labelled as such: runs that submitted a specification")
+    A("    with NEGATIVE in-sample Sharpe, excluded: " + ", ".join(
+        f"{k} {v}" for k, v in neg.items() if v))
+    for name, rs in rows.items():
+        g = np.array([r["gap"] for r in rs if r["gap"] is not None and r["sr_is"] >= 0])
+        A(f"    {name:<20} n {len(g):>2}   mean {g.mean():+.3f}   median {np.median(g):+.3f}")
+    A("    Control has no gate to be deaf to: its agent is told nothing about pricing,")
+    A("    so its gap is the baseline overstatement of an agent searching this panel.")
+    A("")
+    A("STATED BELIEF, SUBMISSION AND CERTIFICATION BY ARM")
+    A("-" * 78)
+    for name, rs in rows.items():
+        sd = [r["stated_sd"] for r in rs if r["stated_sd"] is not None]
+        k = sum(r["at_class_max"] for r in rs)
+        lo, hi = wilson_ci(k, len(rs))
+        cert = sum(r["p_class"] < 0.05 for r in rs)
+        A(f"    {name:<20} stated sd {np.mean(sd):.3f}   submitted SR mean "
+          f"{np.mean([r['sr_is'] for r in rs]):.3f}   at class max {k}/{len(rs)} "
+          f"[{lo:.2f}, {hi:.2f}]   class tier certified {cert}/{len(rs)}")
+    A("")
+    A("HAIRCUT REGRESSION, all four arms — stated mean = a + b*sr_is + c*log(count)")
+    A("-" * 78)
+    for name, rs in rows.items():
+        haircut(A, name, [r for r in rs if r["stated_mean"] is not None])
+    A("    control's fit is ONE POINT: run 8 submitted SR -2.616 and stated -1.40, and every")
+    A("    other control run sits in 0.24-0.27 by 0.12-0.15, so R2 0.999 is that run's leverage.")
+    A("    count is EVALUATE CALLS for control and declared-class and HARNESS-SCORED")
+    A("    CANDIDATES for the grammar arms: different units, so c is not compared across")
+    A("    the two kinds. b remains a slope across the few distinct submitted members.")
+    for name, rs in rows.items():
+        A(f"    {name:<20} distinct submissions {len(set(r['submitted'] for r in rs))}, "
+          f"count median {np.median([r['count'] for r in rs]):.0f}")
+    return "\n".join(L)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="runs/agent_cell_read_cell3.txt")
     a = ap.parse_args(argv)
-    text = read()
+    text = read() + "\n" + read_four()
     print(text)
     Path(a.out).write_text(text + "\n")
     print(f"\nwritten to {a.out}")
