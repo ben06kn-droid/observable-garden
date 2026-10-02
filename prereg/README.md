@@ -145,3 +145,29 @@ which seed is drawn.
 Each pre-registration names its smoke seed block beside its registered one. An
 experiment script's smoke mode takes that block and suppresses its rule output.
 7.1's scaling curve and smoke are the first to follow this.
+
+## Amendment 3 — 2026-10-02. One validity rule, stated once
+
+**The standing rule for a validity claim is the one-sided rule on the LOWER end of the
+Wilson 95% interval** (amendment 1): it **fails high iff the lower end exceeds
+nominal**, the upper end is reported as the largest liberality the data do not rule
+out, and every such rule states the true rate it detects at its n and how often a
+correct procedure passes it (amendment 2).
+
+**The wording in "Decision rules must match what the procedure claims" above** — "the
+upper end of the interval does not exceed α by more than a stated tolerance" — **is
+superseded and must not be cited as a rule.** It stays in place because this file keeps
+originals and appends corrections; this amendment exists so that a reader who stops at
+that section is not left with two rules. What stands from that section is everything
+else in it: a validity claim gets a one-sided rule, an exactness rule needs a named
+proposition, and every rule states a branch for each direction of failure.
+
+**Checked 2026-10-02 against every file in `prereg/`:** none states the
+upper-end-plus-tolerance form. Every validity rule in a live or draft pre-registration
+is the lower-Wilson form: `agent-cell.md`, `bracketed-verdicts.md`,
+`fixed-sequence-replay.md`, `heterogeneous-correlation-fat-tails.md`,
+`pivotal-interrogation.md`, `planted-edge.md`, `prior-weighted-alpha.md`,
+`twin-calibration.md` and `unfaithful-searchers.md`. `twin-calibration.md`'s original
+rule 1, "the Wilson interval containing nominal", is an **exactness** rule, not a
+validity rule; it rests on the exchangeability proposition it names, as this file
+requires, and is unaffected.
