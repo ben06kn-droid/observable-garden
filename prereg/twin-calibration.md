@@ -293,3 +293,43 @@ about $17**, and it brings T1's detectable liberality down to **0.0705**. At 31 
 the memory is about 47 GB of 64. **Lever, registered now:** if the box smoke projects
 more than **$30**, n drops to **500** (detectable 0.0795), with the reason recorded.
 B, K, the constructions and the searchers are never levers.
+
+## Amendment — 2026-10-02, still not live. A score-rank cell, which runs first
+
+**Not live; nothing runs on it.** It adds a cell **ahead of** the p-rank cell above and
+changes nothing in that one.
+
+**The statistic: the searcher's submitted realized net Sharpe**, ranked among its
+K = 19 twins in the registered form with **ties counted against the real run**:
+
+    p = (1 + #{twins whose submitted score >= the real run's}) / (K + 1)
+
+A higher score is the more extreme, which is the only change of orientation from the
+p-rank form. **No class pass and no bootstrap**: each searcher scores only the supports
+it visits, on the real panel and on each twin.
+
+**Levels 0 and 1.0, fixed now**, independent of 7.5's curve. This cell therefore needs
+nothing from 7.5 stage 1 and can go live without it. **Same seeds** (panels
+650000–650999, replication 660000–660999, smoke 985000–985999), the **same two
+constructions** at K = 19 each with the same twin children, the **same rule T1** —
+false certification at level 0, one-sided on the lower Wilson end, both branches, the
+detectability table above — and the **same replication branch**. At level 1.0, correct
+score-rank rejections (submission population Sharpe > 0) are reported per searcher and
+construction, descriptively. There is no class tier beside them in this cell, because it
+runs no class pass.
+
+**What this cell tests, stated so it is not over-read: the twin constructions, not the
+registered p-rank statistic.** Under exchangeability the rank of any statistic computed
+the same way on the real panel and its twins is exact, so T1 here asks whether
+`joint_time_permutation` and `block_permutation` produce twins exchangeable with the
+real panel on real features. The predicted directions are the ones above: at level 0
+the departure follows the sign of the real streams' short-lag autocorrelation, is small,
+and is smaller under block permutation; at 1.0 the twins keep the planted signal's
+static part. **It does not test the statistic the item registers**, the gate's own
+p-value ranked among twins. **That p-rank cell stays in this draft as a later cell**,
+on the same panels so the two are paired, and goes live by its own dated commit after
+7.5 stage 1 fixes its planted level.
+
+**Cost and n** are measured by the laptop smoke on 985000–985999, run to completion,
+and recorded by a dated addendum. The proposed n stays **1,000** unless that
+measurement says otherwise.
