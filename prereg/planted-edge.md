@@ -542,3 +542,77 @@ registered. (3) Masking stands; the departure from §4, its reason, and 6.5's
 convergence on `beta252_z+` (47/80) as a readout. (4) Cap 3 by rule, with the fallback
 read on the agent: saturation above one half reads check 4 as uninformative and
 registers a depth-4 class via the moment engine as the next step.
+
+## Amendment — 2026-10-01, the draft not live. False certification at every level; the population-best member; what the grid is denominated in
+
+**1. False certification is defined at every level as certifying a specification
+whose population Sharpe is ≤ 0** — in-sample `SR_pop` of the certified submission, as
+defined in Design — **not as certifying a non-planted member.** A non-planted member
+with `SR_pop > 0` is a true edge on this DGP, and certifying it is a correct
+certificate. Rule 1 is read with this definition at **every level**:
+- at β = 0 (`c = 0`) every member has `SR_pop < 0`, so every certificate is false, as
+  before;
+- at the planted levels the false members are those with `SR_pop ≤ 0`, which on the
+  design panels is **51,520–77,402 of 82,240** (table below), so the rule has content
+  there too. It is read per level with the same one-sided lower-Wilson rule, the same
+  replication branch, and the same detectability at its n.
+- *Predicted at or below nominal at every level.* The class tier's null is the class
+  maximum with **every** member demeaned, which stochastically dominates the maximum
+  over the members whose null is true; so a certificate on any `SR_pop ≤ 0` member has
+  probability at most α whichever members carry an edge. That is control over the
+  false members themselves, not only under the global null, and it is what rule 1 now
+  tests.
+
+**2. Is `m*` the population-best member at each level? No, and it is not
+guaranteed.** β calibrates `m*`'s own population Sharpe. Every other member loads on the
+planted signal through the overlap of its weights with `w*`, and one that overlaps
+heavily at lower turnover or lower residual variance carries the same edge more
+efficiently. Measured, analytically (no residual draw), on design panels 640000–640006
+(`runs/planted_edge_population_levels.json`):
+
+| level | `m*` is population-best | `m*`'s rank, median (range) | population-best shares 2 of 3 with `m*` |
+|---|---|---|---|
+| 0 | 0/7 | 60,109 | 0/7 (the best is one fixed member, `SR_pop` −0.028) |
+| 0.5 | **0/7** | 3,646 (3 – 13,529) | 4/7 |
+| 1.0 | **1/7** | 1,086 (1 – 7,744) | 4/7 |
+| 1.5 | **1/7** | 216 (1 – 4,268) | 4/7 |
+
+**So recovery is registered against the population-best member as well**, alongside
+the two existing rates. With `m⁺` the argmax of `SR_pop` over the class at the panel's
+level, per run: the submission **equals `m⁺`**, and the submission **shares at least
+two of `m⁺`'s three signed features** (or all of a smaller `m⁺`'s). Rates per level
+and arm, Wilson intervals, each beside its exhaustive base rate from the scripted half
+(how often the realized class argmax equals or overlaps `m⁺`), with both branches as
+rule 3: *near the base rate*, the agent finds what the class's own maximum would;
+*well below it*, it misses the edge's best carrier. **Read at the planted levels only**:
+at β = 0 `m⁺` is one fixed member with negative `SR_pop`, and recovering it means
+nothing. Rule 5's comparison is unchanged, since it already scores each submission by
+its own `SR_pop`.
+
+*Build item this adds, recorded so it is not hidden in cost:* `m⁺` needs every member's
+`SR_pop` at every panel and level. It is to be computed **inside the class pass's own
+position loop** — the positions are the same, and `SR_pop` adds the deterministic
+term `c⟨w, w*⟩` and the quadratic `w'Σw` to what `streams_for` already accumulates —
+and the smoke re-measured. A separate pass would cost about as much again as the
+class pass; if the re-measured cost exceeds $40, the registered lever order applies.
+
+**3. What the grid is denominated in.** **β is the planted member `m*`'s in-sample
+population net Sharpe**: annualised by √252, net of the registered ETF cost and
+borrow, on 2006-01-04 to 2017-12-29, under the planted DGP. **Level 0 is `c = 0`**, the
+unplanted panel. **β is not the class's best population Sharpe, and it is not a realized
+Sharpe.** Per level, on the 7 design panels:
+
+| level | class maximum `SR_pop`, min / median / max | members with `SR_pop` > 0, min / median / max |
+|---|---|---|
+| 0 | −0.028 / −0.028 / −0.028 | 0 / 0 / 0 |
+| 0.5 | +0.508 / +0.754 / +1.324 | 4,838 / 20,370 / 26,402 |
+| 1.0 | +1.000 / +1.207 / +1.759 | 11,541 / 24,874 / 28,867 |
+| 1.5 | +1.500 / +1.679 / +2.194 | 16,455 / 27,592 / 30,720 |
+
+**What this means for the curve, recorded and not acted on.** At a given β the best
+edge actually available varies across panels — at β = 0.5 from 0.51 to 1.32 — so power
+"at β" averages over panels whose strongest member differs by up to 0.8. Rule 2 is read
+by β as registered, and nearest-the-bar is still chosen by β. **Added as a descriptive
+readout**: power reported again against each panel's class-maximum `SR_pop`, binned,
+so the curve can be read in the units of the edge the class actually holds. No rule
+reads it.
