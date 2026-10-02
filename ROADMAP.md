@@ -941,6 +941,10 @@ with the leaking decision kind named.
 
 ## 7.4 EU-tech ADR testbed at 5-minute bars
 
+> **WITHDRAWN 2026-10-01, as written.** Replaced by 7.5, the planted-edge experiment
+> (`prereg/planted-edge.md`). The reason is at the end of this file, "7.4 withdrawn,
+> 7.5 registered". The text below is left as it stood.
+
 **Why ADRs.** The ADR trades in US hours while its home market is open
 until ~11:30 ET and closed after. Information arrives on a schedule and
 pulls in known directions — home index, sector ETF, FX, the ADR–ordinary
@@ -1518,3 +1522,29 @@ That is settled **before** 6.5 opens its holdout, by the rule above and not by w
 tier looks better on the day. It also means 6.5's verdict does not depend on the
 agent's trigger discipline: a run whose rule changed still has a class-tier p, which
 is the property the agent cell showed matters most in practice.
+
+## 7.4 withdrawn, 7.5 registered — 2026-10-01
+
+**7.4 is withdrawn as written.** Its panel's corrected class maximum is **gross +0.59,
+net −2.64, with no net-positive member of the declared class**
+(`prereg/adr-features.md`, the deviation and amendment 3). That fact was established
+**in-sample**, on the panel 7.4 would have searched. A gate run on a class with no
+net-positive member can only confirm FAIL: its expected outcome was already written
+down as "FAIL or INADMISSIBLE throughout", so a run would have measured agent behaviour
+on a known-empty panel and nothing about whether the gate finds an edge. 6.5's ETF
+panel told the same story at real-data scale: class tier 0/40, the class maximum at
+half the null level.
+
+**What survives it.** The ADR feature, cost and universe work stands as recorded in
+`prereg/adr-features.md` and `prereg/adr-universe.md`; nothing there is edited, and
+`data/adr_guard.py` is unchanged. A lower-frequency ADR variant stays where amendment
+3 put it, in `OPEN_QUESTIONS.md`, as a separate experiment.
+
+**7.5 replaces it: a planted edge on real features** (`prereg/planted-edge.md`,
+committed not live). The real ETF feature matrix with a joint-time bootstrap of the
+real return residual and one class member's signal planted at known population net
+Sharpe {0, 0.5, 1.0, 1.5}. The scripted half runs first and fixes the power curve; the
+agent half runs at β = 0, the level nearest the class bar, and 1.5. **The truth is
+known**, so false certification, power, recovery, the deflation gap and out-of-sample
+value are all read against it rather than inferred. 6.5 remains the liquid real-data
+anchor, graded at 6.9.
