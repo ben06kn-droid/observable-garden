@@ -910,3 +910,24 @@ whose `m*` does not contain feature 32**, under the per-panel shuffled numbering
    that same stream (`environments/planted_view.asset_permutation`, which asserts that
    its feature permutation equals `masking_permutation`). Rows are not reordered.
    Every per-panel random choice stays on one registered stream.
+
+## Stage 1 — paused, 2026-10-02 (America/Chicago), 21:54 CDT (02:54 UTC on 2026-10-03)
+
+**The registered curve was paused at the author's request, partway through. Nothing
+was opened.** The run started at 01:52:36 UTC (launch commit `6f55a07`, code at
+`6fdd1ba`, 191 workers on the c7a.48xlarge). It was stopped at 02:54 UTC, just after
+its third wave of 191 seeds was written.
+- **On disk:** `runs/planted_edge_scripted/draws.jsonl`, **573 complete lines**,
+  seeds **600000–600572** contiguous, none unparseable (checked by seed count only),
+  SHA-256 `9adf6ebfb3c1bb212298f820251675dfba61988c4fbb25592fd157b313945ad4`. It is on
+  the instance's volume (shutdown behaviour Stop, so the volume persists) and in a
+  copy on the author's laptop outside the repository. **Not committed:** results are
+  committed when all 2,000 seeds are complete.
+- **Lost:** the fourth wave's seeds had just started and are rerun from scratch.
+  Resume is by seed (`experiments/_resume.load_done`): the relaunch runs the 1,427
+  missing seeds at identical settings, and a seed's record does not depend on which
+  run computed it.
+- **The resume uses the same code.** The instance's checkout is not pulled before the
+  relaunch, so `planted_panel.py` and `planted_edge.py` stay at `6fdd1ba`, and the
+  log's commit line for the resumed run must read `6f55a07`. A different instance type
+  or platform is a deviation and is recorded as one.
