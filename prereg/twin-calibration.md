@@ -508,3 +508,64 @@ the data it reports on is fixed in history before any number in it is seen.
 and peak memory. **Resume is by seed**: a relaunch skips every seed on record and redoes
 the rest from scratch, deterministically; a truncated last line from an interrupted
 write is dropped and its seed redone (`load_done`, tested).
+
+## Score-rank cell — Read, 2026-10-02. CLOSED
+
+**Read once**, by the reader committed before it opened the results (`26e3a0e`), on
+the results committed before any read (`1affdd1`); the output is `1fc432a`
+(`runs/planted_twins_score/read.txt`). 1,000 panels on 650000–650999, run at the live
+commit `f43c812`. Nothing below goes beyond that file.
+
+**T1 at level 0 — all twelve PASS.** k score-rank rejections at α = 0.05 of 1,000
+level-0 panels; the rule fires at k ≥ 64.
+
+| searcher | joint-time permutation | block permutation |
+|---|---|---|
+| stop-when-cleared | 32 (0.0320) [0.0228, 0.0448] | 39 (0.0390) [0.0287, 0.0529] |
+| extend-while-improving | 32 (0.0320) [0.0228, 0.0448] | 39 (0.0390) [0.0287, 0.0529] |
+| cleared-restart | 32 (0.0320) [0.0228, 0.0448] | 39 (0.0390) [0.0287, 0.0529] |
+| lookahead-stop-when-cleared | 33 (0.0330) [0.0236, 0.0460] | 39 (0.0390) [0.0287, 0.0529] |
+| random-extend-while-improving | 25 (0.0250) [0.0170, 0.0366] | 48 (0.0480) [0.0364, 0.0631] |
+| second-best-while-improving | 32 (0.0320) [0.0228, 0.0448] | 45 (0.0450) [0.0338, 0.0597] |
+
+No ties and no empty submissions on any rule. **The replication branch was not
+triggered.** Each upper Wilson end is the largest liberality the data do not rule out:
+at most 0.0448–0.0460 under joint-time permutation (0.0366 for
+random-extend-while-improving) and 0.0529–0.0631 under block permutation.
+
+**The autocorrelation sign, and the prediction: it held.** The median across the 1,000
+level-0 panels of `median_lag1_autocorr_signed_singles` is **−0.063514**, negative on
+998 panels and positive on 2. Registered, that predicts a departure **below** 1/20,
+small, and smaller under block permutation. All twelve rates are below 0.05, and every
+block-permutation rate (0.0390–0.0480) is nearer 0.05 than the same searcher's
+joint-time rate (0.0250–0.0330).
+
+**Level 1.0, descriptive; no rule reads it.** Correct rejections, those with submission
+population Sharpe > 0, are **450–463 of 1,000 under joint-time permutation and 499–509
+under block permutation**, Wilson intervals in `read.txt`. **29 rejections were of
+submissions with population Sharpe ≤ 0**, every one negative (−0.047 to −0.443), on
+seeds 650086, 650686, 650706, 650789 and 650839, listed in full in `read.txt`.
+
+**The limits, stated with the result:**
+- **Twelve dependent rules.** Six searchers on the same 1,000 panels, several submitting
+  the same specification, are not twelve independent tests. Four searchers give
+  identical counts under both constructions. The family figures registered beside them
+  assumed independence.
+- **Score-rank, not p-rank.** This tests whether the two twin constructions are
+  exchangeable with the real panel on real features, for the submitted-score statistic.
+  It does **not** test the registered p-rank statistic, the gate's own p-value ranked
+  among twins. That cell remains a draft.
+- **Scripted searchers only.** No agent ran. Whether an agent's search keeps twins
+  exchangeable is untested.
+- **Synthetic returns on real features.** The panels are the planted generator's:
+  real X (pinned, `4b461070…b7ba`) with a resampled real residual, independent of X by
+  construction. A real return series, with real feature-return dependence, is not tested
+  here.
+
+**Cost, from the run's log:** 1,000 panels in **34 min 01 s wall** (2026-10-03,
+00:06:58–00:40:59 UTC); per panel, wall median 349 s (178–555); peak 444 MB per worker;
+about 97 CPU-hours. **About $5.58 for the run** at $9.85/h, **about $7.22 with the
+self-stop's 10-minute fetch window**, against the $7–9 projected from the box smoke.
+No seat cost.
+
+**The score-rank cell is closed.**

@@ -154,7 +154,7 @@ rather than in a footnote.
 | `prior-weighted-alpha` | is splitting alpha between a declared short list and the adaptive search worth the power? | draft, not live |
 | `living-verdict` | can a certification be kept under continuous review and revoked? (stub, built after the paper) | draft, not live |
 | `stability-statistic` | does minimum-Sharpe-across-blocks reduce non-persistent passes enough to justify its power cost? | draft, not live |
-| `twin-calibration` | does re-running the same agent on placebo twins certify what the log-based null misses? | draft, not live |
+| `twin-calibration` | does re-running the same agent on placebo twins certify what the log-based null misses? | **score-rank cell CLOSED 2026-10-02** (live `f43c812`, results `1affdd1`, reader `26e3a0e`, read `1fc432a`): 1,000 planted panels, six scripted searchers, K = 19 under joint-time and block permutation. **T1 at level 0: all twelve PASS**, k = 25-48 of 1,000 against the threshold of 64; replication not triggered. The predicted direction held: median lag-1 autocorrelation -0.0635, every rate below 0.05, block permutation nearer nominal. Level 1.0 descriptive: correct rejections 450-509 of 1,000; 29 rejections of negative-population-Sharpe submissions on 5 seeds. Limits: twelve dependent rules, score-rank not p-rank, scripted only, synthetic returns on real features. 34 min, ~$7 on a c7a.48xlarge. **The p-rank cell and the agent-level item remain draft, not live** |
 | `bits-of-selection` | is there a common unit for how much a search looked at? (measurement only, enters no verdict) | draft, not live |
 | `pivotal-interrogation` | can DEPENDS_ON_JUDGMENT be resolved by querying the agent only where its answer could move the verdict? | draft, not live |
 

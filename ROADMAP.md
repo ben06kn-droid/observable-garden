@@ -1548,3 +1548,17 @@ agent half runs at β = 0, the level nearest the class bar, and 1.5. **The truth
 known**, so false certification, power, recovery, the deflation gap and out-of-sample
 value are all read against it rather than inferred. 6.5 remains the liquid real-data
 anchor, graded at 6.9.
+
+## Twin calibration: the score-rank cell closed — 2026-10-02
+
+**Closed** (`prereg/twin-calibration.md`, "Score-rank cell — Read"; live `f43c812`,
+results `1affdd1`, read `1fc432a`). On 1,000 planted panels with six scripted searchers,
+**both twin constructions passed T1 at level 0 on all twelve rules**, at rates of
+0.025–0.048 against a threshold of k ≥ 64 of 1,000. **The replication branch was not
+triggered.** The registered direction held: conservative, and nearer nominal under block
+permutation. The cell ran in 34 minutes for about $7 on a c7a.48xlarge.
+
+**Still draft, not live:** the **p-rank cell**, which ranks the gate's own p-value among
+twins, needs 7.5 stage 1's nearest-the-bar level; and the agent-level twin item. The
+score-rank cell tested the constructions, not the p-rank statistic, so it does not
+license twin certification as registered.
