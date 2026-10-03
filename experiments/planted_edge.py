@@ -41,6 +41,7 @@ from estimator.bootstrap import select_block_length, stationary_bootstrap_indice
 from experiments._resume import load_done
 
 SEED0 = 600_000              # registered: 600000-601999
+SEED0_REPLICATION = 610_000  # registered: one shot, for the first rule-1 failure
 SEED0_SMOKE = 980_000        # smoke and scaling, cost only
 B_DEFAULT = 1_000
 N_REGISTERED = 2000          # the curve's registered seeds, 600000-601999
@@ -267,16 +268,23 @@ def main(argv=None) -> int:
                          "projects hours only")
     ap.add_argument("--projected-workers", type=int, default=None,
                     help="the worker count the registered run will use; default --workers")
+    ap.add_argument("--replication", action="store_true",
+                    help="the registered one-shot replication block 610000-611999, the "
+                         "whole block at identical settings; writes to OUT + _replication")
     ap.add_argument("--smoke", type=int, default=0,
                     help="N panels on the smoke block 980000+, cost only, no rule quantity")
     a = ap.parse_args(argv)
     levels = [float(x) for x in a.levels.split(",")]
 
     smoke = a.smoke > 0
-    seed0, n = (SEED0_SMOKE, a.smoke) if smoke else (SEED0, a.draws)
+    if smoke and a.replication:
+        raise SystemExit("--replication and --smoke are exclusive")
+    seed0 = SEED0_SMOKE if smoke else (SEED0_REPLICATION if a.replication else SEED0)
+    n = a.smoke if smoke else a.draws
     if smoke and n > 1000:
         raise SystemExit("the smoke block is 980000-980999")
-    out = Path("runs/_smoke/planted_edge" if smoke else a.out)
+    out = Path("runs/_smoke/planted_edge" if smoke else
+               a.out + ("_replication" if a.replication else ""))
     out.mkdir(parents=True, exist_ok=True)
     path = out / "draws.jsonl"
     done = load_done(path)          # a truncated last line is dropped, its seed redone

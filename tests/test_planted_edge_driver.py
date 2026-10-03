@@ -140,3 +140,29 @@ def test_every_seed_records_its_cpu_seconds_and_the_smoke_its_wall_cpu_ratio(
     recs = [json.loads(l) for l in (tmp_path / "runs" / "_smoke" / "planted_edge"
                                     / "draws.jsonl").read_text().splitlines()]
     assert all(r["cpu_secs"] > 0 for r in recs)
+
+
+def test_the_replication_flag_runs_610000_into_its_own_directory(tmp_path, monkeypatch, base):
+    monkeypatch.setattr(pp, "load_base", lambda: base)
+    real = pp.invariants_for
+    monkeypatch.setattr(pp, "invariants_for", lambda b: real(b, cache_dir=tmp_path))
+    monkeypatch.chdir(tmp_path)
+    seen = []
+    real_seed = pe.run_seed
+    monkeypatch.setattr(pe, "run_seed", lambda p: seen.append(p[0]) or real_seed(p))
+
+    class Inline:
+        def __init__(self, max_workers=None): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def submit(self, fn, *a):
+            from concurrent.futures import Future
+            f = Future(); f.set_result(fn(*a)); return f
+    import concurrent.futures as cf
+    monkeypatch.setattr(cf, "ProcessPoolExecutor", Inline)
+    assert pe.main(["--replication", "--draws", "2", "--workers", "1", "--levels", "0",
+                    "--B", "10", "--out", str(tmp_path / "res")]) == 0
+    assert seen == [610000, 610001]
+    assert (tmp_path / "res_replication" / "draws.jsonl").exists()
+    with pytest.raises(SystemExit, match="exclusive"):
+        pe.main(["--replication", "--smoke", "1"])
