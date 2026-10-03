@@ -887,3 +887,26 @@ whose `m*` does not contain feature 32**, under the per-panel shuffled numbering
 - *Beside it, descriptive and proposed for stage 2 to accept or drop:* the same share
   for **masked number 32**, whatever true feature it is. A rate above base there is an
   effect of position in the numbering, which the shuffle separates from X.
+
+## Recorded for stage 2 — 2026-10-02 (America/Chicago), draft, not live. The cap inside the replay null; the instrument labels' stream
+
+1. **The unsaturable arm's cap is enforced inside the replay null, not only in the
+   live harness.** The harness refuses the fourth content move (`ToolSession`'s
+   `content_cap`, build item 7, `ad825d4`), and the cap is written on the session log.
+   Trigger replay as it stands (`quixote/replay.py`) bounds a replicate by the
+   declared budget, which is the turn limit (60). A replicate whose triggers never fire
+   could therefore make more content moves than the capped agent could, so it would
+   price a deeper search than the one that ran. **Registered for stage 2: on a capped
+   run, every replicate stops content moves at the same cap and counts them as the
+   harness does.** Each of `init`, `extend_best`, `swap_worst`, `flip`, `refine`, `pick`
+   and the fill's content step counts one when evaluated; `restart` and `stop` do not.
+   After the cap, a replicate ends as the harness would end the live search. It must
+   be built and tested (on a replicate equal to the realized data, the capped replay
+   reproduces the capped search) before the stage-2 live commit. Until then the
+   unsaturable arm's replay tier is not computable as registered.
+2. **The instrument labels come from the same stream as the feature shuffle.** The
+   feature permutation is child [1]'s stream after the member draw
+   (`masking_permutation`). The instrument-label permutation is the next draw from
+   that same stream (`environments/planted_view.asset_permutation`, which asserts that
+   its feature permutation equals `masking_permutation`). Rows are not reordered.
+   Every per-panel random choice stays on one registered stream.
