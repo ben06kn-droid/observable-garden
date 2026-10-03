@@ -123,6 +123,10 @@ class SessionLog:
     # limit is that budget and is written at session open, so a replay has no
     # business guessing one (`prereg/agent-cell.md` amendment 10).
     agent_driven: bool = False
+    # The cap on CONTENT moves a session may make, or None. 7.5's unsaturable arm
+    # runs at 3 (`prereg/planted-edge.md`, "The unsaturable arm"); the harness
+    # refuses the fourth. Recorded on the log so a stored run says what it ran under.
+    content_cap: int | None = None
 
     # -- append-only ------------------------------------------------------
 

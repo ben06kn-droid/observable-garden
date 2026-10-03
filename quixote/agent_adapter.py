@@ -127,9 +127,21 @@ class ToolSession:
     """
 
     def __init__(self, session: Session, short_list_cap: int = 5,
-                 max_turns: int | None = None):
+                 max_turns: int | None = None, content_cap: int | None = None):
         self.session = session
         self.short_list_cap = short_list_cap
+        # THE CONTENT-MOVE CAP: 7.5's unsaturable arm (`prereg/planted-edge.md`).
+        # `init`, `extend_best`, `swap_worst`, `flip`, `refine` and `pick` each count
+        # one; the declarations, `stop`, `restart`, `predict` and `submit` do not.
+        # A move counts when it is EVALUATED, kept or discarded alike, since it
+        # touched the data either way. A move refused before evaluation (inapplicable,
+        # outside the class, a firing trigger) or one with no candidate does not.
+        # The move past the cap is refused before anything is computed.
+        if content_cap is not None and int(content_cap) < 1:
+            raise ValueError(f"content_cap {content_cap} must be a positive integer")
+        self.content_cap = None if content_cap is None else int(content_cap)
+        self.n_content = 0
+        session.log.content_cap = self.content_cap
         # AT SESSION OPEN: the harness's turn limit IS the declared budget.
         #
         # An agent's procedure ends at a declared trigger or at the turn limit,
@@ -211,6 +223,11 @@ class ToolSession:
         (decision (b)): the harness announces the rule and waits for the agent to
         stop or to change it.
         """
+        if self.content_cap is not None and self.n_content >= self.content_cap:
+            raise ToolRefused(
+                f"{move.kind} refused: this session's cap of {self.content_cap} content "
+                f"moves is used ({self.n_content} made). `stop` on a declared trigger, "
+                "`predict` and `submit` remain.")
         pre = self.session.grammar.precondition(self.session.support, move)
         if pre is not None:
             kind, why = pre
@@ -230,6 +247,7 @@ class ToolSession:
             self.session.cancel()
             return ToolResult(False, f"{move.kind}: no candidate inside the class",
                               {"n_candidates": 0})
+        self.n_content += 1
         if keep:
             self.session.accept(trigger=trigger)
             kept = "kept"
