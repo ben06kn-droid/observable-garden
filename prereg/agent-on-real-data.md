@@ -566,3 +566,26 @@ change is resolution**: every interval in the 6.5 read is wider than registered,
 factors above, and the arm comparisons see only effects about 1.4 times larger than
 the registration sized for. Whether to run the missing 60 runs is a separate decision,
 and this note does not make it.
+
+## Recorded 2026-10-02: registered as "feature names are not masked"; in fact agents were shown numbers only
+
+`prereg/AGENT_PROMPTS_REAL.md` §4 registers that "Feature names are not masked", on the
+grounds that the names describe arithmetic. **No 6.5 agent was shown a feature name.**
+Every tool takes and returns feature numbers 0–39, in one fixed order on every panel,
+and the system prompt says only how many features there are. A search of all **87 ETF
+run files** (`runs/etf_*`, `runs/shakeout_etf_orientation`, `runs/agent_pilot_etf_seat`)
+found none of the 40 names in any prompt, tool call, tool result or assistant text.
+What the agents saw was the numbering, the same on every run: number 32 was `beta252_z`
+and number 31 was `drawdown_rank`.
+
+**No verdict changes.** The registration said names *could* be shown; it did not
+require them to be. Every tool, the class, the class tier and the replay tier work on
+the numbers, and the runs are priced on what was actually shown. What changes is how
+readouts that mention names should be read. "Agents converged on `beta252_z+`" means
+they converged on **number 32**, and a reading that appeals to the name (momentum, low
+volatility) is not available. Control run 8's `[ret1_rank −, mom5_rank +]` was, as the
+agent saw it, `[1−, 3+]`. The rank-tie note above is unaffected: it concerns the values
+behind the numbers.
+
+7.5's masking rationale is corrected for the same reason (`prereg/planted-edge.md`,
+amendment of 2026-10-02).

@@ -8,8 +8,9 @@ member draw.
 **The index order is masked, not only the names.** An agent names a feature by its
 integer index (`evaluate(features=[...])`, `flip(feature=...)`, `pick(among=[...])`), and
 every support it is shown is a list of indices. In 6.5 no real feature name reached
-any agent: on 2026-10-03, a scan of all 87 ETF run files found none of the 40 names in
-any prompt, tool call, tool result or assistant text. What did cross was a **stable
+any agent: on 2026-10-02 (America/Chicago), a scan of all 87 ETF run files found
+none of the 40 names in any prompt, tool call, tool result or assistant text. What
+did cross was a **stable
 index**. Index 32 was `beta252_z` on every panel, so "convergence on one feature" could
 be convergence on one index. Relabelling alone would leave that in place, so the view
 permutes the feature AXIS: masked index `j` is true feature `perm[j]`, and its label is
