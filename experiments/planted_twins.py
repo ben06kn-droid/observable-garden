@@ -42,6 +42,7 @@ from experiments.planted_edge import _searchers, _sharpe_rows, peak_rss_mb
 from quixote.twins import K_FOR_ALPHA, twin_p_value, twins
 
 SEED0 = 650_000
+SEED0_REPLICATION = 660_000      # registered: one shot, for the first T1 failure
 SEED0_SMOKE = 985_000
 K = K_FOR_ALPHA[0.05]            # 19, registered
 B_DEFAULT = 1_000
@@ -336,6 +337,9 @@ def main(argv=None) -> int:
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     ap.add_argument("--out", default="runs/planted_twins")
     ap.add_argument("--smoke", type=int, default=0)
+    ap.add_argument("--replication", action="store_true",
+                    help="the registered one-shot replication block 660000-660999, "
+                         "for the first T1 failure only; writes to OUT + _replication")
     ap.add_argument("--cell", choices=("score", "prank"), default="score",
                     help="score: the score-rank cell, runs first, levels 0 and 1.0 fixed; "
                          "prank: the registered p-rank cell, a later cell")
@@ -352,8 +356,11 @@ def main(argv=None) -> int:
             raise SystemExit("--planted is required for the p-rank cell: stage 1's "
                              "nearest-the-bar, fixed by dated commit before it is live")
         levels = [0.0, a.planted]
-    seed0, n = (SEED0_SMOKE, a.smoke) if smoke else (SEED0, a.draws)
-    suffix = "" if a.cell == "prank" else "_score"
+    if smoke and a.replication:
+        raise SystemExit("--replication and --smoke are exclusive")
+    seed0 = SEED0_SMOKE if smoke else (SEED0_REPLICATION if a.replication else SEED0)
+    n = a.smoke if smoke else a.draws
+    suffix = ("" if a.cell == "prank" else "_score") + ("_replication" if a.replication else "")
     out = Path(f"runs/_smoke/planted_twins{suffix}" if smoke else a.out + suffix)
     out.mkdir(parents=True, exist_ok=True)
     path = out / "draws.jsonl"

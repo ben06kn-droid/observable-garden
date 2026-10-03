@@ -169,3 +169,27 @@ def test_every_record_carries_its_platform(base, monkeypatch):
     rec = tw.run_seed((985000, [0.0], 10, "score"))
     for r in (rec, tw.cost_only(rec)):
         assert set(r["platform"]) >= {"machine", "system", "python", "numpy"}
+
+
+def test_the_replication_flag_runs_its_own_block_into_its_own_directory(base, monkeypatch, tmp_path):
+    monkeypatch.setattr(pp, "load_base", lambda: base)
+    monkeypatch.chdir(tmp_path)
+    seen = []
+    real = tw.run_seed
+    monkeypatch.setattr(tw, "run_seed", lambda payload: seen.append(payload[0]) or real(payload))
+
+    class Inline:                                  # run in-process so the patches hold
+        def __init__(self, max_workers=None): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def submit(self, fn, *a):
+            from concurrent.futures import Future
+            f = Future(); f.set_result(fn(*a)); return f
+    import concurrent.futures as cf
+    monkeypatch.setattr(cf, "ProcessPoolExecutor", Inline)
+    assert tw.main(["--cell", "score", "--replication", "--draws", "2", "--workers", "1",
+                    "--out", str(tmp_path / "res")]) == 0
+    assert seen == [660000, 660001]
+    assert (tmp_path / "res_score_replication" / "draws.jsonl").exists()
+    with pytest.raises(SystemExit, match="exclusive"):
+        tw.main(["--replication", "--smoke", "1"])
