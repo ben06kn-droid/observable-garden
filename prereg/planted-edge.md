@@ -1,9 +1,10 @@
 # 7.5 planted-edge: a known edge, on real features, in agent hands
 
-**DRAFT — committed, not live. Nothing runs on it.** It replaces 7.4, withdrawn
-2026-10-01 (`ROADMAP.md`, "7.4 withdrawn, 7.5 registered"). It goes live by a
-dated commit once the build items below exist and pass their tests. Until then a
-change is an edit to a draft, recorded in history, not an amendment.
+**STAGE 1 (the scripted half) LIVE from 2026-10-02 (America/Chicago). Stage 2 (the agent
+half) is NOT live.** It replaces 7.4, withdrawn 2026-10-01 (`ROADMAP.md`, "7.4 withdrawn,
+7.5 registered"). From this commit a change to anything stage 1 reads is a dated
+amendment, appended, never an edit; the agent half's sections remain a draft until
+stage 2's commit (the end of this file, "Stage 1 — LIVE").
 
 ## Question
 
@@ -752,3 +753,92 @@ files, and loads the pinned X beside them. The box's real-data tests pass on the
 (`test_the_registered_generator_reproduces_the_preflights_scale`,
 `test_load_base_uses_the_pinned_matrix_not_the_build`), so a box run and a laptop run are
 the same panel.
+
+## Stage 1 — LIVE, 2026-10-02 (America/Chicago)
+
+**Only the scripted half goes live.** Stage 2, the agent half, stays a draft — its arms and
+sizing, the sealed agent holdout, masking, rules 4, 6 and 7, the four reader definitions,
+the prior-weighted arm and build items 2–7 — until its own dated commit after the
+scripted read.
+
+**What goes live:**
+- **Design.** Features are the pinned X (SHA-256
+  `4b4610704db0042c514c8ee4f230b239942d4b15be87d07188be3f0e7600b7ba`, refused on
+  mismatch with no rebuild); returns and costs come from the 40 in-sample CSVs (combined
+  SHA-256 `ce4bc21e64b47d09714308560fa25f39540714dcfba6fb89ab3ee2d34e69df2a`). The
+  residual is resampled in joint-time blocks, independently of X, at block length 7.
+- **Levels: 0, 0.5, 1.0 and 1.5.** Level 0 is the unplanted panel (`c = 0`), where every
+  member's population Sharpe is negative. At 0.5, 1.0 and 1.5 the planted scale is set so
+  that the planted member's population net Sharpe equals the level. The four levels of
+  one seed share its residual draw and its planted member, and every member's population
+  Sharpe is computed in closed form.
+- **Searchers.** The six registered scripted searchers (`registered_71`), class-capped to
+  `SubsetClass(max_size=3, signed=True)`, 82,240 members.
+- **Nulls.** **Class tier (certifying**, by the tier rule) **and trigger replay
+  (audit)**, both at **B = 1,000**, on **identical replicates**: one set of B stationary
+  bootstrap index sequences per panel and level, shared by the two tiers.
+- **Rules, per searcher and level:**
+  - **Rule 1:** false certification, per run: certifying a submission whose in-sample
+    population Sharpe is ≤ 0. Fails high iff the lower end of the Wilson 95% interval
+    exceeds α, at every level.
+    - **The family: 6 searchers × 4 levels × 2 α = 48 tests.** At n = 2,000 a rule
+      fires at k ≥ 120 (α = 0.05) and k ≥ 29 (α = 0.01); an exactly valid rule passes
+      0.9749 and 0.9664 respectively. **If all 48 were exactly valid and independent,
+      all 48 would pass 0.2393 of the time; with the replication branch, 0.9587.** They
+      are neither: **predicted conservative** (at level 0 every member's population
+      Sharpe is negative, and a sub-maximal search is conservative by P2), and
+      **correlated** (the same panels, the same replicates, and searchers that often
+      submit the same specification), so the true family pass rate is higher.
+    - **A rule-1 failure triggers the one-shot replication before anything else is
+      read: the whole block 610000–611999 is rerun at identical settings** — all 2,000
+      seeds, all four levels, all six searchers, B = 1,000 — **and every rule that
+      failed high is re-read on it.** A rule that fails again is a liberal gate on this
+      design; one that holds is reported as one failure of two.
+  - **Rule 2:** power, counting correct certificates only.
+  - **Rule 3:** recovery of `m*` and of the population-best member `m⁺`, exact and
+    two-of-three, beside the exhaustive base rates from the realized class argmax.
+  - **Rule 5:** holdout population Sharpe, certified against uncertified within each
+    level; secondary, the holdout realization computed inline.
+  - Descriptive: power against the panel's class-maximum population Sharpe.
+  - **The standing check.**
+- **Nearest-the-bar:** the level among {0.5, 1.0, 1.5} whose pooled scripted power at
+  α = 0.05 is nearest 50%, ties to the lower.
+
+**Registered now:**
+
+| item | value |
+|---|---|
+| panel seeds | **600000–601999** (2,000 panels, each at all four levels) |
+| replication | **610000–611999**, one shot, for the first failure of any validity rule |
+| smoke | 980000–980999, cost only (used: 980000–980007 on the laptop, 980000–980190 on the box) |
+| design | 640000–640999. **On record:** 640000–640019 (the budget-cap preflight), 640000–640006 (the β = 0 null check and the population analysis), 640001 and 640004 (the closed form's check against that analysis). **Also used, unrecorded until now:** 640020, for the driver's correctness and timing checks on 2026-10-01 and 2026-10-02 |
+| B | **1,000**, both tiers, identical replicates per panel |
+| α | 0.05 and 0.01 |
+| code | `environments/planted_panel.py`, `experiments/planted_edge.py` at **`6fdd1ba`**; the launch uses `cloud/run.sh` at **`8e923c5`** or later (exact-match tmux targets, so the self-stop can fire) |
+| platform | x86_64, EC2 c7a.48xlarge (instance `i-0e0c1484de3c755ad`), shutdown behaviour **Stop** (confirmed in the console); every record carries its platform, and the launch writes the commit hash to the log |
+| workers | **191** |
+
+**Box smoke, the sizing measurement** (`runs/_smoke/planted_edge_box/`, commit `58167e8`; run at `6fdd1ba` on 2026-10-03, 01:10:44 UTC, exit 0):
+
+| item | value |
+|---|---|
+| panels | **191** (980000–980190), all four levels each, B = 1,000 |
+| per seed, all four levels | wall median **1,188 s** (mean 1,186, max 1,208); CPU median **1,188 s**; wall/CPU **1.00** (median and max). Per level: class pass 243 s, trigger nulls 50 s |
+| peak RSS per worker | **1,035 MB** (about 198 GB of 369 at 191 workers); the invariant population moments, once per run, 167 s |
+| projected for 2,000 seeds, **mean throughput** | **3.45 h** wall, **$34** at $9.85/h (plus 167 s for the invariants) |
+| projected for 2,000 seeds, **upper bound** (full rounds × the slowest seed) | **3.69 h** wall (11 rounds × 1,208 s), **$36** at $9.85/h |
+| against the $40 threshold | **under: $34 against $40, so no lever is taken** (the upper bound, $36, is under too) |
+
+**The $40 threshold reads the mean-throughput projection;** the upper bound is reported
+beside it and decides nothing. Fixed here before the smoke ran.
+
+**Before the read:** the results and the run's log are fetched and committed, checked for
+exactly 2,000 complete lines and no truncated line, without opening or summarising any
+rule quantity. **The reader is committed, and tested on synthetic files in the results'
+format, before it opens the results.** The read cites both commits.
+
+**The read, once, after all 2,000 seeds, in this order:** rule 1 per searcher and level
+(and, if any rule fails high, the replication on 610000–611999 before anything else);
+then rules 2, 3 and 5; then the standing check. Nearest-the-bar, the measured standing
+check, rule 5's detectable difference and the recovery base rates are then written into
+this file by a dated commit, as stage 2's inputs.
