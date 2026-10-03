@@ -32,6 +32,26 @@ null over the 82,240 stored net streams (`ClassTable.null_max`), the submitted
 specification scored from the same table. Its replicates are the certifying
 null's own -- the same block length, the same RNG seed, drawn in the same order --
 so the two p-values of a run are computed on identical resamples.
+
+**Planted panels (7.5 stage 2, build item 4).** A run whose `start` event names panel
+`planted` carries its `level`, and its supports are in the MASKED indices the agent saw
+(`environments/planted_view.py`). The panel is rebuilt from the seed: `load_base()`
+loads the pinned X and refuses a mismatch, `make_draw` regenerates the draw, and
+`agent_view` re-applies the mask. **One pass over the masked panel** then builds the
+run's class table in memory (82,240 streams, about 2 GB, so allow about 2.5 GB a
+worker), and with it each member's overlap with the planted weights. From that pass:
+- the **class tier**: `class_p_etf`'s computation on that table, so the replicates are
+  the certifying null's own, as on the ETF panel;
+- the **replay-tier verdict**, through `certify_log` with the same table. Both tiers run
+  at `PLANTED_B` = 1,000 (`prereg/planted-edge.md`, "The nulls");
+- the **population truths**, written to a `planted_truth` record: the submission's
+  in-sample population Sharpe (the closed form, as the scripted driver computes it) and
+  holdout population and realized Sharpe; the planted member and the population-best
+  member, with recovery of each; the realized class argmax; and the feature mask. Every
+  support in the record is in TRUE indices.
+For a planted directory the readout gives counts only. The class-p rates are a rule
+quantity, and they are read by the registered reader after the results are committed,
+not printed at pricing time.
 """
 from __future__ import annotations
 
@@ -131,6 +151,145 @@ def class_p_etf(sandbox, table, seed: int, support, B: int) -> dict:
             "guard_floor": None, "guard_cap": None}
 
 
+PLANTED_B = 1_000         # prereg/planted-edge.md: both tiers at B = 1,000
+
+
+def planted_level(d: dict) -> float:
+    start = events_of(d, "start")
+    if not start or "level" not in start[0]:
+        raise ValueError(f"{d.get('run_id')}: a planted run's `start` event must carry "
+                         "its `level`")
+    return float(start[0]["level"])
+
+
+def planted_basis(seed: int, beta: float):
+    """`(base, draw, view, mask)`: the run's planted panel, rebuilt from its seed on
+    the pinned X, and the masked view its agent searched."""
+    from environments import planted_panel as pp
+    from environments.planted_view import agent_view
+    base = pp.load_base()                  # the pinned X; refuses a mismatch
+    draw = pp.make_draw(base, seed, beta)
+    view, mask = agent_view(draw.in_sample, seed)
+    return base, draw, view, mask
+
+
+def planted_table(base, draw, view, mask, inv: dict | None = None):
+    """One pass over the masked view: the run's class table, in memory, and every
+    member's population Sharpe at this draw's scale.
+
+    Members are enumerated in the view's indices. The panel-invariant moments are
+    per TRUE member, so they are mapped through the mask; the overlap moments come
+    from the pass itself, as in the scripted driver.
+    """
+    from environments import planted_panel as pp
+    from environments.class_table import (CHUNK, ClassTable, _panel_hash, canonical,
+                                          members_in_order)
+    T, _, K = view.features.shape
+    members = members_in_order(pp.CLS, K)
+    N = len(members)
+    streams = np.empty((N, T))
+    Ea, Ea2, Eak = np.empty(N), np.empty(N), np.empty(N)
+    for s in range(0, N, CHUNK):
+        X, Ea[s:s + CHUNK], Ea2[s:s + CHUNK], Eak[s:s + CHUNK] = \
+            pp.streams_with_overlap(view, members[s:s + CHUNK], draw.w_star_is)
+        streams[s:s + len(X)] = X
+    table = ClassTable(streams=streams, members=members,
+                       index={canonical(m): i for i, m in enumerate(members)},
+                       panel_hash=_panel_hash(view),
+                       periods_per_year=float(view.periods_per_year))
+    inv = pp.invariants_for(base) if inv is None else inv
+    true_ix = {canonical(m): i for i, m in enumerate(base.members)}
+    order = np.array([true_ix[canonical(mask.to_true(m))] for m in members])
+    inv_v = {k: np.asarray(v)[order] for k, v in inv.items()}
+    pop = pp.population_from_moments(Ea, Ea2, Eak, inv_v, draw.c, view.periods_per_year)
+    return table, pop
+
+
+def _overlaps(sup, ref) -> bool:
+    """The scripted driver's two-of-three, for a depth-3 reference."""
+    cs = set(sup) if sup else set()
+    need = 2 if len(ref) == 3 else len(ref)
+    return len(cs & set(ref)) >= need
+
+
+def planted_truth(base, draw, view, mask, table, pop, support_masked) -> dict:
+    """The population truths for one run, every support in TRUE indices."""
+    from environments import planted_panel as pp
+    from environments.class_table import canonical
+    from experiments.planted_edge import StreamCache, _sharpe
+
+    ann = float(np.sqrt(view.periods_per_year))
+    star = canonical(draw.m_star)
+    star_v = canonical(mask.to_masked(star))
+    if draw.beta > 0:
+        assert abs(pop[table.column(star_v)] - draw.beta) < 1e-8, \
+            "closed form disagrees with the planted scale"
+    jp = int(np.argmax(pop))
+    plus = canonical(mask.to_true(table.members[jp]))
+    cmax, jc = table.max_sharpe()
+    argmax = canonical(mask.to_true(table.members[jc]))
+
+    def recovery(sup):
+        return {"equals": sup == star if sup else False,
+                "two_of_three": _overlaps(sup, star),
+                "equals_pop_best": sup == plus if sup else False,
+                "two_of_three_pop_best": _overlaps(sup, plus)}
+
+    sup_v = canonical(support_masked) if support_masked else None
+    sup = canonical(mask.to_true(sup_v)) if sup_v else None
+    rec = {"seed": draw.seed, "level": draw.beta, "c": draw.c,
+           "feature_mask": list(mask.perm),
+           "submitted_support_true": [list(x) for x in sup] if sup else None,
+           "submitted_truth": ({"in_sample": float(pop[table.column(sup_v)]),
+                                "holdout": pp.truth(base, draw, sup)["holdout"]}
+                               if sup else None),
+           "submitted_realized": table.sharpe(sup_v) if sup else None,
+           "submitted_holdout_realized": (_sharpe(StreamCache(draw.holdout).get(sup), ann)
+                                          if sup else None),
+           "submitted_recovery": recovery(sup),
+           "planted": [list(x) for x in star],
+           "planted_truth": pp.truth(base, draw, star),
+           "planted_realized": table.sharpe(star_v),
+           "class_max": float(cmax), "class_argmax": [list(x) for x in argmax],
+           "class_argmax_recovery": recovery(argmax),
+           "pop_best": [list(x) for x in plus], "pop_best_sr": float(pop[jp]),
+           "pop_n_positive": int((pop > 0).sum()),
+           "planted_rank": int((pop > pop[table.column(star_v)]).sum()) + 1}
+    return rec
+
+
+def price_planted(d: dict, out: dict, check: bool, class_B: int | None) -> dict:
+    """One planted run: verdict, class tier and truths from one pass."""
+    from environments import planted_panel as pp
+    from environments.real_sandbox import RealSandbox
+    from experiments.agent_backend import RunRecord, certify_log
+
+    t0 = time.time()
+    seed, beta = int(d["seed"]), planted_level(d)
+    base, draw, view, mask = planted_basis(seed, beta)
+    sandbox = RealSandbox(view, spec_class=pp.CLS)
+    table, pop = planted_table(base, draw, view, mask)
+    B = class_B or PLANTED_B
+    log = rebuild_session_log(d)
+    if log is not None and (out["needs_verdict"] or check):
+        rec = RunRecord(run_id=d["run_id"], arm=d["arm"], seed=seed)
+        certify_log(rec, log, sandbox, pp.CLS, table, B=B)
+        out["certifying_null_computable"] = rec.certifying_null_computable
+        out["verdict"] = rec.verdict
+        out["verdict_events"] = rec.events
+    sup = d.get("submitted_support")
+    cp = class_p_etf(sandbox, table, seed, sup, B)
+    cp["status"] = "CERTIFIED" if cp["p_upper"] < CLASS_ALPHA else "FAIL"
+    cp["alpha"] = CLASS_ALPHA
+    cp["tier"] = "declared class"
+    cp["basis"] = "planted: in-memory class table of the masked view"
+    out["class_p"] = cp
+    out["planted_truth"] = planted_truth(base, draw, view, mask, table, pop, sup)
+    out["panel"] = "planted"
+    out["secs"] = time.time() - t0
+    return out
+
+
 def price_one(payload) -> dict:
     """One run. Module-level so a process pool can pickle it; returns what to
     write and writes nothing itself."""
@@ -150,6 +309,12 @@ def price_one(payload) -> dict:
     # deferred and not yet priced; a second pass over a directory is a no-op
     out["needs_verdict"] = deferred and not ({"verdict", "certify_error"} & set(kinds))
     panel, seed = panel_of(d), int(d["seed"])
+    if panel == "planted":
+        if "planted_truth" in kinds and "class_p" in kinds and not check:
+            out.update(class_p=d["class_p"], planted_truth=d["planted_truth"],
+                       panel=panel, secs=0.0)
+            return out
+        return price_planted(d, out, check, class_B)
     sandbox, cls, table, ann = _basis(panel, seed)
     t0 = time.time()
 
@@ -196,6 +361,11 @@ def _write(path: Path, d: dict, result: dict) -> None:
     if not any(e.get("kind") == "class_p" for e in ev):
         d["class_p"] = result["class_p"]
         new.append({"t": time.time(), "kind": "class_p", **result["class_p"]})
+    if "planted_truth" in result and not any(e.get("kind") == "planted_truth"
+                                             for e in ev):
+        d["planted_truth"] = result["planted_truth"]
+        new.append({"t": time.time(), "kind": "planted_truth",
+                    **result["planted_truth"]})
     if not new:
         return
     new.append({"t": time.time(), "kind": "priced_from_log",
@@ -203,7 +373,8 @@ def _write(path: Path, d: dict, result: dict) -> None:
                 "platform": __import__("experiments.code_state",
                                        fromlist=["platform_info"]).platform_info(),
                 "verdict_written": bool(result.get("needs_verdict")),
-                "class_p_written": "class_p" in [e["kind"] for e in new]})
+                "class_p_written": "class_p" in [e["kind"] for e in new],
+                "planted_truth_written": "planted_truth" in [e["kind"] for e in new]})
     d["events"] = ev[:end_at] + new + ev[end_at:]
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(d, indent=1, default=str))
@@ -307,6 +478,17 @@ def main(argv=None) -> int:
             n_written += p.read_bytes() != before
         L.append(f"  {sum(1 for r in priced if r['needs_verdict'])} deferred run(s) "
                  f"given a verdict; {n_written} file(s) written")
+
+    if any(r.get("panel") == "planted" for r in priced):
+        # counts only: the class-p rates and the truths are rule quantities, read by
+        # the registered reader after the results are committed
+        L += ["", f"  planted: {len(priced)} run(s) priced; class tier and truths "
+              "written; no rate is printed here"]
+        text = "\n".join(L)
+        print("\n" + text, flush=True)
+        if not a.check:
+            (d / "pricing_readout.txt").write_text(text + "\n")
+        return 1 if a.check and disagree else 0
 
     # the readout, from the files' verdicts (or the re-prices under --check)
     def verdict_of(r):

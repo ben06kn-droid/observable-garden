@@ -356,7 +356,8 @@ def _certify_run(rec: RunRecord, tools: ToolSession, sandbox, cls, table=None) -
     certify_log(rec, tools.session.log, sandbox, cls, table)
 
 
-def certify_log(rec: RunRecord, log, sandbox, cls, table=None) -> None:
+def certify_log(rec: RunRecord, log, sandbox, cls, table=None,
+                B: int | None = None) -> None:
     """Can trigger replay be computed from this run's log at all?
 
     Takes the LOG, not the live session, so `experiments/price_runs.py` prices a
@@ -375,7 +376,8 @@ def certify_log(rec: RunRecord, log, sandbox, cls, table=None) -> None:
     base = sandbox.base_feature_columns()
     ann = float(np.sqrt(sandbox.periods_per_year))
     try:
-        v = certify(log, cls, base, ann, alpha=0.05, B=CERTIFY_B,
+        v = certify(log, cls, base, ann, alpha=0.05,
+                    B=CERTIFY_B if B is None else int(B),
                     seed=rec.seed, table=table)
     except Exception as e:
         rec.certifying_null_computable = False
