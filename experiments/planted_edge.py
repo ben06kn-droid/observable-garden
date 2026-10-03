@@ -228,7 +228,7 @@ def run_seed(payload) -> dict:
     seed, levels, B = payload
     base = pp.load_base()
     inv = pp.invariants_for(base)          # computed once by the parent, loaded here
-    t0 = time.time()
+    t0, c0 = time.time(), time.process_time()
     recs, overlap = [], None
     for b in levels:
         r = run_level(base, seed, b, B, inv, overlap)
@@ -236,6 +236,8 @@ def run_seed(payload) -> dict:
         recs.append(r)
     out = {"seed": seed, "levels": recs}
     out["secs"] = time.time() - t0
+    # this seed's own CPU seconds: unaffected by sleep or contention, which wall is not
+    out["cpu_secs"] = time.process_time() - c0
     out["peak_rss_mb"] = peak_rss_mb()
     from experiments.code_state import platform_info
     out["platform"] = platform_info()
@@ -246,7 +248,8 @@ COST_ONLY = ("seed", "secs", "peak_rss_mb")
 
 
 def cost_only(rec: dict) -> dict:
-    return {"seed": rec["seed"], "secs": rec["secs"], "peak_rss_mb": rec["peak_rss_mb"],
+    return {"seed": rec["seed"], "secs": rec["secs"], "cpu_secs": rec.get("cpu_secs"),
+            "peak_rss_mb": rec["peak_rss_mb"],
             "stage_secs": [lv["secs"] for lv in rec["levels"]],
             "platform": rec.get("platform")}
 
@@ -321,8 +324,15 @@ def main(argv=None) -> int:
              "=" * 78,
              f"  panels {len(recs)} (seeds {seed0}-{seed0 + n - 1}), levels {len(levels)}, "
              f"B {a.B}, workers {a.workers}, wall {wall:.0f}s",
-             f"  per seed (all levels): mean {per_seed.mean():.0f}s  median "
-             f"{np.median(per_seed):.0f}s  max {per_seed.max():.0f}s",
+             f"  per seed (all levels): wall mean {per_seed.mean():.0f}s  median "
+             f"{np.median(per_seed):.0f}s  max {per_seed.max():.0f}s; CPU mean "
+             f"{np.mean([r['cpu_secs'] for r in recs]):.0f}s  median "
+             f"{np.median([r['cpu_secs'] for r in recs]):.0f}s  max "
+             f"{max(r['cpu_secs'] for r in recs):.0f}s",
+             f"  wall/CPU ratio median "
+             f"{np.median([r['secs'] / r['cpu_secs'] for r in recs]):.2f} max "
+             f"{max(r['secs'] / r['cpu_secs'] for r in recs):.2f} "
+             "(well above 1 means the machine slept or was contended during that seed)",
              "  per level, by stage (median s): " + ", ".join(
                  f"{k} {np.median(v):.1f}" for k, v in stages.items()),
              f"  peak RSS per worker: max {max(r['peak_rss_mb'] for r in recs):.0f} MB",

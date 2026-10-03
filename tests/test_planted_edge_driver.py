@@ -130,3 +130,13 @@ def test_the_smoke_prices_at_the_given_rate_and_worker_count(tmp_path, monkeypat
 def test_without_a_price_the_smoke_projects_hours_only(tmp_path, monkeypatch, base):
     text = _smoke_main(tmp_path, monkeypatch, base, [])
     assert "hours only" in text and "$" not in text
+
+
+def test_every_seed_records_its_cpu_seconds_and_the_smoke_its_wall_cpu_ratio(
+        tmp_path, monkeypatch, base):
+    text = _smoke_main(tmp_path, monkeypatch, base, ["--price-per-hour", "9.85"])
+    assert "CPU mean" in text and "wall/CPU ratio median" in text
+    import json
+    recs = [json.loads(l) for l in (tmp_path / "runs" / "_smoke" / "planted_edge"
+                                    / "draws.jsonl").read_text().splitlines()]
+    assert all(r["cpu_secs"] > 0 for r in recs)
