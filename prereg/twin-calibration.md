@@ -1,6 +1,8 @@
 # twin-calibration (item 5): the agent as its own null
 
-**DRAFT — committed but not live.** Authorises nothing. A new Phase 7 item.
+**DRAFT — committed but not live, EXCEPT the score-rank cell, LIVE from 2026-10-02**
+(the section "Score-rank cell — LIVE" at the end). Everything else here authorises
+nothing. A new Phase 7 item.
 **This one changes what certifies.** Literature search 2026-09-30 (`docs/RELATED_WORK_2026.md`) found no prior
 replay of an adaptive search's logged decisions inside a data-snooping null,
 and no mixed replay/max-over-alternatives pricing. Not a proof of absence. The note below stands.
@@ -423,3 +425,86 @@ files, and loads the pinned X beside them. The box's real-data tests pass on the
 (`test_the_registered_generator_reproduces_the_preflights_scale`,
 `test_load_base_uses_the_pinned_matrix_not_the_build`), so a box run and a laptop run are
 the same panel.
+
+## Score-rank cell — LIVE, 2026-10-02
+
+**Only the score-rank cell goes live** (the amendments and addenda of 2026-10-02 above).
+The p-rank cell and everything else in this file stay drafts. From this commit, a change
+to anything this cell reads is a dated amendment, appended, never an edit.
+
+**This cell tests the twin constructions, not the registered p-rank statistic.** Under
+exchangeability the rank of any statistic computed the same way on the real panel and
+its twins is exact, so T1 asks whether `joint_time_permutation` and `block_permutation`
+produce twins exchangeable with the real panel on real features. The p-rank statistic —
+the gate's own p-value ranked among twins — is a later cell in this draft.
+
+**What runs.** On each panel, at **levels 0 and 1.0**, the real panel and **K = 19 twins
+under each of `joint_time_permutation` and `block_permutation`** (block 21; twin children
+[3] and [4] of `SeedSequence(seed)`, shared by both levels), and the **six registered
+scripted searchers** (`registered_71`), class-capped to signed depth 3. **Statistic:
+each searcher's submitted realized net Sharpe**; **p** is its rank among the 19 twins,
+`(1 + #{twins scoring ≥ the real run}) / 20`, ties counted against the real run. An
+empty real submission ranks at p = 1, and an empty twin submission never counts against
+the real run (both tested). **X is the pinned file**, SHA-256
+`4b4610704db0042c514c8ee4f230b239942d4b15be87d07188be3f0e7600b7ba`, refused on mismatch
+with no rebuild; returns and costs come from the 40 in-sample CSVs, combined SHA-256
+`ce4bc21e64b47d09714308560fa25f39540714dcfba6fb89ab3ee2d34e69df2a`.
+
+**Registered now:**
+
+| item | value |
+|---|---|
+| panel seeds | **650000–650999, n = 1,000**, both levels paired on each seed |
+| replication | **660000–660999**, n = 1,000, one shot, for the **first** failure among the twelve T1 rules |
+| smoke | 985000–985999, cost only (used: 985000–985013 on the laptop, 985000–985190 on the box) |
+| levels | **0** (unplanted; every member's population Sharpe negative) and **1.0** (the planted member's population net Sharpe) |
+| K | **19 per construction**; α = 0.05 the only attainable level |
+| code | `experiments/planted_twins.py --cell score` and `environments/planted_panel.py` at **`a3ac38b`** (the score cell's code is unchanged since `c5e3860`; the box smoke ran at `a3ac38b`) |
+| platform | **x86_64, EC2 c7a.48xlarge** (instance `i-0e0c1484de3c755ad`), Ubuntu 26.04, Python 3.14.7, numpy 2.5.3; every record carries its platform, and the launch writes the checked-out commit hash to the log |
+| workers | **191**, under `cloud/run.sh` (one BLAS thread per process) |
+
+**Measured cost on this box** (smoke on 985000–985190, 191 panels, 191 workers;
+`runs/_smoke/planted_twins_score_box/`, commit `f840875`): per panel, both levels, 39
+return matrices each, **wall median 338 s** (range 210–428), **CPU median 338 s**,
+**wall/CPU 1.00**; peak memory **441 MB per worker** (about 84 GB of 369); throughput
+**1,587 panels per hour**. **For n = 1,000: six rounds, about 40–45 minutes, about 94
+CPU-hours, about $7 at $9.85/h** (about $9 with the self-stop's 10-minute fetch
+window). No seat cost.
+
+**Before the read: the results are fetched and committed, and only then opened.**
+`runs/planted_twins_score/draws.jsonl` and the run's log are copied from the box,
+checked for exactly 1,000 complete lines and no truncated line, and committed **without
+opening or summarising any rule quantity**. **The read cites that commit's hash**, so
+the data it reports on is fixed in history before any number in it is seen.
+
+**The read, once, after all 1,000 panels, in this order:**
+1. **T1 per searcher and construction — 6 × 2 = 12 rules.** Score-rank rejections at
+   α = 0.05 (`p ≤ 1/20`) at **level 0** over all 1,000 panels; every one is a false
+   certification, since every member's population Sharpe is negative there. **Fails
+   high iff the lower end of the Wilson 95% interval exceeds 0.05 — at n = 1,000, iff
+   k ≥ 64 of 1,000.** An exactly valid rule passes 0.9716; 80% detects a true rate of
+   0.0705. The family pass rate — 0.69–0.71 for twelve independent valid rules, 0.99
+   with the replication branch — is reported beside the twelve.
+   - *At or below nominal:* the construction is exchangeable with the real panel on real
+     features, to this resolution; the upper end is reported as the largest liberality
+     not ruled out.
+   - *Fails high:* the **one-shot replication on 660000–660999** runs before anything
+     else is read. Fails again: the construction is not exchangeable on real features,
+     and twin certification is not used on real-feature panels until it is explained.
+     Replication holds: reported as one failure of two.
+   - *The predicted direction is read against* `median_lag1_autocorr_signed_singles`,
+     recorded per panel and level: **the median, over the real panel's 80 signed depth-1
+     members (every feature at +1 and at −1), of each net stream's demeaned lag-1
+     autocorrelation**, Σ_{t≥2} x̃_t x̃_{t−1} / Σ_t x̃_t². Its median across the level-0
+     panels gives the sign: positive predicts a departure above 1/20 (liberal), negative
+     below (conservative), small either way and smaller under block permutation. **This
+     is not the p-rank cell's figure** (the median over the first class-pass chunk's 512
+     members); this cell reads only its own.
+2. **Level 1.0, descriptively:** correct score-rank rejections (submission population
+   Sharpe > 0) per searcher and construction, with Wilson intervals. No class tier is
+   beside them in this cell, and no rule reads them.
+
+**No interim read.** The run's log prints only the commit hash and per-seed wall time
+and peak memory. **Resume is by seed**: a relaunch skips every seed on record and redoes
+the rest from scratch, deterministically; a truncated last line from an interrupted
+write is dropped and its seed redone (`load_done`, tested).
