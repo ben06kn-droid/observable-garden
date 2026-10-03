@@ -126,7 +126,7 @@ B = 10,000. That is a question about whether a near-threshold verdict is stable,
 not about whether the rate is right, and it averages out across draws. The
 B = 50,000 subsample measures it as a **verdict flip rate**; it does not gate,
 and it is the only result that could implicate B — and then only if the paired
-shift is signed rather than noise. See `prereg/calibration-at-1pct.md`
+shift is signed rather than noise. See `prereg/calibration-at-1pct.md` (closed; `git show a62036a:prereg/calibration-at-1pct.md`)
 amendment 4.
 
 **CLOSED 2026-09-20. Exact at 1% with B = 10,000.**

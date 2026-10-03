@@ -1,6 +1,6 @@
 """costs-and-regime-change: what does a PASS survive?
 
-Pre-registered in `prereg/costs-and-regime-change.md`. Amendment 2 withdrew the
+Pre-registered in `prereg/costs-and-regime-change.md` (closed; removed from prereg/ after `a62036a`, recover with `git show a62036a:prereg/costs-and-regime-change.md`). Amendment 2 withdrew the
 cost half entirely: the DGP draws features independently each period, so every
 submission's position path is serially independent, turnover is `sqrt(2)` for
 every specification, and any charge is a drag common to PASS and FAIL alike. A

@@ -5,7 +5,7 @@
     python -m experiments.calibration_at_1pct --arm B --workers 32
     python -m experiments.calibration_at_1pct --arm C --workers 32
 
-Pre-registered in prereg/calibration-at-1pct.md.
+Pre-registered in prereg/calibration-at-1pct.md (closed; removed from prereg/ after `a62036a`, recover with `git show a62036a:prereg/calibration-at-1pct.md`).
 
 **Arm A** reads the p-value every graded s0 run already stored and reports the
 rejection rate at three levels with Wilson intervals plus a KS test against
