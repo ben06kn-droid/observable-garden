@@ -41,8 +41,11 @@ REPLICATION_LAUNCH = (
     "'cd ~/observable-garden && git pull --ff-only && cloud/run.sh twin_score_rep bash -c "
     "\"echo commit \\$(git rev-parse HEAD); exec python -m experiments.planted_twins "
     "--cell score --replication --draws 1000 --workers 191\" && tmux new-session -d -s "
-    "twin_score_rep_selfstop \"while tmux has-session -t twin_score_rep 2>/dev/null; do "
+    "selfstop_after_rep \"while tmux has-session -t '=twin_score_rep' 2>/dev/null; do "
     "sleep 60; done; sleep 600; sudo shutdown -h now\"'")
+# EXACT-MATCH target ('=NAME'): tmux matches -t by prefix, so `-t twin_score` also
+# finds `twin_score_selfstop`, and a self-stop named after its run never fires. That
+# kept the box up from 00:51 to 01:10 UTC on 2026-10-03 after the score-rank run.
 
 
 def load(path: Path) -> list[dict]:

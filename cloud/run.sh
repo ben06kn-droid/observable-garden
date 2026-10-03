@@ -25,7 +25,10 @@ if [ $# -lt 2 ]; then
 fi
 name="$1"
 shift
-if tmux has-session -t "$name" 2>/dev/null; then
+# '=' makes the target an exact match: tmux matches -t by prefix, so without it a
+# session "curve" would be refused while "curve_smoke" exists (and a self-stop waiting
+# on "NAME" would see "NAME_selfstop" and never fire).
+if tmux has-session -t "=$name" 2>/dev/null; then
   echo "tmux session '$name' already exists" >&2
   exit 1
 fi

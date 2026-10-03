@@ -94,3 +94,12 @@ def test_level_1_separates_correct_rejections_from_rejections_of_non_positive_tr
 def test_the_autocorrelation_sign_is_reported(tmp_path):
     text, _ = rd.read(rd.load(_synthetic(tmp_path / "f.jsonl")))
     assert "median_lag1_autocorr_signed_singles" in text and "negative: predicts" in text
+
+
+def test_the_replication_self_stop_waits_on_an_exact_session_name():
+    """tmux matches -t by prefix: a self-stop named after its run and waiting on the
+    bare name finds itself and never fires (2026-10-03). The launch must use '=NAME'
+    and a self-stop name that is not the run's name plus a suffix."""
+    cmd = rd.REPLICATION_LAUNCH
+    assert "has-session -t '=twin_score_rep'" in cmd
+    assert "selfstop_after_rep" in cmd and "twin_score_rep_selfstop" not in cmd

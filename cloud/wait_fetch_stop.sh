@@ -52,7 +52,7 @@ while true; do
     echo "run finished: $line"
     break
   fi
-  if ! ssh "$HOST" "tmux has-session -t $NAME 2>/dev/null"; then
+  if ! ssh "$HOST" "tmux has-session -t '=$NAME' 2>/dev/null"; then   # exact match
     echo "WARNING: no tmux session '$NAME' and no exit marker." >&2
     echo "The run may have died before writing one. Not stopping the instance." >&2
     ssh "$HOST" "tail -20 $LOG 2>/dev/null" || true
