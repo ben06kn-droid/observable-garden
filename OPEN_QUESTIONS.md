@@ -213,15 +213,20 @@ B = 50,000 replicates on all 500 draws, but the bar it is buying resolution on
 only matters near the threshold: a draw whose p-value is 0.4 needed a few
 hundred replicates to say so, and got 50,000.
 
-Besag & Clifford (1991) give the sequential construction — stop sampling once
-the running count of exceedances reaches a fixed h, and report a p-value that is
-still exactly valid — which spends replicates in proportion to how close a draw
-is to rejecting. For a calibration sweep, where most draws are nowhere near α,
+Besag & Clifford (1991) give the sequential construction: stop sampling once
+the running count of exceedances reaches a fixed h (p = h/l at l draws), and
+otherwise run to the cap and report the usual (1 + #)/(n + 1). The p-value is
+unconditionally valid, P(p <= α) <= α. It stops early when a draw is clearly not
+significant and samples to the cap only when it might be. (Formula and
+validity checked 2026-10-02 against secondary sources only, Stoepker & Castro,
+arXiv:2409.18908, §3.3; the paper's own text was not accessible. See
+`docs/CITATIONS.md`.) For a calibration sweep, where most draws are nowhere near α,
 the saving should be large, and it grows as α falls, which is precisely the
 regime 6.1 is about.
 
 Two things to check before it is worth building. The validity argument is for a
-single test with i.i.d. replicates; the stationary-bootstrap replicates here are
+single test with i.i.d. replicates (unverified: the abstract also covers a
+Markov-chain version, where the draws are exchangeable rather than i.i.d.); the stationary-bootstrap replicates here are
 exchangeable under the null, which is what the fixed-B proof uses too, but the
 stopping rule interacts with the full-class maximum in a way that has not been
 checked. And the estimator prices the whole class once per draw and scores every

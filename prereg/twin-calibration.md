@@ -575,3 +575,18 @@ counts under both constructions" is wrong. **Three do** — stop-when-cleared,
 extend-while-improving and cleared-restart, 32 and 39 — and lookahead-stop-when-cleared
 matches them under block permutation only (39), not under joint-time permutation (33
 against 32). The limit it illustrates, that the twelve rules are dependent, stands.
+
+## Citation note — 2026-10-02 (America/Chicago). Phipson & Smyth, read against the claim
+
+The Design section above says the twin rank p-value "controls type-I at any K" because
+the K + 1 runs are exchangeable, and cites Phipson & Smyth (2010) for the construction.
+Read against the text (arXiv:1603.05766v1; `docs/CITATIONS.md`): the paper calls
+`(b + 1)/(m + 1)` **exact** for independent null datasets with a continuous statistic
+(§4, p. 6). It calls it **valid but conservative** for permutations drawn with
+replacement (§6.1–6.2, pp. 7–8). It does not treat exchangeable replicates in general.
+Validity at any K under exchangeability stands, but **on the standard rank argument,
+not on that paper**. Counting ties by `<=`, as the score-rank cell does, makes the test
+conservative. **No verdict changes:** the score-rank cell's rule is a validity rule
+(rate ≤ α), and its twelve rates were all below 0.05, the direction this predicts.
+Besag & Clifford (1991) is cited here only for sequential stopping, which is not
+registered; its text could not be accessed.

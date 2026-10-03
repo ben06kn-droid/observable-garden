@@ -6,8 +6,12 @@ run's rank among them is the p-value:
 
     p = (1 + #{twins with p_k <= p_real}) / (K + 1)
 
-which is exact under exchangeability (Phipson & Smyth 2010, opened in full), and
-is the same `(1 + #)/(K + 1)` form the gate's bootstrap p-values already use.
+which is valid at any K. Phipson & Smyth (2010, opened in full) show it EXACT for
+independent null datasets with a continuous statistic and no ties (§4), and "valid but
+conservative" for permutations drawn with replacement (§6.1-6.2). Ties counted by
+`<=` make it conservative too. Validity under exchangeability alone comes from the
+standard rank argument, not from that paper. It is
+the same `(1 + #)/(K + 1)` form the gate's bootstrap p-values already use.
 **K = 19 for alpha = 0.05 and K = 99 for alpha = 0.01**, the registered values,
 whose attainable levels are exactly 1/20 and 1/100.
 
