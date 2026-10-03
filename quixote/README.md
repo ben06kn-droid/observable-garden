@@ -66,6 +66,16 @@ It has a second consequence that matters more for inference: because every move
 is a pure function of (support, data, statistic), a bootstrap replicate can
 **re-execute it exactly**. A search that can be re-executed can be priced.
 
+**Prior art.** Re-executing an analysis's logged sequence of actions on each
+bootstrap sample is Faraway (1992), "On the Cost of Data Analysis", *JCGS* 1(3),
+213–229, §3.2: "a valid bootstrap predictive distribution may only be obtained by
+applying the same sequence of actions to the resampled datasets". Trigger replay
+applies that idea to an agent's search inside a class-maximum null. The grammar is
+what makes the sequence exactly re-executable, and the triggers make the stopping
+decisions part of it. Faraway §6 also names what replay cannot reach, informal and
+unlogged actions, which is why judgment that was not declared is priced at the
+maximum (below) rather than replayed.
+
 ---
 
 ## The modules

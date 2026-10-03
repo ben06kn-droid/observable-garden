@@ -25,7 +25,8 @@ P4–P6 are the parts to have reviewed.
 - The **naive** (realized-menu) bootstrap demeans every logged column, which
   imposes the least-favorable null (White 2000), resamples time jointly, and
   estimates `F_C`. The **recursive** bootstrap replays the search's own
-  decisions on each resample and estimates `F_P`. The **full-class** bootstrap
+  decisions on each resample and estimates `F_P`. Applying the same sequence of
+  analysis actions to each bootstrap sample is Faraway (1992), below. The **full-class** bootstrap
   estimates the law of the maximum over a declared class `Θ`.
 - The test reports `p = P*(M ≥ sr_sel)` under whichever null is used.
 
@@ -462,6 +463,20 @@ is what is claimed new here — not the existence of the failure mode, which is 
 and is attributed below and in `SCOPE.md`.
 
 Read from full text, not summaries:
+
+- **Faraway (1992)**, "On the Cost of Data Analysis", *Journal of Computational
+  and Graphical Statistics* 1(3), 213–229, doi:10.1080/10618600.1992.10474582
+  (the author's Bath preprint; the page numbers are the preprint's). **This is prior
+  art for trigger replay itself.** §3.2, p. 6, says to "perform the data analysis in
+  the same order as for the original data" on each bootstrap sample, because "a
+  valid bootstrap predictive distribution may only be obtained by applying the same
+  sequence of actions to the resampled datasets". §6, pp. 11–12, names the failure
+  that replay cannot price: informal actions that are not logged, and restarts.
+  Replaying a logged analysis sequence on resamples is therefore Faraway's idea, and
+  nothing here claims it. What is narrower and not found there is replay **inside a
+  data-snooping (class-maximum) null**, with a search's declared triggers re-evaluated
+  on each replicate. The 2026-09-30 search's "no prior replay" sentence above is read
+  with this restriction.
 
 - **Nikolopoulos (2026)** scales the expected maximum over correlated
   candidates by an effective multiplicity, and treats the Reality Check and SPA

@@ -41,7 +41,7 @@ simulatability. Not read.
 text was read from the Wayback copy of the author's Bath preprint, so page numbers are
 the preprint's.
 
-**Not cited anywhere in the repository.** The only mention is a to-do outside it.
+**Cited, since 2026-10-02, in `THEORY.md` (the bootstrap definitions, and prior work for P4) and `quixote/README.md` (the central idea), as prior art for trigger replay.** Before that it was cited nowhere in the repository.
 
 **What it says**, and why it matters to novelty wording:
 - §3.2, p. 6: "Perform the data analysis in the same order as for the original data",
