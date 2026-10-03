@@ -569,3 +569,9 @@ self-stop's 10-minute fetch window**, against the $7–9 projected from the box 
 No seat cost.
 
 **The score-rank cell is closed.**
+
+*Correction to the Read section above, 2026-10-02:* "Four searchers give identical
+counts under both constructions" is wrong. **Three do** — stop-when-cleared,
+extend-while-improving and cleared-restart, 32 and 39 — and lookahead-stop-when-cleared
+matches them under block permutation only (39), not under joint-time permutation (33
+against 32). The limit it illustrates, that the twelve rules are dependent, stands.
