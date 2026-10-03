@@ -33,11 +33,13 @@
 set -uo pipefail
 
 if [ $# -lt 2 ]; then
-  echo "usage: cloud/wait_fetch_stop.sh HOST NAME [POLL_SECONDS]" >&2
+  echo "usage: cloud/wait_fetch_stop.sh HOST NAME [POLL_SECONDS] [RESULTS_DIR]" >&2
+  echo "  RESULTS_DIR, repo-relative (e.g. runs/planted_edge_scripted), is fetched" >&2
+  echo "  FIRST; if it fails the instance is not stopped" >&2
   echo "  HOST is an ~/.ssh/config alias, e.g. og" >&2
   exit 2
 fi
-HOST="$1"; NAME="$2"; POLL="${3:-60}"
+HOST="$1"; NAME="$2"; POLL="${3:-60}"; RESULTS="${4:-}"
 LOG="observable-garden/logs/$NAME.log"
 
 if ! ssh -o ConnectTimeout=20 "$HOST" true 2>/dev/null; then
@@ -60,6 +62,15 @@ while true; do
   fi
   sleep "$POLL"
 done
+
+# A run that writes its results under runs/ rather than figures/ names that directory:
+# without it the instance would be stopped with its results still on the volume.
+if [ -n "$RESULTS" ]; then
+  echo "fetching $RESULTS"
+  mkdir -p "$RESULTS"
+  rsync -avz "$HOST:observable-garden/$RESULTS/" "$RESULTS/" || {
+    echo "rsync of $RESULTS failed; NOT stopping the instance" >&2; exit 1; }
+fi
 
 echo "fetching figures/ and logs/"
 rsync -avz "$HOST:observable-garden/figures/" figures/ || {
