@@ -76,3 +76,24 @@ def test_later_levels_reuse_the_first_levels_overlap_and_agree(base, tmp_path):
     own = pe.run_level(base, 21, 1.0, B=10, inv=inv)
     for k in ("pop_best", "pop_best_sr", "pop_n_positive", "planted_rank"):
         assert reused[k] == own[k], k
+
+
+# -- resume: the shared load_done, as the curve driver uses it -----------------
+
+def test_the_curve_driver_resumes_through_the_shared_load_done():
+    from experiments import _resume, planted_twins
+    assert pe.load_done is _resume.load_done is planted_twins.load_done
+
+
+def test_the_curve_driver_drops_a_truncated_last_line(tmp_path):
+    f = tmp_path / "draws.jsonl"
+    f.write_text('{"seed": 600000}\n{"seed": 600001}\n{"seed": 600002, "lev')
+    assert pe.load_done(f) == {600000, 600001}
+    assert f.read_text().endswith('{"seed": 600001}\n')
+
+
+def test_the_curve_driver_refuses_corruption_before_the_last_line(tmp_path):
+    f = tmp_path / "draws.jsonl"
+    f.write_text('{"seed": 600000}\n{"se\n{"seed": 600002}\n')
+    with pytest.raises(SystemExit, match="corruption"):
+        pe.load_done(f)

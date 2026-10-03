@@ -39,6 +39,7 @@ from environments import planted_panel as pp
 from environments.class_table import CHUNK, canonical
 from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
 from experiments.planted_edge import _searchers, _sharpe_rows, peak_rss_mb
+from experiments._resume import load_done  # noqa: F401  (re-exported; tested here)
 from quixote.twins import K_FOR_ALPHA, twin_p_value, twins
 
 SEED0 = 650_000
@@ -222,34 +223,6 @@ def median_lag1_signed_singles(panel) -> float:
     num = (x0[:, 1:] * x0[:, :-1]).sum(axis=1)
     den = (x0 * x0).sum(axis=1)
     return float(np.median(np.where(den > 0, num / np.where(den > 0, den, 1.0), 0.0)))
-
-
-def load_done(path: Path) -> set:
-    """Seeds already on record, for resume. A process killed mid-write leaves a
-    TRUNCATED LAST LINE with no newline: it is removed, and the file rewritten without
-    it, so the next record is not glued onto it. A malformed line anywhere else is real
-    corruption and raises."""
-    if not path.exists():
-        return set()
-    text = path.read_text()
-    lines = text.split("\n")
-    if lines and lines[-1] == "":
-        lines = lines[:-1]
-    done, keep = set(), []
-    for i, ln in enumerate(lines):
-        try:
-            rec = json.loads(ln)
-        except json.JSONDecodeError:
-            if i == len(lines) - 1:
-                print(f"  resume: dropped a truncated last line ({len(ln)} chars); "
-                      "its seed is redone", flush=True)
-                path.write_text("".join(k + "\n" for k in keep))
-                break
-            raise SystemExit(f"{path}: line {i + 1} is malformed and is not the last line; "
-                             "that is corruption, not an interrupted write")
-        done.add(rec["seed"])
-        keep.append(ln)
-    return done
 
 
 def score_rank_p(real: float, twin_scores) -> float:

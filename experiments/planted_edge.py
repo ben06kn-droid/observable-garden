@@ -38,6 +38,7 @@ import numpy as np
 from environments import planted_panel as pp
 from environments.class_table import CHUNK, canonical, streams_for
 from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
+from experiments._resume import load_done
 
 SEED0 = 600_000              # registered: 600000-601999
 SEED0_SMOKE = 980_000        # smoke and scaling, cost only
@@ -269,9 +270,7 @@ def main(argv=None) -> int:
     out = Path("runs/_smoke/planted_edge" if smoke else a.out)
     out.mkdir(parents=True, exist_ok=True)
     path = out / "draws.jsonl"
-    done = set()
-    if path.exists():
-        done = {json.loads(l)["seed"] for l in path.read_text().splitlines() if l}
+    done = load_done(path)          # a truncated last line is dropped, its seed redone
     todo = [(seed0 + i, levels, a.B) for i in range(n) if seed0 + i not in done]
     print(f"{'SMOKE (cost only)' if smoke else 'REGISTERED'}: seeds {seed0}-{seed0 + n - 1},"
           f" levels {levels}, B {a.B}, {len(todo)} to run, {len(done)} done", flush=True)
