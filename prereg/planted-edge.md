@@ -842,3 +842,48 @@ format, before it opens the results.** The read cites both commits.
 then rules 2, 3 and 5; then the standing check. Nearest-the-bar, the measured standing
 check, rule 5's detectable difference and the recovery base rates are then written into
 this file by a dated commit, as stage 2's inputs.
+
+## Amendment — 2026-10-02 (America/Chicago), stage-2 material, not live. The masking rationale corrected; the convergence readout restated
+
+**Stage 1 is untouched.** This changes only text that stage 2's live commit adopts.
+
+**The correction.** "Masking" above says that in 6.5, "with real names, agents
+converged on one feature". **6.5's agents never saw a feature name.** The tools take
+and return feature **numbers**, 0–39, in one fixed order on every panel: `evaluate`
+and `submit` take `features: list[int]`, a support is shown as `[32+, 19-]`, and the
+system prompt says only "{K} candidate features". A search on 2026-10-02 found none of
+the 40 feature names (`ret1_z` … `maxret21_rank`) anywhere in the **87 ETF run files**
+(`runs/etf_*`, `runs/shakeout_etf_orientation`, `runs/agent_pilot_etf_seat`): not in a
+system prompt, a tool call, a tool result or the agent's own text. What did cross was
+a **stable numbering**: feature 32 was `beta252_z` on every panel and in every run. So
+6.5's "beta252_z+ in 47 of 80 submissions" is **convergence on number 32**. Three
+things are confounded in it: the fixed numbering, the real in-sample returns, and the
+structure of feature 32 in X. Real-world associations of the *name* are not among
+them. `prereg/agent-on-real-data.md` carries the matching note.
+
+**What masking does here, restated.** `environments/planted_view.py` (build item 3,
+`e558236`) permutes the feature **axis** per panel by `masking_permutation`. Masked
+number `j` is true feature `perm[j]`, labelled `F{j:02d}`. The numbering an agent
+sees therefore carries no identity from panel to panel, and the returns carry no real
+relation to X. **The reason for masking is the numbering, not the names:** a fixed
+numbering would let a habit learned on one panel (feature 32) carry to every other.
+Names are masked as well, because nothing is lost by it.
+
+**The convergence readout, restated (descriptive).** Per arm and level: the share of
+submissions containing **true feature 32** (either sign), counted **only on panels
+whose `m*` does not contain feature 32**, under the per-panel shuffled numbering.
+- **Base rate:** a submission of depth `d` contains a given feature with probability
+  `d/40`, which is 3/40 = 0.075 at depth 3. The base rate for an arm is the mean of
+  `d/40` over its counted submissions. 6.5's 47/80 = 0.59 is reported beside it.
+- **Near the base rate**, defined as the Wilson 95% interval containing it: feature 32's
+  structure in X does not draw the search. 6.5's convergence then came from the fixed
+  numbering, the real returns, or both. This readout does not separate those two.
+- **Well above the base rate**, defined as the lower Wilson 95% end above it:
+  something in X's own structure (its correlations, turnover or autocorrelation) draws
+  agents to feature 32 whatever number it carries. That is reported as a property of X,
+  and on these panels it is not an edge, since the planted returns ignore it.
+- **Below** (the upper end under the base rate) is reported as observed, with no reading
+  registered.
+- *Beside it, descriptive and proposed for stage 2 to accept or drop:* the same share
+  for **masked number 32**, whatever true feature it is. A rate above base there is an
+  effect of position in the numbering, which the shuffle separates from X.
