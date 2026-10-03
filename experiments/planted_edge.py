@@ -43,7 +43,7 @@ from experiments._resume import load_done
 SEED0 = 600_000              # registered: 600000-601999
 SEED0_SMOKE = 980_000        # smoke and scaling, cost only
 B_DEFAULT = 1_000
-PRICE_PER_HOUR = 9.85 / 6    # c7a.8xlarge, one sixth of the c7a.48xlarge on record
+N_REGISTERED = 2000          # the curve's registered seeds, 600000-601999
 ALPHAS = (0.05, 0.01)
 
 
@@ -258,6 +258,12 @@ def main(argv=None) -> int:
     ap.add_argument("--B", type=int, default=B_DEFAULT)
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     ap.add_argument("--out", default="runs/planted_edge_scripted")
+    ap.add_argument("--price-per-hour", type=float, default=None,
+                    help="the instance's on-demand $/h, for the smoke's dollar projection "
+                         "(c7a.48xlarge 9.85, c7a.8xlarge 1.64); without it the smoke "
+                         "projects hours only")
+    ap.add_argument("--projected-workers", type=int, default=None,
+                    help="the worker count the registered run will use; default --workers")
     ap.add_argument("--smoke", type=int, default=0,
                     help="N panels on the smoke block 980000+, cost only, no rule quantity")
     a = ap.parse_args(argv)
@@ -301,7 +307,16 @@ def main(argv=None) -> int:
             for lv in r["stage_secs"]:
                 for k, v in lv.items():
                     stages.setdefault(k, []).append(v)
-        cpu_h = per_seed.mean() * 2000 / 3600
+        W = a.projected_workers or a.workers
+        # two projections for N_REGISTERED seeds on W workers: mean throughput (every
+        # worker always busy), and an upper bound of full rounds each as long as the
+        # slowest seed seen
+        h_mean = N_REGISTERED * per_seed.mean() / W / 3600
+        h_upper = int(np.ceil(N_REGISTERED / W)) * per_seed.max() / 3600
+        price = a.price_per_hour
+        dollars = ("" if price is None else
+                   f" -> ${h_mean * price:.0f} (mean) to ${h_upper * price:.0f} (upper) "
+                   f"at ${price:.2f}/h")
         L = ["7.5 scripted half — SMOKE, cost only (no rule quantity is written or shown)",
              "=" * 78,
              f"  panels {len(recs)} (seeds {seed0}-{seed0 + n - 1}), levels {len(levels)}, "
@@ -313,11 +328,12 @@ def main(argv=None) -> int:
              f"  peak RSS per worker: max {max(r['peak_rss_mb'] for r in recs):.0f} MB",
              f"  invariant population moments, once per run: {t_inv:.0f}s this invocation"
              " (0 when the cache already held them)",
-             f"  projection for 2,000 seeds: {cpu_h:.0f} CPU-hours at this machine's "
-             f"per-core speed under {a.workers} workers;",
-             f"    on 31 workers ~{cpu_h / 31:.1f} h wall, ~${cpu_h / 31 * PRICE_PER_HOUR:.0f}"
-             f" at ${PRICE_PER_HOUR:.2f}/h (c7a.8xlarge, derived); re-measure there before "
-             "launch (prereg/README.md, Sizing)"]
+             f"  projection for {N_REGISTERED:,} seeds on {W} workers: {h_mean:.2f} h "
+             f"(mean throughput) to {h_upper:.2f} h ({int(np.ceil(N_REGISTERED / W))} "
+             f"rounds x the slowest seed){dollars}",
+             ("  no --price-per-hour given: hours only" if price is None else
+              "  re-measure on the registered instance before launch (prereg/README.md, "
+              "Sizing)")]
         text = "\n".join(L)
         print("\n" + text)
         (out / "smoke_cost.txt").write_text(text + "\n")

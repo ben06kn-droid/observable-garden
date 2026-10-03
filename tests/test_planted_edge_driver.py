@@ -97,3 +97,36 @@ def test_the_curve_driver_refuses_corruption_before_the_last_line(tmp_path):
     f.write_text('{"seed": 600000}\n{"se\n{"seed": 600002}\n')
     with pytest.raises(SystemExit, match="corruption"):
         pe.load_done(f)
+
+
+def _smoke_main(tmp_path, monkeypatch, base, extra):
+    """Run the smoke path end to end in-process on the synthetic base."""
+    monkeypatch.setattr(pp, "load_base", lambda: base)
+    real = pp.invariants_for
+    monkeypatch.setattr(pp, "invariants_for", lambda b: real(b, cache_dir=tmp_path))
+    monkeypatch.chdir(tmp_path)
+
+    class Inline:
+        def __init__(self, max_workers=None): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def submit(self, fn, *a):
+            from concurrent.futures import Future
+            f = Future(); f.set_result(fn(*a)); return f
+    import concurrent.futures as cf
+    monkeypatch.setattr(cf, "ProcessPoolExecutor", Inline)
+    assert pe.main(["--smoke", "2", "--workers", "1", "--levels", "0,1.0", "--B", "10"]
+                   + extra) == 0
+    return (tmp_path / "runs" / "_smoke" / "planted_edge" / "smoke_cost.txt").read_text()
+
+
+def test_the_smoke_prices_at_the_given_rate_and_worker_count(tmp_path, monkeypatch, base):
+    text = _smoke_main(tmp_path, monkeypatch, base,
+                       ["--price-per-hour", "9.85", "--projected-workers", "191"])
+    assert "on 191 workers" in text and "at $9.85/h" in text
+    assert "c7a.8xlarge" not in text and "$1.64" not in text
+
+
+def test_without_a_price_the_smoke_projects_hours_only(tmp_path, monkeypatch, base):
+    text = _smoke_main(tmp_path, monkeypatch, base, [])
+    assert "hours only" in text and "$" not in text
