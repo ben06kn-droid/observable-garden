@@ -1,5 +1,6 @@
 """The planted-panel agent runner, in dry runs on a small synthetic base. No model call."""
 import json
+from pathlib import Path
 
 import pytest
 
@@ -82,16 +83,33 @@ def test_price_runs_prices_dry_runs_with_the_cap_restored(base, prompts, monkeyp
         assert log.content_cap == (3 if arm == "unsaturable" else None)
 
 
-def test_only_dry_runs_on_design_seeds_until_stage_2_is_live():
+def test_until_stage_2_is_live_only_dry_runs_and_the_shakeout_block():
     assert pa.AGENT_SEEDS is None and pa.LEVELS == (0.0, 1.0, 1.5)
+    assert pa.SHAKEOUT == range(632000, 632010)
     with pytest.raises(SystemExit, match="not live"):
-        pa.check_seeds([640900], dry_run=False)
+        pa.check_seeds([640900], dry_run=False, out=pa.SHAKEOUT_DIR)
+    with pytest.raises(SystemExit, match="not live"):
+        pa.check_seeds([630000], dry_run=False, out=pa.SHAKEOUT_DIR)   # the agent block
     with pytest.raises(SystemExit, match="design block"):
         pa.check_seeds([600000], dry_run=True)
-    pa.check_seeds([640900, 640901], dry_run=True)
+    assert pa.check_seeds([640900, 640901], dry_run=True) == "dry"
+    assert pa.check_seeds([632000, 632003], dry_run=False,
+                          out=pa.SHAKEOUT_DIR / "planted_agent") == "shakeout"
+    with pytest.raises(SystemExit, match="_shakeout"):
+        pa.check_seeds([632000], dry_run=False, out=Path("runs/planted_agent"))
+    with pytest.raises(SystemExit, match="_shakeout"):            # not straddling
+        pa.check_seeds([632009, 632010], dry_run=False, out=pa.SHAKEOUT_DIR)
     with pytest.raises(SystemExit):
         pa.main(["--arm", "unsaturable", "--level", "1.0", "--runs", "1",
                  "--seed0", "640900"])                      # no --dry-run
+
+
+def test_once_live_the_agent_block_is_accepted(monkeypatch):
+    monkeypatch.setattr(pa, "AGENT_SEEDS", range(630000, 630020))
+    assert pa.check_seeds([630000, 630019], dry_run=False,
+                          out=Path("runs/planted_agent")) == "registered"
+    with pytest.raises(SystemExit, match="not live"):
+        pa.check_seeds([630020], dry_run=False, out=Path("runs/planted_agent"))
 
 
 def test_unregistered_arms_and_levels_are_refused(base, prompts):

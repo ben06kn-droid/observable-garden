@@ -52,6 +52,10 @@ CAP = 3
 DEPTH = 3
 DESIGN = range(640_000, 641_000)
 AGENT_SEEDS: range | None = None          # fixed by stage 2's live commit
+# THE SHAKE-OUT BLOCK (checked 2026-10-05: no collision). Model-backed runs on these
+# seeds are allowed, into runs/_shakeout/ only, and are never read for any rule.
+SHAKEOUT = range(632_000, 632_010)
+SHAKEOUT_DIR = Path("runs/_shakeout")
 PREREG = Path(__file__).resolve().parent.parent / "prereg" / "planted-edge.md"
 CAP_HEADING = "### The unsaturable arm's prompt sentence"
 
@@ -136,13 +140,27 @@ def run_one(arm: str, seed: int, level: float, index: int, *, prompts: dict,
     return rec
 
 
-def check_seeds(seeds, dry_run: bool) -> None:
-    if not dry_run:
-        raise SystemExit("stage 2 is not live: only --dry-run runs, on design seeds")
-    bad = [s for s in seeds if s not in DESIGN]
-    if bad:
-        raise SystemExit(f"seeds {bad[:3]} are outside the design block 640000-640999; "
-                         "the agent seed block is fixed by stage 2's live commit")
+def check_seeds(seeds, dry_run: bool, out: Path | None = None) -> str:
+    """What this invocation is allowed to be: `"dry"` (design seeds, no model),
+    `"shakeout"` (model-backed, shake-out seeds, written under runs/_shakeout/), or
+    `"registered"` (the agent block, once stage 2 is live). Anything else refuses."""
+    seeds = list(seeds)
+    if dry_run:
+        bad = [s for s in seeds if s not in DESIGN]
+        if bad:
+            raise SystemExit(f"seeds {bad[:3]} are outside the design block "
+                             "640000-640999; a dry run uses design seeds")
+        return "dry"
+    if all(s in SHAKEOUT for s in seeds):
+        if out is None or SHAKEOUT_DIR.resolve() not in [Path(out).resolve(),
+                                                         *Path(out).resolve().parents]:
+            raise SystemExit(f"shake-out runs are written under {SHAKEOUT_DIR}/ only")
+        return "shakeout"
+    if AGENT_SEEDS is not None and all(s in AGENT_SEEDS for s in seeds):
+        return "registered"
+    raise SystemExit("stage 2 is not live: model-backed runs are allowed only on the "
+                     f"shake-out seeds {SHAKEOUT.start}-{SHAKEOUT.stop - 1}, into "
+                     f"{SHAKEOUT_DIR}/; otherwise --dry-run on design seeds")
 
 
 def main(argv=None) -> int:
@@ -155,7 +173,8 @@ def main(argv=None) -> int:
     ap.add_argument("--out", default="runs/_dry/planted_agent")
     a = ap.parse_args(argv)
     seeds = list(range(a.seed0, a.seed0 + a.runs))
-    check_seeds(seeds, a.dry_run)
+    mode = check_seeds(seeds, a.dry_run, Path(a.out))
+    print(f"  {mode}: {a.arm} at level {a.level}, seeds {seeds[0]}-{seeds[-1]}", flush=True)
     prompts = read_prompts()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
