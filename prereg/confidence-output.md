@@ -139,6 +139,13 @@ Sharpe. Suppose `P(D ≤ q_g) ≥ g`.
     small at level 0, where it is costs only, and grows with the planted scale.
   - The `SR²/2` term pushes the other way and is about 0.2% at most.
 - **Secondary:** a KS test of `u` against uniform, per level, descriptive.
+- **The read stops after V2 on any fail-low** (confirmed 2026-10-04). If any V2 test
+  fails low, P7's premise fails on this design and every confidence output is
+  withdrawn pending a cause, so V1 and V3 are not printed. This mirrors stage 1's
+  stop on rule 1 (`experiments/confidence_cell_read.py`).
+- **The live marker is the line `## V2 — LIVE`** (confirmed 2026-10-04). The
+  registered run (`experiments/confidence_cell.py` on 620000–620999) refuses unless
+  this file contains it, so V2 can only run after its own dated live commit.
 - **Design:**
   - **1,000 fresh panels on 620000–620999, at levels 0, 1.0 and 1.5 only**, on the
     pinned X, B = 1,000. This uses the same generator and the same class pass as stage
