@@ -1,10 +1,14 @@
 # confidence-output: a graded confidence beside the verdict, and whether it is calibrated
 
-**DRAFT, committed and not live, except one section.** "Stage-1 secondary analysis"
-is **LIVE from 2026-10-04 (America/Chicago)**, by this commit, pre-registration only.
-It authorises that analysis's reader and its one run on `30ee870`'s file, and nothing
-else. Everything else here authorises nothing. It goes live only by a dated commit
-after review, and after the build items at the end pass their tests.
+**DRAFT, committed and not live, except two sections.**
+- "Stage-1 secondary analysis" is **LIVE from 2026-10-04 (America/Chicago)**. It
+  authorises that analysis's reader and its one run on `30ee870`'s file.
+- **"V2 — LIVE" is LIVE from 2026-10-05 (America/Chicago)**, pre-registration only. It
+  authorises the V2 cell on 620000–620999, together with the V1 and V3 readouts on
+  that block.
+
+Nothing else here authorises anything. The rest goes live only by a dated commit after
+review.
 
 ## Question
 
@@ -262,3 +266,86 @@ is V2's block.
    - `L_g` equals the quantile arithmetic;
    - `P_5` matches a direct numerical integration;
    - the V2 driver's class pass equals `planted_edge.run_level`'s on a synthetic base.
+
+## V2 — LIVE, 2026-10-05 (America/Chicago)
+
+**Only V2 goes live**, together with the V1 and V3 readouts measured on its block.
+The rest of this file's draft stays a draft. This commit is pre-registration only.
+
+**What goes live:**
+- **Design.** Planted panels from `environments/planted_panel.py`.
+  - The features are the pinned X, SHA-256
+    `4b4610704db0042c514c8ee4f230b239942d4b15be87d07188be3f0e7600b7ba`, shape
+    (4276, 40, 40), refused on mismatch with no rebuild.
+  - Returns and costs come from the 40 in-sample CSVs (combined SHA-256
+    `ce4bc21e64b47d09714308560fa25f39540714dcfba6fb89ab3ee2d34e69df2a`).
+  - The residual is resampled in joint-time blocks of length 7.
+  - Six registered scripted searchers, class-capped to `SubsetClass(3, signed=True)`
+    (82,240 members).
+- **Levels: 0, 1.0 and 1.5.**
+- **Seeds: 620000–620999.** 1,000 panels, each at all three levels. Checked
+  2026-10-04 with `experiments.seed_block_check`: no collision.
+- **B = 1,000** for both tiers, on identical replicates per panel and level.
+- **V2** (the exactness rule), **V1** (coverage of `L_g` for g in {0.90, 0.95, 0.99},
+  both tiers, with the tightness readout) and **V3** (reliability of `P_5`), exactly
+  as written in the sections above.
+- **The read stops after V2 on any fail-low.**
+
+**Registered now:**
+
+| item | value |
+|---|---|
+| seeds | **620000–620999** |
+| smoke | **981000–981999**, cost only; the smoke uses 981000–981190 |
+| levels | **0, 1.0, 1.5** |
+| B | **1,000**, both tiers |
+| g | 0.90, 0.95, 0.99 |
+| grid | s = −1.00, −0.95, …, 3.00 (81 points); H = 5 |
+| code, by file | `experiments/confidence_cell.py` `a64ca42`; `experiments/confidence_cell_read.py` `ec6d8ae`; `quixote/confidence.py` `93393f7`; `environments/planted_panel.py` `c5e3860`; `experiments/planted_edge.py` `87b70e2` (only `StreamCache`, `_searchers`, `_sharpe`, `_sharpe_rows` and `peak_rss_mb` are imported); `environments/class_table.py` `6e7f538`; `estimator/bootstrap.py` `063416a`; `searchers/meta_adaptive.py` `761e64d`; `experiments/_resume.py` `d8fb254` |
+| launch | `cloud/run.sh` `8e923c5` (exact-match tmux targets); `cloud/wait_fetch_stop.sh` `6f55a07` (results fetched before the stop) |
+| platform | x86_64, EC2 c7a.48xlarge (`i-0e0c1484de3c755ad`), shutdown behaviour **Stop**. Every record carries its platform, and the launch writes the commit hash to the log. |
+| workers | **191** |
+
+**Box smoke, the sizing measurement:**
+
+| item | value |
+|---|---|
+| panels | 191 (981000–981190), all three levels, B = 1,000 |
+| run | 2026-10-05, 22:18–22:34 UTC, at `3737147`; records `517f027` |
+| per seed, three levels | wall mean **900 s** (median 900, max 934) |
+| peak RSS per worker | **1,037 MB** |
+| projected for 1,000 seeds, **mean throughput** | **1.31 h, $12.89** at $9.85/h |
+| projected, **upper bound** (6 rounds × the slowest seed) | **1.56 h, $15.33** |
+| against the $25 threshold | **under: $12.89 against $25** |
+
+**The cost threshold is $25 on the mean-throughput projection.** The upper bound is
+reported beside it and decides nothing. **If the mean projection exceeds $25, the run
+does not launch.** It stops and is reported, and no lever (fewer seeds, a smaller B,
+fewer levels) is applied automatically. The draft's projection was about $13 (mean)
+and about $15.5 (upper).
+
+**Before the read:**
+1. The results (`runs/confidence_cell/draws.jsonl`) and the run's log are fetched and
+   committed.
+2. That commit is checked for exactly 1,000 complete lines on 620000–620999, with no
+   truncated line, without opening or summarising any rule quantity.
+3. **The reader is pinned to one exact commit: `experiments/confidence_cell_read.py`
+   at `ec6d8ae`.** It is committed, and tested on synthetic files in the results'
+   format, before it opens the results.
+   - The hash is fixed in this live commit. If the reader changes before the live
+     commit, this line is updated to the new hash in the live commit itself, and never
+     afterwards.
+   - The read runs only if the working tree's reader is byte-identical to that
+     commit's: `git diff --quiet ec6d8ae -- experiments/confidence_cell_read.py`.
+   - It refuses anything but 620000–620999 at three levels of six searchers.
+
+The read cites both commits.
+
+**The read, once, after all 1,000 seeds, in this order:**
+1. **V2**, per level and g. If any test fails low, the read stops there: every `L_g`,
+   `C0` and `C(s)` is withdrawn pending a cause, and V1 and V3 are not printed.
+2. Otherwise **V1**: the class tier with the argmax rows, then the replay tier as
+   audit, each with tightness.
+3. Then **V3**.
+
+The output is committed as `runs/confidence_cell/read.txt`.
