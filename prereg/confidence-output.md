@@ -1,8 +1,10 @@
 # confidence-output: a graded confidence beside the verdict, and whether it is calibrated
 
-**DRAFT, committed and not live.** It authorises nothing and nothing runs on it. It
-goes live only by a dated commit after review, and after the build items at the end
-pass their tests.
+**DRAFT, committed and not live, except one section.** "Stage-1 secondary analysis"
+is **LIVE from 2026-10-04 (America/Chicago)**, by this commit, pre-registration only.
+It authorises that analysis's reader and its one run on `30ee870`'s file, and nothing
+else. Everything else here authorises nothing. It goes live only by a dated commit
+after review, and after the build items at the end pass their tests.
 
 ## Question
 
@@ -168,7 +170,7 @@ Sharpe. Suppose `P(D ≤ q_g) ≥ g`.
   - the same reliability computed against the holdout **population** Sharpe > 0, to
     separate noise from drift.
 
-## Stage-1 secondary analysis: V1, class tier, on data already read
+## Stage-1 secondary analysis: V1, class tier, on data already read — LIVE, 2026-10-04 (America/Chicago)
 
 **SECONDARY, ON DATA ALREADY READ.** This section is separate from the rest of the
 file so that it can go live on its own.
