@@ -193,3 +193,17 @@ def test_the_replication_flag_runs_its_own_block_into_its_own_directory(base, mo
     assert (tmp_path / "res_score_replication" / "draws.jsonl").exists()
     with pytest.raises(SystemExit, match="exclusive"):
         tw.main(["--replication", "--smoke", "1"])
+
+
+def test_the_prank_cell_is_refused_until_its_live_heading_exists(tmp_path):
+    from experiments import planted_twins as pt
+    f = tmp_path / "p.md"
+    f.write_text("- its heading will be `## P-rank cell — LIVE`\n")
+    with pytest.raises(SystemExit, match="not live"):
+        pt.require_prank_live(f)
+    f.write_text("## P-rank cell — LIVE, someday\n")
+    pt.require_prank_live(f)
+    with pytest.raises(SystemExit, match="not live"):
+        pt.require_prank_live(pt.PRANK_PREREG)          # the real file: a draft
+    with pytest.raises(SystemExit, match="not live"):
+        pt.main(["--cell", "prank", "--planted", "1.5", "--draws", "1000"])

@@ -301,6 +301,19 @@ def cost_only(rec: dict) -> dict:
             "platform": rec.get("platform")}
 
 
+PRANK_PREREG = Path(__file__).resolve().parent.parent / "prereg" / "twin-calibration.md"
+PRANK_LIVE_MARK = "## P-rank cell — LIVE"
+
+
+def require_prank_live(path: Path = PRANK_PREREG) -> None:
+    """The registered p-rank cell runs only once a line BEGINS with its live heading;
+    a mention in prose does not count. Smokes are cost only and need nothing."""
+    import re
+    if not re.search(rf"^{re.escape(PRANK_LIVE_MARK)}", path.read_text(), re.M):
+        raise SystemExit(f"the p-rank cell is not live: {path.name} has no line beginning "
+                         f"'{PRANK_LIVE_MARK}'. Only --smoke runs before its live commit.")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--draws", type=int, default=0)
@@ -328,6 +341,7 @@ def main(argv=None) -> int:
         if a.planted is None:
             raise SystemExit("--planted is required for the p-rank cell: stage 1's "
                              "nearest-the-bar, fixed by dated commit before it is live")
+        require_prank_live()
         levels = [0.0, a.planted]
     if smoke and a.replication:
         raise SystemExit("--replication and --smoke are exclusive")
