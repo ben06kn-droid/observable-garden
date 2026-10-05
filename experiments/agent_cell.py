@@ -227,6 +227,73 @@ def handlers_for(arm: str, sandbox, cls, rec, K: int):
     return handlers, tools
 
 
+def log_session(rec, tools) -> None:
+    """Write a grammar session's record into the run: the declared rules, the
+    close-time self-check, the budget, the content cap, the session log, the
+    change history, and the submission if the agent never called submit.
+
+    One function, so every runner that drives a `ToolSession` (this one and
+    `experiments/planted_agent.py`) writes the same events that
+    `experiments/price_runs.py` rebuilds a log from.
+    """
+    rec.triggers_predeclared = [dict(t) for t in
+                                tools.session.log.declared_trigger_records]
+    rec.triggers_changed = bool(tools.session.log.trigger_changes)
+    # The close-time self-check, recorded in the log (the pre-agent-cell list)
+    check = tools.session.close()
+    # The self-check goes into the RUN FILE, not only into the run config: a
+    # resume decides run by run whether a file is complete, and a completeness
+    # test that has to consult a shared index cannot tell a finished run from
+    # one whose index entry was written before it crashed.
+    rec.log("self_check", **check)
+    # THE SESSION LOG, ON DISK. The first shake-out found this missing from
+    # this runner (`prereg/agent-pilot.md`, 2026-09-29): the records existed in
+    # process and never reached the file, so those runs could not be re-graded
+    # and amendment 8's round trip could not be audited from the artifact.
+    #
+    # Every move carries its PARAMETERS and its `shown` payload. Parameters
+    # because a `flip` without its feature is a different move on re-execution
+    # (the ADR seat runs could not be re-graded for exactly that reason);
+    # `shown` because `prereg/agent-cell.md` amendment 8 registers that
+    # re-rendering it reproduces the payload sent, byte for byte, and an
+    # invariant that cannot be checked from the stored run is not one a reader
+    # can rely on.
+    # the declared budget, so a re-grade reads the bound the search ran under
+    # instead of reconstructing it (amendment 10)
+    rec.log("declared_budget", budget=tools.session.log.budget)
+    # the content-move cap, if the arm ran under one; the replay null enforces it
+    rec.log("content_cap", cap=getattr(tools, "content_cap", None))
+    rec.log("session_log", records=[
+        {"step": r.step, "kind": r.move.kind, "support": list(r.support_after),
+         "score": r.score_after, "n_candidates": r.n_candidates,
+         "trigger": r.trigger, "trigger_value": r.trigger_value,
+         "replayable": r.replayable, "contradicted": r.contradicted,
+         "move": {"kind": r.move.kind, "statistic": r.move.statistic,
+                  "feature": r.move.feature, "note": r.move.note,
+                  "among": list(r.move.among or ()),
+                  "else_statistic": r.move.else_statistic,
+                  "choice": r.move.choice},
+         "shown": ([list(pair) for pair in r.information.shown]
+                   if r.information is not None else []),
+         "trigger_stamped_at": r.trigger_stamped_at,
+         "information": (r.information.as_context()
+                         if r.information is not None else None)}
+        for r in tools.session.log.records])
+    # The CHANGE HISTORY, with timestamps. Attempt 2 recorded its absence as a
+    # gap: the file carried a `triggers_changed` boolean and the committed
+    # rules, so re-grading worked, but a reader could not see WHAT was changed
+    # or WHEN. A change is a data-dependent decision and its timing is the
+    # whole reason it is priced, so the timing belongs in the artifact.
+    rec.log("trigger_changes", changes=[
+        {"at_step": ch.get("at_step"), "trigger": dict(ch.get("trigger") or {}),
+         "reason": ch.get("reason"), "timestamp": ch.get("timestamp")}
+        for ch in (tools.session.log.trigger_changes or ())])
+    if not rec.submitted:
+        support, score = tools.session.submission()
+        rec.submitted_support = [[int(k), float(s)] for k, s in support]
+        rec.submitted_sharpe = float(score)
+
+
 def run_one(arm: str, panel_name: str, seed: int, index: int, *,
             prompts: dict, dry_run: bool = False,
             credential: str = "unknown",
@@ -270,60 +337,7 @@ def run_one(arm: str, panel_name: str, seed: int, index: int, *,
                      depth=DEPTH[panel_name])
 
     if tools is not None:
-        rec.triggers_predeclared = [dict(t) for t in
-                                    tools.session.log.declared_trigger_records]
-        rec.triggers_changed = bool(tools.session.log.trigger_changes)
-        # The close-time self-check, recorded in the log (the pre-agent-cell list)
-        check = tools.session.close()
-        # The self-check goes into the RUN FILE, not only into the run config: a
-        # resume decides run by run whether a file is complete, and a completeness
-        # test that has to consult a shared index cannot tell a finished run from
-        # one whose index entry was written before it crashed.
-        rec.log("self_check", **check)
-        # THE SESSION LOG, ON DISK. The first shake-out found this missing from
-        # this runner (`prereg/agent-pilot.md`, 2026-09-29): the records existed in
-        # process and never reached the file, so those runs could not be re-graded
-        # and amendment 8's round trip could not be audited from the artifact.
-        #
-        # Every move carries its PARAMETERS and its `shown` payload. Parameters
-        # because a `flip` without its feature is a different move on re-execution
-        # (the ADR seat runs could not be re-graded for exactly that reason);
-        # `shown` because `prereg/agent-cell.md` amendment 8 registers that
-        # re-rendering it reproduces the payload sent, byte for byte, and an
-        # invariant that cannot be checked from the stored run is not one a reader
-        # can rely on.
-        # the declared budget, so a re-grade reads the bound the search ran under
-        # instead of reconstructing it (amendment 10)
-        rec.log("declared_budget", budget=tools.session.log.budget)
-        rec.log("session_log", records=[
-            {"step": r.step, "kind": r.move.kind, "support": list(r.support_after),
-             "score": r.score_after, "n_candidates": r.n_candidates,
-             "trigger": r.trigger, "trigger_value": r.trigger_value,
-             "replayable": r.replayable, "contradicted": r.contradicted,
-             "move": {"kind": r.move.kind, "statistic": r.move.statistic,
-                      "feature": r.move.feature, "note": r.move.note,
-                      "among": list(r.move.among or ()),
-                      "else_statistic": r.move.else_statistic,
-                      "choice": r.move.choice},
-             "shown": ([list(pair) for pair in r.information.shown]
-                       if r.information is not None else []),
-             "trigger_stamped_at": r.trigger_stamped_at,
-             "information": (r.information.as_context()
-                             if r.information is not None else None)}
-            for r in tools.session.log.records])
-        # The CHANGE HISTORY, with timestamps. Attempt 2 recorded its absence as a
-        # gap: the file carried a `triggers_changed` boolean and the committed
-        # rules, so re-grading worked, but a reader could not see WHAT was changed
-        # or WHEN. A change is a data-dependent decision and its timing is the
-        # whole reason it is priced, so the timing belongs in the artifact.
-        rec.log("trigger_changes", changes=[
-            {"at_step": ch.get("at_step"), "trigger": dict(ch.get("trigger") or {}),
-             "reason": ch.get("reason"), "timestamp": ch.get("timestamp")}
-            for ch in (tools.session.log.trigger_changes or ())])
-        if not rec.submitted:
-            support, score = tools.session.submission()
-            rec.submitted_support = [[int(k), float(s)] for k, s in support]
-            rec.submitted_sharpe = float(score)
+        log_session(rec, tools)
         if defer_pricing:
             # The log above is everything pricing needs; the certifying null is
             # the expensive part of a run and the part that needs no model, so it
