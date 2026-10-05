@@ -210,9 +210,13 @@ def cost_only(rec: dict) -> dict:
 
 
 def require_live(path: Path = PREREG) -> None:
-    if LIVE_MARK not in path.read_text():
-        raise SystemExit(f"V2 is not live: {path.name} has no '{LIVE_MARK}' section. "
-                         "Only --smoke runs before the live commit.")
+    """Live only if a LINE BEGINS with the marker: the heading of the live section.
+    The draft mentions the marker in prose (in backticks), and a substring test passed
+    on that mention -- found on 2026-10-05, before any registered run."""
+    import re
+    if not re.search(rf"^{re.escape(LIVE_MARK)}", path.read_text(), re.M):
+        raise SystemExit(f"V2 is not live: {path.name} has no line beginning "
+                         f"'{LIVE_MARK}'. Only --smoke runs before the live commit.")
 
 
 def main(argv=None) -> int:

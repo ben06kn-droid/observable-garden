@@ -73,11 +73,16 @@ def test_the_registered_run_is_refused_until_v2_is_live(tmp_path):
     f.write_text("# draft\n")
     with pytest.raises(SystemExit, match="not live"):
         cc.require_live(f)
+    f.write_text("- the live marker is the line `## V2 — LIVE`, documented\n")
+    with pytest.raises(SystemExit, match="not live"):    # a mention is not the heading
+        cc.require_live(f)
     f.write_text("# x\n\n## V2 — LIVE, someday\n")
     cc.require_live(f)                                  # no raise
-    if cc.LIVE_MARK not in cc.PREREG.read_text():
-        with pytest.raises(SystemExit, match="not live"):
-            cc.main(["--workers", "1"])
+    # the real draft mentions the marker in prose and is NOT live
+    with pytest.raises(SystemExit, match="not live"):
+        cc.require_live(cc.PREREG)
+    with pytest.raises(SystemExit, match="not live"):
+        cc.main(["--workers", "1"])
 
 
 def test_the_smoke_block_is_this_files_own():
