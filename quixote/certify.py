@@ -35,6 +35,7 @@ import numpy as np
 
 from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
 from estimator.trigger_replay import ReplayNulls
+from quixote.confidence import confidence
 from quixote.pricing import DEFAULT as NO_PRICING
 from quixote.pricing import PricingOptions, steps_to_price
 from quixote.replay import (LoggedPolicy, commitment_check,
@@ -254,6 +255,9 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         contradicted_picks=len(log.contradicted_picks()),
         locally_priced_steps=tuple(sorted(priced)),
         pricing_licensed=False if priced else None,
+        confidence_replay=confidence(
+            float(nulls.realized_score if submitted is None else submitted),
+            nulls.trigger, ppy=float(annualization) ** 2, tier="trigger replay (audit)"),
     )
     v.reasons.append(integrity.reason())
     if not has_stop:

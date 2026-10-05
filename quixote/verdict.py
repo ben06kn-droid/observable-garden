@@ -68,6 +68,10 @@ class QuixoteVerdict:
     # different things: the fill share says how often the null left the log, and
     # this says how often it had no choice.
     handover_replicates: int | None = None
+    # Confidence fields from the certifying null's own replicates (trigger replay):
+    # `quixote.confidence.confidence`, `prereg/confidence-output.md` (draft). Beside
+    # the verdict, never part of its status.
+    confidence_replay: dict | None = None
 
     # -- local-max and fidelity-driven pricing (quixote/pricing.py) ---------
     # Empty unless a flag is on, and a flag being on makes the verdict

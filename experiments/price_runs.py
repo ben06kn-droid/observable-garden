@@ -144,12 +144,20 @@ def class_p_etf(sandbox, table, seed: int, support, B: int) -> dict:
     class_max, _ = table.max_sharpe()
     sr = table.sharpe(support) if support else float("-inf")
     p = (1 + int(np.sum(M_b >= sr))) / (B + 1)
+    from quixote.confidence import confidence
+    conf = (confidence(float(sr), M_b, ppy=float(table.periods_per_year),
+                       tier="declared class") if support else None)
     return {"seed": seed, "p_upper": p, "submitted_score": float(sr),
+            "confidence": conf,
             "class_max": float(class_max), "block_length": L,
             "null_max_mean": float(M_b.mean()), "B": B,
             "basis": "class table (stored net streams)",
             "guard_floor": None, "guard_cap": None}
 
+
+# Verdict fields added after runs were priced in-line: `--check` compares a re-price
+# with what a stored run CAN carry, so a field the run predates is not a difference.
+ADDED_SINCE = ("confidence",)
 
 PLANTED_B = 1_000         # prereg/planted-edge.md: both tiers at B = 1,000
 
@@ -390,6 +398,9 @@ def compare(stored: dict, result: dict) -> list[str]:
     # through JSON, as the stored side went, so a tuple and a list compare equal
     rt = lambda x: json.loads(json.dumps(x, default=str))
     a, b = rt(stored.get("verdict") or {}), rt(result.get("verdict") or {})
+    for k in ADDED_SINCE:                 # fields a run priced before them cannot carry
+        if k not in a:
+            b.pop(k, None)
     for k in sorted(set(a) | set(b)):
         if a.get(k) != b.get(k):
             diffs.append(f"verdict.{k}: {a.get(k)!r} != {b.get(k)!r}")
