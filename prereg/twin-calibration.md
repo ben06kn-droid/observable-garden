@@ -590,3 +590,39 @@ conservative. **No verdict changes:** the score-rank cell's rule is a validity r
 (rate ≤ α), and its twelve rates were all below 0.05, the direction this predicts.
 Besag & Clifford (1991) is cited here only for sequential stopping, which is not
 registered; its text could not be accessed.
+
+## Amendment — 2026-10-05 (America/Chicago), not live. The p-rank cell, set up for the box
+
+**The planted level is 1.5.** The cell's planted level was registered as "7.5 stage 1's
+nearest-the-bar", fixed by dated commit. Stage 1's read returned **1.5** (`8660508`;
+pooled power at α = 0.05 of 0.4391, against 0.2035 at 1.0 and 0.0484 at 0.5). That
+choice was made by the stage-1 read alone, before this cell has any data. The cell's
+levels are therefore **0 and 1.5**.
+
+**On the box.** The cell runs on the c7a.48xlarge (`i-0e0c1484de3c755ad`, x86_64,
+shutdown behaviour Stop) at **191 workers**. At about 1.5 GB per worker (39 streams of
+a chunk, plus 39 count matrices) that is about 290 GB of 369. The box smoke records the
+real peak.
+
+**The cost threshold replaces the lever.** The lever registered above ("if the box
+smoke projects more than $30, n drops to 500") is withdrawn before any smoke has run,
+so the change depends on no data. **The threshold is $30 on the mean-throughput
+projection.** The projection is 1,000 panels × mean seconds per panel ÷ 191 workers,
+at $9.85/h. The upper bound (full rounds × the slowest panel) is reported beside it and
+decides nothing. **If the mean projection exceeds $30, the cell does not launch.** It
+stops and is reported, and no lever (n, B, K, constructions, searchers) is applied
+automatically.
+
+**Expected, from the laptop component estimate (labelled as one):** about 820 s per
+panel uncontended. That is about **1.2 h and $12** at mean throughput, and about
+**$16** at the upper bound (6 rounds of about 1,000 s). The box smoke replaces it.
+
+**The smoke:** 191 panels on the smoke block, at levels 0 and 1.5, B = 1,000, cost
+only. The driver starts its smoke at 985000, so it reuses 985000–985190, which the
+score-rank box smoke also used. Smoke seeds are never read, so that is cost-only
+reuse. It writes to `runs/_smoke/planted_twins/`, separately from the score-rank smoke.
+
+**Still to build before the live commit:** the p-rank reader. `experiments/
+planted_twins_read.py` reads the score-rank cell only. The p-rank reader is to be
+committed, and tested on synthetic files, before the cell's results exist. It is pinned
+by hash in the live commit.
