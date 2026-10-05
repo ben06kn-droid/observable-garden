@@ -931,3 +931,88 @@ its third wave of 191 seeds was written.
   relaunch, so `planted_panel.py` and `planted_edge.py` stay at `6fdd1ba`, and the
   log's commit line for the resumed run must read `6f55a07`. A different instance type
   or platform is a deviation and is recorded as one.
+
+## Stage 1 — Read, 2026-10-04 (America/Chicago). CLOSED
+
+**Read once**, by the reader committed before the results existed locally (`6236b18`,
+`experiments/planted_edge_read.py`, unchanged), on the results committed before any
+read (`30ee870`, `runs/planted_edge_scripted/draws.jsonl`, 2,000 complete lines on
+600000–601999, SHA-256 `cd7e9f8f…259ce1`). The output is `8660508`
+(`runs/planted_edge_scripted/read.txt`). Run at the live commit `bb0dcc4`, code
+`6fdd1ba`, launch commit `6f55a07`, paused and resumed by seed (`74fc761`). Nothing
+below goes beyond that file.
+
+**Rule 1: all 48 PASS.** No searcher certified a submission with population Sharpe
+≤ 0 at any level or either α: k = 0 of 2,000 on every one of the 48 tests (Wilson upper
+end 0.0019). **The replication branch was not triggered.** At level 0 no run certified
+at all (rule 2, level 0: 0 of 2,000 for every searcher).
+
+**Rule 2, power at α = 0.05 (class tier), per searcher:**
+
+| level | range over the six searchers | pooled |
+|---|---|---|
+| 0.5 | 0.0400–0.0610 | 0.0484 |
+| 1.0 | 0.1665–0.2390 | 0.2035 |
+| 1.5 | 0.4100–0.4760 | 0.4391 |
+
+At α = 0.01 the range is 0.0235–0.0350, 0.1050–0.1610 and 0.3180–0.3965. The
+trigger-replay tier (audit) is in `read.txt`.
+
+**Rule 3, recovery.** Exact recovery of `m*` by a searcher ranges from 0 to 10 of 2,000
+at every planted level. Two-of-three recovery of `m*` ranges from 0.0005 to 0.0835.
+Per-searcher figures, and recovery of `m⁺`, are in `read.txt`.
+
+**Rule 5, out of sample.** Certified minus uncertified holdout population Sharpe,
+within level and combined over the planted levels, is **+0.8375 to +0.9021** across the
+six searchers (secondary, realized: +0.8415 to +0.9056). The per-level SEs are
+0.019–0.030 (primary). No run certified at level 0, so that level is n/a.
+
+**The standing check:** with k = 0 at n = 2,000, a procedure with this curve's
+false-certification rate passes rule 1 at the agent half's n = 20 with probability
+1.000, at every searcher, level and α.
+
+### Stage 2's inputs, written here as registered
+
+- **Nearest-the-bar: level 1.5** (pooled power at α = 0.05 is 0.4391; 0.5 is 0.0484 and
+  1.0 is 0.2035).
+- **The measured standing check:** 1.000 throughout, as above.
+- **Rule 5's detectable difference** at 20 runs per level (10 certified against 10
+  uncertified, 80%, two-sided 0.05): **0.4951 at 0.5, 0.6685 at 1.0, 0.8413 at 1.5**.
+  The holdout population Sharpe's sd is 0.3954, 0.5339 and 0.6718.
+- **Recovery base rates, from the realized class argmax:**
+
+  | level | = m* | 2 of 3 m* | = m⁺ | 2 of 3 m⁺ |
+  |---|---|---|---|---|
+  | 0.5 | 0.0110 | 0.1355 | 0.0535 | 0.2330 |
+  | 1.0 | 0.0450 | 0.2765 | 0.1160 | 0.3610 |
+  | 1.5 | 0.1215 | 0.4370 | 0.2230 | 0.5135 |
+
+**Open for the stage-2 live commit, recorded and not resolved here:** the agent half is
+registered at "β = 0, nearest-the-bar, 1.5". Nearest-the-bar is 1.5, so as written the
+three agent levels are two. Stage 2 must decide how to treat that before it goes live.
+
+**The limits, stated with the result:**
+- **48 dependent rules.** Six searchers on the same 2,000 panels and the same
+  replicates, several often submitting the same specification. Rule 1's family figures
+  assumed independence. Three searchers (stop-when-cleared, cleared-restart,
+  lookahead-stop-when-cleared) have near-identical rows throughout.
+- **Rule 1 here is a test of a conservative regime.** Level 0's planted panel has every
+  member's population Sharpe negative, so k = 0 is what P2 predicts. It shows the gate
+  is not liberal on this design. It does not measure how close to nominal it runs.
+- **Scripted searchers only.** No agent ran; that is stage 2.
+- **Synthetic returns on real features.** These are the planted generator's panels: the
+  pinned real X with a resampled, demeaned real residual, independent of X by
+  construction, plus one planted member. Real feature-return dependence is not tested.
+- **The holdout is the planted process continued** into 2018–2022, with the same
+  member and scale. It is not a regime change.
+
+**Cost, from the logs.** Two segments at 191 workers on a c7a.48xlarge:
+- 573 seeds, 2026-10-03 01:52:36 to 02:54 UTC;
+- 1,427 seeds, 2026-10-04 05:07:14 to about 07:42 UTC, exit 0.
+
+That is **about 3 h 37 min of run wall, about $36** at $9.85/h, against the $34
+projected from mean throughput and the $36 upper bound. The fourth wave's seeds, just
+started at the pause, were rerun. Seconds per seed were 1,184–1,248, as in the smoke.
+No seat cost.
+
+**7.5 stage 1 is closed.** Stage 2 stays a draft until its own dated live commit.
