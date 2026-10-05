@@ -1558,7 +1558,13 @@ results `1affdd1`, read `1fc432a`). On 1,000 planted panels with six scripted se
 triggered.** The registered direction held: conservative, and nearer nominal under block
 permutation. The cell ran in 34 minutes for about $7 on a c7a.48xlarge.
 
-**Still draft, not live:** the **p-rank cell**, which ranks the gate's own p-value among
-twins, needs 7.5 stage 1's nearest-the-bar level; and the agent-level twin item. The
-score-rank cell tested the constructions, not the p-rank statistic, so it does not
-license twin certification as registered.
+**The p-rank cell stopped at its box smoke, 2026-10-05.** This cell ranks the gate's own
+p-value among twins, at levels 0 and 1.5 (stage 1's nearest-the-bar). On the
+c7a.48xlarge at 191 workers the smoke measured 3,633 s per panel, so the projection
+for 1,000 panels was **$52.04 against the registered $30 threshold**.
+- The cell stopped as registered: no live commit, no run, no lever.
+- **The p-rank statistic is unmeasured.** The score-rank cell tested the twin
+  constructions, not the p-rank statistic, so twin certification as registered is not
+  licensed.
+- Running the cell needs a new dated registration of its size or threshold.
+- The agent-level twin item remains a draft.

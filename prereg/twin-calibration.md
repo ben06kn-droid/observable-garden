@@ -626,3 +626,31 @@ reuse. It writes to `runs/_smoke/planted_twins/`, separately from the score-rank
 planted_twins_read.py` reads the score-rank cell only. The p-rank reader is to be
 committed, and tested on synthetic files, before the cell's results exist. It is pinned
 by hash in the live commit.
+
+## P-rank cell — stopped at its box smoke, 2026-10-05 (America/Chicago). Not run; the p-rank statistic is unmeasured
+
+The registered box smoke ran on 2026-10-05, 22:34–23:37 UTC: 191 panels on
+985000–985190, levels 0 and 1.5, B = 1,000, 191 workers on the c7a.48xlarge, at
+`3737147`. The records are cost only (`517f027`).
+- Each panel took a wall mean of **3,633 s** (max 3,789; wall/CPU 1.05). The class pass
+  over the 39 matrices took 1,813 s per level (median). Peak memory was **2,281 MB per
+  worker**.
+- The **mean-throughput projection for 1,000 panels was 5.28 h, $52.04**, against the
+  **$30 threshold** (amendment of 2026-10-05). The upper bound was 6.32 h, $62.20.
+- **Over the threshold, the cell stopped as registered.** There was no live commit and
+  no registered run, and **no lever was applied**: not n, B, K, the constructions, the
+  searchers or the workers.
+- **The p-rank statistic is unmeasured.** Twin certification as registered (the gate's
+  own p ranked among twins) has no result on real-feature panels. The score-rank cell's
+  T1 passes (closed 2026-10-02) test the twin constructions with the submitted-score
+  statistic. They do not license the p-rank statistic.
+
+**Why the estimate missed, recorded for any later registration:**
+- The laptop component estimate was about 820 s per panel, single process and
+  uncontended. With 191 workers on the box, a panel took about 4.4 times that, and the
+  class pass is nearly all of it.
+- Memory per worker was 2.3 GB, not the estimated 1.5 GB, which left only 10–20 GB of
+  the box's 369 free.
+
+Running the cell would need a new, dated registration of its size or its threshold,
+made before any p-rank data exists. None is made here.
