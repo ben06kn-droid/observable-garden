@@ -24,11 +24,10 @@ stage-1 driver stored them.
 1. **Deflated confidence** `C0 = 1 − p_class`, where
    `p_class = (1 + #{M_b ≥ S})/(B + 1)`.
 2. **Lower bounds** `L_g = S − quantile_g(M_b)`, for g ∈ {0.90, 0.95, 0.99}.
-3. **Confidence curve** `C(s) = #{M_b < S − s}/B`, on the fixed grid
+3. **Confidence curve** `C(s) = 1 − (1 + #{M_b ≥ S − s})/(B + 1)`, on the fixed grid
    s ∈ {−1.00, −0.95, …, 3.00} (81 points, annualised Sharpe units). `C` is
-   nonincreasing in s. At s = 0 it differs from `C0` by the `+1` correction:
-   `C(0) − C0 ∈ [0, 1/(B+1)]`. *For review:* defining `C` with the same `+1`, so that
-   `C(0) = C0` exactly, is the alternative.
+   nonincreasing in s, and **`C(0) = C0` exactly**: the curve is the deflated
+   confidence evaluated at every shifted bar, with the same `+1`.
 4. **Replay-tier versions, audit only.** The same three quantities, with `M_b`
    replaced by the trigger-replay replicates `N_b`, the procedure's own statistic on
    each replicate (`p_trigger`'s replicates). They are reported beside the class
@@ -55,7 +54,7 @@ Sharpe. Suppose `P(D ≤ q_g) ≥ g`.
 - Then `SR_θ ≥ Ŝ_θ − q_g` holds for **every** θ at once with probability at least g,
   and so for whichever member the search submits, however adaptively it was chosen.
   That is `L_g`'s coverage.
-- `C0` is the largest confidence at which `L_g ≥ 0`, up to the `+1` correction.
+- `C0 = C(0)` is the confidence that the submission's population Sharpe exceeds 0.
 - `C(s)` is the confidence that the submission's population Sharpe exceeds s.
 
 **The route:**
@@ -139,9 +138,17 @@ Sharpe. Suppose `P(D ≤ q_g) ≥ g`.
   - The `SR²/2` term pushes the other way and is about 0.2% at most.
 - **Secondary:** a KS test of `u` against uniform, per level, descriptive.
 - **Design:**
-  - **1,000 fresh panels on 620000–620999** (unused; the registered blocks are 600xxx,
-    610xxx, 640xxx, 650xxx and 660xxx), at all four levels on the pinned X, B = 1,000.
-    This uses the same generator and the same class pass as stage 1.
+  - **1,000 fresh panels on 620000–620999, at levels 0, 1.0 and 1.5 only**, on the
+    pinned X, B = 1,000. This uses the same generator and the same class pass as stage
+    1. Level 0.5 is dropped for cost; its power was 0.0484, so it adds few certified
+    submissions to V1 or V3.
+  - **Seed check, 2026-10-04 (America/Chicago):** `experiments.seed_block_check
+    --exclude prereg/confidence-output.md --ranges 620000-620999,981000-981999` scanned
+    36 files, 109 explicit ranges and 8 master seeds (5,000 draws each): **NO
+    COLLISION**. The smoke seeds first proposed, 980191–980381, **collided** with 7.5's
+    registered smoke block 980000–980999 (`prereg/planted-edge.md`). They are replaced
+    by this file's own smoke block, **981000–981999**, of which the smoke uses
+    981000–981190.
   - The six registered searchers also run (realized, with their trigger-replay nulls
     as audit), so that V1 and V3 are measured **confirmatorily** on the same block.
   - Each record stores `D`, `u`, the class-tier `M_b` and replay-tier `N_b` on the
@@ -160,6 +167,36 @@ Sharpe. Suppose `P(D ≤ q_g) ≥ g`.
     truth.in_sample`), which measures how stationary even the planted design is;
   - the same reliability computed against the holdout **population** Sharpe > 0, to
     separate noise from drift.
+
+## Stage-1 secondary analysis: V1, class tier, on data already read
+
+**SECONDARY, ON DATA ALREADY READ.** This section is separate from the rest of the
+file so that it can go live on its own.
+- **Data:** `runs/planted_edge_scripted/draws.jsonl` at `30ee870` (2,000 seeds,
+  600000–601999, SHA-256 `cd7e9f8f…259ce1`), read once for stage 1 at `8660508`.
+  None of the quantities below was computed in that read.
+- **Rows:** the six registered searchers, plus the **class argmax**, at levels 0, 0.5,
+  1.0 and 1.5. That is 7 rows × 4 levels × 2 values of g = **56 tests**.
+- **Definitions, per run:**
+  - `L_g = S − q_g`. `S` is the searcher's `score`, or `class_max` for the argmax row.
+  - `q_g` is the stored `null_max_q`: `q_0.95 = null_max_q["0.05"]` and
+    `q_0.99 = null_max_q["0.01"]`, each `np.quantile(M_b, 1 − α)` as the driver
+    stored it.
+  - **Covered** iff the in-sample population Sharpe (`truth.in_sample`, or
+    `class_argmax_truth.in_sample`) is ≥ `L_g`.
+  - A run with no submission (support `None`) is excluded and counted.
+- **Rule, per row, level and g:** k covered of n, the rate, and its Wilson 95%.
+  - **Fails low iff the upper Wilson end < g.**
+  - **Conservative** iff the lower end > g.
+  - Otherwise within.
+  - Detectable shortfall at n = 2,000 and 80%: 0.013 (g = 0.95), 0.006 (g = 0.99).
+- **Predicted:** conservative on every searcher row (P7 with P2). The argmax rows are
+  nearest g, since the class argmax is the member most likely to carry the class's
+  largest error.
+- **What a fail-low does here:** it is reported, and it becomes a registered
+  prediction that V2's confirmatory V1 also fails low on that row. **No replication is
+  run off this analysis.** It is secondary, and its data are already read.
+- **No family-wise pass rate is claimed.** The 56 tests share panels and replicates.
 
 ## What the existing stage-1 file can and cannot give
 
@@ -185,18 +222,17 @@ is V2's block.
 
 ## Cost
 
-- **Smoke plan, not run:** 191 panels on the unused smoke seeds 980191–980381, all
-  four levels, 191 workers, on a c7a.48xlarge, **cost only**. That is one wave of
-  about 1,190–1,250 s (the class pass, 243 s per level, and the trigger nulls, 50 s
-  per level, as measured in stage 1's box smoke) plus boot: **about 25 minutes,
-  about $4**. It checks memory: the stored grids add little, and peak RSS should stay
-  near stage 1's 1,035 MB per worker.
+- **Smoke plan, not run:** 191 panels on 981000–981190, at levels 0, 1.0 and 1.5,
+  191 workers, on a c7a.48xlarge, **cost only**.
+  - One wave takes about 890–940 s: three levels, each a 243 s class pass plus 50 s of
+    trigger nulls, as measured in stage 1's box smoke.
+  - With boot, that is **about 20 minutes, about $3.5**.
+  - It checks memory: the stored grids add little, and peak RSS should stay near stage
+    1's 1,035 MB per worker.
 - **V2 projected from that measurement:**
-  - **mean throughput:** 1,000 seeds × ~1,190 s / 191 workers ≈ **1.73 h, about $17**;
-  - **upper bound:** 6 waves × 1,250 s ≈ **2.08 h, about $21**;
+  - **mean throughput:** 1,000 seeds × ~890 s / 191 workers ≈ **1.29 h, about $13**;
+  - **upper bound:** 6 waves × ~940 s ≈ **1.57 h, about $15.5**;
   - plus the fetch window.
-- **A cheaper variant, for review:** levels 0 and 1.5 only, about half, **$9–11**,
-  with V1 and V3 then measured on two levels.
 - **The threshold rule as in stage 1:** the mean projection decides, with the upper
   bound reported beside it. No seat cost.
 
@@ -206,8 +242,8 @@ is V2's block.
    `C(s)` and `P_5`, both tiers.
 2. The V2 driver and its reader, tested on synthetic files.
 3. Tests:
-   - `C` is monotone;
-   - `C(0)` and `C0` agree within `1/(B+1)`;
+   - `C` is nonincreasing on the grid;
+   - `C(0) = C0` exactly, both tiers;
    - `L_g` equals the quantile arithmetic;
    - `P_5` matches a direct numerical integration;
    - the V2 driver's class pass equals `planted_edge.run_level`'s on a synthetic base.
