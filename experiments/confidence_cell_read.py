@@ -13,7 +13,8 @@
 2. **V1, coverage of `L_g`**, per row (the six searchers and the class argmax), level
    and g, on the class tier, with the replay tier (searchers only) as audit. A run is
    covered iff its in-sample population Sharpe is >= `L_g`. Fails low iff the upper
-   Wilson end < g; conservative iff the lower end > g.
+   Wilson end < g; conservative iff the lower end > g. Beside it, **tightness**: the
+   median and quartiles of `SR_pop - L_g`, descriptive.
 3. **V3, reliability, descriptive.** `P_5` (class tier) is binned into deciles against
    whether the realized holdout Sharpe is > 0, per level. All submissions and certified
    ones (`p_class < 0.05`) are shown separately, with the Brier score. Beside them: the
@@ -100,11 +101,12 @@ def read_v2(recs, A) -> bool:
     return fails
 
 
-def _covered(row: dict, conf_key: str, g: float):
+def _gap(row: dict, conf_key: str, g: float):
+    """`SR_pop - L_g`, or None for a run with no submission. Covered iff >= 0."""
     conf, truth = row.get(conf_key), row.get("truth")
     if conf is None or truth is None:
         return None
-    return truth["in_sample"] >= conf["L"][f"{g:.2f}"]
+    return truth["in_sample"] - conf["L"][f"{g:.2f}"]
 
 
 def read_v1(recs, A) -> None:
@@ -114,22 +116,25 @@ def read_v1(recs, A) -> None:
         A(f"2. V1 — coverage of L_g, {tier}")
         A("-" * 78)
         A(f"   {'row':<32}{'level':>6}{'g':>6}{'k':>7}{'n':>7}{'rate':>9}   "
-          f"{'Wilson 95%':<18}{'verdict':<13}{'excl':>5}")
+          f"{'Wilson 95%':<18}{'verdict':<13}{'excl':>5}   "
+          f"gap SR_pop - L_g: median [q25, q75]")
         for name in rows:
             for beta in LEVELS:
                 lvs = by_level(recs, beta)
                 for g in GS:
-                    cov = []
+                    gaps = []
                     for lv in lvs:
                         row = lv["argmax"] if name == ARGMAX else next(
                             s for s in lv["searchers"] if s["searcher"] == name)
-                        cov.append(_covered(row, key, g))
-                    k = sum(1 for c in cov if c)
-                    n = sum(1 for c in cov if c is not None)
+                        gaps.append(_gap(row, key, g))
+                    got = np.array([x for x in gaps if x is not None], dtype=float)
+                    k, n = int((got >= 0).sum()), int(got.size)
                     lo, hi, v = verdict(k, n, g) if n else (np.nan, np.nan, "n/a")
+                    q25, q50, q75 = (np.quantile(got, [0.25, 0.5, 0.75]) if n
+                                     else (np.nan,) * 3)
                     A(f"   {name:<32}{beta:>6.1f}{g:>6.2f}{k:>7}{n:>7}"
                       f"{(k / n if n else np.nan):>9.4f}   [{lo:.4f}, {hi:.4f}]  "
-                      f"{v:<13}{len(cov) - n:>5}")
+                      f"{v:<13}{len(gaps) - n:>5}   {q50:+.4f} [{q25:+.4f}, {q75:+.4f}]")
         A("")
 
 

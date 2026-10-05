@@ -85,3 +85,13 @@ def test_it_refuses_the_wrong_block_or_shape(tmp_path):
     bad[3]["levels"] = bad[3]["levels"][:2]
     with pytest.raises(SystemExit, match="levels"):
         cr.load(_file(tmp_path, bad))
+
+
+def test_v1_tightness_is_the_gap_between_sr_and_the_bound(tmp_path):
+    # sr alternates 1.0 / 2.0 with L = 0.5: gaps 0.5 and 1.5, median 1.0
+    recs = [_rec(s, sr=(1.0 if s % 2 else 2.0)) for s in cr.SEEDS]
+    text, _ = cr.read(cr.load(_file(tmp_path, recs)))
+    line = next(l for l in text.splitlines() if l.strip().startswith("s1 ") and " 0.95 " in l)
+    assert line.rstrip().endswith("+1.0000 [+0.5000, +1.5000]")
+    assert "gap SR_pop - L_g: median [q25, q75]" in text
+

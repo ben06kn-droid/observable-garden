@@ -109,6 +109,12 @@ Sharpe. Suppose `P(D ≤ q_g) ≥ g`.
   | 2,000 | 0.017 | 0.013 | 0.006 |
   | 1,000 | 0.024 | 0.018 | 0.009 |
 
+- **Tightness, registered beside coverage** (added 2026-10-04). Per tier, row
+  (searcher, or the class argmax on the class tier), level and g: the median and
+  quartiles of the gap `SR_pop − L_g` between the submission's in-sample population
+  Sharpe and its lower bound. Coverage says whether the bound holds; the gap says how
+  much it gives away. Descriptive, with no rule. A bound can cover at 1.000 and still
+  be too loose to use, and this is what shows it.
 - **Replay tier:** the same, as audit.
 - **Family:** per searcher × level × g × tier, reported in full. No family-wise pass
   rate is claimed. A fail-low triggers the one-shot replication on the next fresh
