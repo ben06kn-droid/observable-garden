@@ -1005,6 +1005,29 @@ three agent levels are two. Stage 2 must decide how to treat that before it goes
   construction, plus one planted member. Real feature-return dependence is not tested.
 - **The holdout is the planted process continued** into 2018–2022, with the same
   member and scale. It is not a regime change.
+- **How often the class maximum itself clears the bar.** The read reports the
+  searchers' power, not the exhaustive search's. Recorded afterwards:
+
+  **Descriptive, outside the registered read, on data already read** (2026-10-04,
+  America/Chicago). One pass over `30ee870`'s file (SHA-256 `cd7e9f8f…`) counted the
+  panels whose realized class maximum exceeds the stored null quantiles `null_max_q`.
+
+  **This approximates the certificate rule; it is not that rule.** A certificate is
+  `p_class = (1 + #{M_b ≥ S})/(B + 1) < α`. The replicates `M_b` were not stored, only
+  their 0.95 and 0.99 quantiles, so "class max > q_{1−α}" stands in for it. The two can
+  differ only on panels where the class maximum falls within a replicate or two of the
+  quantile.
+
+  The ratio column gives each searcher's realized score as a share of its panel's
+  realized class maximum, pooled over the six searchers (n = 12,000 per level). The class
+  maximum is positive on every panel, so the share is well defined.
+
+  | level | class max > q_0.95 | class max > q_0.99 | median searcher score / class max [q25, q75] |
+  |---|---|---|---|
+  | 0 | 1 / 2,000 = 0.0005 | 0 / 2,000 = 0.0000 | 0.5049 [0.1635, 0.7490] |
+  | 0.5 | 412 / 2,000 = 0.2060 | 268 / 2,000 = 0.1340 | 0.5770 [0.2003, 0.8183] |
+  | 1.0 | **1,400 / 2,000 = 0.7000** | 1,039 / 2,000 = 0.5195 | 0.6107 [0.2188, 0.8288] |
+  | 1.5 | 1,973 / 2,000 = 0.9865 | 1,909 / 2,000 = 0.9545 | 0.6110 [0.2380, 0.8109] |
 
 **Cost, from the logs.** Two segments at 191 workers on a c7a.48xlarge:
 - 573 seeds, 2026-10-03 01:52:36 to 02:54 UTC;
@@ -1025,13 +1048,36 @@ nearest-the-bar, 1.5". The stage-1 read (`8660508`) returned **nearest-the-bar =
 1.0. As written, the three agent levels would therefore be two. **1.0 fills the third
 slot.**
 
-**The author's reason, recorded as stated (2026-10-04):** at 1.0 the realized class
-maximum is certified on about 70% of panels. **That figure is not a quantity in
-`read.txt`.** The read reports the six searchers' power (pooled 0.2035 at 1.0) and
-recovery of the class argmax, not the certification rate of the class maximum itself.
-The figure is to be checked against the stage-1 file, as a labelled descriptive
-quantity on data already read, before the stage-2 live commit. If it differs, the
-record is corrected and the choice of 1.0 is reconsidered there.
+**The reason:** at 1.0 the realized class maximum clears the class tier's 0.05 bar
+on **1,400 of 2,000 panels (0.7000)**, and its 0.01 bar on 1,039 (0.5195). The
+searchers clear it far less often, with pooled power 0.2035. **Checked
+2026-10-04**: the author first stated the figure as about 70%, and the check confirms
+it. The check was descriptive, outside the registered read, on data already read,
+and it approximates the certificate rule (see stage 1's Limits). At 1.0, then, an
+exhaustive search usually certifies and the registered searchers usually do not.
+That gap is what the agent half measures. At 1.5 both certify often, and at 0.5 the
+class maximum clears the bar on only 0.2060 of panels.
+
+**Descriptive, outside the registered read, on data already read** (2026-10-04,
+America/Chicago). One pass over `30ee870`'s file (SHA-256 `cd7e9f8f…`) counted the
+panels whose realized class maximum exceeds the stored null quantiles `null_max_q`.
+
+**This approximates the certificate rule; it is not that rule.** A certificate is
+`p_class = (1 + #{M_b ≥ S})/(B + 1) < α`. The replicates `M_b` were not stored, only
+their 0.95 and 0.99 quantiles, so "class max > q_{1−α}" stands in for it. The two can
+differ only on panels where the class maximum falls within a replicate or two of the
+quantile.
+
+The ratio column gives each searcher's realized score as a share of its panel's
+realized class maximum, pooled over the six searchers (n = 12,000 per level). The class
+maximum is positive on every panel, so the share is well defined.
+
+| level | class max > q_0.95 | class max > q_0.99 | median searcher score / class max [q25, q75] |
+|---|---|---|---|
+| 0 | 1 / 2,000 = 0.0005 | 0 / 2,000 = 0.0000 | 0.5049 [0.1635, 0.7490] |
+| 0.5 | 412 / 2,000 = 0.2060 | 268 / 2,000 = 0.1340 | 0.5770 [0.2003, 0.8183] |
+| 1.0 | **1,400 / 2,000 = 0.7000** | 1,039 / 2,000 = 0.5195 | 0.6107 [0.2188, 0.8288] |
+| 1.5 | 1,973 / 2,000 = 0.9865 | 1,909 / 2,000 = 0.9545 | 0.6110 [0.2380, 0.8109] |
 
 **The runner** is `experiments/planted_agent.py`. Every agent panel is shown through
 the masked view (`environments/planted_view.py`) and searched on the fly (no class
