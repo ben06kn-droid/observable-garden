@@ -177,14 +177,20 @@ def _spec_from(features, signs, K: int, name: str) -> Specification:
     return Specification(weights=w, name=name)
 
 
-def control_tools(sandbox: RealSandbox, rec: RunRecord, K: int):
-    """`evaluate` and `submit`: the surface `searchers/llm_agent.py` uses."""
+def control_tools(sandbox: RealSandbox, rec: RunRecord, K: int, on_evaluate=None):
+    """`evaluate` and `submit`: the surface `searchers/llm_agent.py` uses.
+
+    `on_evaluate`, if given, is called at the start of every `evaluate` call, refused
+    or not: the prior-weighted arm uses it to close the short list at the first
+    evaluation the agent asks for."""
     from claude_agent_sdk import tool
 
     @tool("evaluate", "In-sample Sharpe, net of costs, of an equal-weight signed "
                       "feature combination.", {"features": list[int], "signs": list[int]})
     async def evaluate(args):
         rec.n_tool_calls += 1
+        if on_evaluate is not None:
+            on_evaluate()
         try:
             spec = _spec_from(args.get("features", []), args.get("signs", []), K,
                               f"{rec.run_id}_{rec.n_tool_calls}")
@@ -222,6 +228,66 @@ def control_tools(sandbox: RealSandbox, rec: RunRecord, K: int):
         return {"content": [{"type": "text", "text": "Submitted."}]}
 
     return [evaluate, submit]
+
+
+SHORT_LIST_CAP = 5        # prereg/prior-weighted-alpha.md; prereg/planted-edge.md
+
+
+def prior_weighted_tools(sandbox: RealSandbox, rec: RunRecord, K: int, cls,
+                         cap: int = SHORT_LIST_CAP):
+    """`short_list`, `evaluate`, `submit`: the prior-weighted arm's registered surface.
+
+    `short_list` may be called **once, before any `evaluate`**, naming up to `cap`
+    specifications in the declared class. A second call, a call after any `evaluate`
+    (even a refused one), a list over the cap, or a member outside the class is
+    refused and logged. The accepted list is written to the run as a `short_list`
+    event; `experiments/price_runs.py` prices it.
+    """
+    from claude_agent_sdk import tool
+
+    state = {"evaluated": False, "declared": False}
+
+    def _closed():
+        state["evaluated"] = True
+
+    @tool("short_list", "Before any evaluate call, name up to "
+                        f"{cap} specifications you believe in for reasons that do "
+                        "not depend on this data.",
+          {"supports": list})
+    async def short_list(args):
+        rec.n_tool_calls += 1
+        why = None
+        if state["declared"]:
+            why = "a short list has already been declared; it is fixed for the session"
+        elif state["evaluated"]:
+            why = "a short list named after an evaluate call is refused"
+        supports = args.get("supports") or []
+        specs = []
+        if why is None:
+            if not 1 <= len(supports) <= cap:
+                why = f"a short list names 1 to {cap} specifications, not {len(supports)}"
+            else:
+                try:
+                    for j, sp in enumerate(supports):
+                        spec = _spec_from(sp.get("features", []), sp.get("signs", []),
+                                          K, f"{rec.run_id}_list_{j}")
+                        if not cls.contains(spec.weights):
+                            raise ValueError(f"specification {j} is outside the declared class")
+                        specs.append([[int(k), float(spec.weights[k])]
+                                      for k in np.nonzero(spec.weights)[0]])
+                except (ValueError, AttributeError, TypeError) as e:
+                    why = str(e)
+        if why is not None:
+            rec.note_refusal("short_list", why)
+            return {"content": [{"type": "text", "text": f"Rejected: {why}"}]}
+        state["declared"] = True
+        rec.moves["short_list"] = rec.moves.get("short_list", 0) + 1
+        rec.log("short_list", supports=specs, cap=cap, before_first_evaluate=True)
+        return {"content": [{"type": "text",
+                             "text": f"Short list of {len(specs)} recorded."}]}
+
+    evaluate, submit = control_tools(sandbox, rec, K, on_evaluate=_closed)
+    return [short_list, evaluate, submit]
 
 
 def replay_tools(tools: ToolSession, rec: RunRecord, K: int):

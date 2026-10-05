@@ -43,7 +43,7 @@ from environments.dgp import DGPConfig, calibrate_sigma, generate
 from environments.sandbox import Sandbox
 from experiments.agent_backend import (
     MAX_TURNS, MODEL, RunRecord, _certify_run, _drive_model, _num,
-    _served_model_assertion, control_tools, replay_tools,
+    _served_model_assertion, control_tools, prior_weighted_tools, replay_tools,
 )
 from experiments.code_state import code_state
 from experiments.real_prompts import ARMS, TOOLS_FOR, read_prompts, system_prompt_for
@@ -163,6 +163,10 @@ def _scripted(rec, handlers, arm: str) -> None:
     def call(name, args):
         return asyncio.run(by[name].handler(args))
 
+    # The prior-weighted arm declares its short list first, before any evaluation.
+    if "short_list" in by:
+        call("short_list", {"supports": [{"features": [0], "signs": [1]},
+                                         {"features": [0, 1], "signs": [1, -1]}]})
     # The control and declared-class-gate arms have no grammar: their tools are
     # `evaluate` and `submit`, so a scripted run evaluates and submits.
     if "declare_triggers" not in by:
@@ -197,11 +201,12 @@ def _scripted(rec, handlers, arm: str) -> None:
 # 6.5's declared-class arm was launched.
 _EVALUATE_SUBMIT = frozenset({"evaluate", "submit"})
 _GRAMMAR = frozenset(TOOLS_FOR["replay gate"])
+_PRIOR_WEIGHTED = frozenset(TOOLS_FOR["prior-weighted"])
 
 
 def buildable(arm: str) -> bool:
     """Whether this runner can give `arm` exactly its registered tools."""
-    return frozenset(TOOLS_FOR[arm]) in (_EVALUATE_SUBMIT, _GRAMMAR)
+    return frozenset(TOOLS_FOR[arm]) in (_EVALUATE_SUBMIT, _GRAMMAR, _PRIOR_WEIGHTED)
 
 
 def handlers_for(arm: str, sandbox, cls, rec, K: int):
@@ -210,6 +215,8 @@ def handlers_for(arm: str, sandbox, cls, rec, K: int):
     registered = frozenset(TOOLS_FOR[arm])
     if registered == _EVALUATE_SUBMIT:
         handlers, tools = control_tools(sandbox, rec, K), None
+    elif registered == _PRIOR_WEIGHTED:
+        handlers, tools = prior_weighted_tools(sandbox, rec, K, cls), None
     elif registered == _GRAMMAR:
         session = Session.on_sandbox(sandbox, cls, name_prefix=rec.run_id)
         # the harness's turn limit becomes the declared budget at open
