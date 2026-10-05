@@ -1016,3 +1016,34 @@ started at the pause, were rerun. Seconds per seed were 1,184–1,248, as in the
 No seat cost.
 
 **7.5 stage 1 is closed.** Stage 2 stays a draft until its own dated live commit.
+
+## Recorded for stage 2 — 2026-10-04 (America/Chicago), draft, not live. The agent levels, and the unsaturable arm's prompt sentence
+
+**The agent levels are 0, 1.0 and 1.5.** The agent half is registered at "β = 0,
+nearest-the-bar, 1.5". The stage-1 read (`8660508`) returned **nearest-the-bar =
+1.5**, with pooled power at α = 0.05 of 0.4391, against 0.0484 at 0.5 and 0.2035 at
+1.0. As written, the three agent levels would therefore be two. **1.0 fills the third
+slot.**
+
+**The author's reason, recorded as stated (2026-10-04):** at 1.0 the realized class
+maximum is certified on about 70% of panels. **That figure is not a quantity in
+`read.txt`.** The read reports the six searchers' power (pooled 0.2035 at 1.0) and
+recovery of the class argmax, not the certification rate of the class maximum itself.
+The figure is to be checked against the stage-1 file, as a labelled descriptive
+quantity on data already read, before the stage-2 live commit. If it differs, the
+record is corrected and the choice of 1.0 is reconsidered there.
+
+**The runner** is `experiments/planted_agent.py`. Every agent panel is shown through
+the masked view (`environments/planted_view.py`) and searched on the fly (no class
+table). The unsaturable arm runs with `ToolSession(content_cap=3)`, and the cap is
+enforced in the replay null (`3e7a803`). The runner refuses everything but a dry run
+on design seeds until this stage's live commit fixes the agent seed block.
+
+### The unsaturable arm's prompt sentence
+
+Appended to the replay-gate prompt for the unsaturable arm only, and to no other arm.
+The runner reads it from here and nowhere else:
+
+```
+You may make at most 3 content moves in this session. Each call to init, extend_best, swap_worst, flip, refine or pick counts as one, whether you keep its result or discard it. A fourth content move is refused. Declaring triggers, changing a trigger, stop, restart, pick_prior, predict and submit do not count.
+```
