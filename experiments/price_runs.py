@@ -131,6 +131,60 @@ def _basis(panel: str, seed: int):
     return sandbox, cls, None, float(np.sqrt(dgp.periods_per_year))
 
 
+def replicate_rows(sandbox, seed: int, B: int):
+    """The certifying null's replicate rows, as `quixote.certify.three_nulls` draws
+    them: the block length chosen on the demeaned base columns, `default_rng(seed)`,
+    one `stationary_bootstrap_indices` call per replicate, in order. Every tier priced
+    from a run's file uses these rows, so its p-values share their resamples."""
+    from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
+
+    base = np.asarray(sandbox.base_feature_columns(), dtype=float)
+    S0 = base - base.mean(axis=0, keepdims=True)
+    L = int(select_block_length(S0))
+    rng = np.random.default_rng(seed)
+    return [stationary_bootstrap_indices(base.shape[0], L, rng) for _ in range(B)], L
+
+
+ALPHA_PRIOR, ALPHA_SEARCH = 0.04, 0.01      # prereg/prior-weighted-alpha.md
+
+
+def prior_weighted(sandbox, table, seed: int, short_list, support, B: int,
+                   p_search: float) -> dict:
+    """The prior-weighted arm's two routes, on the class tier's own replicates.
+
+    - **The list route:** Reality Check over the short list's own members. The
+      submission's Sharpe is compared with the maximum over the LIST of the demeaned
+      replicate Sharpe, at alpha_prior = 0.04. It applies only when the submission is
+      on the list; the verdict attaches to the submission, as the registered prompt
+      says ("anything you submit is admissible either way").
+    - **The search route:** the class tier's p (`p_search`), at alpha_search = 0.01.
+
+    The run certifies if either route rejects, and `route` says which. Total size is
+    at most 0.05 by the union bound, given that the list preceded every evaluation,
+    which the tool enforces.
+    """
+    from environments.class_table import ClassTable, canonical
+    lst = [canonical(tuple((int(k), float(sg)) for k, sg in sup)) for sup in short_list]
+    sub = canonical(tuple((int(k), float(sg)) for k, sg in support)) if support else None
+    on_list = sub is not None and sub in lst
+    rows, _ = replicate_rows(sandbox, seed, B)
+    mini = ClassTable(streams=np.stack([table.stream(m) for m in lst]), members=lst,
+                      index={m: i for i, m in enumerate(lst)},
+                      panel_hash=table.panel_hash, periods_per_year=table.periods_per_year)
+    N_b = mini.null_max(rows)
+    S = table.sharpe(sub) if sub is not None else float("-inf")
+    p_prior = (1 + int(np.sum(N_b >= S))) / (B + 1) if on_list else None
+    prior_ok = p_prior is not None and p_prior < ALPHA_PRIOR
+    search_ok = p_search < ALPHA_SEARCH
+    route = ("both" if prior_ok and search_ok else "list" if prior_ok
+             else "search" if search_ok else None)
+    return {"short_list": [[list(x) for x in m] for m in lst], "on_list": on_list,
+            "p_prior": p_prior, "alpha_prior": ALPHA_PRIOR,
+            "p_search": float(p_search), "alpha_search": ALPHA_SEARCH,
+            "status": "CERTIFIED" if route else "FAIL", "route": route, "B": B,
+            "list_null_max_mean": float(N_b.mean())}
+
+
 def class_p_etf(sandbox, table, seed: int, support, B: int) -> dict:
     """The declared-class p on the ETF panel, from the class table.
 
@@ -138,13 +192,7 @@ def class_p_etf(sandbox, table, seed: int, support, B: int) -> dict:
     the block length chosen on the demeaned base columns, `default_rng(seed)`, one
     `stationary_bootstrap_indices` call per replicate in order.
     """
-    from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
-
-    base = np.asarray(sandbox.base_feature_columns(), dtype=float)
-    S0 = base - base.mean(axis=0, keepdims=True)
-    L = int(select_block_length(S0))
-    rng = np.random.default_rng(seed)
-    rows = [stationary_bootstrap_indices(base.shape[0], L, rng) for _ in range(B)]
+    rows, L = replicate_rows(sandbox, seed, B)
     M_b = table.null_max(rows)
     class_max, _ = table.max_sharpe()
     sr = table.sharpe(support) if support else float("-inf")
@@ -296,8 +344,21 @@ def price_planted(d: dict, out: dict, check: bool, class_B: int | None) -> dict:
     cp["alpha"] = CLASS_ALPHA
     cp["tier"] = "declared class"
     cp["basis"] = "planted: in-memory class table of the masked view"
+    sl = events_of(d, "short_list")
+    if sl:
+        cp["prior_weighted"] = prior_weighted(sandbox, table, seed, sl[0]["supports"],
+                                              sup, B, cp["p_upper"])
     out["class_p"] = cp
     out["planted_truth"] = planted_truth(base, draw, view, mask, table, pop, sup)
+    if sl:
+        from environments.class_table import canonical
+        star = canonical(draw.m_star)
+        lst = [canonical(mask.to_true(tuple((int(k), float(g)) for k, g in m)))
+               for m in sl[0]["supports"]]
+        out["planted_truth"]["short_list_true"] = [[list(x) for x in m] for m in lst]
+        out["planted_truth"]["short_list_contains_m_star"] = star in lst
+        out["planted_truth"]["short_list_overlaps_m_star"] = any(
+            _overlaps(m, star) for m in lst)
     out["panel"] = "planted"
     out["secs"] = time.time() - t0
     return out
@@ -349,6 +410,10 @@ def price_one(payload) -> dict:
                        or CERTIFY_B)
     if panel == "etf":
         cp = class_p_etf(sandbox, table, seed, sup, B)
+        sl = events_of(d, "short_list")
+        if sl:
+            cp["prior_weighted"] = prior_weighted(sandbox, table, seed,
+                                                  sl[0]["supports"], sup, B, cp["p_upper"])
     else:
         cp = class_p_on(sandbox, cls, ann, seed, sup, B)
     cp["status"] = "CERTIFIED" if cp["p_upper"] < CLASS_ALPHA else "FAIL"
