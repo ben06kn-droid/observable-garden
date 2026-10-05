@@ -693,12 +693,25 @@ def test_every_arm_is_built_with_exactly_its_registered_tools(arm):
     assert sorted(h.name for h in handlers) == sorted(TOOLS_FOR[arm])
 
 
-def test_an_unbuilt_arm_is_refused_before_anything_is_created(tmp_path):
+def test_an_unbuilt_arm_is_refused_before_anything_is_created(tmp_path, monkeypatch):
+    """Every registered arm is buildable since the prior-weighted arm was built
+    (2026-10-05), so the guard is exercised on a tool set this runner does not build."""
+    monkeypatch.setitem(ac.TOOLS_FOR, "prior-weighted", ("status", "evaluate", "submit"))
     out = tmp_path / "pw"
     with pytest.raises(SystemExit, match="does not build"):
         ac.main(["--panel", "s0", "--arm", "prior-weighted", "--runs", "1",
                  "--dry-run", "--out", str(out)])
     assert not out.exists()
+
+
+def test_the_prior_weighted_arm_now_builds_and_dry_runs(tmp_path):
+    out = tmp_path / "pw"
+    assert ac.buildable("prior-weighted")
+    assert ac.main(["--panel", "s0", "--arm", "prior-weighted", "--runs", "1",
+                    "--dry-run", "--out", str(out)]) == 0
+    d = json.loads(next(out.glob("cell_*.json")).read_text())
+    kinds = [e["kind"] for e in d["events"]]
+    assert "short_list" in kinds and kinds.index("short_list") < kinds.index("tool_result")
 
 
 def test_a_run_record_carries_its_platform():
