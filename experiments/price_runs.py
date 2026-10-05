@@ -167,6 +167,14 @@ def prior_weighted(sandbox, table, seed: int, short_list, support, B: int,
     lst = [canonical(tuple((int(k), float(sg)) for k, sg in sup)) for sup in short_list]
     sub = canonical(tuple((int(k), float(sg)) for k, sg in support)) if support else None
     on_list = sub is not None and sub in lst
+    if not lst:                                   # an explicit decline: no list route
+        search_ok = p_search < ALPHA_SEARCH
+        return {"short_list": [], "declined": True, "on_list": False, "p_prior": None,
+                "alpha_prior": ALPHA_PRIOR, "p_search": float(p_search),
+                "alpha_search": ALPHA_SEARCH,
+                "status": "CERTIFIED" if search_ok else "FAIL",
+                "route": "search" if search_ok else None, "B": B,
+                "list_null_max_mean": None}
     rows, _ = replicate_rows(sandbox, seed, B)
     mini = ClassTable(streams=np.stack([table.stream(m) for m in lst]), members=lst,
                       index={m: i for i, m in enumerate(lst)},
@@ -178,7 +186,8 @@ def prior_weighted(sandbox, table, seed: int, short_list, support, B: int,
     search_ok = p_search < ALPHA_SEARCH
     route = ("both" if prior_ok and search_ok else "list" if prior_ok
              else "search" if search_ok else None)
-    return {"short_list": [[list(x) for x in m] for m in lst], "on_list": on_list,
+    return {"short_list": [[list(x) for x in m] for m in lst], "declined": False,
+            "on_list": on_list,
             "p_prior": p_prior, "alpha_prior": ALPHA_PRIOR,
             "p_search": float(p_search), "alpha_search": ALPHA_SEARCH,
             "status": "CERTIFIED" if route else "FAIL", "route": route, "B": B,

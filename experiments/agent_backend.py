@@ -177,20 +177,22 @@ def _spec_from(features, signs, K: int, name: str) -> Specification:
     return Specification(weights=w, name=name)
 
 
-def control_tools(sandbox: RealSandbox, rec: RunRecord, K: int, on_evaluate=None):
+def control_tools(sandbox: RealSandbox, rec: RunRecord, K: int, gate=None):
     """`evaluate` and `submit`: the surface `searchers/llm_agent.py` uses.
 
-    `on_evaluate`, if given, is called at the start of every `evaluate` call, refused
-    or not: the prior-weighted arm uses it to close the short list at the first
-    evaluation the agent asks for."""
+    `gate`, if given, is called at the start of every `evaluate`; a message it returns
+    refuses the call before anything is evaluated. The prior-weighted arm uses it to
+    keep every data access closed until its short list is declared."""
     from claude_agent_sdk import tool
 
     @tool("evaluate", "In-sample Sharpe, net of costs, of an equal-weight signed "
                       "feature combination.", {"features": list[int], "signs": list[int]})
     async def evaluate(args):
         rec.n_tool_calls += 1
-        if on_evaluate is not None:
-            on_evaluate()
+        why = gate() if gate is not None else None
+        if why is not None:
+            rec.note_refusal("evaluate", why)
+            return {"content": [{"type": "text", "text": f"Rejected: {why}"}]}
         try:
             spec = _spec_from(args.get("features", []), args.get("signs", []), K,
                               f"{rec.run_id}_{rec.n_tool_calls}")
@@ -237,18 +239,24 @@ def prior_weighted_tools(sandbox: RealSandbox, rec: RunRecord, K: int, cls,
                          cap: int = SHORT_LIST_CAP):
     """`short_list`, `evaluate`, `submit`: the prior-weighted arm's registered surface.
 
-    `short_list` may be called **once, before any `evaluate`**, naming up to `cap`
-    specifications in the declared class. A second call, a call after any `evaluate`
-    (even a refused one), a list over the cap, or a member outside the class is
-    refused and logged. The accepted list is written to the run as a `short_list`
-    event; `experiments/price_runs.py` prices it.
+    **The list comes first.** `evaluate`, the only tool that touches the data, is
+    refused until `short_list` has been called, so the list cannot depend on anything
+    the agent has seen. `short_list` is called **once**, naming 0 to `cap`
+    specifications in the declared class. **An empty list is an explicit decline**:
+    it is logged, and the run then has the search route alone. A second call, a list
+    over the cap, or a member outside the class is refused and logged. The accepted
+    list is written to the run as a `short_list` event, and
+    `experiments/price_runs.py` prices it.
     """
     from claude_agent_sdk import tool
 
-    state = {"evaluated": False, "declared": False}
+    state = {"declared": False}
 
-    def _closed():
-        state["evaluated"] = True
+    def _gate():
+        if state["declared"]:
+            return None
+        return ("call short_list first: no data is available until your short list "
+                "is declared. An empty list (supports: []) declines it.")
 
     @tool("short_list", "Before any evaluate call, name up to "
                         f"{cap} specifications you believe in for reasons that do "
@@ -259,13 +267,11 @@ def prior_weighted_tools(sandbox: RealSandbox, rec: RunRecord, K: int, cls,
         why = None
         if state["declared"]:
             why = "a short list has already been declared; it is fixed for the session"
-        elif state["evaluated"]:
-            why = "a short list named after an evaluate call is refused"
         supports = args.get("supports") or []
         specs = []
         if why is None:
-            if not 1 <= len(supports) <= cap:
-                why = f"a short list names 1 to {cap} specifications, not {len(supports)}"
+            if not 0 <= len(supports) <= cap:
+                why = f"a short list names 0 to {cap} specifications, not {len(supports)}"
             else:
                 try:
                     for j, sp in enumerate(supports):
@@ -282,11 +288,13 @@ def prior_weighted_tools(sandbox: RealSandbox, rec: RunRecord, K: int, cls,
             return {"content": [{"type": "text", "text": f"Rejected: {why}"}]}
         state["declared"] = True
         rec.moves["short_list"] = rec.moves.get("short_list", 0) + 1
-        rec.log("short_list", supports=specs, cap=cap, before_first_evaluate=True)
-        return {"content": [{"type": "text",
-                             "text": f"Short list of {len(specs)} recorded."}]}
+        rec.log("short_list", supports=specs, cap=cap, declined=not specs,
+                before_first_evaluate=True)
+        text = (f"Short list of {len(specs)} recorded." if specs else
+                "No short list: declined.") + " evaluate is now available."
+        return {"content": [{"type": "text", "text": text}]}
 
-    evaluate, submit = control_tools(sandbox, rec, K, on_evaluate=_closed)
+    evaluate, submit = control_tools(sandbox, rec, K, gate=_gate)
     return [short_list, evaluate, submit]
 
 

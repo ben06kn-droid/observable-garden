@@ -11,14 +11,14 @@ from experiments.agent_backend import RunRecord, prior_weighted_tools
 from tests.test_planted_panel import _panel
 
 
-def _surface(K=5):
+def _surface(K=5, with_sandbox=False):
     base = pp.base_from(_panel(K=K))
     from environments.real_sandbox import RealSandbox
     sb = RealSandbox(base.in_sample, spec_class=pp.CLS)
     rec = RunRecord(run_id="pw", arm="prior-weighted", seed=1)
     by = {h.name: h for h in prior_weighted_tools(sb, rec, K, pp.CLS)}
     call = lambda n, a: asyncio.run(by[n].handler(a))["content"][0]["text"]
-    return rec, call, by
+    return (rec, call, by, sb) if with_sandbox else (rec, call, by)
 
 
 def _sl(*specs):
@@ -35,14 +35,32 @@ def test_the_list_is_accepted_once_before_any_evaluate():
     assert [r["tool"] for r in rec.refusals] == ["short_list"]
 
 
-def test_a_list_after_any_evaluate_is_refused_even_a_refused_one():
+def test_every_data_access_is_refused_until_the_list_is_declared():
+    """`evaluate` is the arm's only data-access tool: refused before `short_list`, and
+    nothing is evaluated. After the list it opens."""
+    rec, call, by, sb = _surface(with_sandbox=True)
+    data_access = set(by) - {"short_list", "submit"}
+    assert data_access == {"evaluate"}
+    for _ in range(2):
+        assert "call short_list first" in call("evaluate", {"features": [0], "signs": [1]})
+    assert len(sb.transcript) == 0                         # nothing was computed
+    assert [r["tool"] for r in rec.refusals] == ["evaluate", "evaluate"]
+    assert "recorded" in call("short_list", _sl(([0], [1])))
+    assert call("evaluate", {"features": [0], "signs": [1]}).startswith("Sharpe")
+    assert len(sb.transcript) == 1
+
+
+def test_an_empty_list_declines_and_opens_the_data():
     rec, call, _ = _surface()
-    call("evaluate", {"features": [9], "signs": [1]})                  # refused: K = 5
-    assert "after an evaluate" in call("short_list", _sl(([0], [1])))
+    assert "declined" in call("short_list", {"supports": []})
+    ev = [e for e in rec.events if e["kind"] == "short_list"][0]
+    assert ev["supports"] == [] and ev["declined"] is True
+    assert call("evaluate", {"features": [1], "signs": [-1]}).startswith("Sharpe")
+    assert "Rejected" in call("short_list", _sl(([0], [1])))         # once only
 
 
 @pytest.mark.parametrize("specs,why", [
-    ((([0], [1]),) * 6, "1 to 5"),
+    ((([0], [1]),) * 6, "0 to 5"),
     ((([0, 1, 2, 3], [1, 1, 1, 1]),), "outside the declared class"),
     ((([0, 0], [1, 1]),), "at most once"),
 ])
@@ -85,6 +103,14 @@ def test_the_list_route_is_reality_check_over_the_list_on_the_class_tiers_rows(p
     p_brute = (1 + sum(v >= S for v in brute)) / (B + 1)
     assert out["on_list"] and out["p_prior"] == pytest.approx(p_brute, abs=1e-12)
     assert out["p_prior"] <= cp["p_upper"]          # the list is inside the class
+
+
+def test_a_declined_list_prices_on_the_search_route_alone(priced_parts):
+    sb, table = priced_parts
+    out = pr.prior_weighted(sb, table, 640905, [], [[4, 1.0]], 30, 0.005)
+    assert out["declined"] and out["p_prior"] is None and out["route"] == "search"
+    out = pr.prior_weighted(sb, table, 640905, [], [[4, 1.0]], 30, 0.5)
+    assert out["status"] == "FAIL" and out["route"] is None
 
 
 def test_off_the_list_only_the_search_route_can_certify(priced_parts):
