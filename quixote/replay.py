@@ -70,6 +70,9 @@ class ReplayTrace:
     # steps replaced by the best admissible move under local-max or
     # fidelity-driven pricing; zero unless one of those flags is on
     locally_priced: int = 0
+    # True when this replicate ended because the log's content-move cap was used:
+    # the harness refuses a content move past the cap, so the replay ends there too
+    capped: bool = False
     # the support after each step, so a priced step's choice can be audited
     supports: list = field(default_factory=list)
 
@@ -128,6 +131,14 @@ class LoggedPolicy:
         self.budget = log.budget if log.budget is not None else _DEFAULT_BUDGET
         self.budget_declared = log.budget is not None
         self.triggers = [Trigger.from_record(t) for t in log.declared_triggers()]
+        # THE CONTENT-MOVE CAP, enforced inside the null (7.5's unsaturable arm,
+        # `prereg/planted-edge.md`, "Recorded for stage 2"). The live harness refuses
+        # a content move past the cap (`ToolSession.content_cap`), so a replicate
+        # that could keep extending would price a deeper search than the one that
+        # ran. Each content move a replicate makes counts one -- the anchor, a logged
+        # move or the fill -- and a restart or a stop does not, as in the harness.
+        # None for an uncapped log, which leaves every path exactly as it was.
+        self.content_cap = getattr(log, "content_cap", None)
 
     # -- the policy --------------------------------------------------------
 
@@ -140,6 +151,9 @@ class LoggedPolicy:
         trace = ReplayTrace()
 
         for step in range(self.max_features):
+            if self.content_cap is not None and step >= self.content_cap:
+                trace.capped = True
+                break
             cand_support, cand_score, n = g.apply(support, Move("extend_best", self.statistic))
             if n == 0:
                 trace.moves.append("stop")
@@ -187,6 +201,7 @@ class LoggedPolicy:
         best_support = list(support)
         failures, last_gain, restarts = 0, float("inf"), 0
         trace = ReplayTrace()
+        n_content = 1                        # the anchor is the first content move
 
         def score_list(ns):
             return g.score(tuple(ns), self.statistic)
@@ -224,6 +239,11 @@ class LoggedPolicy:
                 trace.moves.append("restart")
                 continue
 
+            if self.content_cap is not None and n_content >= self.content_cap:
+                trace.moves.append("stop")
+                trace.capped = True
+                break
+            n_content += 1
             if filling or step in self._priced_steps:
                 trace.filled = trace.filled or filling
                 trace.locally_priced += int(step in self._priced_steps)
@@ -305,6 +325,7 @@ class LoggedPolicy:
         # past the end, silently took the fill instead of the move that was
         # logged. Every check on a log whose restart rule fired was affected.
         cursor = 0
+        n_content = 0                        # content moves made on this replicate
         # Latched once a logged move proves inapplicable on this replicate: from
         # then on the fill drives the remainder, under the same declared triggers.
         handed_over = False
@@ -383,6 +404,12 @@ class LoggedPolicy:
             # inapplicable move. `handover_step` records where the log stopped
             # being followed, which is a property of the searcher's moves worth
             # measuring rather than a failure to hide.
+            if self.content_cap is not None and n_content >= self.content_cap:
+                # the harness would refuse this content move: the search ends here
+                trace.moves.append("stop")
+                trace.capped = True
+                break
+            n_content += 1
             take_fill = filling or cursor >= len(moves) or handed_over
             if not take_fill:
                 cand_support, cand_score, n = g.apply(support, moves[cursor])

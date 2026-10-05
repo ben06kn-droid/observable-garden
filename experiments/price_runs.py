@@ -104,6 +104,11 @@ def rebuild_session_log(d: dict):
                       agent_driven=True)
     for rec, r in zip(log.records, records):
         rec.contradicted = bool(r.get("contradicted", False))
+    # the content-move cap a capped arm ran under (7.5's unsaturable arm): the replay
+    # null enforces it, so a run priced from its file must carry it
+    cap = events_of(d, "content_cap")
+    log.content_cap = (None if not cap or cap[0].get("cap") is None
+                       else int(cap[0]["cap"]))
     changes = events_of(d, "trigger_changes")
     log.trigger_changes = tuple(
         {"at_step": ch.get("at_step"), "trigger": dict(ch.get("trigger") or {}),
