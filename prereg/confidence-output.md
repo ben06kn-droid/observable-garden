@@ -1,0 +1,213 @@
+# confidence-output: a graded confidence beside the verdict, and whether it is calibrated
+
+**DRAFT, committed and not live.** It authorises nothing and nothing runs on it. It
+goes live only by a dated commit after review, and after the build items at the end
+pass their tests.
+
+## Question
+
+The gate says PASS or FAIL at α. A user also wants to know how sure the gate is and
+of what: a lower bound on the submission's Sharpe, a whole confidence curve, and a
+plain "probability this makes money over five years". Each of these can be derived
+from the replicates the gate already draws. **Are they calibrated?** Do the bounds
+cover as often as they claim, is the class maximum's error distribution what the
+null says, and do stated horizon probabilities match realized outcomes?
+
+## Definitions, for one priced run
+
+The run's **submitted score** is `S`, its in-sample net Sharpe, annualised. The
+certifying (class) tier's replicates are `M_b`, b = 1..B: the class maximum of the
+demeaned net Sharpe on replicate b, exactly as `p_class` uses them (B = 1,000).
+Quantiles are `np.quantile(M_b, g)` with the default linear method, which is how the
+stage-1 driver stored them.
+
+1. **Deflated confidence** `C0 = 1 − p_class`, where
+   `p_class = (1 + #{M_b ≥ S})/(B + 1)`.
+2. **Lower bounds** `L_g = S − quantile_g(M_b)`, for g ∈ {0.90, 0.95, 0.99}.
+3. **Confidence curve** `C(s) = #{M_b < S − s}/B`, on the fixed grid
+   s ∈ {−1.00, −0.95, …, 3.00} (81 points, annualised Sharpe units). `C` is
+   nonincreasing in s. At s = 0 it differs from `C0` by the `+1` correction:
+   `C(0) − C0 ∈ [0, 1/(B+1)]`. *For review:* defining `C` with the same `+1`, so that
+   `C(0) = C0` exactly, is the alternative.
+4. **Replay-tier versions, audit only.** The same three quantities, with `M_b`
+   replaced by the trigger-replay replicates `N_b`, the procedure's own statistic on
+   each replicate (`p_trigger`'s replicates). They are reported beside the class
+   versions and never instead of them, as the tier rule requires.
+5. **Horizon readout** `P_H`, the stated probability that the realized net Sharpe
+   over the next H years is positive, with **H = 5** to match the planted holdout
+   (2018–2022, 1,257 trading days).
+   - Read `1 − C(s)` as a distribution function over the submission's population
+     Sharpe, discretised on the grid. Grid point `s_k` gets mass
+     `C(s_{k−1}) − C(s_k)`. Mass below the grid goes on −1.00 and mass above it on
+     3.00.
+   - Then `P_H = Σ_k mass_k · Φ( s_k √H / √(1 + s_k²/(2·252)) )`.
+
+   The Φ term is the probability that an H-year annualised Sharpe estimate is
+   positive when the true Sharpe is `s_k`, under i.i.d. daily returns (the Lo 2002
+   standard error).
+
+## What each rests on, and its limits
+
+**P7 (proposed here, not in `THEORY.md` yet): simultaneous lower bounds by inverting
+the centred class maximum.** Let `D = max_{θ∈Θ} (Ŝ_θ − SR_θ)`: the largest estimation
+error over the declared class, where `SR_θ` is each member's in-sample population
+Sharpe. Suppose `P(D ≤ q_g) ≥ g`.
+- Then `SR_θ ≥ Ŝ_θ − q_g` holds for **every** θ at once with probability at least g,
+  and so for whichever member the search submits, however adaptively it was chosen.
+  That is `L_g`'s coverage.
+- `C0` is the largest confidence at which `L_g ≥ 0`, up to the `+1` correction.
+- `C(s)` is the confidence that the submission's population Sharpe exceeds s.
+
+**The route:**
+- The demeaned stationary bootstrap's class maximum `M_b` estimates the law of `D`
+  to first order. Demeaning each stream centres it at its own population mean.
+- This is P3's construction, used for a confidence set rather than a test: the
+  least-favourable null `SR_θ = 0` is replaced by centring at each `SR_θ`.
+- The selected member's error is at most `D`. So, as in P2, the bound is
+  conservative for any submission that does not carry the class's largest error.
+
+**Limits, stated with the definitions:**
+- **Stationarity.** Every quantity is about the in-sample population Sharpe of the
+  process that generated the sample. `P_H` additionally assumes the next H years
+  come from the **same** process. A regime change breaks `P_H` and not `L_g`
+  (`costs-and-regime-change`: under a flipped β, the PASS − FAIL gap fell from +0.46
+  to +0.08).
+- **Not a posterior.** `C(s)` is a confidence curve. It carries no prior and does not
+  say "the probability that SR > s given the data". `P_H` treats `1 − C` as if it
+  were a distribution in order to integrate. It is a **stated** number whose only
+  warrant is V3's reliability check, and it is labelled that way wherever it is
+  printed.
+- **Simultaneous, so conservative for a single member.** The bounds cover the whole
+  class at once (the "deflated" in deflated confidence). For one submission they are
+  predicted to over-cover. That is P2's direction, and V1 measures how far.
+- **First order only.** The demeaned replicate drops the Sharpe ratio's own variance
+  term (`SR²/2` per period). At an annual SR of 1.5 on daily data that term inflates
+  the standard deviation by about 0.2%, which is negligible here and stated rather
+  than assumed.
+- **The class gap of P1 applies.** Bootstrap validity for maxima over 82,240
+  correlated members rests on simulation evidence, not a theorem.
+- **Net of the panel's registered costs**, and nothing else is modelled. `P_H` uses
+  i.i.d. daily noise. Autocorrelated returns make its Φ term too narrow or too wide.
+
+## Validation rules (to register)
+
+### V1: coverage of `L_g`
+
+- **Statement.** For each searcher, level and g: the share of runs whose submission's
+  in-sample population Sharpe is ≥ `L_g`, with Wilson 95%.
+- **One-sided, with both branches reported:**
+  - **Fails low (liberal)** iff the upper Wilson end < g. A failure halts every
+    confidence output on the affected tier until it is explained.
+  - **Conservative** iff the lower Wilson end > g. This is predicted by P7 and P2,
+    and is reported with its size, not as a failure.
+  - Otherwise within tolerance of g.
+- **Detectability**, the coverage shortfall detectable at 80% (one-sided 0.05):
+
+  | n | g = 0.90 | g = 0.95 | g = 0.99 |
+  |---|---|---|---|
+  | 2,000 | 0.017 | 0.013 | 0.006 |
+  | 1,000 | 0.024 | 0.018 | 0.009 |
+
+- **Replay tier:** the same, as audit.
+- **Family:** per searcher × level × g × tier, reported in full. No family-wise pass
+  rate is claimed. A fail-low triggers the one-shot replication on the next fresh
+  block, as in `planted-edge`.
+
+### V2: the calibration cell, on a fresh seed block
+
+- **Statement.** Per panel and level, compute
+  `D = max over all 82,240 members of (realized Sharpe − in-sample population Sharpe)`.
+  The realized Sharpes come from the class pass, the population Sharpes from the
+  closed form (`planted_panel.population_from_moments`). Set it against the null
+  quantiles: `r_g = #{D ≤ quantile_g(M_b)}/n` for g ∈ {0.90, 0.95, 0.99}, and the PIT
+  value `u = #{M_b < D}/B`.
+- **The exactness rule.** It names P7's route, the demeaned bootstrap's maximum
+  estimating the law of `D`.
+  - **Exact** iff the Wilson 95% interval of `r_g` contains g, per level and g.
+  - **Fails low** iff the upper end < g. P7's premise then fails on this design;
+    every `L_g`, `C0` and `C(s)` is withdrawn pending a cause.
+  - **Conservative** iff the lower end > g.
+- **The predicted direction, registered: slightly conservative**, for a reason
+  specific to this design.
+  - The planted DGP holds X fixed and draws only the residual. The deterministic,
+    X-driven part of each member's per-period return (the planted overlap less costs)
+    therefore does not vary between draws.
+  - The stationary bootstrap resamples time, so it also varies that part. Its
+    replicates are slightly wider than `D`'s sampling distribution.
+  - The size is set by that part's share of each member's per-period variance. It is
+    small at level 0, where it is costs only, and grows with the planted scale.
+  - The `SR²/2` term pushes the other way and is about 0.2% at most.
+- **Secondary:** a KS test of `u` against uniform, per level, descriptive.
+- **Design:**
+  - **1,000 fresh panels on 620000–620999** (unused; the registered blocks are 600xxx,
+    610xxx, 640xxx, 650xxx and 660xxx), at all four levels on the pinned X, B = 1,000.
+    This uses the same generator and the same class pass as stage 1.
+  - The six registered searchers also run (realized, with their trigger-replay nulls
+    as audit), so that V1 and V3 are measured **confirmatorily** on the same block.
+  - Each record stores `D`, `u`, the class-tier `M_b` and replay-tier `N_b` on the
+    81-point grid, and `C(s)`, `L_g`, `C0` and `P_5` per searcher.
+
+### V3: reliability of the horizon readout, descriptive
+
+- Per submission: `P_5`, against whether its **realized holdout Sharpe** is > 0. The
+  holdout is the planted process continued into 2018–2022.
+- Bin `P_5` into deciles. For each bin, give the realized frequency with its Wilson
+  interval, and give the Brier score overall. Report all submissions and certified
+  ones separately, per level.
+- **No pass/fail rule.** A reliability diagram on one design is not a calibration
+  claim for real markets. Two further figures are reported beside it:
+  - the in-sample-to-holdout shift in **population** Sharpe (`truth.holdout −
+    truth.in_sample`), which measures how stationary even the planted design is;
+  - the same reliability computed against the holdout **population** Sharpe > 0, to
+    separate noise from drift.
+
+## What the existing stage-1 file can and cannot give
+
+`runs/planted_edge_scripted/draws.jsonl` (`30ee870`, read at `8660508`) stores, per
+searcher and level:
+- `score`, `p_class`, `p_trigger`, and `truth.in_sample` and `truth.holdout`;
+- `holdout_realized`;
+- **of `M_b` only** its 0.95 and 0.99 quantiles (`null_max_q`) and its mean.
+
+| readout | from the stage-1 file? |
+|---|---|
+| `C0`, both tiers | **yes**: `1 − p_class` and `1 − p_trigger` |
+| **V1, class tier, g = 0.95 and 0.99** | **yes**, as a **declared secondary analysis**: `L_g = score − null_max_q`, against `truth.in_sample`. The class argmax rows can be computed too. |
+| V1 at g = 0.90 | **no**: the 0.90 quantile was not stored |
+| V1, replay tier | **no**: only `p_trigger` was stored, not the `N_b` quantiles |
+| V2 | **no**: `D` needs every member's realized and population Sharpe, which were not stored |
+| V3 | **no**: `C(s)` needs the distribution of `M_b`, and two quantiles and a mean do not give it |
+
+**The secondary analysis is declared, not confirmatory.** The stage-1 file has
+already been read. The V1 quantities were not computed in that read, but they are
+computed on read data after the fact, and are labelled that way. The confirmatory V1
+is V2's block.
+
+## Cost
+
+- **Smoke plan, not run:** 191 panels on the unused smoke seeds 980191–980381, all
+  four levels, 191 workers, on a c7a.48xlarge, **cost only**. That is one wave of
+  about 1,190–1,250 s (the class pass, 243 s per level, and the trigger nulls, 50 s
+  per level, as measured in stage 1's box smoke) plus boot: **about 25 minutes,
+  about $4**. It checks memory: the stored grids add little, and peak RSS should stay
+  near stage 1's 1,035 MB per worker.
+- **V2 projected from that measurement:**
+  - **mean throughput:** 1,000 seeds × ~1,190 s / 191 workers ≈ **1.73 h, about $17**;
+  - **upper bound:** 6 waves × 1,250 s ≈ **2.08 h, about $21**;
+  - plus the fetch window.
+- **A cheaper variant, for review:** levels 0 and 1.5 only, about half, **$9–11**,
+  with V1 and V3 then measured on two levels.
+- **The threshold rule as in stage 1:** the mean projection decides, with the upper
+  bound reported beside it. No seat cost.
+
+## Build items, before the live commit
+
+1. The confidence fields in the verdict and in `price_runs`' `class_p`: `C0`, `L_g`,
+   `C(s)` and `P_5`, both tiers.
+2. The V2 driver and its reader, tested on synthetic files.
+3. Tests:
+   - `C` is monotone;
+   - `C(0)` and `C0` agree within `1/(B+1)`;
+   - `L_g` equals the quantile arithmetic;
+   - `P_5` matches a direct numerical integration;
+   - the V2 driver's class pass equals `planted_edge.run_level`'s on a synthetic base.
