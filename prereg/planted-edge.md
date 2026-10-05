@@ -1093,3 +1093,31 @@ The runner reads it from here and nowhere else:
 ```
 You may make at most 3 content moves in this session. Each call to init, extend_best, swap_worst, flip, refine or pick counts as one, whether you keep its result or discard it. A fourth content move is refused. Declaring triggers, changing a trigger, stop, restart, pick_prior, predict and submit do not count.
 ```
+
+## Recorded for stage 2 — 2026-10-05 (America/Chicago), draft, not live. The prior-weighted arm is built
+
+The registration says this arm "runs in 7.5 only if `short_list` and its pricing are
+built and tested before the live commit". They now are:
+- **The tool surface** (`experiments/agent_backend.prior_weighted_tools`).
+  `short_list` may be called once, before any `evaluate`, even a refused one. It
+  takes up to 5 class members. A late, second, over-cap or out-of-class list is
+  refused and logged.
+- **The pricing** (`experiments/price_runs.prior_weighted`). It uses the class tier's
+  own replicate rows.
+- **The planted runner's `prior-weighted` arm**, with the registered prompt.
+
+**The reading the build takes, to be confirmed at the live commit.** The definitions
+say "the short list is tested by White's Reality Check over its own members at
+α_prior = 0.04 … A run certifies if either test rejects". The registered prompt says
+"anything you submit is admissible either way". The verdict attaches to the
+**submission**, so:
+- **The list route** applies only when the submission is on the list. It compares the
+  submission's Sharpe with the maximum, over the list, of the demeaned replicate
+  Sharpe, at 0.04.
+- **The search route** is the class tier at 0.01.
+- The route that certified is recorded (`list`, `search` or `both`).
+- "False certification per route at β = 0" is read on the submission.
+
+**Still unregistered:** the arm's size per level. The agent table lists it as
+"definitions registered below; not run unless built and tested before live", and the
+live commit must give its run count.

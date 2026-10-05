@@ -35,10 +35,15 @@ def test_a_dry_run_writes_a_complete_planted_run_file(base, prompts, arm):
     d = _dry(base, prompts, arm)
     start = _ev(d, "start")[0]
     assert start["panel"] == "planted" and start["level"] == 1.0 and start["masked"]
-    for k in ("session_log", "declared_budget", "content_cap", "trigger_changes",
-              "self_check", "pricing_deferred", "end"):
-        assert _ev(d, k), k
     assert d["events"][-1]["kind"] == "end"
+    for k in ("self_check", "pricing_deferred", "end"):
+        assert _ev(d, k), k
+    if arm == "prior-weighted":                      # no grammar session
+        assert _ev(d, "short_list") and not _ev(d, "session_log")
+        assert _ev(d, "self_check")[0]["replayable"] is None
+        return
+    for k in ("session_log", "declared_budget", "content_cap", "trigger_changes"):
+        assert _ev(d, k), k
     assert _ev(d, "content_cap")[0]["cap"] == (3 if arm == "unsaturable" else None)
     assert _ev(d, "self_check")[0]["replayable"] is True
 

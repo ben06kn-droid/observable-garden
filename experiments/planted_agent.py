@@ -15,6 +15,9 @@
   sentence read from `prereg/planted-edge.md`. It runs with
   `ToolSession(content_cap=3)`, and the replay null enforces the same cap
   (`quixote/replay.py`).
+- `prior-weighted` uses 6.5's registered prompt and tools for that arm: `short_list`
+  once before any `evaluate`, then `evaluate` and `submit`. It has no grammar session.
+  `price_runs` prices its two routes (`prior_weighted`).
 
 **Refused until stage 2 goes live.** The agent seed block is fixed by stage 2's live
 commit and `AGENT_SEEDS` stays `None` until then. So this runner makes **dry runs on
@@ -35,14 +38,15 @@ from pathlib import Path
 from environments import planted_panel as pp
 from environments.planted_view import agent_view
 from environments.real_sandbox import RealSandbox
-from experiments.agent_backend import MAX_TURNS, RunRecord, replay_tools
+from experiments.agent_backend import (MAX_TURNS, RunRecord, prior_weighted_tools,
+                                       replay_tools)
 from experiments.agent_cell import (_drive_model, _scripted, _served_model_assertion,
                                     completion_of, is_complete, log_session)
 from experiments.real_prompts import TOOLS_FOR, read_prompts, system_prompt_for
 from quixote.agent_adapter import ToolSession
 from quixote.session import Session
 
-ARMS = ("replay gate", "replay gate (reasoned pick)", "unsaturable")
+ARMS = ("replay gate", "replay gate (reasoned pick)", "unsaturable", "prior-weighted")
 LEVELS = (0.0, 1.0, 1.5)     # nearest-the-bar returned 1.5; 1.0 fills the third slot
 CAP = 3
 DEPTH = 3
@@ -95,9 +99,13 @@ def run_one(arm: str, seed: int, level: float, index: int, *, prompts: dict,
             masked=True, content_cap=cap)
     prompt = prompt_for(arm, M, K, prompts)
     # a neutral prefix: specification names never carry the arm, level or seed
-    session = Session.on_sandbox(sandbox, pp.CLS, name_prefix="q")
-    tools = ToolSession(session, max_turns=MAX_TURNS, content_cap=cap)
-    handlers = replay_tools(tools, rec, K)
+    if arm == "prior-weighted":
+        tools = None
+        handlers = prior_weighted_tools(sandbox, rec, K, pp.CLS)
+    else:
+        session = Session.on_sandbox(sandbox, pp.CLS, name_prefix="q")
+        tools = ToolSession(session, max_turns=MAX_TURNS, content_cap=cap)
+        handlers = replay_tools(tools, rec, K)
     built = frozenset(h.name for h in handlers)
     if built != frozenset(TOOLS_FOR[tool_arm(arm)]):
         raise SystemExit(f"built tools {sorted(built)} are not the registered "
@@ -109,7 +117,12 @@ def run_one(arm: str, seed: int, level: float, index: int, *, prompts: dict,
     else:
         _drive_model(tool_arm(arm), rec, handlers, view, sandbox, K, prompt=prompt,
                      depth=DEPTH)
-    log_session(rec, tools)
+    if tools is not None:
+        log_session(rec, tools)
+    else:
+        rec.log("self_check", replayable=None, check=None, basis=None,
+                reason="this arm has no session, so there is nothing to re-execute",
+                error=None)
     rec.log("pricing_deferred", priced_by="experiments/price_runs.py",
             reason="planted runs are priced from the file on the pinned X, which "
                    "rebuilds the panel and the mask from the seed")
