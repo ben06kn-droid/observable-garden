@@ -1106,17 +1106,47 @@ built and tested before the live commit". They now are:
   own replicate rows.
 - **The planted runner's `prior-weighted` arm**, with the registered prompt.
 
-**The reading the build takes, to be confirmed at the live commit.** The definitions
-say "the short list is tested by White's Reality Check over its own members at
-α_prior = 0.04 … A run certifies if either test rejects". The registered prompt says
-"anything you submit is admissible either way". The verdict attaches to the
-**submission**, so:
-- **The list route** applies only when the submission is on the list. It compares the
-  submission's Sharpe with the maximum, over the list, of the demeaned replicate
-  Sharpe, at 0.04.
-- **The search route** is the class tier at 0.01.
-- The route that certified is recorded (`list`, `search` or `both`).
-- "False certification per route at β = 0" is read on the submission.
+**The routes, confirmed 2026-10-05 (America/Chicago).**
+- **The list route applies only when the submission is on the list.** It compares the
+  submission's Sharpe with the maximum over the list of the demeaned replicate Sharpe,
+  at α_prior = 0.04.
+- **The class tier at α_search = 0.01 applies either way**, on or off the list.
+- The run certifies if either route rejects, and the route is recorded (`list`,
+  `search`, `both`). False certification per route at β = 0 is read on the submission.
+
+**The size argument.** At β = 0 every member's population Sharpe is negative, so any
+certificate is false, and P(certify) ≤ P(list route rejects) + P(search route rejects)
+≤ 0.04 + 0.01 = **0.05**. That is the union bound, and it holds **under any dependence**
+between the routes. Each term is valid on its own:
+- **The list route is a fixed menu.** The list is declared before the agent has seen
+  any data. The harness refuses every data-access tool until `short_list` has been
+  called, and the prompt carries no data. The list is therefore independent of the
+  returns, and Reality Check over a fixed menu of at most 5 members is valid at its
+  level (P1).
+- Comparing the **submission's** Sharpe rather than the list's maximum can only raise
+  the p-value, since the submission is on the list and so its Sharpe is at most the
+  list's maximum. That only makes the route more conservative (P2).
+- **The search route is the class tier**, valid at 0.01 however the search ran (P3).
+
+Rule 1, on this arm at β = 0, measures the result. The prediction is at or below 0.05,
+and conservative, since the union bound is not tight.
+
+**The list comes first, enforced (2026-10-05).** `evaluate` is refused until
+`short_list` has been called. An empty list (`supports: []`) is an explicit decline: it
+is logged, and the arm then runs with the search route alone. The refusal message
+says so. This makes the declaration a required step. The registered prompt says the
+agent "may" call it once, so the refusal message is what tells it the call comes first.
+
+**On masked synthetic panels the list is blind.** The features are shuffled per panel
+and anonymised, and the returns are synthetic and unrelated to any real-world fact. An
+agent therefore has no information from which a prior could point at the planted
+member: its list is, in effect, chosen blind. **On this panel the arm is a validity
+check of the pricing and makes no power claim.** It measures:
+- the size of the two-route procedure at β = 0;
+- the share of certificates by route;
+- at 1.5, whether a blind list ever certifies.
+
+It does not measure whether a prior that is right pays.
 
 **Still unregistered:** the arm's size per level. The agent table lists it as
 "definitions registered below; not run unless built and tested before live", and the
