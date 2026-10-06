@@ -1343,3 +1343,19 @@ files afterwards.
 | seat, check 2 | on the order of 1,000 short, stateless calls, each about one model latency | `fidelity.py --live` prints the exact count and needs `--yes` |
 | **pricing, box** | **about 282 s per run with the current code**, measured. 220 runs is about 17 CPU-hours. At about 140 workers (2.5 GB each), that is 2 waves of about 5 minutes. **About $2–4 with boot, against the $25 threshold** | one planted dry-run file (4 logged moves; 6.5's replay logs have a median of 5), design seed 640063, B = 1,000, on the laptop on battery in Low Power Mode: class table 176 s (63%), replay verdict 86 s (31%), class tier 17 s, truths 2 s |
 | holdout generation | 60 panels, minutes, on the laptop | `planted_holdout` |
+
+### Stage 2 — the sealed holdout encrypted and moved off the machine, 2026-10-05 (America/Chicago)
+
+Reported by the author and recorded here:
+- The archive (`planted_stage2_holdout.tar.gz`, SHA-256 `132eb820…cefa0ad47`) was
+  encrypted with `openssl enc -aes-256-cbc -pbkdf2 -salt`. The round trip (decrypt,
+  then SHA-256) matched the registered hash.
+- **The encrypted archive's SHA-256 is
+  `c64eb3ca32a2c1d2b4b80cbe9707ed081da979a2023309b75e119441949d16cd`.** It was copied
+  to a flash drive and verified identical on both copies.
+- The plaintext archive, the plaintext directory and the laptop's `.enc` were deleted.
+  `~/og_sealed/` was checked empty on 2026-10-05.
+
+The holdout is opened once, after every agent run is priced and the priced files are
+committed: decrypted against this `.enc` hash, then opened by `open_sealed` against
+the registered plaintext hash.
