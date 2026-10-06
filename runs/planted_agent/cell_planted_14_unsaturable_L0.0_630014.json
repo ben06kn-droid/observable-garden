@@ -1,0 +1,747 @@
+{
+ "run_id": "cell_planted_14_unsaturable_L0.0_630014",
+ "arm": "unsaturable",
+ "seed": 630014,
+ "events": [
+  {
+   "t": 1791257311.780469,
+   "kind": "start",
+   "arm": "unsaturable",
+   "seed": 630014,
+   "panel": "planted",
+   "level": 0.0,
+   "K": 40,
+   "M": 40,
+   "T": 3019,
+   "masked": true,
+   "content_cap": 3
+  },
+  {
+   "t": 1791257312.925248,
+   "kind": "system_prompt",
+   "sha": "7efc26bd62b4f110",
+   "chars": 3164
+  },
+  {
+   "t": 1791257316.279458,
+   "kind": "assistant_text",
+   "text": "I'll start by declaring my stopping triggers, since this is required before my first move."
+  },
+  {
+   "t": 1791257318.925218,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__declare_triggers",
+   "input": {
+    "triggers": [
+     {
+      "trigger": "best_so_far_above",
+      "param": 1,
+      "action": "stop",
+      "reason": "If we find a spec with annualized Sharpe above 1.0 in-sample, that's a strong candidate net of costs, good enough to stop searching."
+     },
+     {
+      "trigger": "failures_at_least",
+      "param": 2,
+      "action": "stop",
+      "reason": "If 2 consecutive moves fail to improve on the best held, further search is unlikely to be productive given the 3-move budget."
+     },
+     {
+      "trigger": "last_gain_at_most",
+      "param": 0.02,
+      "action": "restart",
+      "reason": "If the last move produced a negligible gain, consider restarting from a different anchor rather than continuing to refine a weak line."
+     }
+    ]
+   }
+  },
+  {
+   "t": 1791257318.941268,
+   "kind": "tool_result",
+   "tool": "declare_triggers",
+   "args": {
+    "triggers": [
+     {
+      "trigger": "best_so_far_above",
+      "param": 1,
+      "action": "stop",
+      "reason": "If we find a spec with annualized Sharpe above 1.0 in-sample, that's a strong candidate net of costs, good enough to stop searching."
+     },
+     {
+      "trigger": "failures_at_least",
+      "param": 2,
+      "action": "stop",
+      "reason": "If 2 consecutive moves fail to improve on the best held, further search is unlikely to be productive given the 3-move budget."
+     },
+     {
+      "trigger": "last_gain_at_most",
+      "param": 0.02,
+      "action": "restart",
+      "reason": "If the last move produced a negligible gain, consider restarting from a different anchor rather than continuing to refine a weak line."
+     }
+    ]
+   },
+   "text": "declared: best_so_far > bar -> stop, failures >= 2 -> stop, last_gain > 0.02 -> restart",
+   "ok": true
+  },
+  {
+   "t": 1791257321.273508,
+   "kind": "assistant_text",
+   "text": "I won't use `pick_prior` since I don't have a domain-specific conviction independent of this data \u2014 better to let the data-driven moves guide the search within my 3-move budget.\n\nLet's start with `init` to anchor on the best single feature."
+  },
+  {
+   "t": 1791257321.2740328,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__init",
+   "input": {}
+  },
+  {
+   "t": 1791257323.796101,
+   "kind": "tool_result",
+   "tool": "init",
+   "args": {},
+   "text": "init kept: [9+] sharpe 0.2961 (best 0.2961, 80 candidates) | shown: step=0.0000; best=-inf; failures=0.0000; last_gain=inf; budget_left=60.0000",
+   "ok": true,
+   "score": 0.2961273783623356,
+   "best": 0.2961273783623356,
+   "n_candidates": 80,
+   "shown": [
+    [
+     "step",
+     0.0
+    ],
+    [
+     "best",
+     -Infinity
+    ],
+    [
+     "failures",
+     0.0
+    ],
+    [
+     "last_gain",
+     Infinity
+    ],
+    [
+     "budget_left",
+     60.0
+    ]
+   ]
+  },
+  {
+   "t": 1791257325.675531,
+   "kind": "assistant_text",
+   "text": "Init gave Sharpe 0.2961 with feature 9 (long). That's move 1 of 3. Let's extend with the best complementary feature."
+  },
+  {
+   "t": 1791257325.717918,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791257327.914078,
+   "kind": "tool_result",
+   "tool": "extend_best",
+   "args": {},
+   "text": "extend_best kept: [9+, 0-] sharpe 0.3125 (best 0.3125, 78 candidates) | shown: step=0.0000; best=0.2961; failures=0.0000; last_gain=inf; budget_left=60.0000",
+   "ok": true,
+   "score": 0.31253431598335357,
+   "best": 0.31253431598335357,
+   "n_candidates": 78,
+   "shown": [
+    [
+     "step",
+     0.0
+    ],
+    [
+     "best",
+     0.2961273783623356
+    ],
+    [
+     "failures",
+     0.0
+    ],
+    [
+     "last_gain",
+     Infinity
+    ],
+    [
+     "budget_left",
+     60.0
+    ]
+   ]
+  },
+  {
+   "t": 1791257333.1515892,
+   "kind": "assistant_text",
+   "text": "Move 2 of 3: now [9+, 0-] with Sharpe 0.3125, a gain of only 0.0164 \u2014 below my 0.02 \"last_gain_at_most\" restart threshold. That trigger would fire now. But let me think about whether to restart or continue extending with my last move.\n\nGiven the gain was small, the restart trigger fires. However, restarting discards progress to try a fresh anchor \u2014 risky with only 1 move left after that. Instead, let me use my last move productively: extend_best again to add a third feature, which is more likely to improve the combination than restarting from scratch with no moves left to build back up.\n\nLet me reconsider the trigger: since it fired, I should either act on it or change it with justification. I'll change the trigger \u2014 the small gain here doesn't mean the line is bad, it may just mean this feature pair is already fairly efficient and a third feature could still add diversification. I'll lower my restart threshold expectation and instead use my last move to extend further."
+  },
+  {
+   "t": 1791257335.3245661,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__change_trigger",
+   "input": {
+    "trigger": "last_gain_at_most",
+    "param": 0,
+    "action": "restart",
+    "reason": "The gain from move 2 (0.0164) was small but positive, and we still have one content move left. Rather than restart from scratch and lose the [9+, 0-] base, I want to use the last move to extend_best again and see if a third feature meaningfully improves the two-feature combination before deciding whether to stop. Lowering the trigger to only fire on zero/negative gains avoids prematurely discarding a working base."
+   }
+  },
+  {
+   "t": 1791257335.3382132,
+   "kind": "tool_result",
+   "tool": "change_trigger",
+   "args": {
+    "trigger": "last_gain_at_most",
+    "param": 0.0,
+    "action": "restart",
+    "reason": "The gain from move 2 (0.0164) was small but positive, and we still have one content move left. Rather than restart from scratch and lose the [9+, 0-] base, I want to use the last move to extend_best again and see if a third feature meaningfully improves the two-feature combination before deciding whether to stop. Lowering the trigger to only fire on zero/negative gains avoids prematurely discarding a working base."
+   },
+   "text": "changed to last_gain > 0.0. Recorded with its timestamp; from here the run is priced as not replayable and reported in the bracket.",
+   "ok": true,
+   "triggers_changed": true
+  },
+  {
+   "t": 1791257336.985295,
+   "kind": "assistant_text",
+   "text": "Now let's use my final content move to extend the current support."
+  },
+  {
+   "t": 1791257336.997399,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791257339.399105,
+   "kind": "tool_result",
+   "tool": "extend_best",
+   "args": {},
+   "text": "extend_best kept: [9+, 0-, 10+] sharpe 0.3204 (best 0.3204, 76 candidates) | shown: step=1.0000; best=0.3125; failures=0.0000; last_gain=0.0164; budget_left=59.0000",
+   "ok": true,
+   "score": 0.3204007446617697,
+   "best": 0.3204007446617697,
+   "n_candidates": 76,
+   "shown": [
+    [
+     "step",
+     1.0
+    ],
+    [
+     "best",
+     0.31253431598335357
+    ],
+    [
+     "failures",
+     0.0
+    ],
+    [
+     "last_gain",
+     0.01640693762101797
+    ],
+    [
+     "budget_left",
+     59.0
+    ]
+   ]
+  },
+  {
+   "t": 1791257346.1847098,
+   "kind": "assistant_text",
+   "text": "That's move 3 of 3 (my content move budget is now exhausted). Current state: [9+, 0-, 10+], Sharpe 0.3204, last gain 0.0079 \u2014 which fires my restart trigger (last_gain > 0.0... wait, 0.0079 > 0.0 is true, so it would fire to *restart*, not stop). But I have no content moves left to use after a restart, so restarting would be pointless (I couldn't rebuild a spec). Let me check: I've used init, extend_best, extend_best = 3 content moves. I'm at the budget limit for content moves.\n\nGiven I can't make further content moves, I should stop here and submit the best specification I have: **[feature 9 long, feature 0 short, feature 10 long]**, equal-weight, in-sample Sharpe 0.3204.\n\nLet me check my stopping triggers \u2014 `best_so_far_above 1.0` hasn't fired (0.32 < 1.0), and `failures_at_least 2` hasn't fired (0 failures). I'll declare stop using a trigger that reflects reality: I've exhausted my move budget, so I should just proceed to submit. Since none of my \"stop\" triggers fire validly at threshold, let me use `failures_at_least` \u2014 not fired either. The cleanest honest path: I have no more content moves available regardless of triggers, so I go straight to `submit`."
+  },
+  {
+   "t": 1791257349.543872,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__predict",
+   "input": {
+    "mean": 0.18,
+    "sd": 0.25,
+    "note": "In-sample annualized Sharpe of 0.32 for equal-weight [feature 9 long, feature 0 short, feature 10 long], net of costs. Given typical in-sample-to-out-of-sample degradation from a short, data-driven search (3 moves, 80 initial candidates, substantial multiple-comparisons risk), I expect meaningful shrinkage toward zero. The feature additions after init gave diminishing marginal gains (0.0164, then 0.0079), suggesting the combination is not capturing strong orthogonal signal, which also raises doubt about robustness out-of-sample. I center my OOS belief well below the in-sample value, with a wide SD reflecting genuine uncertainty about sign/magnitude persistence."
+   }
+  },
+  {
+   "t": 1791257349.552812,
+   "kind": "tool_result",
+   "tool": "predict",
+   "args": {
+    "mean": 0.18,
+    "sd": 0.25,
+    "note": "In-sample annualized Sharpe of 0.32 for equal-weight [feature 9 long, feature 0 short, feature 10 long], net of costs. Given typical in-sample-to-out-of-sample degradation from a short, data-driven search (3 moves, 80 initial candidates, substantial multiple-comparisons risk), I expect meaningful shrinkage toward zero. The feature additions after init gave diminishing marginal gains (0.0164, then 0.0079), suggesting the combination is not capturing strong orthogonal signal, which also raises doubt about robustness out-of-sample. I center my OOS belief well below the in-sample value, with a wide SD reflecting genuine uncertainty about sign/magnitude persistence."
+   },
+   "text": "prediction 0.180 (sd 0.250) recorded",
+   "ok": true
+  },
+  {
+   "t": 1791257350.916188,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__submit",
+   "input": {}
+  },
+  {
+   "t": 1791257350.919816,
+   "kind": "tool_result",
+   "tool": "submit",
+   "args": {},
+   "text": "submitted [9+, 0-, 10+] sharpe 0.3204",
+   "ok": true,
+   "score": 0.3204007446617697
+  },
+  {
+   "t": 1791257357.757967,
+   "kind": "assistant_text",
+   "text": "Submitted.\n\n**Final specification:** Equal-weight combination of:\n- Feature 9 \u2014 **long**\n- Feature 0 \u2014 **short**\n- Feature 10 \u2014 **long**\n\n**In-sample annualized Sharpe (net of costs):** 0.3204\n\n**Search summary:**\n1. `declare_triggers` \u2014 set stop/restart rules before any moves.\n2. `init` \u2192 anchored on feature 9 (Sharpe 0.2961).\n3. `extend_best` \u2192 added feature 0 short (Sharpe 0.3125, gain +0.0164).\n4. Noticed the small gain tripped my declared `last_gain_at_most` restart trigger; rather than discard progress with no moves left to rebuild, I used `change_trigger` (recorded as not-replayable from that point) to loosen the threshold and preserve the base.\n5. `extend_best` \u2192 added feature 10 long (Sharpe 0.3204, gain +0.0079) \u2014 my third and final content move.\n\n**Predicted OOS Sharpe:** mean 0.18, sd 0.25. I shrank well below the in-sample figure because: the search was short and exploratory (80 initial candidates, multiple-comparisons risk), marginal gains from each added feature were small and decreasing, and no fundamental/prior justification was used for feature selection \u2014 all of which point to likely in-sample/out-of-sample Sharpe decay. The wide SD reflects real uncertainty about whether the combination's edge persists at all out-of-sample."
+  },
+  {
+   "t": 1791257365.499755,
+   "kind": "self_check",
+   "replayable": true,
+   "check": "integrity",
+   "basis": "class table",
+   "realized_support": [
+    [
+     9,
+     1.0
+    ],
+    [
+     0,
+     -1.0
+    ],
+    [
+     10,
+     1.0
+    ]
+   ],
+   "replayed_support": [
+    [
+     9,
+     1.0
+    ],
+    [
+     0,
+     -1.0
+    ],
+    [
+     10,
+     1.0
+    ]
+   ],
+   "realized_score": 0.3204007446617697,
+   "replayed_score": 0.3204007446617697,
+   "reason": "Integrity check (fixed-sequence replay: the realized meta decisions with the logged content moves): PASS on the class table. The replay reproduces the realized support and score; they differ by 0.00e+00.",
+   "error": null
+  },
+  {
+   "t": 1791257365.4997602,
+   "kind": "declared_budget",
+   "budget": 60
+  },
+  {
+   "t": 1791257365.4997609,
+   "kind": "content_cap",
+   "cap": 3
+  },
+  {
+   "t": 1791257365.500594,
+   "kind": "session_log",
+   "records": [
+    {
+     "step": 0,
+     "kind": "init",
+     "support": [
+      [
+       9,
+       1.0
+      ]
+     ],
+     "score": 0.2961273783623356,
+     "n_candidates": 80,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "init",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       0.0
+      ],
+      [
+       "best",
+       -Infinity
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       60.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 0,
+      "support": [],
+      "score": -Infinity,
+      "shown": [
+       [
+        "step",
+        0.0
+       ],
+       [
+        "best",
+        -Infinity
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        60.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 1,
+     "kind": "extend_best",
+     "support": [
+      [
+       9,
+       1.0
+      ],
+      [
+       0,
+       -1.0
+      ]
+     ],
+     "score": 0.31253431598335357,
+     "n_candidates": 78,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "extend_best",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       0.0
+      ],
+      [
+       "best",
+       0.2961273783623356
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       60.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 1,
+      "support": [
+       [
+        9,
+        1.0
+       ]
+      ],
+      "score": 0.2961273783623356,
+      "shown": [
+       [
+        "step",
+        0.0
+       ],
+       [
+        "best",
+        0.2961273783623356
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        60.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 2,
+     "kind": "extend_best",
+     "support": [
+      [
+       9,
+       1.0
+      ],
+      [
+       0,
+       -1.0
+      ],
+      [
+       10,
+       1.0
+      ]
+     ],
+     "score": 0.3204007446617697,
+     "n_candidates": 76,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "extend_best",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       1.0
+      ],
+      [
+       "best",
+       0.31253431598335357
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       0.01640693762101797
+      ],
+      [
+       "budget_left",
+       59.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 2,
+      "support": [
+       [
+        9,
+        1.0
+       ],
+       [
+        0,
+        -1.0
+       ]
+      ],
+      "score": 0.31253431598335357,
+      "shown": [
+       [
+        "step",
+        1.0
+       ],
+       [
+        "best",
+        0.31253431598335357
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        0.01640693762101797
+       ],
+       [
+        "budget_left",
+        59.0
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "t": 1791257365.500624,
+   "kind": "trigger_changes",
+   "changes": [
+    {
+     "at_step": 2,
+     "trigger": {
+      "kind": "last_gain_at_most",
+      "param": 0.0,
+      "action": "restart"
+     },
+     "reason": "The gain from move 2 (0.0164) was small but positive, and we still have one content move left. Rather than restart from scratch and lose the [9+, 0-] base, I want to use the last move to extend_best again and see if a third feature meaningfully improves the two-feature combination before deciding whether to stop. Lowering the trigger to only fire on zero/negative gains avoids prematurely discarding a working base.",
+     "timestamp": 2424852.515383875
+    }
+   ]
+  },
+  {
+   "t": 1791257365.5006442,
+   "kind": "pricing_deferred",
+   "priced_by": "experiments/price_runs.py",
+   "reason": "planted runs are priced from the file on the pinned X, which rebuilds the panel and the mask from the seed"
+  },
+  {
+   "t": 1791257365.500911,
+   "kind": "end",
+   "submitted": true,
+   "no_submit": false
+  }
+ ],
+ "refusals": [],
+ "moves": {
+  "declare_triggers": 1,
+  "init": 1,
+  "extend_best": 2,
+  "change_trigger": 1,
+  "predict": 1,
+  "submit": 1
+ },
+ "triggers_declared": {},
+ "triggers_fired": {},
+ "picks_accepted": 0,
+ "picks_contradicted": 0,
+ "turns": 14,
+ "n_tool_calls": 7,
+ "submitted": true,
+ "submitted_support": [
+  [
+   9,
+   1.0
+  ],
+  [
+   0,
+   -1.0
+  ],
+  [
+   10,
+   1.0
+  ]
+ ],
+ "submitted_sharpe": 0.3204007446617697,
+ "prior_pick": null,
+ "prediction": {
+  "mean": 0.18,
+  "sd": 0.25
+ },
+ "triggers_changed": true,
+ "triggers_predeclared": [
+  {
+   "kind": "best_so_far_above",
+   "param": 1.0,
+   "action": "stop"
+  },
+  {
+   "kind": "failures_at_least",
+   "param": 2.0,
+   "action": "stop"
+  },
+  {
+   "kind": "last_gain_at_most",
+   "param": 0.02,
+   "action": "restart"
+  }
+ ],
+ "certifying_null_computable": null,
+ "verdict": null,
+ "no_submit": false,
+ "credential": "unknown",
+ "platform": {
+  "machine": "arm64",
+  "system": "Darwin",
+  "python": "3.14.2",
+  "numpy": "2.5.3",
+  "node": "MacBook-Air-196.local"
+ },
+ "endpoint": {
+  "base_url": "default",
+  "auth": [],
+  "models_reported": [
+   "claude-sonnet-5"
+  ],
+  "pinned_model": "claude-sonnet-5",
+  "served_is_pinned": true,
+  "status": "ok",
+  "agrees_with_prereg": true,
+  "note": "\u00a73 excludes a run whose usage log reports any other model string; this field records which endpoint the string came from, which the check alone did not."
+ },
+ "usd": 0.0644648,
+ "usage": {
+  "input_tokens": 16,
+  "cache_creation_input_tokens": 4062,
+  "cache_read_input_tokens": 117224,
+  "output_tokens": 2474,
+  "output_tokens_details": {
+   "thinking_tokens": 0
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 4062,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "not_available",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 490,
+    "cache_read_input_tokens": 16433,
+    "cache_creation_input_tokens": 105,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 105
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard"
+ },
+ "models_seen": [
+  "claude-sonnet-5"
+ ],
+ "error": null,
+ "engagement": 1.0,
+ "unregistered_refusals": []
+}
