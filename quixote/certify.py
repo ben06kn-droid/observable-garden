@@ -36,6 +36,7 @@ import numpy as np
 from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
 from estimator.trigger_replay import ReplayNulls
 from quixote.confidence import confidence
+from quixote.confidence import render as render_confidence
 from quixote.pricing import DEFAULT as NO_PRICING
 from quixote.pricing import PricingOptions, steps_to_price
 from quixote.replay import (LoggedPolicy, commitment_check,
@@ -260,6 +261,8 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
             nulls.trigger, ppy=float(annualization) ** 2, tier="trigger replay (audit)"),
     )
     v.reasons.append(integrity.reason())
+    v.reasons.append(render_confidence(v.confidence_replay,
+                                       certified=v.status == "CERTIFIED"))
     if not has_stop:
         v.reasons.append(NO_STOP_RULE_NOTE)
     elif submitted is not None and p_submitted != p_procedure:

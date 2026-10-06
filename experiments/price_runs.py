@@ -209,8 +209,12 @@ def class_p_etf(sandbox, table, seed: int, support, B: int) -> dict:
     from quixote.confidence import confidence
     conf = (confidence(float(sr), M_b, ppy=float(table.periods_per_year),
                        tier="declared class") if support else None)
+    from quixote.confidence import render
     return {"seed": seed, "p_upper": p, "submitted_score": float(sr),
             "confidence": conf,
+            # P_H printed only beside a certified run (prereg/confidence-output.md,
+            # 2026-10-05); stored in `confidence` either way
+            "confidence_text": render(conf, certified=p < CLASS_ALPHA),
             "class_max": float(class_max), "block_length": L,
             "null_max_mean": float(M_b.mean()), "B": B,
             "basis": "class table (stored net streams)",

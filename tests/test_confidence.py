@@ -115,6 +115,8 @@ def test_price_runs_class_tier_carries_confidence_with_c0_one_minus_p_upper():
     cp = pr.class_p_etf(RealSandbox(view, spec_class=pp.CLS), table, 640011, sup, 50)
     assert cp["confidence"]["C0"] == pytest.approx(1 - cp["p_upper"], abs=0)
     assert cp["confidence"]["tier"] == "declared class"
+    shown = f"{cp['confidence']['P_H']:.3f}" in cp["confidence_text"]
+    assert shown == (cp["p_upper"] < 0.05)          # P_H printed only when certified
 
 
 def test_check_mode_ignores_a_field_the_stored_run_predates():
@@ -127,3 +129,31 @@ def test_check_mode_ignores_a_field_the_stored_run_predates():
     assert pr.compare(stored, repriced) == []
     stored["verdict"]["confidence"] = {"C0": 0.2}
     assert any("confidence" in d for d in pr.compare(stored, repriced))
+
+
+def test_p_h_is_printed_only_beside_a_certified_verdict(reps):
+    conf = cf.confidence(1.3, reps, tier="declared class")
+    shown = cf.render(conf, certified=True)
+    hidden = cf.render(conf, certified=False)
+    assert f"{conf['P_H']:.3f}" in shown and "at least" in shown and "afdcb53" in shown
+    assert f"{conf['P_H']:.3f}" not in hidden and "not shown" in hidden
+    assert "P_H" in conf and conf["P_H"] == cf.confidence(1.3, reps)["P_H"]   # stored
+    assert cf.render(None, certified=True).startswith("confidence: none")
+
+
+def test_the_verdict_and_class_p_follow_the_rule():
+    from tests.test_agent_adapter import _fixture, _sandbox, policy_via_tools
+    from quixote.agent_adapter import ToolSession
+    from quixote.certify import certify
+    from quixote.session import Session
+    data, cfg, cls = _fixture()
+    sb = _sandbox(data, cfg)
+    tools = ToolSession(Session.on_sandbox(sb, cls))
+    policy_via_tools(tools)
+    v = certify(tools.session.log, cls, sb.base_feature_columns(),
+                np.sqrt(cfg.periods_per_year), B=60, seed=3)
+    if v.confidence_replay is None:
+        pytest.skip("not priced by the certifying null")
+    line = next(r for r in v.reasons if r.startswith("confidence ("))
+    P = f"{v.confidence_replay['P_H']:.3f}"
+    assert (P in line) == (v.status == "CERTIFIED")

@@ -80,3 +80,24 @@ def confidence(S: float, reps, *, H: float = H_DEFAULT, ppy: float = 252.0,
             "curve": [float(x) for x in C],
             "H": float(H), "P_H": horizon(C, H, ppy),
             "label": PH_LABEL}
+
+
+def render(conf: dict | None, certified: bool) -> str:
+    """The confidence line printed beside a verdict.
+
+    **`P_H` is printed only beside a certified verdict.** For an uncertified run it is
+    stored in the record but not shown. V3 found that on panels with no edge the
+    replay tier's `P_5` overstates the realized outcome from about 0.4 up (`de348ea`;
+    the class tier's from about 0.4 too, `afdcb53`), and no such run was certified. A
+    high stated P_H on an uncertified run is exactly where it is least warranted
+    (`prereg/confidence-output.md`, 2026-10-05).
+    """
+    if conf is None:
+        return "confidence: none (no submission)"
+    L = conf["L"]
+    head = (f"confidence ({conf['tier']}): C0 {conf['C0']:.4f}; L_0.90 {L['0.90']:+.4f}, "
+            f"L_0.95 {L['0.95']:+.4f}, L_0.99 {L['0.99']:+.4f}")
+    if certified:
+        return (head + f"; P_{conf['H']:.0f} at least {conf['P_H']:.3f}, where the panel "
+                "has an edge (V3, afdcb53, de348ea)")
+    return head + "; P_H stored, not shown: the run is not certified"

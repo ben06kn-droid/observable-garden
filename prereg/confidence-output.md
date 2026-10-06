@@ -458,3 +458,21 @@ file (`0edab26`, SHA-256 checked):
 **Descriptive, with no rule.** Its reader is committed and tested on synthetic files
 before it opens the results, and runs once. This section authorises that analysis
 alone.
+
+## P_H is shown only beside a certified verdict — 2026-10-05 (America/Chicago)
+
+From `quixote/confidence.py` (`render`): **`P_H` is printed only beside a certified
+verdict.** For an uncertified run it is stored in the record (`confidence.P_H`) but not
+shown. Both tiers follow the rule: the replay verdict's confidence line in its reasons,
+and the class tier's `confidence_text` in `price_runs`' `class_p`.
+
+**The reason** is V3:
+- On panels with no edge (level 0), the replay tier's `P_5` overstates the realized
+  5-year outcome in every bin from about 0.4 up (`de348ea`), and the class tier's does
+  from 0.4 too (`afdcb53`).
+- **No such run was certified.** No level-0 submission was certified on either read.
+
+So a P_H printed beside an uncertified run would show the number exactly where it is
+least warranted. Beside a certified run, it is printed as "at least", with the
+qualifier that this holds where the panel has an edge. Nothing about the computation
+changes; only what is displayed.
