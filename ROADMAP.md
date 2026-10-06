@@ -1596,3 +1596,21 @@ and are now the largest cost.
 **Unused.** No registered cell and no pricing path calls it: `price_runs` and every
 registered driver use their own code, and stage 2 prices on the current path (about
 282 s per run, measured). Using the kernel anywhere would need its own registration.
+
+## Confidence outputs: V2 closed — 2026-10-05
+
+**V2 closed** (`prereg/confidence-output.md`, "V2 read"; live `697bef8`, results
+`0edab26`, read `afdcb53`). On 1,000 planted panels, the class tier's bootstrap maximum
+matched the law of the class's largest estimation error at the registered quantiles:
+**8 of 9 tests exact, 1 conservative, none low.**
+- The lower bounds `L_g` cover conservatively on every searcher row, on both tiers.
+- `P_5` is a floor only where there is an edge. It understates at the planted levels,
+  and overstates from about 0.4 up on panels with none.
+- Limits: KS rejects uniformity of the PIT at every level, and the 0.99 intervals sit
+  at the edge.
+
+`quixote/confidence.py` now labels `P_H` that way (`1140c61`). The first launch did not
+start, because of a git collision on the box; it was relaunched under the same go. The
+cell cost about $14, and the session about $31 including the two smokes (the p-rank
+smoke stopped over its threshold) and the idle gate.
+
