@@ -1568,3 +1568,31 @@ for 1,000 panels was **$52.04 against the registered $30 threshold**.
   licensed.
 - Running the cell needs a new dated registration of its size or threshold.
 - The agent-level twin item remains a draft.
+
+## A factorised class-pass kernel: built, equivalence-tested, unused by any registered cell — 2026-10-05
+
+`environments/planted_fast.py` (`ffcdbac`) is a cached, factorised class pass for
+planted panels:
+- **(a)** the per-member normaliser and daily cost tables, computed once from the
+  pinned X, kept outside git and shared read-only. The cache key covers the pinned X's
+  hash, the panel and the class.
+- **(b)** every planted level of a seed from one pass.
+
+It is exact only on stateless books (every name tradable, no overnight flattening) and
+refuses any other panel.
+
+**Equivalence against `planted_edge.run_level`:**
+- On the synthetic base, 3 seeds × 3 levels (`tests/test_planted_fast.py`): streams to
+  1e-12 relative, Sharpes to 1e-10.
+- On the pinned X, design seeds 640060–640062, levels 0, 1.0, 1.5, B = 1,000: largest
+  difference 3.3e-16.
+- In both, class argmax, searcher supports, move counts and both p-values are identical,
+  with no flip.
+
+**Measured** (laptop, battery, one thread): the class pass is 4.9–5.2× faster and a
+whole seed 2.5–2.7× faster. The trigger-replay nulls (33–52 s per level) are untouched
+and are now the largest cost.
+
+**Unused.** No registered cell and no pricing path calls it: `price_runs` and every
+registered driver use their own code, and stage 2 prices on the current path (about
+282 s per run, measured). Using the kernel anywhere would need its own registration.
