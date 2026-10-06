@@ -85,7 +85,7 @@ def test_a_wrong_hash_or_a_tampered_file_is_refused(sealed, tmp_path):
 def test_seeds_outside_the_design_block_are_refused(base, tmp_path, seed):
     with pytest.raises(SystemExit, match="design block"):
         ph.generate([seed], [1.0], tmp_path / "x", base=base)
-    assert ph.AGENT_SEEDS is None                 # no registered block yet
+    assert ph.AGENT_SEEDS == range(630000, 630020)   # the live agent block
     assert not (tmp_path / "x").exists()
 
 
@@ -117,3 +117,9 @@ def test_the_archive_holds_only_regular_files_with_zeroed_metadata(sealed):
     with tarfile.open(archive, "r:gz") as tf:
         for m in tf.getmembers():
             assert m.isfile() and m.mtime == 0 and m.uid == 0 and m.gid == 0
+
+
+def test_the_live_agent_block_is_accepted(base, tmp_path):
+    assert ph.check_seeds([630000, 630019]) == [630000, 630019]
+    with pytest.raises(SystemExit, match="design block"):
+        ph.check_seeds([630020])

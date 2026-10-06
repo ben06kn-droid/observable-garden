@@ -83,13 +83,18 @@ def test_price_runs_prices_dry_runs_with_the_cap_restored(base, prompts, monkeyp
         assert log.content_cap == (3 if arm == "unsaturable" else None)
 
 
-def test_until_stage_2_is_live_only_dry_runs_and_the_shakeout_block():
-    assert pa.AGENT_SEEDS is None and pa.LEVELS == (0.0, 1.0, 1.5)
+def test_the_live_seed_blocks_and_what_each_allows():
+    assert pa.AGENT_SEEDS == range(630000, 630020) and pa.LEVELS == (0.0, 1.0, 1.5)
     assert pa.SHAKEOUT == range(632000, 632010)
+    assert pa.REPLICATION_SEEDS == range(631000, 631020)
     with pytest.raises(SystemExit, match="not live"):
         pa.check_seeds([640900], dry_run=False, out=pa.SHAKEOUT_DIR)
-    with pytest.raises(SystemExit, match="not live"):
-        pa.check_seeds([630000], dry_run=False, out=pa.SHAKEOUT_DIR)   # the agent block
+    assert pa.check_seeds([630000, 630019], dry_run=False,
+                          out=Path("runs/planted_agent")) == "registered"
+    with pytest.raises(SystemExit, match="--replication"):
+        pa.check_seeds([631000], dry_run=False, out=Path("runs/planted_agent"))
+    assert pa.check_seeds([631000], dry_run=False, out=Path("runs/planted_agent_rep"),
+                          replication=True) == "replication"
     with pytest.raises(SystemExit, match="design block"):
         pa.check_seeds([600000], dry_run=True)
     assert pa.check_seeds([640900, 640901], dry_run=True) == "dry"
@@ -104,10 +109,7 @@ def test_until_stage_2_is_live_only_dry_runs_and_the_shakeout_block():
                  "--seed0", "640900"])                      # no --dry-run
 
 
-def test_once_live_the_agent_block_is_accepted(monkeypatch):
-    monkeypatch.setattr(pa, "AGENT_SEEDS", range(630000, 630020))
-    assert pa.check_seeds([630000, 630019], dry_run=False,
-                          out=Path("runs/planted_agent")) == "registered"
+def test_seeds_outside_every_block_are_refused():
     with pytest.raises(SystemExit, match="not live"):
         pa.check_seeds([630020], dry_run=False, out=Path("runs/planted_agent"))
 

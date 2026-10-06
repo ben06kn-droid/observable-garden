@@ -1,10 +1,12 @@
 # 7.5 planted-edge: a known edge, on real features, in agent hands
 
-**STAGE 1 (the scripted half) LIVE from 2026-10-02 (America/Chicago). Stage 2 (the agent
-half) is NOT live.** It replaces 7.4, withdrawn 2026-10-01 (`ROADMAP.md`, "7.4 withdrawn,
-7.5 registered"). From this commit a change to anything stage 1 reads is a dated
-amendment, appended, never an edit; the agent half's sections remain a draft until
-stage 2's commit (the end of this file, "Stage 1 — LIVE").
+**STAGE 1 (the scripted half) LIVE from 2026-10-02 (America/Chicago), read and CLOSED
+2026-10-04. STAGE 2 (the agent half) LIVE from 2026-10-05 (America/Chicago).** It
+replaces 7.4, withdrawn 2026-10-01 (`ROADMAP.md`, "7.4 withdrawn, 7.5 registered").
+- A change to anything either stage reads is a dated amendment, appended, never an
+  edit.
+- Stage 2's terms are its live section at the end of this file ("Stage 2 — LIVE"),
+  together with the stage-2 records it names.
 
 ## Question
 
@@ -1151,3 +1153,193 @@ It does not measure whether a prior that is right pays.
 **Still unregistered:** the arm's size per level. The agent table lists it as
 "definitions registered below; not run unless built and tested before live", and the
 live commit must give its run count.
+
+## Stage 2 — LIVE, 2026-10-05 (America/Chicago)
+
+**The agent half goes live**, as amended by the stage-2 records of 2026-10-02,
+2026-10-04 and 2026-10-05. This commit is pre-registration only, apart from the
+seed constants it sets:
+- `AGENT_SEEDS = range(630000, 630020)` in `experiments/planted_agent.py` and
+  `experiments/planted_holdout.py`;
+- the replication block, `range(631000, 631020)`.
+
+The shake-out block (`SHAKEOUT = range(632000, 632010)`, model-backed runs into
+`runs/_shakeout/` only) is already in the runner (`ad26545`).
+
+**What goes live:**
+- **Panels.** `environments/planted_panel.py` on the pinned X (SHA-256
+  `4b4610704db0042c514c8ee4f230b239942d4b15be87d07188be3f0e7600b7ba`), at **levels 0,
+  1.0 and 1.5**.
+  - Nearest-the-bar returned 1.5 (`8660508`), so **1.0 fills the third slot**. There
+    the realized class maximum clears the 0.05 bar on 1,400 of 2,000 panels
+    (descriptive, `e317d56`).
+  - Agents see the **masked view** (`environments/planted_view.py`) and evaluate on the
+    fly. Model `claude-sonnet-5`, thinking disabled, `max_turns = 60`.
+- **Arms and sizes.** A run's seed is set by its index: index i is seed 630000 + i,
+  in every arm and at every level. Arms are therefore paired on the same panel, and
+  levels on the same residual draw.
+
+  | arm | runs | seeds (index) |
+  |---|---|---|
+  | replay gate | **20 per level, 60** | 630000–630019 |
+  | unsaturable, `content_cap = 3`, the cap enforced in the replay null | **20 per level, 60** | 630000–630019 |
+  | replay gate (reasoned pick) | **14 per level to start, 42**; then +2 per level (6 runs) until **10 accepted picks** are on record, pooled over the three levels; capped at **20 per level, 60** | 630000–630013, extending in order to 630019 |
+  | prior-weighted | **20 at level 0 and 20 at level 1.5, 40** | 630000–630019 |
+
+  - The reasoned-pick stopping rule reads **only the count of accepted picks**, a
+    harness fact.
+  - At the cap with fewer than 10 accepted picks, check 2 is **unmeasured, with its
+    count**.
+  - Total: **202 to 220 runs**.
+- **The prior-weighted arm** has two routes: the list route at 0.04 (Reality Check over
+  the short list, when the submission is on it), and the class tier at 0.01 either
+  way. Total size is at most 0.05 by the union bound. `evaluate` is refused until
+  `short_list` is called, and an empty list declines. **On these panels the list is
+  blind. This arm is a validity check of the pricing and makes no power claim.**
+- **Rule 1 is read per arm at every level** (0, 1.0 and 1.5, and 0 and 1.5 for
+  prior-weighted), at α = 0.05 and 0.01.
+  - A **false certificate** is a run certified by the class tier (`p_class < α`)
+    whose submission has in-sample population Sharpe ≤ 0. At level 0 every certificate
+    is false; at a planted level only those on a non-positive member are.
+  - It fails high iff the lower Wilson 95% end exceeds α.
+  - **The prior-weighted arm is read per route:** the list route against 0.04, the
+    search route against 0.01, and the run's combined certificate against 0.05.
+- **Rules:** (1)–(7) as registered in "Decision rules", with the standing check's
+  measured rates (1.000 throughout) and the inputs written at stage 1's close:
+  - nearest-the-bar 1.5;
+  - rule 5's detectable differences 0.4951, 0.6685 and 0.8413;
+  - the recovery base rates.
+
+  Rule 7 (check 4, tier power at matched size) is read on the unsaturable arm at 1.5.
+- **Registered descriptive readouts** (no rule reads them), per arm and level, on both
+  tiers (the class tier, and the replay tier as audit):
+  - **coverage of `L_g`** for g = 0.90, 0.95 and 0.99: the share of runs whose
+    submission's in-sample population Sharpe is ≥ `L_g`;
+  - **tightness**: the median and quartiles of `SR_pop − L_g`;
+  - **`P_5` against the sealed holdout**: the mean stated `P_5`, the observed share of
+    runs with realized holdout Sharpe > 0, and the Brier score. These are given for all
+    runs and **for certified runs separately, on both tiers**, each by its own
+    certificate (the class tier `p_class < 0.05`, the replay tier its verdict's status).
+    V3 found `P_5` a floor only where there is an edge (`afdcb53`, `de348ea`), and
+    `P_H` is shown only beside a certified verdict (`0290ec5`);
+  - **the agent's stated distribution beside the gate's confidence curve**: the
+    agent's `predict` (mean μ, sd σ), read as the stated `P(SR > 0) = Φ(μ/σ)`,
+    against `C0`; and μ against the gate's median, the smallest grid `s` with
+    `C(s) ≤ 0.5`.
+
+**Seed blocks**, checked 2026-10-05 against every pre-registration, live and removed
+(`experiments.seed_block_check --exclude prereg/planted-edge.md --ranges
+630000-630999,631000-631999,632000-632999`: **NO COLLISION**):
+
+| block | use |
+|---|---|
+| **630000–630019** (block 630000–630999) | the agent runs |
+| **631000–631019** (block 631000–631999) | the one-shot replication for the first rule-1 failure: same arm, same n, identical settings |
+| **632000–632009** (block 632000–632999) | the shake-out, never read for any rule |
+
+**The sealed holdout for the agent seeds**, generated in this commit before any agent
+run:
+- `python -m experiments.planted_holdout --seeds 630000-630019 --levels 0 1.0 1.5
+  --out <outside the repository>`;
+- 60 panels; **archive SHA-256
+  `132eb820f8165111645743b2f5d3c575b8824002a3a36b9aceb2067cefa0ad47`**
+  (`planted_stage2_holdout.tar.gz`, 22,551,053 bytes, generated 2026-10-05 on the
+  laptop outside the repository). The per-file hashes are in its `manifest.json`. The
+  manifest's code state is this live commit's working tree; the returns depend only on
+  `environments/planted_panel.py` (`c5e3860`) and the pinned X.
+- The operator encrypts it with `openssl enc -aes-256-cbc -pbkdf2`, as for 6.5, and
+  moves it off the machine. The plaintext is deleted.
+- **It is opened once, after every agent run is priced and the priced files are
+  committed**, by `open_sealed` against this SHA-256, for rule 5's secondary readout.
+- The replication block's holdout is generated and sealed the same way, in the commit
+  that launches the replication, if that is ever needed.
+
+**Shake-out first. Never read; its runs are excluded from every rule.**
+- **Which runs:** four model-backed runs, one per arm, on 632000–632003. The replay
+  gate, unsaturable and reasoned-pick arms run at level 1.0; prior-weighted runs at
+  1.5. Pricing is deferred, and the four files are then priced on the box with
+  `price_runs` at B = 1,000. `fidelity.py --dry-run` runs on the reasoned-pick file.
+- **What it checks.** Every item must hold:
+  1. every file is complete (`end` and `self_check` events), and the grammar arms'
+     self-checks are replayable;
+  2. **masking:** none of the 40 real feature names, no ticker and no calendar date
+     appears anywhere in any file (the search that was run on 6.5's 87 files);
+  3. **unsaturable:** at most 3 content moves were made, and any fourth was refused
+     with the cap message;
+  4. **prior-weighted:** no `evaluate` was accepted before `short_list`;
+  5. the served model is the pinned one (`endpoint.agrees_with_prereg`);
+  6. `price_runs` computes, for every file:
+     - the verdict, with replay integrity PASS on the per-run table;
+     - `class_p` with both tiers' confidence fields;
+     - `planted_truth`;
+     - for the unsaturable file, the cap restored;
+     - for the prior-weighted file, both routes;
+  7. the cost record: turns, tool calls and wall minutes per run, and pricing seconds
+     and peak memory per run on the box.
+- **The commands** (seat for the four runs; the box for pricing):
+
+  ```
+  for spec in "replay gate|1.0|632000" "unsaturable|1.0|632001" \
+              "replay gate (reasoned pick)|1.0|632002" "prior-weighted|1.5|632003"; do
+    IFS='|' read arm level seed <<< "$spec"
+    python -m experiments.planted_agent --arm "$arm" --level "$level" --runs 1 \
+        --seed0 "$seed" --out runs/_shakeout/planted_agent
+  done
+  git add runs/_shakeout/planted_agent && git commit -m "7.5 stage 2 shake-out: four run files, unpriced" && git push
+  ssh og-48 'cd ~/observable-garden && git pull --ff-only && python -m experiments.price_runs --dir runs/_shakeout/planted_agent --workers 4 --B 1000'
+  python -m experiments.fidelity --dir _shakeout/planted_agent --panel planted --dry-run
+  ```
+
+- **What stops the launch:** any failure of items 1–6; a **projected wall time above
+  120 hours for the 202–220 runs, at the concurrency measured in the shake-out**; or a
+  pricing projection above **$25** at mean throughput. A stop is reported. **No lever** (arms, n, B, levels, cap) is applied
+  automatically.
+
+**Pricing from committed logs.** The run files are committed as they finish, unpriced
+(`pricing_deferred`).
+- They are priced on the box by `experiments/price_runs.py` at **B = 1,000**, both
+  tiers. Each run rebuilds its panel and mask from its seed and level on the pinned X,
+  and its class table in memory.
+- `price_runs` writes the verdict, `class_p` (with confidence fields and, on that arm,
+  `prior_weighted`) and `planted_truth` into each file, before its `end`.
+- The priced files are committed **before any reader opens them**.
+- The readout `price_runs` prints for a planted directory is counts only.
+
+**Readers committed before the results.**
+- **The stage-2 reader is pinned: `experiments/planted_agent_read.py` at `4a8dbae`**
+  (re-pinned in this live commit from `7ddc547`, for the certified-separately `P_5`
+  readout).
+  It was committed, and tested on synthetic priced files and on an end-to-end set of
+  priced dry runs, before any result exists.
+- **Check 2's rule reader is pinned: `experiments/fidelity_read.py` at `f948ead`.** It
+  recomputes agreement from the live presentation log.
+- Each runs only if the working copy is byte-identical to its pinned commit
+  (`git diff --quiet <hash> -- <file>`). If a reader changes before the live commit,
+  its pin is updated in the live commit itself, and never afterwards.
+- The sealed holdout is opened only by the reader, after the priced files are
+  committed.
+
+**The read, once, after all runs are priced, in this order:**
+1. **Rule 1** per arm and level, with the prior-weighted arm per route. **If any rule
+   fails high, the replication on 631000–631019 for that arm runs before anything else
+   is read.**
+2. **Rule 2** (power against the scripted curve), **rule 3** (recovery against the
+   base rates), **rule 4** (deflation gap) and **rule 5**: holdout population Sharpe as
+   primary, then the sealed holdout opened for the secondary.
+3. **Rule 6** (check 2: fidelity, from the `--live` presentations, at the 0.80
+   tolerance).
+4. **Rule 7** (check 4, the unsaturable arm at 1.5).
+5. The prior-weighted readouts: route shares, the list containing or overlapping `m*`,
+   and size per route at 0.
+6. The registered descriptive readouts above, then the behavioural ones.
+
+**Cost.** Corrected 2026-10-05 from measurements. The earlier 31–57-minute "per run"
+figures were not session time: they ran to timestamps of pricing written into 6.5's
+files afterwards.
+
+| item | estimate | basis |
+|---|---|---|
+| **seat, agent sessions** | **about 3 hours of sessions, run one after another** (202–220 runs). That is 162–180 grammar-arm runs at about 0.65 min each and 40 prior-weighted runs at about 1.5 min each. Upper bound, every run at the slowest observed: 220 × 2.4 min = 8.8 h. Far under the 120-hour stop | 6.5's sessions, system prompt to last tool call: replay-gate median 0.63 min (max 1.78), orientation 0.70 (max 2.36), control 1.58 (max 2.29), declared-class 1.44 (max 2.02). Model latency is about all of it: 1.7 s median between grammar calls, 0.5 s between `evaluate` calls, against 0.01 s of harness per call |
+| seat, check 2 | on the order of 1,000 short, stateless calls, each about one model latency | `fidelity.py --live` prints the exact count and needs `--yes` |
+| **pricing, box** | **about 282 s per run with the current code**, measured. 220 runs is about 17 CPU-hours. At about 140 workers (2.5 GB each), that is 2 waves of about 5 minutes. **About $2–4 with boot, against the $25 threshold** | one planted dry-run file (4 logged moves; 6.5's replay logs have a median of 5), design seed 640063, B = 1,000, on the laptop on battery in Low Power Mode: class table 176 s (63%), replay verdict 86 s (31%), class tier 17 s, truths 2 s |
+| holdout generation | 60 panels, minutes, on the laptop | `planted_holdout` |

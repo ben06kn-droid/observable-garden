@@ -19,10 +19,10 @@
   once before any `evaluate`, then `evaluate` and `submit`. It has no grammar session.
   `price_runs` prices its two routes (`prior_weighted`).
 
-**Refused until stage 2 goes live.** The agent seed block is fixed by stage 2's live
-commit and `AGENT_SEEDS` stays `None` until then. So this runner makes **dry runs on
-design seeds only**: a scripted policy through the real tool handlers, with no model
-call and no seat.
+**Live from 2026-10-05.** The agent block (`AGENT_SEEDS`, 630000-630019) is fixed by
+stage 2's live commit. Model-backed runs are allowed only on that block, on the
+shake-out block (632000-632009, into runs/_shakeout/ only), or on the replication block
+with `--replication`. A dry run (scripted policy, no model) uses design seeds.
 
     python -m experiments.planted_agent --arm unsaturable --level 1.0 --runs 2 \\
         --seed0 640900 --dry-run --out runs/_dry/planted_agent
@@ -51,7 +51,11 @@ LEVELS = (0.0, 1.0, 1.5)     # nearest-the-bar returned 1.5; 1.0 fills the third
 CAP = 3
 DEPTH = 3
 DESIGN = range(640_000, 641_000)
-AGENT_SEEDS: range | None = None          # fixed by stage 2's live commit
+# Fixed by stage 2's live commit, 2026-10-05 (prereg/planted-edge.md, "Stage 2 — LIVE").
+AGENT_SEEDS: range | None = range(630_000, 630_020)
+# The one-shot replication for the first rule-1 failure: same arm, same n, identical
+# settings. Accepted only with --replication, after a dated commit records the failure.
+REPLICATION_SEEDS = range(631_000, 631_020)
 # THE SHAKE-OUT BLOCK (checked 2026-10-05: no collision). Model-backed runs on these
 # seeds are allowed, into runs/_shakeout/ only, and are never read for any rule.
 SHAKEOUT = range(632_000, 632_010)
@@ -140,7 +144,8 @@ def run_one(arm: str, seed: int, level: float, index: int, *, prompts: dict,
     return rec
 
 
-def check_seeds(seeds, dry_run: bool, out: Path | None = None) -> str:
+def check_seeds(seeds, dry_run: bool, out: Path | None = None,
+                replication: bool = False) -> str:
     """What this invocation is allowed to be: `"dry"` (design seeds, no model),
     `"shakeout"` (model-backed, shake-out seeds, written under runs/_shakeout/), or
     `"registered"` (the agent block, once stage 2 is live). Anything else refuses."""
@@ -157,7 +162,14 @@ def check_seeds(seeds, dry_run: bool, out: Path | None = None) -> str:
             raise SystemExit(f"shake-out runs are written under {SHAKEOUT_DIR}/ only")
         return "shakeout"
     if AGENT_SEEDS is not None and all(s in AGENT_SEEDS for s in seeds):
+        if replication:
+            raise SystemExit("--replication runs the replication block, not the agent block")
         return "registered"
+    if all(s in REPLICATION_SEEDS for s in seeds):
+        if not replication:
+            raise SystemExit("the replication block 631000-631019 runs only with "
+                             "--replication, after a dated commit records the rule-1 failure")
+        return "replication"
     raise SystemExit("stage 2 is not live: model-backed runs are allowed only on the "
                      f"shake-out seeds {SHAKEOUT.start}-{SHAKEOUT.stop - 1}, into "
                      f"{SHAKEOUT_DIR}/; otherwise --dry-run on design seeds")
@@ -170,10 +182,12 @@ def main(argv=None) -> int:
     ap.add_argument("--runs", type=int, required=True)
     ap.add_argument("--seed0", type=int, required=True)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--replication", action="store_true",
+                    help="the one-shot replication block, after a recorded rule-1 failure")
     ap.add_argument("--out", default="runs/_dry/planted_agent")
     a = ap.parse_args(argv)
     seeds = list(range(a.seed0, a.seed0 + a.runs))
-    mode = check_seeds(seeds, a.dry_run, Path(a.out))
+    mode = check_seeds(seeds, a.dry_run, Path(a.out), replication=a.replication)
     print(f"  {mode}: {a.arm} at level {a.level}, seeds {seeds[0]}-{seeds[-1]}", flush=True)
     prompts = read_prompts()
     out = Path(a.out)

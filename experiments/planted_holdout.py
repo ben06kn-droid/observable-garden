@@ -43,7 +43,8 @@ import numpy as np
 from environments import planted_panel as pp
 
 DESIGN = range(640_000, 641_000)
-AGENT_SEEDS: range | None = None   # fixed by the stage-2 live commit, not before
+# Fixed by stage 2's live commit, 2026-10-05 (prereg/planted-edge.md, "Stage 2 — LIVE").
+AGENT_SEEDS: range | None = range(630_000, 630_020)
 REPO = Path(__file__).resolve().parent.parent
 
 
