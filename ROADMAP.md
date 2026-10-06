@@ -1603,7 +1603,8 @@ registered driver use their own code, and stage 2 prices on the current path (ab
 `0edab26`, read `afdcb53`). On 1,000 planted panels, the class tier's bootstrap maximum
 matched the law of the class's largest estimation error at the registered quantiles:
 **8 of 9 tests exact, 1 conservative, none low.**
-- The lower bounds `L_g` cover conservatively on every searcher row, on both tiers.
+- The lower bounds `L_g` cover conservatively on every class-tier searcher row. On the
+  replay tier they do so on all but two rows, which are within.
 - `P_5` is a floor only where there is an edge. It understates at the planted levels,
   and overstates from about 0.4 up on panels with none.
 - Limits: KS rejects uniformity of the PIT at every level, and the 0.99 intervals sit
