@@ -1,0 +1,549 @@
+{
+ "run_id": "cell_planted_7_unsaturable_L1.5_630007",
+ "arm": "unsaturable",
+ "seed": 630007,
+ "events": [
+  {
+   "t": 1791260999.483754,
+   "kind": "start",
+   "arm": "unsaturable",
+   "seed": 630007,
+   "panel": "planted",
+   "level": 1.5,
+   "K": 40,
+   "M": 40,
+   "T": 3019,
+   "masked": true,
+   "content_cap": 3
+  },
+  {
+   "t": 1791261000.130154,
+   "kind": "system_prompt",
+   "sha": "7efc26bd62b4f110",
+   "chars": 3164
+  },
+  {
+   "t": 1791261004.0820658,
+   "kind": "assistant_text",
+   "text": "I'll approach this systematically. Let me start by declaring my stopping triggers, then consider a prior before making any moves."
+  },
+  {
+   "t": 1791261006.3998451,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__declare_triggers",
+   "input": {
+    "triggers": [
+     {
+      "trigger": "best_so_far_above",
+      "param": 1.2,
+      "action": "stop",
+      "note": "If in-sample Sharpe exceeds 1.2, further search is likely overfitting noise given only 40 features and limited data."
+     },
+     {
+      "trigger": "failures_at_least",
+      "param": 2,
+      "action": "restart",
+      "note": "If 2 consecutive moves fail to improve, abandon current anchor and restart from a fresh init."
+     },
+     {
+      "trigger": "last_gain_at_most",
+      "param": 0.02,
+      "action": "stop",
+      "note": "If the last move's gain in Sharpe is negligible (<=0.02), stop searching further - diminishing returns."
+     }
+    ]
+   }
+  },
+  {
+   "t": 1791261006.411798,
+   "kind": "tool_result",
+   "tool": "declare_triggers",
+   "args": {
+    "triggers": [
+     {
+      "trigger": "best_so_far_above",
+      "param": 1.2,
+      "action": "stop",
+      "note": "If in-sample Sharpe exceeds 1.2, further search is likely overfitting noise given only 40 features and limited data."
+     },
+     {
+      "trigger": "failures_at_least",
+      "param": 2,
+      "action": "restart",
+      "note": "If 2 consecutive moves fail to improve, abandon current anchor and restart from a fresh init."
+     },
+     {
+      "trigger": "last_gain_at_most",
+      "param": 0.02,
+      "action": "stop",
+      "note": "If the last move's gain in Sharpe is negligible (<=0.02), stop searching further - diminishing returns."
+     }
+    ]
+   },
+   "text": "declared: best_so_far > bar -> stop, failures >= 2 -> restart, last_gain > 0.02 -> stop",
+   "ok": true
+  },
+  {
+   "t": 1791261009.071048,
+   "kind": "assistant_text",
+   "text": "I won't use `pick_prior` since I don't have a specification I believe in for reasons independent of this data (I have no domain knowledge about these specific 40 anonymized features/instruments). I'll proceed with data-driven search instead.\n\nLet me start with `init` to anchor on the best single feature."
+  },
+  {
+   "t": 1791261009.16299,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__init",
+   "input": {}
+  },
+  {
+   "t": 1791261010.711616,
+   "kind": "tool_result",
+   "tool": "init",
+   "args": {},
+   "text": "init kept: [36-] sharpe 1.6068 (best 1.6068, 80 candidates) | shown: step=0.0000; best=-inf; failures=0.0000; last_gain=inf; budget_left=60.0000",
+   "ok": true,
+   "score": 1.6067882039394683,
+   "best": 1.6067882039394683,
+   "n_candidates": 80,
+   "shown": [
+    [
+     "step",
+     0.0
+    ],
+    [
+     "best",
+     -Infinity
+    ],
+    [
+     "failures",
+     0.0
+    ],
+    [
+     "last_gain",
+     Infinity
+    ],
+    [
+     "budget_left",
+     60.0
+    ]
+   ]
+  },
+  {
+   "t": 1791261013.022757,
+   "kind": "assistant_text",
+   "text": "Interesting \u2014 `init` already gives Sharpe 1.6068, well above my stop trigger of 1.2. My `best_so_far_above` trigger has fired. Let me call `stop`."
+  },
+  {
+   "t": 1791261013.3589408,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__stop",
+   "input": {
+    "trigger": "best_so_far_above",
+    "param": 1.2
+   }
+  },
+  {
+   "t": 1791261013.391967,
+   "kind": "tool_result",
+   "tool": "stop",
+   "args": {
+    "trigger": "best_so_far_above",
+    "param": 1.2
+   },
+   "text": "stopped on best_so_far > bar (value 0.4068) | shown: step=0.0000; best=1.6068; failures=0.0000; last_gain=inf; budget_left=60.0000",
+   "ok": true,
+   "best": 1.6067882039394683,
+   "shown": [
+    [
+     "step",
+     0.0
+    ],
+    [
+     "best",
+     1.6067882039394683
+    ],
+    [
+     "failures",
+     0.0
+    ],
+    [
+     "last_gain",
+     Infinity
+    ],
+    [
+     "budget_left",
+     60.0
+    ]
+   ]
+  },
+  {
+   "t": 1791261021.386681,
+   "kind": "assistant_text",
+   "text": "The stop fired as declared. I have a specification: feature [36-] (feature 36, short/negative sign) with in-sample Sharpe of 1.6068, found with a single move (`init`).\n\nI'm being appropriately cautious here: an in-sample Sharpe of 1.6 from a single feature, searched out of 40 candidates with sign choice, is very likely to be substantially inflated by selection \u2014 even just picking \"best of 80 candidates\" (40 features \u00d7 2 signs) induces a meaningful upward bias. I did not extend or swap further since my stopping rule fired immediately, which is good \u2014 it means I'm not compounding overfitting by searching more. However, I should calibrate my out-of-sample belief to be well below the in-sample number, reflecting:\n\n1. Selection bias from choosing the best of 80 sign/feature combinations.\n2. Single-feature specifications tend to be less robust than combinations (less diversification benefit), though also simpler (lower overfitting degrees of freedom) than a 3-feature combo.\n3. Transaction costs are already embedded (net Sharpe), but regime shift / non-stationarity risk remains for OOS data.\n\nA common rule of thumb: in-sample Sharpe from mild feature-selection search often overstates OOS Sharpe by a factor of ~2x or more. I'll predict an OOS Sharpe mean around 0.5-0.6, with a wide standard deviation reflecting real uncertainty."
+  },
+  {
+   "t": 1791261024.816182,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__predict",
+   "input": {
+    "mean": 0.55,
+    "sd": 0.45,
+    "note": "Single-feature spec (feature 36, short) found via init, in-sample Sharpe 1.6068 net of costs. This was the best of 80 candidates (40 features x 2 signs), so selection bias likely inflates the in-sample figure substantially. A single-feature spec has fewer overfit degrees of freedom than a 3-feature combo, which is reassuring, but I still expect meaningful shrinkage out-of-sample due to (a) search-based selection of the best candidate, (b) potential regime non-stationarity, and (c) no cross-validation performed within-sample. I center my OOS belief around 1/3 of the in-sample value with a wide SD to reflect genuine uncertainty about the degree of decay."
+   }
+  },
+  {
+   "t": 1791261024.849528,
+   "kind": "tool_result",
+   "tool": "predict",
+   "args": {
+    "mean": 0.55,
+    "sd": 0.45,
+    "note": "Single-feature spec (feature 36, short) found via init, in-sample Sharpe 1.6068 net of costs. This was the best of 80 candidates (40 features x 2 signs), so selection bias likely inflates the in-sample figure substantially. A single-feature spec has fewer overfit degrees of freedom than a 3-feature combo, which is reassuring, but I still expect meaningful shrinkage out-of-sample due to (a) search-based selection of the best candidate, (b) potential regime non-stationarity, and (c) no cross-validation performed within-sample. I center my OOS belief around 1/3 of the in-sample value with a wide SD to reflect genuine uncertainty about the degree of decay."
+   },
+   "text": "prediction 0.550 (sd 0.450) recorded",
+   "ok": true
+  },
+  {
+   "t": 1791261026.4449909,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__submit",
+   "input": {}
+  },
+  {
+   "t": 1791261026.460408,
+   "kind": "tool_result",
+   "tool": "submit",
+   "args": {},
+   "text": "submitted [36-] sharpe 1.6068",
+   "ok": true,
+   "score": 1.6067882039394683
+  },
+  {
+   "t": 1791261035.25228,
+   "kind": "assistant_text",
+   "text": "## Summary\n\n**Specification submitted:** Short position in feature 36 (single feature, weight -1), in-sample annualized Sharpe = **1.6068** (net of costs).\n\n**Process:**\n1. Declared three stopping triggers up front: stop if best-so-far Sharpe exceeds 1.2, restart after 2 consecutive failures, stop if last gain is negligible (\u22640.02).\n2. Skipped `pick_prior` \u2014 I had no data-independent conviction about any of these 40 anonymized features, so a prior would have been arbitrary.\n3. Called `init`, which anchored on the best single feature out of 80 candidates (40 features \u00d7 2 signs) and immediately returned Sharpe 1.6068 \u2014 already exceeding my 1.2 stop bar.\n4. Honored my pre-declared trigger and called `stop` rather than continuing to search, which would have meant changing the rule after seeing a favorable result (explicitly flagged in the rules as a decision \"about the data\").\n\n**Out-of-sample prediction:** mean Sharpe 0.55, sd 0.45.\n\n**Reasoning for the discount:** An in-sample Sharpe obtained as the best of 80 candidate sign/feature combinations carries substantial selection bias even from a single move. I did not compound this with further search (no `extend_best`/`swap_worst`/`pick`), which limits \u2014 but doesn't eliminate \u2014 overfitting risk. I shrunk my OOS estimate to roughly one-third of the in-sample value and used a wide standard deviation to reflect genuine uncertainty about how much the edge decays out of sample, given no cross-validation was performed and no independent rationale (economic or structural) for why feature 36 should predict returns."
+  },
+  {
+   "t": 1791261036.761558,
+   "kind": "self_check",
+   "replayable": true,
+   "check": "integrity",
+   "basis": "class table",
+   "realized_support": [
+    [
+     36,
+     -1.0
+    ]
+   ],
+   "replayed_support": [
+    [
+     36,
+     -1.0
+    ]
+   ],
+   "realized_score": 1.6067882039394683,
+   "replayed_score": 1.6067882039394683,
+   "reason": "Integrity check (fixed-sequence replay: the realized meta decisions with the logged content moves): PASS on the class table. The replay reproduces the realized support and score; they differ by 0.00e+00.",
+   "error": null
+  },
+  {
+   "t": 1791261036.761559,
+   "kind": "declared_budget",
+   "budget": 60
+  },
+  {
+   "t": 1791261036.76156,
+   "kind": "content_cap",
+   "cap": 3
+  },
+  {
+   "t": 1791261036.76158,
+   "kind": "session_log",
+   "records": [
+    {
+     "step": 0,
+     "kind": "init",
+     "support": [
+      [
+       36,
+       -1.0
+      ]
+     ],
+     "score": 1.6067882039394683,
+     "n_candidates": 80,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "init",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       0.0
+      ],
+      [
+       "best",
+       -Infinity
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       60.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 0,
+      "support": [],
+      "score": -Infinity,
+      "shown": [
+       [
+        "step",
+        0.0
+       ],
+       [
+        "best",
+        -Infinity
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        60.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 1,
+     "kind": "stop",
+     "support": [
+      [
+       36,
+       -1.0
+      ]
+     ],
+     "score": 1.6067882039394683,
+     "n_candidates": 0,
+     "trigger": "best_so_far > bar",
+     "trigger_value": 0.40678820393946835,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "stop",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       0.0
+      ],
+      [
+       "best",
+       1.6067882039394683
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       60.0
+      ]
+     ],
+     "trigger_stamped_at": 2428530.452501833,
+     "information": {
+      "step": 1,
+      "support": [
+       [
+        36,
+        -1.0
+       ]
+      ],
+      "score": 1.6067882039394683,
+      "shown": [
+       [
+        "step",
+        0.0
+       ],
+       [
+        "best",
+        1.6067882039394683
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        60.0
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "t": 1791261036.76158,
+   "kind": "trigger_changes",
+   "changes": []
+  },
+  {
+   "t": 1791261036.7615921,
+   "kind": "pricing_deferred",
+   "priced_by": "experiments/price_runs.py",
+   "reason": "planted runs are priced from the file on the pinned X, which rebuilds the panel and the mask from the seed"
+  },
+  {
+   "t": 1791261036.762049,
+   "kind": "end",
+   "submitted": true,
+   "no_submit": false
+  }
+ ],
+ "refusals": [],
+ "moves": {
+  "declare_triggers": 1,
+  "init": 1,
+  "stop": 1,
+  "predict": 1,
+  "submit": 1
+ },
+ "triggers_declared": {
+  "best_so_far_above": 1
+ },
+ "triggers_fired": {
+  "best_so_far_above": 1
+ },
+ "picks_accepted": 0,
+ "picks_contradicted": 0,
+ "turns": 10,
+ "n_tool_calls": 5,
+ "submitted": true,
+ "submitted_support": [
+  [
+   36,
+   -1.0
+  ]
+ ],
+ "submitted_sharpe": 1.6067882039394683,
+ "prior_pick": null,
+ "prediction": {
+  "mean": 0.55,
+  "sd": 0.45
+ },
+ "triggers_changed": false,
+ "triggers_predeclared": [
+  {
+   "kind": "best_so_far_above",
+   "param": 1.2,
+   "action": "stop"
+  },
+  {
+   "kind": "failures_at_least",
+   "param": 2.0,
+   "action": "restart"
+  },
+  {
+   "kind": "last_gain_at_most",
+   "param": 0.02,
+   "action": "stop"
+  }
+ ],
+ "certifying_null_computable": null,
+ "verdict": null,
+ "no_submit": false,
+ "credential": "unknown",
+ "platform": {
+  "machine": "arm64",
+  "system": "Darwin",
+  "python": "3.14.2",
+  "numpy": "2.5.3",
+  "node": "MacBook-Air-196.local"
+ },
+ "endpoint": {
+  "base_url": "default",
+  "auth": [],
+  "models_reported": [
+   "claude-sonnet-5"
+  ],
+  "pinned_model": "claude-sonnet-5",
+  "served_is_pinned": true,
+  "status": "ok",
+  "agrees_with_prereg": true,
+  "note": "\u00a73 excludes a run whose usage log reports any other model string; this field records which endpoint the string came from, which the check alone did not."
+ },
+ "usd": 0.050405000000000005,
+ "usage": {
+  "input_tokens": 12,
+  "cache_creation_input_tokens": 3273,
+  "cache_read_input_tokens": 85545,
+  "output_tokens": 2018,
+  "output_tokens_details": {
+   "thinking_tokens": 0
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 3273,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "not_available",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 569,
+    "cache_read_input_tokens": 15652,
+    "cache_creation_input_tokens": 97,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 97
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard"
+ },
+ "models_seen": [
+  "claude-sonnet-5"
+ ],
+ "error": null,
+ "engagement": 1.0,
+ "unregistered_refusals": []
+}

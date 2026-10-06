@@ -1,0 +1,543 @@
+{
+ "run_id": "cell_planted_5_unsaturable_L1.5_630005",
+ "arm": "unsaturable",
+ "seed": 630005,
+ "events": [
+  {
+   "t": 1791260940.9431858,
+   "kind": "start",
+   "arm": "unsaturable",
+   "seed": 630005,
+   "panel": "planted",
+   "level": 1.5,
+   "K": 40,
+   "M": 40,
+   "T": 3019,
+   "masked": true,
+   "content_cap": 3
+  },
+  {
+   "t": 1791260941.5771258,
+   "kind": "system_prompt",
+   "sha": "7efc26bd62b4f110",
+   "chars": 3164
+  },
+  {
+   "t": 1791260945.492435,
+   "kind": "assistant_text",
+   "text": "I'll approach this systematically. Let me start by declaring my stopping rules, then consider a prior before making my first move."
+  },
+  {
+   "t": 1791260946.3843699,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__declare_triggers",
+   "input": {
+    "triggers": [
+     {
+      "trigger": "best_so_far_above",
+      "param": 1.2,
+      "action": "stop"
+     },
+     {
+      "trigger": "failures_at_least",
+      "param": 2,
+      "action": "stop"
+     },
+     {
+      "trigger": "last_gain_at_most",
+      "param": 0.05,
+      "action": "stop"
+     }
+    ]
+   }
+  },
+  {
+   "t": 1791260946.3983612,
+   "kind": "tool_result",
+   "tool": "declare_triggers",
+   "args": {
+    "triggers": [
+     {
+      "trigger": "best_so_far_above",
+      "param": 1.2,
+      "action": "stop"
+     },
+     {
+      "trigger": "failures_at_least",
+      "param": 2,
+      "action": "stop"
+     },
+     {
+      "trigger": "last_gain_at_most",
+      "param": 0.05,
+      "action": "stop"
+     }
+    ]
+   },
+   "text": "declared: best_so_far > bar -> stop, failures >= 2 -> stop, last_gain > 0.05 -> stop",
+   "ok": true
+  },
+  {
+   "t": 1791260948.697223,
+   "kind": "assistant_text",
+   "text": "Now let me make my first content move: `init` to anchor on the best single feature."
+  },
+  {
+   "t": 1791260948.74318,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__init",
+   "input": {}
+  },
+  {
+   "t": 1791260950.021666,
+   "kind": "tool_result",
+   "tool": "init",
+   "args": {},
+   "text": "init kept: [13+] sharpe 1.6270 (best 1.6270, 80 candidates) | shown: step=0.0000; best=-inf; failures=0.0000; last_gain=inf; budget_left=60.0000",
+   "ok": true,
+   "score": 1.6269809367790091,
+   "best": 1.6269809367790091,
+   "n_candidates": 80,
+   "shown": [
+    [
+     "step",
+     0.0
+    ],
+    [
+     "best",
+     -Infinity
+    ],
+    [
+     "failures",
+     0.0
+    ],
+    [
+     "last_gain",
+     Infinity
+    ],
+    [
+     "budget_left",
+     60.0
+    ]
+   ]
+  },
+  {
+   "t": 1791260952.0501518,
+   "kind": "assistant_text",
+   "text": "Strong start \u2014 feature 13 (long) gives Sharpe 1.627, already above my stop bar of 1.2. Let me check if my trigger fires."
+  },
+  {
+   "t": 1791260952.397373,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__stop",
+   "input": {
+    "trigger": "best_so_far_above",
+    "param": 1.2
+   }
+  },
+  {
+   "t": 1791260952.402004,
+   "kind": "tool_result",
+   "tool": "stop",
+   "args": {
+    "trigger": "best_so_far_above",
+    "param": 1.2
+   },
+   "text": "stopped on best_so_far > bar (value 0.4270) | shown: step=0.0000; best=1.6270; failures=0.0000; last_gain=inf; budget_left=60.0000",
+   "ok": true,
+   "best": 1.6269809367790091,
+   "shown": [
+    [
+     "step",
+     0.0
+    ],
+    [
+     "best",
+     1.6269809367790091
+    ],
+    [
+     "failures",
+     0.0
+    ],
+    [
+     "last_gain",
+     Infinity
+    ],
+    [
+     "budget_left",
+     60.0
+    ]
+   ]
+  },
+  {
+   "t": 1791260956.885529,
+   "kind": "assistant_text",
+   "text": "The stop rule fired and the search has ended. The harness is reporting best=1.6270, confirming my single-feature specification (feature 13, long) achieved an in-sample annualized Sharpe of 1.627, net of costs, comfortably clearing my 1.2 bar after just one move.\n\nGiven this is a single, strong, parsimonious feature (not an overfit combination of 3), I have reasonable confidence it will generalize, though I'll expect meaningful shrinkage out-of-sample as is typical \u2014 in-sample Sharpes from feature selection tend to overstate true OOS performance, even with light search (1 move, no swapping/overfitting multiple candidates here)."
+  },
+  {
+   "t": 1791260960.334612,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__predict",
+   "input": {
+    "mean": 0.75,
+    "sd": 0.45,
+    "note": "Single-feature spec (feature 13, long), found on the very first move (init, best of 80 candidates) with no further search or iteration. In-sample Sharpe 1.627 net of costs. Minimal search here reduces overfitting risk relative to a multi-move search, but init itself already picks the best of 80 candidates in-sample, so some optimism bias remains. I expect substantial shrinkage OOS -- typical for daily equity/futures style signals net of realistic costs -- landing around 0.6-0.9 Sharpe, with real uncertainty given it's a single feature (no diversification benefit across features) and the possibility the signal is partly a regime-specific artifact."
+   }
+  },
+  {
+   "t": 1791260960.353995,
+   "kind": "tool_result",
+   "tool": "predict",
+   "args": {
+    "mean": 0.75,
+    "sd": 0.45,
+    "note": "Single-feature spec (feature 13, long), found on the very first move (init, best of 80 candidates) with no further search or iteration. In-sample Sharpe 1.627 net of costs. Minimal search here reduces overfitting risk relative to a multi-move search, but init itself already picks the best of 80 candidates in-sample, so some optimism bias remains. I expect substantial shrinkage OOS -- typical for daily equity/futures style signals net of realistic costs -- landing around 0.6-0.9 Sharpe, with real uncertainty given it's a single feature (no diversification benefit across features) and the possibility the signal is partly a regime-specific artifact."
+   },
+   "text": "prediction 0.750 (sd 0.450) recorded",
+   "ok": true
+  },
+  {
+   "t": 1791260962.0635982,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__submit",
+   "input": {}
+  },
+  {
+   "t": 1791260962.074004,
+   "kind": "tool_result",
+   "tool": "submit",
+   "args": {},
+   "text": "submitted [13+] sharpe 1.6270",
+   "ok": true,
+   "score": 1.6269809367790091
+  },
+  {
+   "t": 1791260970.573783,
+   "kind": "assistant_text",
+   "text": "## Summary\n\n**Specification submitted:** Single feature **#13, long** (weight +1, no combination needed)\n\n**Process:**\n1. Declared three stopping rules upfront (best_so_far_above 1.2, failures_at_least 2, last_gain_at_most 0.05) \u2014 all as \"stop\" actions.\n2. Used my one allowed `pick_prior`-eligible slot by skipping it (no non-data-driven conviction here) and went straight to `init`, which anchors on the single best feature out of all 80 (40 features \u00d7 2 signs).\n3. `init` immediately returned feature 13 (long) with an in-sample annualized Sharpe of **1.627**, net of the stated costs (5bps turnover, 50bps borrow, 1-day implementation lag).\n4. This cleared my declared `best_so_far_above(1.2)` stop bar on the very first move, so I invoked `stop` \u2014 the harness confirmed the rule fired and ended the search there, using only 1 of my 3 allowed content moves.\n\n**Why stop so early:** A single strong feature found on the first candidate scan is about as low-overfitting as this process gets \u2014 no multi-feature combination search, no sign-flipping iterations, no swapping. Continuing to add features or search further would have required more moves and risked fitting idiosyncratic in-sample noise for marginal gains, especially since the bar was already cleared comfortably.\n\n**Prediction:** mean OOS Sharpe **0.75**, sd **0.45** \u2014 reflecting an expectation of meaningful but not extreme shrinkage from the in-sample 1.627, given the minimal search depth but acknowledging the inherent optimism of picking the best of 80 in-sample candidates and the lack of diversification from using only one feature."
+  },
+  {
+   "t": 1791260972.08781,
+   "kind": "self_check",
+   "replayable": true,
+   "check": "integrity",
+   "basis": "class table",
+   "realized_support": [
+    [
+     13,
+     1.0
+    ]
+   ],
+   "replayed_support": [
+    [
+     13,
+     1.0
+    ]
+   ],
+   "realized_score": 1.6269809367790091,
+   "replayed_score": 1.6269809367790091,
+   "reason": "Integrity check (fixed-sequence replay: the realized meta decisions with the logged content moves): PASS on the class table. The replay reproduces the realized support and score; they differ by 0.00e+00.",
+   "error": null
+  },
+  {
+   "t": 1791260972.0878122,
+   "kind": "declared_budget",
+   "budget": 60
+  },
+  {
+   "t": 1791260972.0878122,
+   "kind": "content_cap",
+   "cap": 3
+  },
+  {
+   "t": 1791260972.08784,
+   "kind": "session_log",
+   "records": [
+    {
+     "step": 0,
+     "kind": "init",
+     "support": [
+      [
+       13,
+       1.0
+      ]
+     ],
+     "score": 1.6269809367790091,
+     "n_candidates": 80,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "init",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       0.0
+      ],
+      [
+       "best",
+       -Infinity
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       60.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 0,
+      "support": [],
+      "score": -Infinity,
+      "shown": [
+       [
+        "step",
+        0.0
+       ],
+       [
+        "best",
+        -Infinity
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        60.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 1,
+     "kind": "stop",
+     "support": [
+      [
+       13,
+       1.0
+      ]
+     ],
+     "score": 1.6269809367790091,
+     "n_candidates": 0,
+     "trigger": "best_so_far > bar",
+     "trigger_value": 0.42698093677900917,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "stop",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       0.0
+      ],
+      [
+       "best",
+       1.6269809367790091
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       60.0
+      ]
+     ],
+     "trigger_stamped_at": 2428469.435845333,
+     "information": {
+      "step": 1,
+      "support": [
+       [
+        13,
+        1.0
+       ]
+      ],
+      "score": 1.6269809367790091,
+      "shown": [
+       [
+        "step",
+        0.0
+       ],
+       [
+        "best",
+        1.6269809367790091
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        60.0
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "t": 1791260972.08784,
+   "kind": "trigger_changes",
+   "changes": []
+  },
+  {
+   "t": 1791260972.087849,
+   "kind": "pricing_deferred",
+   "priced_by": "experiments/price_runs.py",
+   "reason": "planted runs are priced from the file on the pinned X, which rebuilds the panel and the mask from the seed"
+  },
+  {
+   "t": 1791260972.088007,
+   "kind": "end",
+   "submitted": true,
+   "no_submit": false
+  }
+ ],
+ "refusals": [],
+ "moves": {
+  "declare_triggers": 1,
+  "init": 1,
+  "stop": 1,
+  "predict": 1,
+  "submit": 1
+ },
+ "triggers_declared": {
+  "best_so_far_above": 1
+ },
+ "triggers_fired": {
+  "best_so_far_above": 1
+ },
+ "picks_accepted": 0,
+ "picks_contradicted": 0,
+ "turns": 10,
+ "n_tool_calls": 5,
+ "submitted": true,
+ "submitted_support": [
+  [
+   13,
+   1.0
+  ]
+ ],
+ "submitted_sharpe": 1.6269809367790091,
+ "prior_pick": null,
+ "prediction": {
+  "mean": 0.75,
+  "sd": 0.45
+ },
+ "triggers_changed": false,
+ "triggers_predeclared": [
+  {
+   "kind": "best_so_far_above",
+   "param": 1.2,
+   "action": "stop"
+  },
+  {
+   "kind": "failures_at_least",
+   "param": 2.0,
+   "action": "stop"
+  },
+  {
+   "kind": "last_gain_at_most",
+   "param": 0.05,
+   "action": "stop"
+  }
+ ],
+ "certifying_null_computable": null,
+ "verdict": null,
+ "no_submit": false,
+ "credential": "unknown",
+ "platform": {
+  "machine": "arm64",
+  "system": "Darwin",
+  "python": "3.14.2",
+  "numpy": "2.5.3",
+  "node": "MacBook-Air-196.local"
+ },
+ "endpoint": {
+  "base_url": "default",
+  "auth": [],
+  "models_reported": [
+   "claude-sonnet-5"
+  ],
+  "pinned_model": "claude-sonnet-5",
+  "served_is_pinned": true,
+  "status": "ok",
+  "agrees_with_prereg": true,
+  "note": "\u00a73 excludes a run whose usage log reports any other model string; this field records which endpoint the string came from, which the check alone did not."
+ },
+ "usd": 0.043572599999999996,
+ "usage": {
+  "input_tokens": 12,
+  "cache_creation_input_tokens": 2793,
+  "cache_read_input_tokens": 84533,
+  "output_tokens": 1547,
+  "output_tokens_details": {
+   "thinking_tokens": 0
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 2793,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "not_available",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 576,
+    "cache_read_input_tokens": 15172,
+    "cache_creation_input_tokens": 97,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 97
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard"
+ },
+ "models_seen": [
+  "claude-sonnet-5"
+ ],
+ "error": null,
+ "engagement": 1.0,
+ "unregistered_refusals": []
+}
