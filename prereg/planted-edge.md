@@ -1483,3 +1483,14 @@ replacing `4a8dbae`. This is the only change to the read.
   - At the read, the secondary is computed by the pinned reader from the verified
     archive. Since the generation is deterministic, the two should agree to floating
     point, and the reader's figures are the registered ones.
+
+**Addendum to the deviation, 2026-10-06 (America/Chicago), before any read.** At the
+read, rule 5's secondary computed by the pinned reader from the verified archive is
+**compared with pricing's stored `submitted_holdout_realized`, run by run, and any
+disagreement is reported**, because the two should be identical: both come from one
+deterministic generation.
+- The comparison is a separate check, run immediately after the pinned reader. The
+  reader is pinned and is not changed after results exist.
+- It prints only the number of runs compared, the number that disagree beyond 1e-12
+  absolute, and the largest absolute difference. No per-run value is printed.
+- Its output is committed beside the read.
