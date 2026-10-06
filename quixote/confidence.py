@@ -14,10 +14,12 @@ replicates `N_b` for the audit tier) and the submitted score `S`:
   probability that an H-year annualised Sharpe estimate is positive under i.i.d.
   returns, `Phi(s sqrt(H) / sqrt(1 + s^2 / (2 ppy)))`.
 
-**What these are and are not** (the draft's limits). Confidence statements under
-stationarity, resting on P7 (inverting the centred class maximum); not posteriors.
-`P_H` is a *stated* number whose only warrant is V3's reliability check. None of this
-enters a verdict's status.
+**What these are and are not.** Confidence statements under stationarity, resting on P7
+(inverting the centred class maximum); not posteriors. **`P_H` is a floor ("at least")
+only where the panel has an edge**: V3 (`prereg/confidence-output.md`, "V2 read") found
+it understates the realized 5-year outcome in every bin at the planted levels, on the
+class tier (`afdcb53`) and the replay tier (`de348ea`), but overstates on panels with no
+edge from about 0.4 up. None of this enters a verdict's status.
 """
 from __future__ import annotations
 
@@ -25,6 +27,13 @@ import numpy as np
 from scipy.stats import norm
 
 GRID = np.round(np.linspace(-1.0, 3.0, 81), 2)
+# What V3 measured (prereg/confidence-output.md, "V2 read", afdcb53; replay tier de348ea):
+# P_H understated the realized 5-year outcome in every bin at the planted levels, on both
+# tiers, so there it is a floor. With no edge (level 0) it overstated from about 0.4 up.
+PH_LABEL = ("confidence under stationarity (P7); not a posterior. P_H is a FLOOR, 'at "
+            "least', only where the panel has an edge: V3 found it understates the realized "
+            "5-year outcome in every bin at the planted levels on both tiers, but overstates "
+            "with no edge (level 0) from about 0.4 up (V2 read afdcb53; replay tier de348ea)")
 GS = (0.90, 0.95, 0.99)
 H_DEFAULT = 5
 
@@ -70,5 +79,4 @@ def confidence(S: float, reps, *, H: float = H_DEFAULT, ppy: float = 252.0,
             "grid": [float(GRID[0]), float(GRID[1] - GRID[0]), int(GRID.size)],
             "curve": [float(x) for x in C],
             "H": float(H), "P_H": horizon(C, H, ppy),
-            "label": "confidence under stationarity (P7, draft); not a posterior; "
-                     "P_H is a stated number warranted only by V3"}
+            "label": PH_LABEL}

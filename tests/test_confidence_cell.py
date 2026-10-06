@@ -78,11 +78,12 @@ def test_the_registered_run_is_refused_until_v2_is_live(tmp_path):
         cc.require_live(f)
     f.write_text("# x\n\n## V2 — LIVE, someday\n")
     cc.require_live(f)                                  # no raise
-    # the real draft mentions the marker in prose and is NOT live
-    with pytest.raises(SystemExit, match="not live"):
-        cc.require_live(cc.PREREG)
-    with pytest.raises(SystemExit, match="not live"):
-        cc.main(["--workers", "1"])
+    # V2 went live at 697bef8 and has run; the real file now carries the heading.
+    # This test must never call main() for a registered run: main is exercised only
+    # on paths that refuse before any work.
+    cc.require_live(cc.PREREG)
+    with pytest.raises(SystemExit, match="registered run is 1000 seeds"):
+        cc.main(["--workers", "1", "--draws", "5"])
 
 
 def test_the_smoke_block_is_this_files_own():

@@ -71,6 +71,9 @@ def test_it_is_json_ready_and_labelled(reps):
     out = cf.confidence(1.0, reps, tier="declared class")
     json.dumps(out)
     assert "not a posterior" in out["label"] and out["tier"] == "declared class"
+    # P_H is described as a floor, qualified by where V3 found it one, and cited
+    assert "at least" in out["label"] and "only where the panel has an edge" in out["label"]
+    assert "afdcb53" in out["label"] and "de348ea" in out["label"]
     with pytest.raises(ValueError):
         cf.confidence(1.0, [])
 
