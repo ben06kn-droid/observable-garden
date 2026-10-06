@@ -390,8 +390,8 @@ of nine is conservative, and the others contain g.
 
 **V1, coverage of `L_g`, on 1,000 submissions per row.**
 - **Class tier:** every searcher row is conservative, with coverage 0.999–1.000 at
-  every level and g. **Tightness:** the median `SR_pop − L_g` is +0.67 to +0.79 at
-  level 0, +0.86 to +1.09 at 1.0 and +0.90 to +1.13 at 1.5.
+  every level and g. **Tightness:** the median `SR_pop − L_g` is +0.67 to +0.92 at
+  level 0, +0.86 to +1.09 at 1.0 and +0.90 to +1.13 at 1.5, rising with g.
 - **The class-argmax rows** cover 0.981–1.000. They are conservative except level 0
   at g = 0.99 (0.9960, within). Their median gap is narrower: +0.41 to +0.61 at level
   0, and +0.76 to +1.03 at the planted levels.
@@ -401,9 +401,9 @@ of nine is conservative, and the others contain g.
   planted levels.
 
 **V3, reliability of `P_5` (class tier), descriptive.**
-- **Level 0:** the Brier score against the realized holdout is 0.3089. Observed shares
-  positive are 0.32–0.39 in every bin with more than 4 submissions, against mean P_5
-  of 0.058–0.538. No submission is certified at level 0.
+- **Level 0:** the Brier score against the realized holdout is 0.3089. The observed
+  share positive is 0.32–0.39 across bins with mean P_5 of 0.058–0.538 (and 0 of 4 in
+  the top bin). No submission is certified at level 0.
 - **Level 1.0:** Brier 0.2563 over all submissions and 0.0349 over the 1,145 certified.
 - **Level 1.5:** Brier 0.1869 over all and 0.0203 over the 2,619 certified.
 - At the planted levels the observed share exceeds the bin's mean P_5 in every bin.
@@ -418,16 +418,23 @@ of nine is conservative, and the others contain g.
   p = 0.0000, 0.0002, 0.0007). Mean u is 0.4548–0.4706, below 0.5. The bootstrap
   maximum's distribution is not exactly the law of D, even where the three
   registered quantiles pass.
-- **`P_5` on the class tier understates at every level, and is a floor, not a
-  calibrated probability**, for the outcome it is defined on: a realized 5-year
-  holdout Sharpe above 0.
-  - In every bin with more than 4 submissions, at every level, the observed share is
-    at or above the bin's mean P_5.
-  - The single exception is level 0's top bin: mean P 0.605, 0 of 4.
-  - **Against the holdout population Sharpe at level 0 it overstates.** Every bin there
-    observed 0, against mean P_5 of 0.058 to 0.605, because every population Sharpe at
-    level 0 is negative. "Floor" therefore describes the realized outcome, not the
-    population sign.
+- **`P_5` on the class tier is not a calibrated probability.** For the outcome it is
+  defined on (a realized 5-year holdout Sharpe above 0), it acts as a floor where there
+  is an edge, and not where there is none:
+  - **At the planted levels (1.0 and 1.5) it understates in every bin**, all
+    submissions and certified alike. There it is a floor.
+  - **At level 0 it understates in the lower bins and overstates in the top three.**
+    In [0.0, 0.4) the observed share is 0.35–0.39 against mean P_5 of 0.058–0.341. In
+    [0.4, 0.5) it is 26 of 78 (0.333) against 0.442, with Wilson upper 0.444; in
+    [0.5, 0.6), 10 of 31 (0.323) against 0.538, with Wilson upper 0.499, below P; and
+    in [0.6, 0.7), 0 of 4 against 0.605. That is 113 of 6,000 level-0 submissions.
+  - **Against the holdout population Sharpe at level 0 it overstates in every bin.**
+    Every bin observed 0, against mean P_5 of 0.058 to 0.605, because every population
+    Sharpe at level 0 is negative.
+  - So **"at least" holds where the panel has an edge and fails where it has none**,
+    which is where a high stated P_5 is least warranted. *Recorded 2026-10-05: the
+    draft wording for this limit, "understates at every level", does not hold at level
+    0's upper bins, and is corrected here before the section was pushed.*
 - Scripted searchers only, on synthetic returns over the real features, and the
   holdout is the planted process continued. This is not a regime change.
 
