@@ -367,3 +367,87 @@ with its own self-stop and the laptop fetch-then-stop. **Exit 0.** All 1,000 see
 620000–620999 are complete (checked by seed count only). The results and the log are
 committed unread with this note. Nothing differs from the registered run apart from
 the session it ran in.
+
+## V2 read — 2026-10-05 (America/Chicago). CLOSED
+
+**Read once** by the pinned reader (`experiments/confidence_cell_read.py` at `ec6d8ae`,
+byte-identical, checked before the run), on the results committed before any read
+(`0edab26`: 1,000 seeds, 620000–620999, SHA-256 `d762314a…6537357`). The run was at the
+live commit `697bef8`; its first launch did not start, as recorded under "V2 — run
+record". The output is `afdcb53` (`runs/confidence_cell/read.txt`). Nothing below goes
+beyond that file.
+
+**V2, the exactness rule: 8 EXACT, 1 CONSERVATIVE, none fails low.**
+
+| level | g = 0.90 | g = 0.95 | g = 0.99 |
+|---|---|---|---|
+| 0 | 0.9250 [0.9070, 0.9397] **CONSERVATIVE** | 0.9530 [0.9381, 0.9645] EXACT | 0.9870 [0.9779, 0.9924] EXACT |
+| 1.0 | 0.9110 [0.8917, 0.9271] EXACT | 0.9470 [0.9313, 0.9593] EXACT | 0.9840 [0.9742, 0.9901] EXACT |
+| 1.5 | 0.9070 [0.8874, 0.9235] EXACT | 0.9460 [0.9302, 0.9584] EXACT | 0.9840 [0.9742, 0.9901] EXACT |
+
+The read did not stop. The predicted direction was "slightly conservative"; one test
+of nine is conservative, and the others contain g.
+
+**V1, coverage of `L_g`, on 1,000 submissions per row.**
+- **Class tier:** every searcher row is conservative, with coverage 0.999–1.000 at
+  every level and g. **Tightness:** the median `SR_pop − L_g` is +0.67 to +0.79 at
+  level 0, +0.86 to +1.09 at 1.0 and +0.90 to +1.13 at 1.5.
+- **The class-argmax rows** cover 0.981–1.000. They are conservative except level 0
+  at g = 0.99 (0.9960, within). Their median gap is narrower: +0.41 to +0.61 at level
+  0, and +0.76 to +1.03 at the planted levels.
+- **Replay tier (audit):** every row is conservative except random-extend-while-
+  improving at 0.99 on levels 0 and 1.0 (0.9940 and 0.9960, within). Coverage is
+  0.947–1.000; the median gap is +0.36 to +0.67 at level 0 and +0.53 to +0.89 at the
+  planted levels.
+
+**V3, reliability of `P_5` (class tier), descriptive.**
+- **Level 0:** the Brier score against the realized holdout is 0.3089. Observed shares
+  positive are 0.32–0.39 in every bin with more than 4 submissions, against mean P_5
+  of 0.058–0.538. No submission is certified at level 0.
+- **Level 1.0:** Brier 0.2563 over all submissions and 0.0349 over the 1,145 certified.
+- **Level 1.5:** Brier 0.1869 over all and 0.0203 over the 2,619 certified.
+- At the planted levels the observed share exceeds the bin's mean P_5 in every bin.
+- The mean shift from in-sample to holdout population Sharpe is −0.0023, +0.0319 and
+  +0.0452 by level.
+
+**Limits, stated with the result:**
+- **The 0.99 intervals contain g only barely.** The upper ends are 0.9924 at level 0
+  and 0.9901 at 1.0 and 1.5. Coverage of the class maximum's error at 0.99 sits at the
+  low edge of exact.
+- **KS rejects uniformity of the PIT at every level** (D = 0.0810, 0.0680, 0.0630;
+  p = 0.0000, 0.0002, 0.0007). Mean u is 0.4548–0.4706, below 0.5. The bootstrap
+  maximum's distribution is not exactly the law of D, even where the three
+  registered quantiles pass.
+- **`P_5` on the class tier understates at every level, and is a floor, not a
+  calibrated probability**, for the outcome it is defined on: a realized 5-year
+  holdout Sharpe above 0.
+  - In every bin with more than 4 submissions, at every level, the observed share is
+    at or above the bin's mean P_5.
+  - The single exception is level 0's top bin: mean P 0.605, 0 of 4.
+  - **Against the holdout population Sharpe at level 0 it overstates.** Every bin there
+    observed 0, against mean P_5 of 0.058 to 0.605, because every population Sharpe at
+    level 0 is negative. "Floor" therefore describes the realized outcome, not the
+    population sign.
+- Scripted searchers only, on synthetic returns over the real features, and the
+  holdout is the planted process continued. This is not a regime change.
+
+**Cost:** 1,000 seeds in about 1 h 26 min of wall time (23:52–01:18 UTC) at 191
+workers, about $14. The smokes and the idle gate came to about $17 more.
+
+**V2 is closed.** The rest of this file's draft stays a draft.
+
+## Replay-tier V3 — a declared secondary analysis on data already read — LIVE, 2026-10-05 (America/Chicago)
+
+**SECONDARY, ON DATA ALREADY READ.** The V2 read (`afdcb53`) printed V3 for the class
+tier only. This registers **V3 for the replay tier's `P_5`** (`conf_replay`) on the same
+file (`0edab26`, SHA-256 checked):
+- the same bins (deciles of P_5);
+- the same outcomes (realized holdout Sharpe > 0, and holdout population Sharpe > 0);
+- the same subsets (all submissions, and those certified by the class tier,
+  `p_class < 0.05`);
+- the Brier score;
+- per level.
+
+**Descriptive, with no rule.** Its reader is committed and tested on synthetic files
+before it opens the results, and runs once. This section authorises that analysis
+alone.
