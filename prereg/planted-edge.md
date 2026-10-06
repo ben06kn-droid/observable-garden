@@ -1410,3 +1410,76 @@ replacing `4a8dbae`. This is the only change to the read.
   (`tests/test_fidelity_live.py`).
 - **Pricing measured:** about 265 s per run at one worker, with a peak of 2.41 GB. The
   projection for 202–220 runs is about $1–2, against $25.
+
+## Stage 2 — deviation, recorded 2026-10-06 (America/Chicago), before any read: the sealed holdout's encrypted copy is corrupt; the archive is regenerated and verified against the registered hash
+
+**What was registered.**
+- The agent seeds' holdout archive (`planted_stage2_holdout.tar.gz`, SHA-256
+  `132eb820f8165111645743b2f5d3c575b8824002a3a36b9aceb2067cefa0ad47`) was encrypted.
+  The encrypted file (SHA-256 `c64eb3ca32a2c1d2b4b80cbe9707ed081da979a2023309b75e119441949d16cd`)
+  was moved to a flash drive, and the laptop's plaintext and `.enc` were deleted.
+- The archive was to be opened once, after every agent run was priced, by `open_sealed`
+  against the registered plaintext hash (entry of 2026-10-05).
+
+**What happened (reported by the author, 2026-10-06).**
+- The `.enc` on the drive still has the right size, 22,551,072 bytes, but now hashes
+  to `1d83837d49a79b6bf921f3c291f5da82a43370d79b597ae8d965ca3fad9e6b70`, not
+  `c64eb3ca…`.
+- Decrypting it gives a file that hashes to `ebaae222…`, not `132eb820…`.
+- Three other files on the same drive read as 0 bytes, so the drive appears faulty.
+- The laptop's copies were deleted on 2026-10-05, as registered.
+- **Likely cause:** the drive was removed before the write was flushed, and the
+  verification on 2026-10-05 read from the cache, not the drive.
+
+**The archive is regenerated, and verified against the registered hash.**
+- The committed generator (`experiments/planted_holdout.py`) was run in a temporary
+  worktree that reproduced the tree at generation time: HEAD `4a8dbae`, plus the four
+  files the live commit `067371d` changed (`experiments/planted_agent.py`,
+  `experiments/planted_holdout.py` and two tests). It used the pinned X and the same
+  seeds (630000–630019) and levels (0, 1.0, 1.5).
+- The panels are a deterministic function of that code and the pinned X. The
+  manifest's code state (head, fingerprint, design md5s, dirty paths) and platform are
+  reproduced exactly by that tree on this laptop.
+- **The manifest's one non-reproducible field, `generated_utc`, was found by search**
+  over 02:15:00–02:59:59 UTC on 2026-10-06, the generation window shown by the
+  archive's mtime. **`2026-10-06T02:31:28Z` reproduces the archive byte for byte:
+  SHA-256 `132eb820f8165111645743b2f5d3c575b8824002a3a36b9aceb2067cefa0ad47`,
+  22,551,053 bytes.**
+- The regenerated archive is at `~/og_sealed/planted_stage2_holdout.tar.gz`, outside
+  the repository. It has not been opened.
+- **The archive used at the read is this regeneration, verified against the registered
+  hash. The seal no longer guarantees that the archive was absent from the machine**:
+  it was rebuilt on the laptop on 2026-10-06, after pricing and before the read. Its
+  content is identical to what was sealed. It was always a deterministic function of
+  committed code, so the seal fixed its bytes, not their secrecy from the code's owner.
+
+**Which readouts are affected.**
+- **Unaffected:** rule 5's primary, the holdout population Sharpe, which is analytic
+  (`planted_panel.truth`, closed form) and uses no archive. So are rules 1–4, rule 7
+  and the class- and replay-tier confidence fields.
+- **Use the archive:** rule 5's **secondary** (the realized holdout Sharpe) and the
+  **`P_5` readouts against the sealed holdout** (`planted_agent_read`'s
+  `realized_holdout`).
+
+**Checked: no agent session read holdout rows. Pricing generated them.**
+- **Agent sessions, by code:** `experiments/planted_agent.run_one` builds the sandbox
+  from `agent_view(draw.in_sample, seed)` alone. `draw.holdout` is never passed to the
+  sandbox, a tool or the prompt.
+- **Agent sessions, by run files:** in the 202 run files, no agent-visible event (system
+  prompt, assistant text, tool calls and results, refusals, submit, short list)
+  contains a 2018–2022 year. The 14 that mention "holdout" are the agents' own words
+  (for example, "no holdout validation was performed during the search").
+- **Pricing:** `experiments/price_runs.py`'s planted path (`planted_truth`, built at
+  `5c6dc5b`) regenerates each run's holdout returns in-process through `make_draw`. It
+  writes the submission's holdout population Sharpe and **its realized holdout Sharpe
+  (`submitted_holdout_realized`)** into `planted_truth`, in all 202 priced files
+  (`06a5284`).
+  - **So rule 5's secondary quantity already exists in the committed priced files**,
+    computed from regenerated holdout rows rather than from the archive.
+  - It has not been read.
+  - The registration's "opened once, after every agent run is priced" did not provide
+    for pricing computing the realization itself. That gap is recorded here, not
+    hidden.
+  - At the read, the secondary is computed by the pinned reader from the verified
+    archive. Since the generation is deterministic, the two should agree to floating
+    point, and the reader's figures are the registered ones.
