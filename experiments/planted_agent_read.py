@@ -29,7 +29,10 @@ certificate is the **class tier's**: `p_class < α`, the tier rule.
    the same arm's level-0 runs (actual size 0.05). The realized actual sizes are
    printed.
 
-**Descriptive, registered, per arm and level, on both tiers:**
+**Descriptive, registered, per arm and level, on both tiers.** The replay tier is reported
+over the runs that have replay-tier confidence (their verdict took the full replay
+branch), with the excluded count. The class tier is reported on all runs and on that
+same subset (stage-2 amendment of 2026-10-05):
 - coverage of `L_g` and tightness (`SR_pop - L_g`, median and quartiles);
 - `P_5` against the sealed holdout (Brier score, and the observed share positive), for
   all runs and **for certified runs separately**, each tier by its own certificate
@@ -288,49 +291,77 @@ def _stated_p_pos(mean, sd):
     return 1.0 if mean > 0 else (0.5 if mean == 0 else 0.0)
 
 
+def _class_conf(d):
+    return d["class_p"].get("confidence")
+
+
+def _replay_conf(d):
+    return (d.get("verdict") or {}).get("confidence")
+
+
+def _replay_certified(d):
+    return (d.get("verdict") or {}).get("status") == "CERTIFIED"
+
+
+def _block(A, label, got, cert, realized):
+    """Coverage and tightness, P_5 against the sealed holdout (all and certified), and
+    the stated distribution beside the gate's curve, for one tier on one set of runs."""
+    if not got:
+        A(f"   {'':<28}{'':>4} {label:<22} none")
+        return
+    cells = []
+    for g in GS:
+        gap = np.array([sr_in(d) - c["L"][g] for d, c in got])
+        q = np.quantile(gap, [0.25, 0.5, 0.75])
+        cells.append(f"g{g[2:]} cover {int((gap >= 0).sum())}/{gap.size} gap "
+                     f"{q[1]:+.3f} [{q[0]:+.3f},{q[2]:+.3f}]")
+    A(f"   {'':<28}{'':>4} {label:<22} n {len(got)}: " + "; ".join(cells))
+    if realized:
+        for subset, keep in (("all", lambda d: True), ("certified", cert)):
+            sel = [(d, c) for d, c in got if d["run_id"] in realized and keep(d)]
+            if not sel:
+                A(f"   {'':<28}{'':>4} {label:<22} P_5 {subset:<9} none")
+                continue
+            P = np.array([c["P_H"] for d, c in sel])
+            y = np.array([realized[d["run_id"]] > 0 for d, c in sel], dtype=float)
+            A(f"   {'':<28}{'':>4} {label:<22} P_5 {subset:<9} mean {P.mean():.3f} "
+              f"against observed {y.mean():.3f} (n {P.size}), Brier "
+              f"{np.mean((P - y) ** 2):.4f}")
+    sp = [(stated(d), c) for d, c in got if stated(d)[0] is not None]
+    if sp:
+        dp = np.array([_stated_p_pos(m, s) - c["C0"] for (m, s), c in sp])
+        med_gap = []
+        for (m, s), c in sp:
+            C = np.asarray(c["curve"])
+            grid = c["grid"][0] + c["grid"][1] * np.arange(c["grid"][2])
+            idx = np.flatnonzero(C <= 0.5)
+            if idx.size:
+                med_gap.append(m - grid[idx[0]])
+        A(f"   {'':<28}{'':>4} {label:<22} stated P(SR>0) - C0: mean {dp.mean():+.3f}"
+          f" median {np.median(dp):+.3f}; stated mean - gate median: "
+          + (f"median {np.median(med_gap):+.3f} (n {len(med_gap)})" if med_gap else "n/a"))
+
+
 def descriptive(runs, A, realized):
+    """The registered descriptive readouts (stage-2 amendment of 2026-10-05): the
+    replay tier over the runs that have replay-tier confidence (those whose verdict
+    took the full replay branch), with the excluded count; the class tier on all runs
+    and on that same subset."""
     A("DESCRIPTIVE (registered) — confidence coverage, tightness, P_5, stated vs gate")
     A("-" * 78)
     for (arm, lv), rs in sorted(runs.items()):
-        for tier, conf_of in (("class", lambda d: d["class_p"].get("confidence")),
-                              ("replay", lambda d: (d.get("verdict") or {}).get("confidence"))):
-            got = [(d, conf_of(d)) for d in rs if conf_of(d) and sr_in(d) is not None]
-            if not got:
-                continue
-            cells = []
-            for g in GS:
-                gap = np.array([sr_in(d) - c["L"][g] for d, c in got])
-                q = np.quantile(gap, [0.25, 0.5, 0.75])
-                cells.append(f"g{g[2:]} cover {int((gap >= 0).sum())}/{gap.size} gap "
-                             f"{q[1]:+.3f} [{q[0]:+.3f},{q[2]:+.3f}]")
-            A(f"   {arm:<28}{lv:>4.1f} {tier:<6} " + "; ".join(cells))
-            if realized:
-                cert = (certified if tier == "class" else
-                        lambda d: (d.get("verdict") or {}).get("status") == "CERTIFIED")
-                for subset, keep in (("all", lambda d: True), ("certified", cert)):
-                    sel = [(d, c) for d, c in got if d["run_id"] in realized and keep(d)]
-                    if not sel:
-                        A(f"   {'':<28}{'':>4} {tier:<6} P_5 {subset:<9} none")
-                        continue
-                    P = np.array([c["P_H"] for d, c in sel])
-                    y = np.array([realized[d["run_id"]] > 0 for d, c in sel], dtype=float)
-                    A(f"   {'':<28}{'':>4} {tier:<6} P_5 {subset:<9} mean {P.mean():.3f} "
-                      f"against observed {y.mean():.3f} (n {P.size}), Brier "
-                      f"{np.mean((P - y) ** 2):.4f}")
-            sp = [(stated(d), c) for d, c in got if stated(d)[0] is not None]
-            if sp:
-                dp = np.array([_stated_p_pos(m, s) - c["C0"] for (m, s), c in sp])
-                med_gap = []
-                for (m, s), c in sp:
-                    C = np.asarray(c["curve"])
-                    grid = c["grid"][0] + c["grid"][1] * np.arange(c["grid"][2])
-                    idx = np.flatnonzero(C <= 0.5)
-                    if idx.size:
-                        med_gap.append(m - grid[idx[0]])
-                A(f"   {'':<28}{'':>4} {tier:<6} stated P(SR>0) - C0: mean {dp.mean():+.3f}"
-                  f" median {np.median(dp):+.3f}; stated mean - gate median: "
-                  + (f"median {np.median(med_gap):+.3f} (n {len(med_gap)})" if med_gap
-                     else "n/a"))
+        subm = [d for d in rs if sr_in(d) is not None]
+        cls_all = [(d, _class_conf(d)) for d in subm if _class_conf(d)]
+        rep = [(d, _replay_conf(d)) for d in subm if _replay_conf(d)]
+        rep_ids = {d["run_id"] for d, _ in rep}
+        cls_sub = [(d, c) for d, c in cls_all if d["run_id"] in rep_ids]
+        excluded = len(subm) - len(rep)
+        A(f"   {arm:<28}{lv:>4.1f}  {len(subm)} runs with a submission; replay tier on "
+          f"{len(rep)}, excluded {excluded} (no full replay branch: bracketed, undecidable "
+          "or no session)")
+        _block(A, "class, all runs", cls_all, certified, realized)
+        _block(A, "class, replay subset", cls_sub, certified, realized)
+        _block(A, "replay", rep, _replay_certified, realized)
     A("")
 
 

@@ -171,9 +171,33 @@ def test_p5_is_reported_for_certified_runs_separately_on_both_tiers(tmp_path):
     lines = []
     ar.descriptive(runs, lines.append, realized)
     text = "\n".join(lines)
-    assert "class  P_5 all " in text and "class  P_5 certified" in text
-    assert "replay P_5 certified" in text
+    assert "class, all runs" in text and "P_5 certified" in text
+    assert any(l.strip().startswith("replay") and "P_5 certified" in l
+               for l in text.splitlines())
     cert15 = [l for l in lines if "P_5 certified" in l and "(n 5)" in l]
     assert cert15                                      # the 5 certified at 1.5, both tiers
     assert any("P_5 certified none" in l for l in lines)   # no certified at level 0
+
+
+
+
+def test_the_replay_tier_reports_its_subset_and_the_class_tier_both_ways(tmp_path):
+    runs = ar.load(_write(tmp_path))
+    for (arm, lv), rs in runs.items():               # 3 bracketed runs: no replay conf
+        if arm == "replay gate" and lv == 1.0:
+            for d in rs[:3]:
+                d["verdict"].pop("confidence")
+    lines = []
+    ar.descriptive(runs, lines.append, {})
+    head = next(l for l in lines if l.strip().startswith("replay gate ") and " 1.0 " in l)
+    assert "20 runs with a submission; replay tier on 17, excluded 3" in head
+    i = lines.index(head)
+    nxt = next(k for k in range(i + 1, len(lines)) if not lines[k].startswith(" " * 36))
+    cov = [l for l in lines[i + 1:nxt] if " cover " in l]       # one coverage line per tier
+    assert len(cov) == 3
+    assert "class, all runs" in cov[0] and "n 20:" in cov[0]
+    assert "class, replay subset" in cov[1] and "n 17:" in cov[1]
+    assert cov[2].split()[0] == "replay" and "n 17:" in cov[2]
+    pw = next(l for l in lines if l.strip().startswith("prior-weighted") and " 0.0 " in l)
+    assert "replay tier on 0, excluded 20" in pw
 
