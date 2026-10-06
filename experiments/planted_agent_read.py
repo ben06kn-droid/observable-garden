@@ -31,7 +31,9 @@ certificate is the **class tier's**: `p_class < α`, the tier rule.
 
 **Descriptive, registered, per arm and level, on both tiers:**
 - coverage of `L_g` and tightness (`SR_pop - L_g`, median and quartiles);
-- `P_5` against the sealed holdout (Brier score, and the observed share positive);
+- `P_5` against the sealed holdout (Brier score, and the observed share positive), for
+  all runs and **for certified runs separately**, each tier by its own certificate
+  (the class tier `p_class < 0.05`, the replay tier its verdict's status);
 - the agent's stated distribution beside the gate's confidence curve: stated
   `P(SR > 0) = Phi(mean/sd)` against `C0`, and the stated mean against the gate's
   median, the smallest grid `s` with `C(s) <= 0.5`.
@@ -303,12 +305,18 @@ def descriptive(runs, A, realized):
                              f"{q[1]:+.3f} [{q[0]:+.3f},{q[2]:+.3f}]")
             A(f"   {arm:<28}{lv:>4.1f} {tier:<6} " + "; ".join(cells))
             if realized:
-                P = np.array([c["P_H"] for d, c in got if d["run_id"] in realized])
-                y = np.array([realized[d["run_id"]] > 0 for d, c in got
-                              if d["run_id"] in realized], dtype=float)
-                if P.size:
-                    A(f"   {'':<28}{'':>4} {tier:<6} P_5 mean {P.mean():.3f} against "
-                      f"observed {y.mean():.3f} (n {P.size}), Brier {np.mean((P - y) ** 2):.4f}")
+                cert = (certified if tier == "class" else
+                        lambda d: (d.get("verdict") or {}).get("status") == "CERTIFIED")
+                for subset, keep in (("all", lambda d: True), ("certified", cert)):
+                    sel = [(d, c) for d, c in got if d["run_id"] in realized and keep(d)]
+                    if not sel:
+                        A(f"   {'':<28}{'':>4} {tier:<6} P_5 {subset:<9} none")
+                        continue
+                    P = np.array([c["P_H"] for d, c in sel])
+                    y = np.array([realized[d["run_id"]] > 0 for d, c in sel], dtype=float)
+                    A(f"   {'':<28}{'':>4} {tier:<6} P_5 {subset:<9} mean {P.mean():.3f} "
+                      f"against observed {y.mean():.3f} (n {P.size}), Brier "
+                      f"{np.mean((P - y) ** 2):.4f}")
             sp = [(stated(d), c) for d, c in got if stated(d)[0] is not None]
             if sp:
                 dp = np.array([_stated_p_pos(m, s) - c["C0"] for (m, s), c in sp])

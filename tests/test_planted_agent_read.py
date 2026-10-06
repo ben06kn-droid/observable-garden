@@ -157,3 +157,23 @@ def test_the_format_is_price_runs_own(monkeypatch, tmp_path):
     text, _ = ar.read(ar.load(out))
     assert "RULE 1" in text
     assert ("RULE 7" in text) or ("THE READ STOPS HERE" in text)
+
+
+def test_p5_is_reported_for_certified_runs_separately_on_both_tiers(tmp_path):
+    runs = ar.load(_write(tmp_path, lambda arm, lv, i: (
+        {"p": 0.001, "sr": 0.5} if lv == 1.5 and i < 5 else {})))
+    realized = {d["run_id"]: (1.0 if i % 2 else -1.0)
+                for rs in runs.values() for i, d in enumerate(rs)}
+    for (arm, lv), rs in runs.items():                 # replay tier certifies the same 5
+        for i, d in enumerate(rs):
+            if "verdict" in d:
+                d["verdict"]["status"] = "CERTIFIED" if (lv == 1.5 and i < 5) else "FAIL"
+    lines = []
+    ar.descriptive(runs, lines.append, realized)
+    text = "\n".join(lines)
+    assert "class  P_5 all " in text and "class  P_5 certified" in text
+    assert "replay P_5 certified" in text
+    cert15 = [l for l in lines if "P_5 certified" in l and "(n 5)" in l]
+    assert cert15                                      # the 5 certified at 1.5, both tiers
+    assert any("P_5 certified none" in l for l in lines)   # no certified at level 0
+
