@@ -41,6 +41,7 @@ RHOS = (0.9, 0.8)
 TAUS = (0.7, 0.8, 0.9)
 B_E = 1000
 EWI = "extend-while-improving"
+S1_SRC_NAMES = ("S1 extend-while-improving", "S1 class argmax")
 CACHE_KEY = "a8c4ecf1ed1b6262"
 TOL_POP = 1e-8
 TOL_E = 1e-9
@@ -56,6 +57,18 @@ def wvec(sup, K=40):
     for k, s in sup:
         w[int(k)] = float(s)
     return w
+
+
+def family_matching(S, M, match) -> int:
+    """The maximum matching of distinct submission features to distinct m* features.
+    Corrected after the run (4d0c7e1): the first version paired a submission shorter
+    than m* only with m*'s first features."""
+    if len(S) > len(M):
+        S, M, match = M, S, (lambda a_, b_, f=match: f(b_, a_))
+    best = 0
+    for perm in permutations(range(len(M)), len(S)):
+        best = max(best, sum(bool(match(S[i], M[p])) for i, p in enumerate(perm)))
+    return best
 
 
 # -- worker state ------------------------------------------------------------------
@@ -478,7 +491,7 @@ def main(argv=None) -> int:
 
     # ---- rows: one per (source, level) submission ----
     # stage 1: sources "S1 extend-while-improving" and "S1 class argmax"
-    S1_SRC = ("S1 extend-while-improving", "S1 class argmax")
+    S1_SRC = S1_SRC_NAMES
     rows = []          # dict(source, level, seed, sub, reg2of3, reg2of3_plus, ...)
     for r in s1:
         for rec in r["levels"]:
@@ -621,10 +634,7 @@ def main(argv=None) -> int:
         def match(a_, b_):
             (k, s), (j, t) = a_, b_
             return fam[k] == fam[j] and s * t * np.sign(Cm[k, j]) > 0
-        best = 0
-        for perm in permutations(range(len(S)), min(len(S), len(M))):
-            best = max(best, sum(match(S[p], M[i]) for i, p in enumerate(perm)))
-        return best >= 2
+        return family_matching(S, M, match) >= 2
 
     P("   recovery against m*: registered two-of-three, beside family-level two-of-three")
     for src, lv, g in groups():
