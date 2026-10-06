@@ -1494,3 +1494,84 @@ deterministic generation.
 - It prints only the number of runs compared, the number that disagree beyond 1e-12
   absolute, and the largest absolute difference. No per-run value is printed.
 - Its output is committed beside the read.
+
+## Stage 2 — Read, 2026-10-06 (America/Chicago). CLOSED
+
+**Read once**, in the registered order, by the readers pinned before any result was
+opened: `experiments/planted_agent_read.py` at `e7d0a3d` (re-pinned by the amendment
+`0e8a6d6`) and `experiments/fidelity_read.py` at `f948ead`, each confirmed byte-identical
+to its pin before the run. Inputs: the 202 priced files (`06a5284`), the live
+presentation log (`09e9235`), and the sealed holdout opened against `132eb820…` (the
+verified regeneration, deviation `0a6f49b`). The output is `b45dba5`
+(`runs/planted_agent/read.txt`). Live commit `067371d`. Nothing below goes beyond that
+file and the addendum's comparison beside it.
+
+**Runs:** replay gate 20, unsaturable 20 and reasoned pick 14 at each of 0, 1.0 and 1.5;
+prior-weighted 20 at 0 and 20 at 1.5; 202 in all. The reasoned-pick arm reached 11
+accepted picks at 14 per level, so it was not extended.
+
+**Rule 1: all 24 PASS.** No arm certified a submission with population Sharpe ≤ 0 at
+any level, α or route: k = 0 everywhere (Wilson upper end 0.1611 at n = 20, 0.2153 at
+n = 14). **The replication branch was not triggered.**
+
+**Rule 2, power at α = 0.05 (class tier):**
+
+| arm | 0 | 1.0 | 1.5 |
+|---|---|---|---|
+| replay gate | 0/20 | 16/20 | 18/20 |
+| unsaturable | 0/20 | 16/20 | 18/20 |
+| replay gate (reasoned pick) | 0/14 | 12/14 | 13/14 |
+| prior-weighted | 0/20 | — | 17/20 |
+
+Against the scripted curve (0.2035 at 1.0, 0.4391 at 1.5), every planted-level rate is
+above it, exact binomial p ≤ 0.0004.
+
+**Rule 3, recovery.** Two-of-three recovery of `m*` is 1/20 to 7/20 per arm and level,
+against base rates of 0.2765 (1.0) and 0.4370 (1.5); "equals" is 0 or 1 per arm and
+level. Per-arm figures and recovery of `m⁺` are in `read.txt`.
+
+**Rule 4, deflation gap** (stated mean minus in-sample `SR_pop`): positive at level 0
+in every arm (means +0.28 to +0.43), negative at 1.0 (−0.27 to −0.32) and 1.5 (−0.63
+to −0.77); t and Wilcoxon p ≤ 0.0005 in every cell.
+
+**Rule 5, out of sample.** Certified minus uncertified holdout population Sharpe,
+combined over the planted levels: replay gate +0.3121, unsaturable +0.3078,
+reasoned pick −0.0548, prior-weighted +0.4116 (primary). The uncertified groups are
+1–4 runs per level, and the reasoned-pick 1.5 cell has one, so its SE is undefined.
+Secondary (realized, from the archive): +0.5695, +0.5744, +0.3342, +0.8715. The
+addendum's comparison: 202 runs compared, 0 disagree beyond 1e-12, largest absolute
+difference 8.882e-16.
+
+**Rule 6, check 2 (fidelity), from 1,380 presentations:** pick 11 decisions, 0.8682
+(at or above tolerance); restart 29, 0.8190 (at or above); **stop 29, 0.5776, below
+0.80: priced locally from then on.**
+- **Open, recorded and not resolved here:** the registered consequence is that `stop`
+  is priced locally in the certifying (replay) null from its first occurrence, and a
+  liberal local price drops the run to the class tier. That re-pricing has not been
+  run: the read used the stored replay verdicts. `quixote/pricing.py` marks local
+  pricing as not licensed (P4 untested). Every rule above reads the class tier, so
+  rules 1–5 are unaffected. Rule 7's replay row and the replay-tier descriptive rows
+  are on the stored, not locally priced, null.
+
+**Rule 7, check 4 (unsaturable, 1.5), at matched actual size 0.05:** class tier 20/20,
+replay tier 19/20.
+
+**Prior-weighted:** no certificate by the list route at either level; at 1.5, 14 by the
+search route and 6 by none. No list contained `m*` or overlapped it; no run declined.
+
+**The limits, stated with the result:**
+- **24 dependent rule-1 tests**, arms paired on the same panels; at n = 20 the rule
+  sees only gross leakage (a true rate below 0.20 at α = 0.05 is invisible).
+- **Rule 5's uncertified groups are tiny** (1–4 runs per level), far below the 10
+  against 10 behind the registered detectable differences.
+- **Rule 6's consequence for `stop` is unapplied**, as above.
+- **The seal**, per the deviation: the archive was regenerated on the laptop after
+  pricing; its bytes match the registered hash.
+- One model (`claude-sonnet-5`), synthetic returns on real features, the planted
+  process continued as the holdout.
+
+**Cost.** Seat: 202 sessions, $28.61 recorded in the run files, run one after another
+from 2026-10-05 22:33 CDT, paused and resumed; check 2's 1,380 stateless calls
+separately. Box: pricing 12 min 46 s at 128 workers on a c7a.48xlarge.
+
+**7.5 stage 2 is closed.**

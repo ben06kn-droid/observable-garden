@@ -1615,3 +1615,11 @@ start, because of a git collision on the box; it was relaunched under the same g
 cell cost about $14, and the session about $31 including the two smokes (the p-rank
 smoke stopped over its threshold) and the idle gate.
 
+
+## 7.5 stage 2 closed — 2026-10-06
+
+**Closed** (`prereg/planted-edge.md`, "Stage 2 — Read"; live `067371d`, results
+`06a5284`, read `b45dba5`). 202 agent runs: rule 1 all 24 pass with k = 0, replication
+not triggered; power at the planted levels above the scripted curve; rule 5 positive
+for three arms, from uncertified groups of 1–4 runs. **Open:** check 2 put `stop` below
+the 0.80 tolerance (0.58), and the registered local pricing of `stop` has not been run.
