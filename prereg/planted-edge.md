@@ -1359,3 +1359,54 @@ Reported by the author and recorded here:
 The holdout is opened once, after every agent run is priced and the priced files are
 committed: decrypted against this `.enc` hash, then opened by `open_sealed` against
 the registered plaintext hash.
+
+## Stage 2 — amendment, 2026-10-05 (America/Chicago), before any registered run. Replay-tier confidence on bracketed runs; the shake-out's findings
+
+**No registered run exists at the time of this amendment.** `runs/planted_agent/` does
+not exist. The only agent runs are the four shake-out files on 632000–632003
+(`c1098c6`, priced `3972f67`).
+
+**1. On a bracketed or undecidable verdict there is no replay-tier confidence, by
+design.**
+- **What the shake-out found:** the reasoned-pick shake-out run (632002) logged three
+  trigger changes, so its verdict was DEPENDS_ON_JUDGMENT. `quixote/certify.py`'s
+  bracket branch computes the fixed-sequence null as the bracket's end and no
+  certifying replay null, so the verdict carried no replay-tier confidence fields.
+- **The rule:** only a verdict that took the full replay branch has a certifying replay
+  null, so only it has replay-tier confidence. A DEPENDS_ON_JUDGMENT or UNDECIDABLE
+  verdict, and a run with no grammar session (prior-weighted), has none.
+- **Shake-out check 6 is restated accordingly:** replay-tier confidence fields are
+  required only on runs whose verdict took the full replay branch. Restated this way,
+  check 6 holds on all four shake-out files (`runs/_shakeout/planted_agent/check_6.txt`).
+
+**2. The registered descriptive readouts, restated.** Per arm and level:
+- the replay tier is reported **over the runs that have replay-tier confidence**, with
+  the **excluded count**;
+- the class tier is reported **both on all runs and on that same subset**, so the two
+  tiers can be compared on identical runs.
+
+This applies to coverage of `L_g`, tightness, `P_5` against the sealed holdout (all and
+certified), and the stated distribution beside the gate's curve.
+
+**3. The reader is re-pinned.** `experiments/planted_agent_read.py` at 4a8dbae printed
+n only inside each coverage cell, with no excluded count and no class tier on the
+replay subset. It is changed to print, per arm and level:
+- the number of runs with a submission, the replay subset's size and the excluded
+  count;
+- then three blocks: "class, all runs", "class, replay subset" and "replay".
+
+It is tested on synthetic files. **The stage-2 reader is now pinned at `e7d0a3d`**,
+replacing `4a8dbae`. This is the only change to the read.
+
+**4. The shake-out's other findings, recorded:**
+- **Checks 3 and 4 held without their refusals firing.** The unsaturable run made
+  exactly 3 content moves and never attempted a fourth. The prior-weighted run declared
+  its list before any `evaluate`, so the gate had nothing to refuse. Both refusals are
+  tested on synthetic sessions (`tests/test_content_cap.py`,
+  `tests/test_prior_weighted.py`), not on a real agent's attempt.
+- **The fidelity pick path was not exercised on a real file.** The reasoned-pick
+  shake-out run made no accepted pick, so `fidelity.py --dry-run` presented one `stop`
+  decision. The pick path is tested on synthetic and dry-run files only
+  (`tests/test_fidelity_live.py`).
+- **Pricing measured:** about 265 s per run at one worker, with a peak of 2.41 GB. The
+  projection for 202–220 runs is about $1–2, against $25.
