@@ -349,3 +349,21 @@ The read cites both commits.
 3. Then **V3**.
 
 The output is committed as `runs/confidence_cell/read.txt`.
+
+## V2 — run record, 2026-10-05 (America/Chicago): the first launch did not start; the relaunch ran
+
+**First launch, 2026-10-05 23:41 UTC: nothing ran.** The V2 flag was set on the
+session-level chain (`chain.sh`). The chain's `git pull` on the box then failed: the
+smoke files committed at `517f027` collided with the box's own untracked copies of
+them. The chain ended at 23:44:14 UTC **without starting V2**, so no registered seed
+was touched. Its log is `runs/confidence_cell/chain_first_attempt.log`.
+
+The four colliding files were byte-identical to the committed ones (SHA-256 checked),
+and were moved aside on the box, not deleted. The box's self-stop was cancelled
+before it fired.
+
+**Relaunch, 23:52:09 UTC, under the same go:** V2 alone, at the live commit `697bef8`,
+with its own self-stop and the laptop fetch-then-stop. **Exit 0.** All 1,000 seeds on
+620000–620999 are complete (checked by seed count only). The results and the log are
+committed unread with this note. Nothing differs from the registered run apart from
+the session it ran in.
