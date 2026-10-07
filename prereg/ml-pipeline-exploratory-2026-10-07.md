@@ -221,3 +221,23 @@ checked; none of the texts was re-read for this note.
    with volatility; planted edges do not follow that.
 
 **The pilot therefore reports mv_combine with risk sizing on and with it off.**
+
+## Planted rules: eligible features and a fast/slow split, decided 2026-10-07 (America/Chicago), before any generator code
+
+The author's decision, recorded before the generator is written.
+1. **Eligible features: all 40, by a seeded uniform draw.** Corner and product draw their
+   two features from different families. **Nothing is excluded, now or after the
+   turnover report.**
+2. **A fast/slow label, fixed now, from turnover alone.** A planted rule is **fast** if
+   the mean daily turnover of its unit-gross position path on the pinned features
+   exceeds **0.5** (the fraction of gross traded per day); otherwise it is **slow**.
+   - The label is computed from the position path only, before any pipeline is fitted.
+   - **The 0.5 threshold is not moved after the turnover table is seen.**
+3. **Reporting.** Every pilot table is given three ways: pooled, fast only and slow
+   only, with the draw count in each cell. A cell with fewer than 5 draws is printed and
+   marked **thin**. It is not dropped or merged.
+4. **What every plant records:** `c`, the population gross Sharpe and the population net
+   Sharpe. `planted_scale` stays net-targeted, as in the repository. Capture is reported
+   against both.
+5. **The full turnover table** for all four rule shapes is reported as part of the build.
+   It is descriptive and changes nothing above.
