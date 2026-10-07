@@ -1,5 +1,5 @@
 """The reader for 6.5 holdout grading (`prereg/holdout-grading.md`). It prints readouts
-(1)-(4), in order, and nothing else.
+(1)-(5), in order, and nothing else. (5) is the relative readouts, descriptive, no rule.
 
 Inputs:
 - the grades file R that `experiments/grade_real.py` writes: per submission, Sharpe and
@@ -32,6 +32,9 @@ SEED_BOOT = 690_000
 SEED_Z = 690_001
 DAYS = 252
 ANN = np.sqrt(DAYS)
+# the stand-in SEs from the rehearsal on 2020-2022 (808f58d; R-d 4ac5a83); the detectable
+# size printed beside each readout is 2.486 x these, labelled as stand-in figures
+STANDIN_SE = {"R-a": 0.355, "R-b": 0.219, "R-c": 0.112, "R-d": 0.059}
 ARMS = {"control": "control", "declared-class gate": "declared-class gate",
         "replay gate": "replay gate", "orientation": "orientation"}
 
@@ -309,6 +312,23 @@ def read(g, rows, B=B_BOOT) -> str:
     ties = _rank_feature_runs(rows)
     P("   tie note (ret1_rank or drawdown_rank, whose exact ties break differently on x86): "
       + (", ".join(ties) if ties else "none"))
+
+    # (5) relative readouts: descriptive, no rule (no registered proposition predicts
+    # their sign); in the registered order R-c, R-d, R-b, R-a
+    P("(5) RELATIVE READOUTS — DESCRIPTIVE, NO RULE")
+    score = np.array([c["submitted_score"] for c in cp])
+    rel = relative_readouts(score, muf, names, real["net_5bps"], boot["net_5bps"])
+    labels = {"R-c": "top half minus bottom half by in-sample score, mean realized",
+              "R-d": "top half minus bottom half by stated mean mu, mean realized",
+              "R-b": "Spearman(stated mean mu, realized)",
+              "R-a": "Spearman(in-sample score, realized)"}
+    for k in ("R-c", "R-d", "R-b", "R-a"):
+        pt, se, lo, hi = rel[k]
+        n_ = rel["n"][k]
+        n_ = f"{n_[0]}/{n_[1]}" if isinstance(n_, tuple) else str(n_)
+        P(f"   {k} {labels[k]:<62} n {n_}  point {pt:+.3f}  SE {se:.3f}  "
+          f"[{lo:+.3f}, {hi:+.3f}]  stand-in detectable {2.486 * STANDIN_SE[k]:.3f}"
+          + ("  (near-duplicate submissions make its ranks unstable)" if k == "R-a" else ""))
     return "\n".join(L)
 
 

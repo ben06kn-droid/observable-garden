@@ -38,7 +38,7 @@ def _make(tmp_path, n=8, T=300, drift=0.0, L_shift=0.0, mu_shift=0.0, seed=0):
                             "verdict": {"status": "FAIL"} if verdict else None}}))
         (runs / f"{name}.json").write_text(json.dumps(
             {"run_id": name, "arm": ARMS[i % 4], "submitted_support": [[1 if i else 3, 1.0]],
-             "prediction": {"mean": 0.3 + mu_shift, "sd": 0.2} if i else None}))
+             "prediction": {"mean": 0.3 + mu_shift + 0.01 * i, "sd": 0.2} if i else None}))
     gp = tmp_path / "grades.json"
     gp.write_text(json.dumps({"grades": grades, "graded_dates": dates}))
     return gp, rep, runs
@@ -50,13 +50,14 @@ def _read(tmp_path, **kw):
     return hr.read(g, rows, B=400)
 
 
-def test_it_prints_the_four_readouts_in_order_and_nothing_else(tmp_path):
+def test_it_prints_the_five_readouts_in_order_and_nothing_else(tmp_path):
     text = _read(tmp_path)
     heads = [ln for ln in text.splitlines() if not ln.startswith(" ")]
     assert heads == ["(1) REGISTERED BY 6.5",
                      "(2) H1 — THE GATE'S LOWER BOUNDS AGAINST REALIZED",
                      "(3) H2 — THE AGENTS' STATED EXPECTATIONS AGAINST REALIZED",
-                     "(4) DESCRIPTIVE"]
+                     "(4) DESCRIPTIVE",
+                     "(5) RELATIVE READOUTS — DESCRIPTIVE, NO RULE"]
     assert "no PASS" in text and "exact from the stored M_b" in text
 
 
@@ -134,3 +135,13 @@ def test_r_d_splits_at_the_median_with_ties_to_the_bottom():
     top, bot = hr.mu_halves(np.array([0.1, 0.2, 0.2, 0.2, 0.5, np.nan]))
     assert list(top) == [False, False, False, False, True, False]     # median 0.2 -> bottom
     assert list(bot) == [True, True, True, True, False, False]
+
+
+def test_section_5_prints_r_c_r_d_r_b_r_a_with_the_stand_in_detectable_size(tmp_path):
+    text = _read(tmp_path)
+    sec = text.split("(5) RELATIVE READOUTS — DESCRIPTIVE, NO RULE")[1].strip().splitlines()
+    assert [ln.split()[0] for ln in sec] == ["R-c", "R-d", "R-b", "R-a"]
+    for ln, k in zip(sec, ("R-c", "R-d", "R-b", "R-a")):
+        assert f"stand-in detectable {2.486 * hr.STANDIN_SE[k]:.3f}" in ln
+        assert " SE " in ln and "[" in ln
+    assert "near-duplicate" in sec[3] and all("near-duplicate" not in ln for ln in sec[:3])
