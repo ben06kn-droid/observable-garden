@@ -237,3 +237,62 @@ holdout copy (`~/Desktop/etf_holdout_2023_2025.tar.gz.enc`) cannot be opened: th
 passphrase is lost. Its SHA-256 matches the registered `4fcaf8cb…`, so it is intact but
 unusable. **The primary copy on the holdout host is the sole source.** Its content hash,
 `8d92a7b2…`, is checked first, and a mismatch ends the grading with nothing graded.
+
+## Revision, 2026-10-06 (America/Chicago), still DRAFT: intervals, H1, H2 and `sr_deflated`
+
+Appended. It supersedes the passages named below, before any number exists.
+
+**Intervals: one joint block bootstrap over the graded days.** Every interval in this
+registration is read from **one joint stationary block bootstrap over the graded
+holdout days**. The same resampled days apply to all 80 streams in each replicate. It
+replaces every across-run Wilson, t and over-runs bootstrap interval above, including
+6.5's registered "bootstrap interval over runs" for the FAIL-side median.
+- **Mean block length 9.** This is 6.5's own: the gate's stationary bootstrap on this
+  panel uses block length 9 (`prereg/agent-on-real-data.md`, "the gate's own
+  stationary bootstrap, block length 9"). It is also the `block_length` stored in all
+  80 runs' class tier. No new length is chosen, and `select_block_length` is not
+  re-run on holdout data.
+- **B = 10,000 replicates, seed 690000**, checked against every pre-registration on
+  2026-10-06 (`seed_block_check --ranges 690000-690009`: NO COLLISION). One-sided
+  bounds are the 5th or 95th percentile of the replicates; two-sided intervals are the
+  2.5th to 97.5th.
+- **"One future", reworded.** The intervals reflect **day-level sampling within this
+  one holdout**: which days, in blocks, the three years happened to contain. **They
+  still say nothing about other regimes**, other periods or other futures. All 80
+  submissions share this one 2023–2025 market.
+
+**H1, replacing the coverage rule above.**
+- **The statistic:** the mean over the 80 submissions of (realized net Sharpe at 5 bps
+  minus `L_0.90`), where `L_0.90` is the class tier's from step 0 at B = 1,000.
+- **The rule fails low iff the upper end of the one-sided 95% joint-bootstrap interval
+  for that mean is below 0.**
+- **Withdrawn:** the 0.80 threshold and the 0.10 allowance.
+- **Fails low:** the bounds overstate what was realized on this holdout. Reported with
+  the direction, the gross-against-net gap and the 10 bps figure; costs and regime
+  change are the named candidate causes.
+- **Holds:** the bounds were not shown to overstate on this holdout. Reported with the
+  mean, its interval and V2's synthetic coverage beside it.
+- **The share of submissions covered** (`L_0.90`, `L_0.95`, `L_0.99`; gross, 5 and
+  10 bps; the replay tier's for the 40 runs with a replay verdict) is **reported with
+  no rule**.
+
+**H2, unchanged in statistic and threshold, with the joint-bootstrap interval.**
+- `d = mu - realized net Sharpe at 5 bps`, over the 79 runs with a stated mean.
+- **The rule fails high iff the lower end of the one-sided 95% joint-bootstrap
+  interval for mean(d) is above 0.**
+- **Fails high:** the agents' stated expectations overstated the realized holdout
+  Sharpe on this holdout. Reported with the mean, its interval and the per-arm means.
+- **Holds:** not shown to overstate on this holdout. Reported likewise.
+
+**`sr_deflated`: exact, the approximation removed.**
+- Step 0's re-price mode now stores each run's B = 1,000 class-null maxima
+  (`price_runs`, `6c3bad5`).
+- So 6.5's registered predictive sample, `F_b = SR_obs - M_b + SE_oos Z_b`, is computed
+  from the stored M_b. The Z_b come from `default_rng(690001)`, one stream reused for
+  every run.
+- The **approximation from the confidence curve, stated above, is withdrawn.**
+- `SE_oos = sqrt((1 + sr_deflated^2 / 2) / years_oos)`, with years_oos = graded periods
+  / 252.
+- **It is computed on the class tier for all 80 runs.** The replay gate's version would
+  need the replay null's draws, which no record stores. It is not computed, and that
+  is stated in the output.
