@@ -159,3 +159,97 @@ added to the conditional tabulation above: **the standard deviation of (estimate
 target) among certified submissions** (ddof 1), beside the bias, MAE and RMSE, for
 every estimate, target, submission and level. A cell with fewer than two certified
 submissions reports it as undefined.
+
+## Addendum, 2026-10-06 (America/Chicago): two threshold candidates. Exploratory, defined before any code
+
+**Why.** Among certified submissions, the unconditional bias corrections overstate the
+holdout SR_pop (`42d5b06`; recorded in `prereg/point-estimate.md`, `75395b3`). A
+certified score is one that cleared the class-tier threshold, so the correction has to
+condition on that. This is the last exploratory round for the point estimate.
+
+### Definitions, as given
+
+**Per panel and searcher:**
+- S is the submitted score;
+- c is the panel's class-tier critical value at alpha 0.05;
+- B is the base bias: EB's for the class argmax, and for extend-while-improving **both**
+  bases, EB's and EBs's;
+- `e_b = [S*_b(m_b) - S(m_b)] - B` are the centred fluctuations over the un-demeaned
+  replicates. m_b is the base's own choice on replicate b: the class argmax of S*_b for
+  EB, the replayed searcher's submission for EBs.
+
+**ET (threshold-corrected):** the theta solving
+`mean over b of (theta + B + e_b), restricted to theta + B + e_b >= c, = S`.
+- Root-find on [S - 3, S - B].
+- If no root lies inside, take the nearer bound and flag the panel.
+
+**ETm (compromise):** the average of ET and the base estimate (S - B).
+
+### Operational choices, fixed here before any code
+
+- **c.** `p_class = (1 + #{M_b >= S}) / 1001 < 0.05` holds iff `#{M_b >= S} <= 49`, that
+  is iff S exceeds the 50th largest M_b. **c is the 50th largest M_b** (B = 1,000) of
+  the centred class null, saved per panel. The restriction uses `>= c` as defined.
+- **The root.** `g(theta) = (restricted mean) - S`.
+  - When no replicate meets the restriction, the restricted mean is taken as c.
+  - Bisection runs on a sign change of g over [S - 3, S - B], to 1e-10.
+  - The empirical restricted mean rises with theta but drops slightly each time a
+    replicate crosses c. The root is therefore the one bisection finds, and g is
+    reported if it is not within 1e-6 of 0 there.
+  - At theta = S - B the unrestricted mean equals S, so the restricted mean is at least
+    S. A root above S - B arises only from the empty-set convention.
+- **No sign change.** If g < 0 at both ends, the root is above: take S - B. If g > 0 at
+  both ends, it is below: take S - 3. In either case the panel is flagged.
+- **Saved per row, beyond `885f217`'s dump:**
+  - c;
+  - B for each base;
+  - the raw differences `d_b = S*_b(m_b) - S(m_b)` for each base (1,000 values),
+    in a compressed npz beside the rows (float64), so that `e_b = d_b - mean(d_b)`.
+- **Which estimate is "base".** For the class argmax it is EB (S - B_EB). For
+  extend-while-improving there are two blocks, one per base. In each, "base", ET and
+  ETm use that base's B and e_b.
+
+### Prior art
+
+Zhong, H. & Prentice, R. L. (2008), "Bias-reduced estimators and confidence intervals for
+odds ratios in genome-wide association studies", *Biostatistics* 9(4), 621-634,
+DOI 10.1093/biostatistics/kxn001. The metadata was checked on Crossref on 2026-10-06; the
+paper's text was not re-read for this note. It is cited as prior art for both candidates:
+- estimating an effect conditional on its having passed a significance threshold (ET);
+- combining that threshold-conditional estimate with a less-corrected one (ETm).
+
+Nothing here is a new method.
+
+### Tabulation
+
+The same form as `42d5b06`: certified submissions only (class tier, alpha 0.05), both
+targets.
+- **Estimates:** E0, EH, base, ET and ETm.
+- **Columns:** n, bias, MAE, RMSE, SD (ddof 1), and the one-sided 95% lower end of the
+  mean overstatement (t interval).
+- **Also reported:** the count of flagged panels, and the count with ET below zero.
+- **Rows:**
+  - the class argmax;
+  - extend-while-improving under the EB base;
+  - extend-while-improving under the EBs base;
+  - each per level, plus a row pooled over levels 0.5 and 1.0 for each.
+
+**Check before tabulating:** the regenerated text tables must equal `6726871`'s on every
+line but the timing line. The regenerated conditional table (`42d5b06`'s form) must
+equal `42d5b06`'s exactly. If either differs, stop.
+
+### Decision rule
+
+**A candidate goes forward** to a confirmatory registration only if, at levels 1.0 and
+1.5 and in the pooled 0.5-and-1.0 row, both of these hold:
+- its mean overstatement against holdout is at or below +0.10;
+- its RMSE (against holdout) is not above the base estimate's.
+
+**The rows it must pass, fixed now:** the class argmax (base EB) **and**
+extend-while-improving under its procedure-matched base EBs. Extend-while-improving
+under the EB base is reported and carries no decision.
+- **Both candidates qualify:** the one with the lower pooled RMSE goes forward. The
+  pooled RMSE here is the mean over the two decision rows of the pooled 0.5-and-1.0
+  RMSE against holdout.
+- **Neither qualifies:** no point estimate is registered, and `prereg/point-estimate.md`
+  is closed with that recorded.
