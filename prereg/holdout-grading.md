@@ -406,3 +406,10 @@ host. No step decrypts anything; the second copy cannot be opened (the deviation
   ```
 
 - Its output is committed and pasted in full.
+
+**Correction, 2026-10-06 (America/Chicago): step 9's deletion does not apply.** Step 9
+above ("the plaintext is deleted when grading ends") was written for a temporary
+decrypted copy. **No such copy is made**: the second copy cannot be opened, and grading
+reads the primary copy on the holdout host's volume in place. **The primary copy is
+never deleted, moved or modified.** It is the sole source, and the host is stopped, not
+terminated.
