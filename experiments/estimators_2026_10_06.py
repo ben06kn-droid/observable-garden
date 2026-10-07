@@ -208,6 +208,10 @@ def main(argv=None) -> int:
     ap.add_argument("--out", default=None)
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--dump", default=None,
+                    help="also write one JSON line per (seed, level, submission); added "
+                         "after b2e3a40 for the conditional tabulation (addendum 8c933a3). "
+                         "The text tables are unchanged by it")
     a = ap.parse_args(argv)
     ok, pw = power_ok()
     if not a.smoke:
@@ -361,6 +365,18 @@ def main(argv=None) -> int:
         return 0
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(text + "\n")
+    if a.dump:
+        with open(a.dump, "w") as fh:
+            for sd in seeds:
+                for r in res[sd]:
+                    for name, key in (("class argmax", "argmax"), (EWI, "ewi")):
+                        x = r[key]
+                        fh.write(json.dumps(
+                            {"seed": sd, "level": r["level"], "searcher": name,
+                             "score": x["S"], **{e: x["est"].get(e) for e in
+                                                 ("E0", "EH", "E2", "EC", "EB", "EBs")},
+                             "in_sample": x["in"], "holdout": x["ho"],
+                             "p_class": x["p"]}) + "\n")
     print(text)
     return 0
 
