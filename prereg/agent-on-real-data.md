@@ -605,3 +605,11 @@ archive).
   host as the first operator step of the grading (`prereg/holdout-grading.md`). If it
   does not match, there is no second copy to fall back on, and nothing is graded.
 - **No holdout data was read in establishing this.**
+
+**Withdrawal, 2026-10-06 (America/Chicago), of the deviation above (`3b049b6`).** The
+author has recalled the passphrase for the second copy. It was verified on 2026-10-06 by
+piping the decrypted stream into `gzip -t`, which printed OK; no output was written or
+displayed, and no holdout data was read. **The second copy is usable, the deviation is
+withdrawn, and both copies stand as registered.** 6.5 holdout grading
+(`prereg/holdout-grading.md`) still grades from the primary copy on the holdout host, and
+checks its content hash `8d92a7b2…` first.

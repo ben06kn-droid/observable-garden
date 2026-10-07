@@ -350,8 +350,9 @@ host. No step decrypts anything; the second copy cannot be opened (the deviation
    sha256sum $(ls -1 | sort) | sha256sum          # MUST print 8d92a7b2f527dd619a3944fb248bccc769e26ad99b38d1336fef34dffab031c8
    ```
 
-   **If the content hash differs: stop.** There is no usable second copy, and nothing
-   is graded; the mismatch is recorded as a deviation.
+   **If the content hash differs: stop and report.** The second copy exists, but
+   grading uses only the primary; nothing is graded, and the mismatch is recorded as a
+   deviation.
    - The registration gives only the content command. The file-list command above is
      the natural reading of "sorted file list", and is a cross-check only.
 4. **Bring the repository to G**, at `<HOST_REPO>` `[GAP: the host's repository path and
@@ -413,3 +414,19 @@ decrypted copy. **No such copy is made**: the second copy cannot be opened, and 
 reads the primary copy on the holdout host's volume in place. **The primary copy is
 never deleted, moved or modified.** It is the sole source, and the host is stopped, not
 terminated.
+
+**Withdrawal, 2026-10-06 (America/Chicago): the passphrase is recalled.**
+- **The deviation is withdrawn.** The author recalled the second copy's passphrase and
+  verified it on 2026-10-06 by piping the decrypted stream into `gzip -t`, which printed
+  OK. No output was written or displayed, and no holdout data was read. The deviation
+  of 2026-10-06 (`3b049b6`) is withdrawn in `prereg/agent-on-real-data.md`, and **both
+  copies stand as registered.**
+- **The correction to step 9 (`caab59b`) keeps its conclusion; its reason is
+  replaced.** Grading reads the primary copy in place, so there is no temporary
+  plaintext to delete, and the primary copy is never deleted, moved or modified. **The
+  reason is no longer that the second copy cannot be opened. It is that grading never
+  uses the second copy:** the primary copy on the holdout host is the grading source.
+- **The operator checklist, step 3,** now reads "the second copy exists but grading uses
+  only the primary; if the content hash differs, stop and report", in place of "there
+  is no usable second copy".
+- The other references to the deviation above stand withdrawn with it.
