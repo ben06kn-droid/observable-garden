@@ -438,6 +438,110 @@ def price_one(payload) -> dict:
     return out
 
 
+REPRICE_NOTE = ("The B = 200 verdict and class_p in the source run file are the registered "
+                "6.5 results. The fields re-priced here exist only to supply the confidence "
+                "readouts for 6.9 (prereg/holdout-grading.md); they supersede nothing in the "
+                "registration and never replace the source file's fields.")
+
+
+def reprice_one(payload) -> dict:
+    """Re-price an ALREADY-priced run (it carries a `class_p`) at `B`, confidence fields
+    included, without touching its file. The class tier always; the verdict only where
+    the run carries one. Module-level so a process pool can pickle it."""
+    import hashlib
+    from experiments.agent_backend import RunRecord, certify_log
+    from experiments.agent_cell_class_p import class_p_on
+
+    path, B = payload
+    path = Path(path)
+    raw = path.read_bytes()
+    d = json.loads(raw)
+    out = {"file": path.name, "run_id": d.get("run_id")}
+    kinds = [e.get("kind") for e in d.get("events", [])]
+    if "end" not in kinds:
+        out["skip"] = "incomplete: no `end` event"
+        return out
+    if "class_p" not in kinds:
+        out["skip"] = "carries no class_p: not an already-priced run"
+        return out
+    panel, seed = panel_of(d), int(d["seed"])
+    if panel == "planted":
+        out["skip"] = "planted runs are out of this mode's scope"
+        return out
+    sandbox, cls, table, ann = _basis(panel, seed)
+    t0 = time.time()
+    verdict, computable, vevents = None, None, []
+    log = rebuild_session_log(d)
+    if d.get("verdict") is not None and log is not None:
+        rec = RunRecord(run_id=d["run_id"], arm=d["arm"], seed=seed)
+        certify_log(rec, log, sandbox, cls, table, B=B)
+        verdict, computable, vevents = rec.verdict, rec.certifying_null_computable, rec.events
+    sup = d.get("submitted_support")
+    if panel == "etf":
+        cp = class_p_etf(sandbox, table, seed, sup, B)
+        sl = events_of(d, "short_list")
+        if sl:
+            cp["prior_weighted"] = prior_weighted(sandbox, table, seed,
+                                                  sl[0]["supports"], sup, B, cp["p_upper"])
+    else:
+        cp = class_p_on(sandbox, cls, ann, seed, sup, B)
+    cp["status"] = "CERTIFIED" if cp["p_upper"] < CLASS_ALPHA else "FAIL"
+    cp["alpha"] = CLASS_ALPHA
+    cp["tier"] = "declared class"
+    out.update(record={
+        "run_id": d.get("run_id"), "arm": d.get("arm"), "seed": seed, "panel": panel,
+        "source": {"file": str(path), "sha256": hashlib.sha256(raw).hexdigest()},
+        "B": B, "class_p": cp, "verdict": verdict,
+        "certifying_null_computable": computable, "verdict_events": vevents,
+        "superseded": {"class_p": d.get("class_p"), "verdict": d.get("verdict"),
+                       "certifying_null_computable": d.get("certifying_null_computable")},
+        "note": REPRICE_NOTE}, secs=time.time() - t0)
+    return out
+
+
+def reprice_dir(src: Path, dest: Path, B: int, workers: int) -> str:
+    """Write one re-priced record per already-priced run into `dest`, a NEW location.
+    Refuses a destination inside the source directory and any existing output file:
+    the B = 200 results are never overwritten, here or anywhere."""
+    from experiments.code_state import code_state, platform_info
+    src, dest = src.resolve(), dest.resolve()
+    if dest == src or src in dest.parents:
+        raise SystemExit(f"{dest} is the source directory or inside it; the re-priced "
+                         "records go to a new location")
+    files = sorted(src.glob("cell_*.json"), key=lambda p: int(p.name.split("_")[2]))
+    clash = [f.name for f in files if (dest / f.name).exists()]
+    if clash:
+        raise SystemExit(f"{len(clash)} output file(s) already exist in {dest} "
+                         f"(first: {clash[0]}); nothing is overwritten")
+    dest.mkdir(parents=True, exist_ok=True)
+    payloads = [(str(f), B) for f in files]
+    if workers > 1:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=workers) as ex:
+            results = list(ex.map(reprice_one, payloads))
+    else:
+        results = [reprice_one(p) for p in payloads]
+    cs, pf = code_state(), platform_info()
+    written, skipped = 0, []
+    for r in results:
+        if "skip" in r:
+            skipped.append((r["file"], r["skip"]))
+            continue
+        rec = dict(r["record"], code_state=cs, platform=pf, secs=r["secs"])
+        target = dest / r["file"]
+        tmp = dest / f".{r['file']}.{os.getpid()}.tmp"
+        tmp.write_text(json.dumps(rec, indent=1, default=str))
+        os.replace(tmp, target)
+        written += 1
+    L = [f"price_runs --reprice-to — {src} -> {dest}  (B = {B})",
+         f"  {len(files)} run file(s); {written} re-priced record(s) written; "
+         f"{len(skipped)} skipped; no source file touched; no rate is printed here"]
+    L += [f"    skipped {f}: {why}" for f, why in skipped]
+    text = "\n".join(L)
+    (dest / "reprice_readout.txt").write_text(text + "\n")
+    return text
+
+
 def _write(path: Path, d: dict, result: dict) -> None:
     """Insert the priced fields, keeping `end` the last event. Atomic."""
     from experiments.code_state import code_state
@@ -509,7 +613,15 @@ def main(argv=None) -> int:
                     help="re-price runs priced in-line and compare; writes nothing")
     ap.add_argument("--B", type=int, default=None,
                     help="class-p replicates; default the run's certifying B")
+    ap.add_argument("--reprice-to", default=None,
+                    help="re-price ALREADY-priced runs at --B, confidence fields included, "
+                         "into this NEW directory; the source files are never touched")
     a = ap.parse_args(argv)
+    if a.reprice_to:
+        if not a.B or a.check:
+            raise SystemExit("--reprice-to needs --B and excludes --check")
+        print(reprice_dir(Path(a.dir), Path(a.reprice_to), a.B, a.workers), flush=True)
+        return 0
 
     d = Path(a.dir)
     files = sorted(d.glob("cell_*.json"), key=lambda p: int(p.name.split("_")[2]))
