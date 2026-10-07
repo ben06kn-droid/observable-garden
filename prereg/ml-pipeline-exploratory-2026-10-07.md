@@ -241,3 +241,49 @@ The author's decision, recorded before the generator is written.
    against both.
 5. **The full turnover table** for all four rule shapes is reported as part of the build.
    It is descriptive and changes nothing above.
+
+## Decisions, 2026-10-07 (America/Chicago), before any code
+
+The author's decisions on the four open points, with additions. Recorded before code.
+
+1. **ridge_stack's fourth block** (the 42 family-by-state columns, scaled by their
+   training standard deviation and not re-standardised by day) takes the penalty values
+   **{1, 3, 10, off}**, as the product block does. The grid becomes 3 x 4 x 4 x 4 = **192**.
+2. **Warm-up.** Rows without a full 63-row history of realised returns for sigma are
+   **dropped from every fit, for all three predictors alike, and the count dropped is
+   printed.** The states stay zero until 252 rows of history, as specified.
+3. **Linear shadow (the design quantity):**
+   - a seeded sample of **100 feature choices per pair rule** (corner, product);
+   - **all 40 features** for U and the state-gated rule;
+   - on its own dedicated seed block, **685000–685999**, checked on 2026-10-07 against
+     every pre-registration: NO COLLISION.
+
+   The distribution is reported with its n.
+4. **The state-gated rule.** Off days (volatility state at or below its expanding median)
+   are **zero positions**; on days are **unit gross**. Trades into and out of the gate are
+   costed like any other trade, and `planted_scale`'s net target is taken **over all
+   days, on and off**.
+
+**Additions.**
+- **B. The fast/slow label, for a path that is not unit gross every day.** Turnover is
+  the sum over days of |change in position| divided by the sum over days of gross. For
+  unit-gross paths this equals the definition recorded at `c356992`. **This is a
+  clarification, not a change**, and the 0.5 threshold is unchanged.
+- **C. The plant and the dispersion state.**
+  - The plant cannot move the volatility state: a dollar-neutral plant has zero
+    equal-weighted market return.
+  - **It can move the 21-row dispersion state**, which the pipelines see. **This is not
+    removed.**
+  - The turnover report gives, for each state-gated plant, the dispersion state with and
+    without the plant, and its correlation with the gate both ways. This is a design
+    quantity, and no pipeline is fitted for it.
+- **E. The LightGBM pin.** **LightGBM 4.7.0**, wheel
+  `lightgbm-4.7.0-py3-none-macosx_12_0_arm64.whl`, **SHA-256
+  `129535462686f274df179133643118c5c5c5667167fe6c3a28d955f0b3c8e868`**. It is a pre-built
+  wheel for this platform (nothing built from source), installed into `.venv` on
+  2026-10-07. A test requires two fits with the registered tree settings to give
+  bit-identical predictions.
+- **F. Seed blocks.**
+  - The linear shadow uses **685000–685999** (item 3).
+  - The cost-only smoke uses **686000–686999**.
+  - Both were checked against every pre-registration on 2026-10-07: NO COLLISION.
