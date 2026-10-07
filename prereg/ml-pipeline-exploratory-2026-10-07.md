@@ -336,3 +336,100 @@ The gate's volatility state is rebuilt from the holdout segment's own data, so i
 (and the gate off) for about the first 316 holdout rows. **The pilot reads no holdout
 quantity.** Before any run that does, the gate must continue from the in-sample state
 history.
+
+## The pilot, 2026-10-07 (America/Chicago). EXPLORATORY: no claim rests on it
+
+Committed alone, before the pilot script. **Exploratory.** It decides only which predictor
+is carried forward to a registration; nothing is claimed from it.
+
+### Panels: seed block 687000–687999
+
+The block was re-checked at this commit against every pre-registration: **NO COLLISION**.
+- **Planted:** 4 rules x levels {1.0, 1.5, 2.5} x 50 = **600 panels**. Each rule has its
+  own 50 seeds, used at all three levels, so levels share each seed's residual draw and
+  rule features:
+
+  | rule | seeds |
+  |---|---|
+  | U | 687000–687049 |
+  | corner | 687050–687099 |
+  | product | 687100–687149 |
+  | state-gated | 687150–687199 |
+
+- **Level 0:** **100 panels**, 687200–687299, at the registered cost. At level 0 the plant
+  is null, so the rule is irrelevant.
+- **The same 100 at zero cost:** `cost_rate` and `borrow_rate` set to zero.
+- **The carry-forward bootstrap** uses seed 687999.
+- **The predictors' supplied-streams tiers and the class tier** each use their panel's
+  seed, as the class null does: B = 1,000, scored-window block length by the class rule.
+
+**Predictors:**
+- control, ridge_stack, mv_combine with risk sizing on, mv_combine with risk sizing off;
+- each priced through the supplied-streams tier as one declared strategy;
+- **the class tier beside them on the same panels:** the class maximum against the class
+  null of the fast kernel, B = 1,000, over the whole in-sample window. On the zero-cost
+  panels the class tier is not computed: its kernel tables carry the registered costs.
+
+Rule features, the fast/slow label and three-way reporting are as recorded at `c356992`
+and `92f7ea1`. **Certified** means p < 0.05 on the tier in question. **No holdout quantity
+is read** (see the known defect above).
+
+### Reads, once, in this order
+
+- **R1, level.** The certification rate of each predictor on the 100 zero-cost level-0
+  panels, then on the 100 at cost, with Wilson 95% intervals.
+  - **A predictor fails level iff the lower Wilson end of its zero-cost rate exceeds
+    0.05**, which at n = 100 means 10 or more certifications.
+  - **Detectable:** a true rate of **0.125 or more** with 80% power. A predictor exactly at
+    0.05 fails with probability 0.028.
+  - **Both branches:**
+    - *Fails:* that predictor is not carried forward, and the failure is reported.
+    - *Holds:* reported with the interval's upper end as the largest excess not ruled
+      out.
+- **R2, power.** The certification rate per rule x level x predictor, with the class tier
+  beside it: pooled, fast only and slow only, with Wilson intervals and cell counts. Cells
+  with fewer than 5 draws are marked thin.
+- **R3, capture.** The population net and gross Sharpe of each predictor's positions,
+  over its scored window, as a share of the plant's net and gross population Sharpe over
+  the same window. Same cells, beside the linear shadow (5a) and the ceiling (5c), as
+  medians and ranges.
+- **R4, descriptive:**
+  - mv_combine's chosen c, effective parameters (total and by block) and block weights,
+    per refit;
+  - ridge_stack's block penalties and stack weights;
+  - the share of days the gross cap binds;
+  - the turnover of every predictor's positions.
+
+### Carry-forward rule, stated now, both branches
+
+- **The primary quantity:** the pooled certification rate at level 1.5 over the four
+  rules: n = 200 panels, paired across predictors.
+- **Qualifying.** Among predictors that do not fail level, a non-linear predictor is
+  carried forward over the control iff its paired difference in that rate from the
+  control has a 95% interval excluding zero on the high side. The interval is a paired
+  bootstrap over panels, B = 10,000, seed 687999.
+- **More than one qualifies:** the highest rate goes forward. Ties go to the cheaper one
+  (mv_combine before ridge_stack).
+- **Risk sizing on against off** is settled by the same paired comparison. If its interval
+  includes zero, risk sizing is on.
+- **None qualifies:** the control is carried forward, and the note says the non-linear
+  layers added nothing detectable at this n.
+- **Detectable at n = 200, 80% power,** computed before the run under a stated discordance
+  assumption. The assumption is that the control certifies 5% of panels the candidate
+  does not (p01 = 0.05). The smallest detectable paired difference is then **0.084**.
+  - Under other discordance it ranges from 0.038 at p01 = 0 (where the normal
+    approximation is poor) through 0.063 at 0.02 to 0.108 at 0.10.
+- **Pricing four predictors each as one declared strategy is an exploratory
+  convenience.** At registration either one predictor is named in advance, or the set is
+  priced jointly as a menu (the maximum over its streams).
+
+### Platform
+
+**The pilot runs on the box only:** the c7a.48xlarge, Linux x86_64.
+- **A second LightGBM pin for that platform:** LightGBM 4.7.0,
+  `lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl`, **SHA-256
+  `d23e922acd891e77212e4d0fbcee9ba973c96dee479491341d05ba595357ebb7`**.
+- **A box smoke first:** cost only, panels 686002 and 686003 from the smoke block; the
+  leak test and a bit-for-bit repeat for all four settings, on the box; seconds per
+  panel; no outcome printed.
+- **Numbers from the laptop and the box are not mixed in one table.**
