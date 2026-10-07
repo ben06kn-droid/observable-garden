@@ -287,3 +287,30 @@ The author's decisions on the four open points, with additions. Recorded before 
   - The linear shadow uses **685000–685999** (item 3).
   - The cost-only smoke uses **686000–686999**.
   - Both were checked against every pre-registration on 2026-10-07: NO COLLISION.
+
+## The capture ceiling from effective parameters, written 2026-10-07 (America/Chicago), before any pilot
+
+**A design quantity; no outcome was read.**
+- **Source:** mv_combine's effective parameters, `trace(Sigma (Sigma + diag(gamma))^-1)`,
+  on the two level-0 smoke panels (686000 and 686001; `runs/ml_smoke/2026-10-07`,
+  `55d5441`), for each c in the grid and each refit. Their training windows run from 3 to
+  10.74 years.
+- **The formula:** the ceiling on the share of a planted edge captured is
+  `1 / sqrt(1 + effective parameters / (T_years * Sharpe^2))`. It is computed per refit,
+  then averaged over refits and panels; the range over refits is in brackets.
+- **What it covers:** estimation noise only. It assumes the edge lies in the span of the
+  basis, and says nothing about whether it does. The linear shadow (Part 5a) is a
+  separate quantity.
+
+| setting | c | true Sharpe 1.0 | 1.5 | 2.5 | mean effective parameters |
+|---|---|---|---|---|---|
+| risk sizing on | 0.25 | 0.598 [0.530–0.637] | 0.745 [0.684–0.778] | 0.880 [0.842–0.900] | 11.54 |
+| risk sizing on | 0.5 | 0.669 [0.606–0.704] | 0.803 [0.752–0.829] | 0.913 [0.885–0.927] | 7.94 |
+| risk sizing on | 1.0 | 0.740 [0.687–0.771] | 0.855 [0.817–0.876] | 0.940 [0.921–0.950] | 5.30 |
+| risk sizing on | 2.0 | 0.808 [0.770–0.833] | 0.899 [0.875–0.914] | 0.960 [0.949–0.966] | 3.43 |
+| risk sizing on | 4.0 | 0.868 [0.845–0.885] | 0.934 [0.921–0.944] | 0.975 [0.969–0.979] | 2.13 |
+| risk sizing off | 0.25 | 0.560 [0.498–0.602] | 0.711 [0.653–0.749] | 0.860 [0.821–0.883] | 14.09 |
+| risk sizing off | 0.5 | 0.635 [0.578–0.672] | 0.776 [0.728–0.806] | 0.899 [0.871–0.915] | 9.56 |
+| risk sizing off | 1.0 | 0.713 [0.666–0.742] | 0.836 [0.801–0.857] | 0.930 [0.913–0.941] | 6.26 |
+| risk sizing off | 2.0 | 0.789 [0.757–0.810] | 0.888 [0.867–0.900] | 0.955 [0.945–0.960] | 3.94 |
+| risk sizing off | 4.0 | 0.857 [0.839–0.870] | 0.928 [0.918–0.936] | 0.972 [0.968–0.975] | 2.37 |
