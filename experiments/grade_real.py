@@ -248,6 +248,33 @@ def grade(submissions, insample_dir, holdout_dir, start=GRADE_START, end=GRADE_E
     return rows, meta
 
 
+def run_grading(insample, holdout, submissions, submissions_sha256, sealed_commit,
+                grading_commit, manifest_path, out, window=(GRADE_START, GRADE_END),
+                expected_platform=None, repo: Path | None = None) -> dict:
+    """The grading path, in its registered order. `main` calls it with the registered
+    window and the pinned platform; only a rehearsal passes anything else, and says so."""
+    repo = REPO if repo is None else repo
+    plat = require_platform(expected_platform)
+    head = require_grading_commit(grading_commit, repo)
+    require_sealed_submissions(sealed_commit, repo)
+    require_file_hash(submissions, submissions_sha256, "submissions file")
+    manifest = json.loads(Path(manifest_path).read_text())
+    n_in = require_manifest_hashes(insample, "insample", manifest)
+    n_ho = require_manifest_hashes(holdout, "holdout", manifest)
+    print(f"grade_real: platform {plat}; HEAD {head[:8]} = grading commit, clean; "
+          f"submissions hash ok; {n_in} in-sample and {n_ho} holdout files match the "
+          "manifest", flush=True)
+    subs = json.loads(Path(submissions).read_text())
+    rows, meta = grade(subs, insample, holdout, *window)
+    result = {"grades": rows, **meta, "platform": list(plat), "grading_commit": head,
+              "sealed_commit": sealed_commit, "submissions_sha256": submissions_sha256}
+    Path(out).write_text(json.dumps(result, indent=1) + "\n")
+    print(f"grade_real: {len(rows)} submissions graded over {meta['window'][0]}.."
+          f"{meta['window'][1]}; feature matrix {meta['feature_matrix_sha256'][:16]}... "
+          f"(T {meta['T']}, {meta['assets']} assets); written to {out} unread", flush=True)
+    return result
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--insample", required=True)
@@ -259,20 +286,8 @@ def main(argv=None) -> int:
     ap.add_argument("--manifest", default=str(MANIFEST))
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
-    plat = require_platform()
-    head = require_grading_commit(a.grading_commit)
-    require_sealed_submissions(a.sealed_commit)
-    require_file_hash(a.submissions, a.submissions_sha256, "submissions file")
-    manifest = json.loads(Path(a.manifest).read_text())
-    require_manifest_hashes(a.insample, "insample", manifest)
-    require_manifest_hashes(a.holdout, "holdout", manifest)
-    subs = json.loads(Path(a.submissions).read_text())
-    rows, meta = grade(subs, a.insample, a.holdout)
-    out = {"grades": rows, **meta, "platform": list(plat), "grading_commit": head,
-           "sealed_commit": a.sealed_commit, "submissions_sha256": a.submissions_sha256}
-    Path(a.out).write_text(json.dumps(out, indent=1) + "\n")
-    print(f"grade_real: {len(rows)} submissions graded; written to {a.out} unread",
-          flush=True)
+    run_grading(a.insample, a.holdout, a.submissions, a.submissions_sha256,
+                a.sealed_commit, a.grading_commit, a.manifest, a.out)
     return 0
 
 

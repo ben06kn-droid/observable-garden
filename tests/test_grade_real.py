@@ -178,9 +178,6 @@ def test_main_writes_grades_without_printing_any(tmp_path, split, monkeypatch, c
     r, s, g = _repo(tmp_path)
     monkeypatch.setattr(gr, "REPO", r)
     monkeypatch.setattr(gr, "PINNED_PLATFORM", gr.platform_now())
-    import experiments.grade_real as mod
-    monkeypatch.setattr(mod, "require_grading_commit", lambda c, repo=r: g)
-    monkeypatch.setattr(mod, "require_sealed_submissions", lambda c, repo=r: None)
     man = {"derived": {t: {"insample": {"sha256": gr.sha256_file(ins / f"{t}.csv")},
                            "holdout": {"sha256": gr.sha256_file(ho / f"{t}.csv")}}
                        for t in TICKERS}}
