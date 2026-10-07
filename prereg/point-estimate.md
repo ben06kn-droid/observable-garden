@@ -227,3 +227,9 @@ spread of `e` among certified submissions.
 - **The laptop** (8 GB) is memory-bound. Today's laptop runs made about 1.2 CPU-minutes
   of progress per wall minute on 2 workers, which is about **160 hours** for 2,000
   seeds. The laptop is for the smoke and the reader only.
+
+## Fixed 2026-10-06 (America/Chicago), still DRAFT: R1's margin
+
+**R1's margin is fixed at +0.10 Sharpe.** It was fixed before the conditional tabulation
+(`prereg/estimators-exploratory-2026-10-06.md`, addendum `8c933a3`) existed: no row of
+it had been generated when this line was committed.
