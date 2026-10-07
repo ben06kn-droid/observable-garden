@@ -314,3 +314,25 @@ The author's decisions on the four open points, with additions. Recorded before 
 | risk sizing off | 1.0 | 0.713 [0.666–0.742] | 0.836 [0.801–0.857] | 0.930 [0.913–0.941] | 6.26 |
 | risk sizing off | 2.0 | 0.789 [0.757–0.810] | 0.888 [0.867–0.900] | 0.955 [0.945–0.960] | 3.94 |
 | risk sizing off | 4.0 | 0.857 [0.839–0.870] | 0.928 [0.918–0.936] | 0.972 [0.968–0.975] | 2.37 |
+
+## Accepted as implemented, and one known defect, 2026-10-07 (America/Chicago)
+
+The author reviewed `2800587..bb2bfa2`.
+
+**Accepted as implemented:**
+- **The tree series' two early rows.** At each tree refit, the two embargo rows between
+  the out-of-fold window and the test year take the new booster's predictions. The
+  out-of-sample extension of the tree column therefore starts two rows early. No
+  unrealised data is used.
+- **When the states start.** The states are non-zero from about row 315: 252 valid state
+  values, the first available at row 64.
+- **The nested solve is left unoptimised.** ridge_stack's out-of-fold penalties are chosen
+  without the predicted year by a full nested leave-one-year-out, about 20 s of its
+  roughly 30 s per panel on the laptop. The cheaper correct form (each leave-two-out solve
+  once per pair of years) is not adopted now.
+
+**Known defect, not fixed now: the state-gated rule's holdout gate restarts from zero.**
+The gate's volatility state is rebuilt from the holdout segment's own data, so it is zero
+(and the gate off) for about the first 316 holdout rows. **The pilot reads no holdout
+quantity.** Before any run that does, the gate must continue from the in-sample state
+history.
