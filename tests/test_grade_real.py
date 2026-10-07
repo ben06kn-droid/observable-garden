@@ -1,4 +1,4 @@
-"""`experiments/grade_real.py` for 6.9 (`prereg/holdout-grading.md`), on synthetic prices.
+"""`experiments/grade_real.py` for 6.5 holdout grading (`prereg/holdout-grading.md`), on synthetic prices.
 
 One feature build over in-sample and holdout; the grade over the earned-return window;
 and every refusal: platform, grading commit and clean tree, sealed submissions,
@@ -195,3 +195,23 @@ def test_main_writes_grades_without_printing_any(tmp_path, split, monkeypatch, c
     assert "sharpe" not in printed.lower() and "unread" in printed
     assert d["grades"][0]["n_periods"] > 0 and len(d["feature_matrix_sha256"]) == 64
     assert d["platform"] == list(gr.platform_now()) and d["grading_commit"] == g
+
+
+def test_the_streams_are_the_graded_days_and_reproduce_every_sharpe(split):
+    ins, ho = split
+    w = np.zeros(40); w[2] = 1.0; w[9] = -1.0
+    rows, meta = gr.grade([{"name": "s", "weights": w.tolist()}], ins, ho)
+    r = rows[0]
+    st = r["stream"]
+    assert set(st) == {"gross", "net_5bps", "net_10bps"}
+    assert len(meta["graded_dates"]) == r["n_periods"] == len(st["gross"])
+    assert meta["graded_dates"][0] == r["first_earned"] and meta["graded_dates"][-1] == r["last_earned"]
+    for key, sk in (("gross_sharpe", "gross"), ("net_sharpe_5bps", "net_5bps"),
+                    ("net_sharpe_10bps", "net_10bps")):
+        x = np.asarray(st[sk])
+        assert x.mean() / x.std(ddof=1) * np.sqrt(252) == pytest.approx(r[key], abs=1e-12)
+    g, n5, n10 = (np.asarray(st[k]) for k in ("gross", "net_5bps", "net_10bps"))
+    assert np.all(n10 <= n5 + 1e-15) and np.all(n5 <= g + 1e-15)     # costs only subtract
+    turn5 = n5 - n10                         # the extra 5 bps of turnover cost
+    assert np.all(turn5 >= -1e-15)
+    assert np.all((g - n5) - turn5 >= -1e-15)   # gross - net_5 = the same cost + borrow

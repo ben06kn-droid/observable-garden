@@ -1,4 +1,4 @@
-"""Rehearse 6.9's grading path on an in-sample split that stands in for the holdout
+"""Rehearse the 6.5 holdout grading path on an in-sample split that stands in for the holdout
 (`prereg/holdout-grading.md`). No holdout file is decrypted, opened or read.
 
 The stand-in: the real in-sample CSVs (2005-2022), hash-checked against the fetch
@@ -55,7 +55,7 @@ def main(argv=None) -> int:
         print(s, flush=True)
     head = subprocess.run(["git", "-C", str(gr.REPO), "rev-parse", "HEAD"],
                           capture_output=True, text=True).stdout.strip()
-    P("REHEARSAL of the 6.9 grading path — an in-sample split stands in for the holdout")
+    P("REHEARSAL of the 6.5 holdout grading path — an in-sample split stands in for the holdout")
     P("=" * 92)
     P(f"  HEAD {head[:12]} (stands in for both S and G); platform {gr.platform_now()}")
     P(f"  SUBSTITUTIONS: window {SPLIT}..{STANDIN_END} (registered 2023-01-01..2025-12-31); "

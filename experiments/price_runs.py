@@ -440,7 +440,7 @@ def price_one(payload) -> dict:
 
 REPRICE_NOTE = ("The B = 200 verdict and class_p in the source run file are the registered "
                 "6.5 results. The fields re-priced here exist only to supply the confidence "
-                "readouts for 6.9 (prereg/holdout-grading.md); they supersede nothing in the "
+                "readouts for 6.5 holdout grading (prereg/holdout-grading.md); they supersede nothing in the "
                 "registration and never replace the source file's fields.")
 
 

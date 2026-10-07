@@ -24,6 +24,10 @@ The refusals run in this order, before any price is read:
 5. **Plaintext only.** This module never decrypts. The loader's refusals (`.enc`,
    `.gpg`, `.asc`, anything under `~/Desktop`) apply to every path.
 
+The grades file holds, per submission, the gross and net (5, 10 bps) Sharpe and the
+**daily gross and net return streams over the graded periods**, with the graded dates
+once. Streams are part of "grades". No price is written and no Sharpe is printed.
+
 Then **one feature build over in-sample and holdout together**, exactly
 `environments.real_panel.build_etf_panel`'s computation on the concatenated series,
 and the grade over the periods whose **earned return** falls inside the window
@@ -231,11 +235,21 @@ def grade_span(submissions: list[dict], dates, F, earn, start: dt.date, end: dt.
         row = {"name": sub.get("name", ""), "gross_sharpe": sharpe(g),
                "n_periods": int(m.sum()),
                "first_earned": dates[int(np.flatnonzero(graded)[0]) + 2].isoformat(),
-               "last_earned": dates[int(np.flatnonzero(graded)[-1]) + 2].isoformat()}
+               "last_earned": dates[int(np.flatnonzero(graded)[-1]) + 2].isoformat(),
+               "stream": {"gross": [float(x) for x in g[m]]}}
         for c in costs_bps:
-            row[f"net_sharpe_{c:g}bps"] = sharpe(g - turn * c * 1e-4 - borrow)
+            net = g - turn * c * 1e-4 - borrow
+            row[f"net_sharpe_{c:g}bps"] = sharpe(net)
+            row["stream"][f"net_{c:g}bps"] = [float(x) for x in net[m]]
         out.append(row)
     return out
+
+
+def graded_dates(dates, start: dt.date, end: dt.date) -> list[str]:
+    """The earned-return dates of the graded periods, in order (the streams' index)."""
+    T = len(dates)
+    return [dates[t + 2].isoformat() for t in range(T)
+            if WARM <= t <= T - 3 and start <= dates[t + 2] <= end]
 
 
 def grade(submissions, insample_dir, holdout_dir, start=GRADE_START, end=GRADE_END):
@@ -244,7 +258,8 @@ def grade(submissions, insample_dir, holdout_dir, start=GRADE_START, end=GRADE_E
     rows = grade_span(submissions, dates, F, earn, start, end)
     meta = {"feature_matrix_sha256": feature_sha256(F), "T": len(dates),
             "assets": len(tickers), "span": [dates[0].isoformat(), dates[-1].isoformat()],
-            "window": [start.isoformat(), end.isoformat()]}
+            "window": [start.isoformat(), end.isoformat()],
+            "graded_dates": graded_dates(dates, start, end)}
     return rows, meta
 
 
