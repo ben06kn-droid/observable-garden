@@ -23,7 +23,11 @@ from pathlib import Path
 BUCKET = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
 DATA = "https://data.binance.vision"
 NS = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
-BINANCE_CUT = "2025-04"          # holdout from 2025-04-01 00:00 UTC; months < this are in-sample
+BINANCE_CUT = "2025-04"
+# After a contract stops trading the archive keeps writing ~4 kB monthly files of
+# zero-volume, constant-price rows (checked: SRMUSDT 2023-06, 720 rows, 0 trades).
+# A month whose 1h zip is at most this size is treated as filler, not trading.
+FILLER_BYTES = 6000          # holdout from 2025-04-01 00:00 UTC; months < this are in-sample
 FRENCH_URL = ("https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
               "{n}_Industry_Portfolios_daily_CSV.zip")
 FRENCH_START, FRENCH_CUT = 20100101, 20200101
@@ -67,7 +71,10 @@ def symbol_months(symbol: str, kind: str = "klines", interval: str = "1h") -> di
     zips = {k: s for k, s in keys if k.endswith(".zip")}
     sums = {k[:-len(".CHECKSUM")] for k, _ in keys if k.endswith(".zip.CHECKSUM")}
     months = sorted(MONTH.search(k).group(1) for k in zips if MONTH.search(k))
-    return {"symbol": symbol, "months": months,
+    sizes = {MONTH.search(k).group(1): s for k, s in zips.items() if MONTH.search(k)}
+    real = [m for m in months if sizes[m] > FILLER_BYTES]
+    return {"symbol": symbol, "months": months, "sizes": sizes,
+            "last_real": real[-1] if real else None,
             "first": months[0] if months else None, "last": months[-1] if months else None,
             "n_months": len(months),
             "missing_checksum": sorted(k for k in zips if k not in sums),
@@ -179,9 +186,56 @@ def french(out: Path) -> str:
     return text
 
 
+def binance_summary(out: Path) -> str:
+    rec = json.loads((out / "binance_listing.json").read_text())
+    kl = rec["klines_1h"]
+    latest = max(k["last"] for k in kl)
+    quote = lambda s: next((q for q in ("USDT", "USDC", "BUSD") if s.endswith(q)), "other")
+    L = [f"BINANCE USD-M, 1h monthly klines, from the bucket listing ({len(kl)} symbols; "
+         f"latest month in the archive {latest})"]
+    L.append("   by quote: " + ", ".join(f"{q} {n}" for q, n in
+                                         sorted(Counter(quote(k['symbol']) for k in kl).items())))
+    L.append(f"   first month in the archive: {min(k['first'] for k in kl)}")
+    L.append("   available in January of each year, and of those, last month before "
+             f"{latest} (delisted or discontinued):")
+    for y in range(2020, 2027):
+        avail = [k for k in kl if k["first"] <= f"{y}-01"]
+        gone = [k for k in avail if k["last"] < latest]
+        dead = [k for k in avail if (k["last_real"] or "") < latest]
+        usdt = [k for k in avail if quote(k["symbol"]) == "USDT"]
+        L.append(f"      {y}-01: {len(avail):4d} listed ({len(usdt)} USDT); {len(gone):4d} "
+                 f"have no file in the latest month; {len(dead):4d} have stopped trading "
+                 f"(last real file, > {FILLER_BYTES} B, before {latest})")
+    padded = [k for k in kl if k["last_real"] and k["last_real"] < k["last"]]
+    L.append(f"   padded after trading stopped (filler months after the last real one): "
+             f"{len(padded)} symbols, of which {sum(k['last'] == latest for k in padded)} are "
+             f"still padded in {latest}")
+    gone_all = [k for k in kl if k["last"] < latest]
+    dead_all = [k for k in kl if (k["last_real"] or "") < latest]
+    L.append(f"   all symbols: {len(gone_all)} of {len(kl)} have no file in {latest}; "
+             f"{len(dead_all)} have stopped trading")
+    miss = sum(len(k["missing_checksum"]) for k in kl)
+    nfiles = sum(k["n_months"] for k in kl)
+    L.append(f"   CHECKSUM files: {nfiles - miss} of {nfiles} monthly 1h zips have one; "
+             f"{miss} missing")
+    ins = sum(k["insample_bytes"] for k in kl)
+    ins_usdt = sum(k["insample_bytes"] for k in kl if quote(k["symbol"]) == "USDT")
+    L.append(f"   download size, 1h klines, in-sample months (< {BINANCE_CUT}) only: "
+             f"{ins / 1e6:.1f} MB all symbols; {ins_usdt / 1e6:.1f} MB USDT-quoted")
+    fr = rec["fundingRate"]
+    frs = [f for f in fr if f["first"]]
+    L.append(f"   funding-rate monthly files: {len(frs)} symbols; earliest month "
+             f"{min(f['first'] for f in frs)}; checksum missing on "
+             f"{sum(len(f['missing_checksum']) for f in frs)} files")
+    text = "\n".join(L)
+    (out / "binance_summary.txt").write_text(text + "\n")
+    return text
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["binance-listing", "binance-insample", "french"])
+    ap.add_argument("what", choices=["binance-listing", "binance-summary", "binance-insample",
+                                     "french"])
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     out = Path(a.out)
@@ -189,6 +243,8 @@ def main(argv=None) -> int:
         rec = binance_listing(out)
         print(f"{len(rec['klines_1h'])} symbols with 1h klines; "
               f"{len(rec['fundingRate'])} with funding-rate files")
+    elif a.what == "binance-summary":
+        print(binance_summary(out))
     elif a.what == "binance-insample":
         print(binance_insample(out))
     else:
