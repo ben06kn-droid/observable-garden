@@ -153,3 +153,9 @@ p_class, every estimate and both targets. The regeneration starts only after a f
 go; its outputs must reproduce `6726871`'s tables, checked before the tabulation is read.
 The order is: this addendum alone, then the dump and tabulation code, then the run,
 then the output.
+
+**Appended 2026-10-06, before the tabulation code or any row exists.** One column is
+added to the conditional tabulation above: **the standard deviation of (estimate -
+target) among certified submissions** (ddof 1), beside the bias, MAE and RMSE, for
+every estimate, target, submission and level. A cell with fewer than two certified
+submissions reports it as undefined.
