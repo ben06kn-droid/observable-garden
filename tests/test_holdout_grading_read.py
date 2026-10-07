@@ -118,7 +118,9 @@ def test_relative_readouts_match_scipy_and_their_definitions():
     assert out["R-c"][0] == pytest.approx(real[top].mean() - real[bot].mean(), abs=1e-12)
     se = np.std([spearmanr(score, boot[:, b]).statistic for b in range(B)], ddof=1)
     assert out["R-a"][1] == pytest.approx(se, abs=1e-12)
-    assert out["n"] == {"R-a": 20, "R-b": 19, "R-c": 10}
+    tmu, bmu = hr.mu_halves(mu)
+    assert out["R-d"][0] == pytest.approx(real[tmu].mean() - real[bmu].mean(), abs=1e-12)
+    assert out["n"] == {"R-a": 20, "R-b": 19, "R-c": 10, "R-d": (9, 10)}
 
 
 def test_halves_break_ties_by_name():
@@ -126,3 +128,9 @@ def test_halves_break_ties_by_name():
     top, bot = hr.halves(np.array([1.0, 1.0, 1.0, 0.0]), ["c", "b", "a", "d"])
     assert list(top) == [False, True, True, False]
     assert list(bot) == [True, False, False, True]
+
+
+def test_r_d_splits_at_the_median_with_ties_to_the_bottom():
+    top, bot = hr.mu_halves(np.array([0.1, 0.2, 0.2, 0.2, 0.5, np.nan]))
+    assert list(top) == [False, False, False, False, True, False]     # median 0.2 -> bottom
+    assert list(bot) == [True, True, True, True, False, False]

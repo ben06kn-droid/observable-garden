@@ -114,8 +114,22 @@ def relative_readouts(score, mu, names, real: np.ndarray, boot: np.ndarray) -> d
     top, bot = halves(score, list(names))
     out["R-c"] = pack(real[top].mean() - real[bot].mean(),
                       boot[top].mean(axis=0) - boot[bot].mean(axis=0))
-    out["n"] = {"R-a": int(score.size), "R-b": int(has.sum()), "R-c": int(top.sum())}
+    tmu, bmu = mu_halves(mu)
+    out["R-d"] = pack(real[tmu].mean() - real[bmu].mean(),
+                      boot[tmu].mean(axis=0) - boot[bmu].mean(axis=0))
+    out["n"] = {"R-a": int(score.size), "R-b": int(has.sum()), "R-c": int(top.sum()),
+                "R-d": (int(tmu.sum()), int(bmu.sum()))}
     return out
+
+
+def mu_halves(mu: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """R-d's split (703beed/649089f): among runs with a stated mean, the top half is mu
+    strictly above the median, the bottom half the rest (ties to the bottom)."""
+    mu = np.asarray(mu, float)
+    has = ~np.isnan(mu)
+    med = float(np.median(mu[has]))
+    top = has & (mu > med)
+    return top, has & ~top
 
 
 # -- CRPS -----------------------------------------------------------------------------

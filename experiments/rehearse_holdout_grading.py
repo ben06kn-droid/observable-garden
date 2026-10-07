@@ -196,9 +196,12 @@ def main(argv=None) -> int:
       f"{SPLIT}; realized = stand-in net 5 bps; joint bootstrap as in 8)")
     for k, lab in (("R-a", "Spearman(in-sample score, realized)"),
                    ("R-b", "Spearman(mu, realized)"),
-                   ("R-c", "top half minus bottom half by in-sample score, mean realized")):
+                   ("R-c", "top half minus bottom half by in-sample score, mean realized"),
+                   ("R-d", "top half minus bottom half by stated mean mu, mean realized")):
         pt, se, lo, hi = rel[k]
-        P(f"   {k} {lab:<62} n {rel['n'][k]:2d}  point {pt:+.3f}  bootstrap SE {se:.3f}  "
+        n_ = rel["n"][k]
+        n_ = f"{n_[0]}/{n_[1]}" if isinstance(n_, tuple) else f"{n_:2d}"
+        P(f"   {k} {lab:<62} n {n_}  point {pt:+.3f}  bootstrap SE {se:.3f}  "
           f"[{lo:+.3f}, {hi:+.3f}]")
     (out / "rehearsal.txt").write_text("\n".join(L) + "\n")
     return 0
