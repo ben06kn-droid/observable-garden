@@ -436,3 +436,29 @@ terminated.
   only the primary; if the content hash differs, stop and report", in place of "there
   is no usable second copy".
 - The other references to the deviation above stand withdrawn with it.
+
+## Relative readouts, defined 2026-10-06 (America/Chicago), before any code. No rule yet
+
+These readouts compare submissions with each other, so the market move that all 80 share
+cancels out of them. **Realized** means the holdout net Sharpe at 5 bps from R.
+**In-sample net score** means the submission's net in-sample Sharpe, taken from the
+`submitted_score` in its stored class tier. That is the class table's own net score; it
+equals the agent's `submitted_sharpe` where a run stores one (the rehearsal: 40 of 40 to
+1.7e-16).
+
+- **R-a:** the Spearman correlation, across the 80 submissions, between in-sample net
+  score and realized. Ties take average ranks.
+- **R-b:** the Spearman correlation between the agent's stated mean mu and realized,
+  over the 79 runs with a stated mean.
+- **R-c:** the mean realized Sharpe of the top half by in-sample score (40 runs) minus
+  that of the bottom half (40 runs). Ties at the cut are broken by run name.
+
+**Intervals** come from the same joint stationary block bootstrap over the graded days
+(mean block 9, B = 10,000, seed 690000). The in-sample score and mu are fixed; only the
+realized Sharpes are resampled, jointly. Each readout reports its point value, its
+bootstrap SE, and the 2.5th to 97.5th percentile interval. **No rule is attached.** The
+stand-in SEs go to the author, who decides.
+
+**On the stand-in (2020–2022)**, the full in-sample score would overlap the stand-in
+window. So there, and only there, the in-sample score is recomputed over the stand-in's
+own in-sample part: the periods whose earned return is dated before 2020-01-01.
