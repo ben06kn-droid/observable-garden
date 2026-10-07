@@ -45,8 +45,9 @@ def list_prefix(prefix: str, delimiter: str | None = "/"):
     """(common prefixes, [(key, size)]) under a prefix, following pagination."""
     prefixes, keys, marker = [], [], ""
     while True:
-        url = f"{BUCKET}?prefix={prefix}" + (f"&delimiter={delimiter}" if delimiter else "") \
-            + (f"&marker={marker}" if marker else "")
+        from urllib.parse import quote
+        url = f"{BUCKET}?prefix={quote(prefix)}" + (f"&delimiter={delimiter}" if delimiter else "") \
+            + (f"&marker={quote(marker)}" if marker else "")
         root = ET.fromstring(_get(url))
         prefixes += [p.find("s3:Prefix", NS).text for p in root.findall("s3:CommonPrefixes", NS)]
         for c in root.findall("s3:Contents", NS):
@@ -99,8 +100,9 @@ def binance_insample(out: Path, symbols=("BTCUSDT", "ETHUSDT", "BNBUSDT")) -> st
         months = [m for m in info["months"] if m < BINANCE_CUT]
         rows, headers, units, opens = 0, Counter(), Counter(), []
         for m in months:
+            from urllib.parse import quote
             z = zipfile.ZipFile(io.BytesIO(_get(
-                f"{DATA}/data/futures/um/monthly/klines/{sym}/1h/{sym}-1h-{m}.zip")))
+                f"{DATA}/data/futures/um/monthly/klines/{quote(sym)}/1h/{quote(sym)}-1h-{m}.zip")))
             text = z.read(z.namelist()[0]).decode()
             lines = text.strip().splitlines()
             first = lines[0].split(",")
