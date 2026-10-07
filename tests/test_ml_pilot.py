@@ -68,3 +68,13 @@ def test_the_task_list_is_the_registered_block():
     assert {sh for k, _, sh in t if k == "planted"} == set(prl.RULES)
     assert [s for k, s, sh in t if sh == "gated"] == list(range(687150, 687200))
     assert P.LEVELS == (1.0, 1.5, 2.5) and P.B == 1000 and P.CARRY_SEED == 687999
+
+
+def test_dry_tasks_are_one_planted_and_one_level0_task_on_the_smoke_block():
+    assert P.dry_tasks([686004, 686005], "gated") == [("planted", 686004, "gated"),
+                                                      ("level0", 686005, None)]
+    for bad in ([687000, 686005], [686004, 686004], [686004, 687299]):
+        with pytest.raises(SystemExit):
+            P.dry_tasks(bad, "gated")
+    with pytest.raises(SystemExit):
+        P.dry_tasks([686004, 686005], "spiral")

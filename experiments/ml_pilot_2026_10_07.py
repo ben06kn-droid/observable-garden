@@ -29,6 +29,12 @@ outcome is printed**: the runner prints progress counts and seconds only. The re
 `experiments/read_ml_pilot_2026_10_07.py`.
 
     python -m experiments.ml_pilot_2026_10_07 --out runs/ml_pilot/2026-10-07 --workers 150
+
+A dry run of the same task path on the smoke block (checked by
+`experiments/check_ml_pilot_dry.py`, which prints no outcome):
+
+    python -m experiments.ml_pilot_2026_10_07 --out runs/ml_pilot_dry/2026-10-07 \
+        --dry-seeds 686004 686005 --workers 2
 """
 from __future__ import annotations
 
@@ -61,6 +67,20 @@ def tasks() -> list[tuple]:
            for s in range(s0, s0 + PER_RULE)]
     out += [("level0", s, None) for s in LEVEL0_SEEDS]
     return out
+
+
+DRY_BLOCK = range(686000, 687000)            # the smoke block; never pilot panels
+
+
+def dry_tasks(seeds, shape: str) -> list[tuple]:
+    """One planted task (all three levels) on seeds[0] and one level-0 task (at cost and at
+    zero cost) on seeds[1], both from the smoke block: the full task path, for a dry run."""
+    a, b = (int(x) for x in seeds)
+    if a == b or a not in DRY_BLOCK or b not in DRY_BLOCK:
+        raise SystemExit("--dry-seeds takes two distinct seeds from the smoke block 686000-686999")
+    if shape not in RULE_SEEDS:
+        raise SystemExit(f"--dry-shape must be one of {list(RULE_SEEDS)}")
+    return [("planted", a, shape), ("level0", b, None)]
 
 
 def run_predictor(name: str, panel) -> dict:
@@ -215,7 +235,12 @@ def main(argv=None) -> int:
     ap.add_argument("--limit", type=int, default=None, help="first n tasks (a code check)")
     ap.add_argument("--allow-laptop", action="store_true",
                     help="permit a non-Linux code check; its output is never evidence")
+    ap.add_argument("--dry-seeds", nargs=2, type=int, default=None,
+                    help="dry run: one planted and one level-0 task on two smoke-block seeds")
+    ap.add_argument("--dry-shape", default="gated", help="the dry run's planted rule")
     a = ap.parse_args(argv)
+    if a.dry_seeds and a.limit:
+        raise SystemExit("--dry-seeds excludes --limit")
     prov = provenance()
     if prov["platform"] != "Linux x86_64" and not a.allow_laptop:
         raise SystemExit(f"the pilot runs on the box only (Linux x86_64); this is {prov['platform']}")
@@ -226,9 +251,14 @@ def main(argv=None) -> int:
     if (out / "pilot.jsonl").exists():
         raise SystemExit(f"{out / 'pilot.jsonl'} exists; not overwriting")
     _init()                                          # build or open the cache once, before forking
-    todo = tasks()[:a.limit] if a.limit else tasks()
+    if a.dry_seeds:
+        todo = dry_tasks(a.dry_seeds, a.dry_shape)
+    else:
+        todo = tasks()[:a.limit] if a.limit else tasks()
     (out / "provenance.json").write_text(json.dumps({**prov, "tasks": len(todo),
-                                                     "workers": a.workers}, indent=1))
+                                                     "workers": a.workers,
+                                                     "dry_run": bool(a.dry_seeds),
+                                                     "task_list": todo}, indent=1))
     t0 = time.time()
     done = 0
     with open(out / "pilot.jsonl.partial", "w") as fh, \
