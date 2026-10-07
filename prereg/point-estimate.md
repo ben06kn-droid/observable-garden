@@ -233,3 +233,30 @@ spread of `e` among certified submissions.
 **R1's margin is fixed at +0.10 Sharpe.** It was fixed before the conditional tabulation
 (`prereg/estimators-exploratory-2026-10-06.md`, addendum `8c933a3`) existed: no row of
 it had been generated when this line was committed.
+
+## Recorded 2026-10-06 (America/Chicago), still DRAFT: the conditional table met the stop condition
+
+**The conditional table** (`42d5b06`, from the rows `e3edce1`) **met the stop condition.**
+Among certified submissions the estimate overstates holdout SR_pop by more than 0.10 at
+planted levels:
+- EB for the class argmax: +0.166 at 0.5 (n 14);
+- EBs for extend-while-improving: +0.273 at 0.5 (n 3) and +0.178 at 1.0 (n 22).
+
+**R1's margin stays at +0.10.** It is not revised to fit.
+
+**Withdrawn, because they do not hold among certified submissions:**
+- **the premise that EH is unbiased at 0.5.** Among certified submissions it is -0.238
+  (class argmax) and -0.181 (extend-while-improving) against holdout.
+- **R3's predicted sign** (EB applied to a non-exhaustive searcher reads low). Among
+  certified submissions, EB on extend-while-improving is +0.167 at 0.5 and +0.048 at
+  1.0.
+
+**One-sided 95% lower ends of the mean overstatement against holdout** (t interval).
+These were computed from the committed rows after the table was produced, and **they are
+not in the committed table**:
+
+| estimate | level | n certified | mean | lower end |
+|---|---|---|---|---|
+| EB, class argmax | 0.5 | 14 | +0.166 | +0.015 |
+| EBs, extend-while-improving | 0.5 | 3 | +0.273 | +0.127 |
+| EBs, extend-while-improving | 1.0 | 22 | +0.178 | +0.112 |
