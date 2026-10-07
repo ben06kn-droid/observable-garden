@@ -315,3 +315,94 @@ The across-run SD of the stand-in Sharpes (0.315) is not the uncertainty of the 
 once the days are resampled jointly. **H1 and H2 can therefore detect only gross
 failures**, of more than about one Sharpe unit on average. A smaller failure is
 reported as "not shown", never as "holds well".
+
+## LIVE section — DRAFTED, UNFILLED. Not live
+
+It is filled and committed as the live commit only when every `<…>` below is known.
+
+**Before the host is started (repository side, in order):**
+1. **Step 0, the re-pricing.** Run `python -m experiments.price_runs --dir runs/etf_<arm>
+   --B 1000 --reprice-to runs/etf_repriced_b1000/<arm>` for each of `control`,
+   `declared_class`, `replay` and `orientation`, then commit. Commit: `<R0>`.
+2. **S, the submissions.** Run `python -m experiments.collect_submissions --dirs
+   runs/etf_control runs/etf_declared_class runs/etf_replay runs/etf_orientation --out
+   runs/holdout_grading/submissions.json`, then commit.
+   - S = `<S>`
+   - SHA-256 = `<SUBS_SHA>`
+   - expected count: 80
+3. **G, the grading code and this file**, with every value above filled in. S must be
+   an ancestor of G. G = `<G>`.
+4. **This section, filled.** It is committed as the live commit, with G as its parent
+   or equal to it.
+
+**The operator's steps, by hand, in this order.** No agent session runs on the holdout
+host. No step decrypts anything; the second copy cannot be opened (the deviation of
+2026-10-06).
+1. **Start the holdout host** `i-0886a189b85d4d051` in the EC2 console. Note its address
+   `<HOST_IP>`.
+2. **Log in:** `ssh -i <KEY> ubuntu@<HOST_IP>`.
+3. **First, before anything else: check the primary copy's content hash.**
+
+   ```
+   cd /home/ubuntu/etf/data/raw/etf/holdout
+   ls -1 | wc -l                                  # must print 40
+   ls -1 | sort | sha256sum                       # compare: 385a11f0f29371de85f552350b4277498a48e39bbeff27440fa92b9cbf46e28d
+   sha256sum $(ls -1 | sort) | sha256sum          # MUST print 8d92a7b2f527dd619a3944fb248bccc769e26ad99b38d1336fef34dffab031c8
+   ```
+
+   **If the content hash differs: stop.** There is no usable second copy, and nothing
+   is graded; the mismatch is recorded as a deviation.
+   - The registration gives only the content command. The file-list command above is
+     the natural reading of "sorted file list", and is a cross-check only.
+4. **Bring the repository to G**, at `<HOST_REPO>` `[GAP: the host's repository path and
+   Python environment are not recorded in the repository]`:
+
+   ```
+   cd <HOST_REPO>
+   git fetch origin
+   git checkout --detach <G>
+   git rev-parse HEAD                             # must print <G>
+   git status --porcelain --untracked-files=no    # must print nothing
+   .venv/bin/python -c "import platform; print(platform.system(), platform.machine())"   # must print Linux x86_64
+   ```
+
+5. **Grade, once:**
+
+   ```
+   .venv/bin/python -m experiments.grade_real \
+       --insample /home/ubuntu/etf/data/raw/etf/insample \
+       --holdout /home/ubuntu/etf/data/raw/etf/holdout \
+       --submissions runs/holdout_grading/submissions.json \
+       --submissions-sha256 <SUBS_SHA> \
+       --sealed-commit <S> --grading-commit <G> \
+       --out ~/grades_65_holdout.json
+   ```
+
+   - It prints only the guard confirmations and "written … unread". **Do not open the
+     output file.**
+   - A refusal stops here; report its message.
+   - It runs once. A second run is a second opening and is not done.
+6. **Record the grades file's hash:** `sha256sum ~/grades_65_holdout.json`. Write the
+   value down: `<R_SHA>`.
+7. **Copy it back, from the laptop:**
+
+   ```
+   scp -i <KEY> ubuntu@<HOST_IP>:grades_65_holdout.json ~/observable-garden/runs/holdout_grading/grades.json
+   shasum -a 256 ~/observable-garden/runs/holdout_grading/grades.json   # must equal <R_SHA>
+   ```
+
+8. **Stop the holdout host** in the EC2 console: **stop, not terminate**. The primary copy
+   on its volume is the sole source and must persist.
+
+**After the operator's steps (repository side):**
+- The grades file is committed **unread** as R.
+- The reader runs once, after a separate go:
+
+  ```
+  python -m experiments.holdout_grading_read --grades runs/holdout_grading/grades.json \
+      --repriced runs/etf_repriced_b1000 --runs runs/etf_control \
+      runs/etf_declared_class runs/etf_replay runs/etf_orientation \
+      --out runs/holdout_grading/read.txt
+  ```
+
+- Its output is committed and pasted in full.
