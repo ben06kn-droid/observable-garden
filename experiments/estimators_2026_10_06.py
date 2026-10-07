@@ -162,7 +162,11 @@ def level_pass(base, cache, D, inv, seed, d, F0, G, pop, B_, fams):
             "star_fam_share": [float(fam[x]) for x in star_fams],
             "star_fams_topk": set(star_fams) == topk,
             "star_fams_in_top3": set(star_fams) <= top3, "n_star_fams": len(star_fams),
-            "class_max": float(obs[j])}
+            "class_max": float(obs[j]),
+            # added for the threshold candidates (addendum 382ac84); not in the tables
+            "c": float(np.sort(M_all)[::-1][49]) if B_ >= 50 else float("nan"),
+            "d_eb": (best_val - obs[best_idx]).astype(float),
+            "d_ebs": bs.astype(float)}
 
 
 def seed_task(args):
@@ -208,6 +212,9 @@ def main(argv=None) -> int:
     ap.add_argument("--out", default=None)
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--dump-diffs", default=None,
+                    help="with --dump: an npz of the raw replicate differences d_b per "
+                         "(seed, level, base), for the threshold candidates (382ac84)")
     ap.add_argument("--dump", default=None,
                     help="also write one JSON line per (seed, level, submission); added "
                          "after b2e3a40 for the conditional tabulation (addendum 8c933a3). "
@@ -376,7 +383,16 @@ def main(argv=None) -> int:
                              "score": x["S"], **{e: x["est"].get(e) for e in
                                                  ("E0", "EH", "E2", "EC", "EB", "EBs")},
                              "in_sample": x["in"], "holdout": x["ho"],
-                             "p_class": x["p"]}) + "\n")
+                             "p_class": x["p"], "c": r["c"],
+                             "B_EB": r["bias_B"],
+                             "B_EBs": r["bias_Bs"] if key == "ewi" else None}) + "\n")
+        if a.dump_diffs:
+            arrs = {}
+            for sd in seeds:
+                for r in res[sd]:
+                    arrs[f"{sd}_{r['level']:.1f}_EB"] = r["d_eb"]
+                    arrs[f"{sd}_{r['level']:.1f}_EBs"] = r["d_ebs"]
+            np.savez_compressed(a.dump_diffs, **arrs)
     print(text)
     return 0
 
