@@ -289,6 +289,39 @@ def _overlaps(sup, ref) -> bool:
     return len(cs & set(ref)) >= need
 
 
+def _rule_truth(base, draw, view, mask, table, pop, support_masked, ann) -> dict:
+    """`planted_truth` for a planted RULE (environments/planted_rules.py): the rule is not a
+    class member, so member recovery is not applicable; the rule's own truths are recorded
+    (c, population net and gross Sharpe, turnover and speed)."""
+    from environments import planted_panel as pp
+    from environments import planted_rules as prl
+    from environments.class_table import canonical
+    from experiments.planted_edge import StreamCache, _sharpe
+    jp = int(np.argmax(pop))
+    plus = canonical(mask.to_true(table.members[jp]))
+    cmax, jc = table.max_sharpe()
+    argmax = canonical(mask.to_true(table.members[jc]))
+    sup_v = canonical(support_masked) if support_masked else None
+    sup = canonical(mask.to_true(sup_v)) if sup_v else None
+    rec = prl.plant_record(base, draw)
+    return {"seed": draw.seed, "level": draw.beta, "c": draw.c,
+            "feature_mask": list(mask.perm), "planted_rule": draw.rule,
+            "planted_truth": rec["net"], "planted_truth_gross": rec["gross"],
+            "planted_turnover": rec["turnover"], "planted_speed": rec["speed"],
+            "submitted_support_true": [list(x) for x in sup] if sup else None,
+            "submitted_truth": ({"in_sample": float(pop[table.column(sup_v)]),
+                                 "holdout": pp.truth(base, draw, sup)["holdout"]}
+                                if sup else None),
+            "submitted_realized": table.sharpe(sup_v) if sup else None,
+            "submitted_holdout_realized": (_sharpe(StreamCache(draw.holdout).get(sup), ann)
+                                           if sup else None),
+            "submitted_recovery": "not applicable: the plant is a rule, not a member",
+            "class_max": float(cmax), "class_argmax": [list(x) for x in argmax],
+            "pop_best": [list(x) for x in plus], "pop_best_sr": float(pop[jp]),
+            "linear_shadow": float(pop[jp]) / draw.beta if draw.beta else None,
+            "pop_n_positive": int((pop > 0).sum())}
+
+
 def planted_truth(base, draw, view, mask, table, pop, support_masked) -> dict:
     """The population truths for one run, every support in TRUE indices."""
     from environments import planted_panel as pp
@@ -296,6 +329,8 @@ def planted_truth(base, draw, view, mask, table, pop, support_masked) -> dict:
     from experiments.planted_edge import StreamCache, _sharpe
 
     ann = float(np.sqrt(view.periods_per_year))
+    if getattr(draw, "m_star", None) is None and getattr(draw, "rule", None) is not None:
+        return _rule_truth(base, draw, view, mask, table, pop, support_masked, ann)
     star = canonical(draw.m_star)
     star_v = canonical(mask.to_masked(star))
     if draw.beta > 0:
