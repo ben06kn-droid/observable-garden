@@ -589,3 +589,19 @@ behind the numbers.
 
 7.5's masking rationale is corrected for the same reason (`prereg/planted-edge.md`,
 amendment of 2026-10-02).
+
+## Deviation, recorded 2026-10-06 (America/Chicago): the second holdout copy cannot be opened
+
+**The author can no longer recall the passphrase for the second copy**,
+`~/Desktop/etf_holdout_2023_2025.tar.gz.enc` (registered above as the symmetric-encrypted
+archive).
+- **The file is intact and unmodified.** Its SHA-256 was verified on 2026-10-06 as the
+  registered `4fcaf8cbad3e003c4a82b98eaca005b41333e3e455ffea9490858f3a86093494`
+  (398,896 bytes). Only the encrypted file was hashed.
+- **It cannot be opened**, so it is no longer a usable source.
+- **The primary copy on the holdout host** (`/home/ubuntu/etf/data/raw/etf/holdout` on
+  `i-0886a189b85d4d051`) **is the sole usable source.** Its registered content hash,
+  `8d92a7b2f527dd619a3944fb248bccc769e26ad99b38d1336fef34dffab031c8`, is checked on the
+  host as the first operator step of the grading (`prereg/holdout-grading.md`). If it
+  does not match, there is no second copy to fall back on, and nothing is graded.
+- **No holdout data was read in establishing this.**

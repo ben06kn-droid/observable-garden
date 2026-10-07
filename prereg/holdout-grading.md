@@ -231,3 +231,9 @@ everything". That is reported with the result.
 - **Grading:** minutes on the holdout host (c7a.8xlarge `i-0886a189b85d4d051`): one
   feature build and 80 gradings.
 - No seat cost.
+
+**Deviation, 2026-10-06 (recorded in `prereg/agent-on-real-data.md`).** The second
+holdout copy (`~/Desktop/etf_holdout_2023_2025.tar.gz.enc`) cannot be opened: the
+passphrase is lost. Its SHA-256 matches the registered `4fcaf8cb…`, so it is intact but
+unusable. **The primary copy on the holdout host is the sole source.** Its content hash,
+`8d92a7b2…`, is checked first, and a mismatch ends the grading with nothing graded.
