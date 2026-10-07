@@ -21,7 +21,10 @@ The refusals run in this order, before any price is read:
 4. **The inputs are the fetched inputs.** Every in-sample and holdout CSV must hash to
    its entry in the single fetch's manifest (`data/etf_manifest.json`), with no file
    missing or extra.
-`--preflight` runs refusals 1-4 and exits before any price is read.
+`--preflight` runs refusals 1-4, then reproduces the in-sample scores the agents saw
+from the in-sample CSVs alone (`build_etf_panel` on this machine; tolerance 1e-9; runs
+containing `ret1_rank` or `drawdown_rank` reported separately), prints the python,
+numpy, pandas and scipy versions, and exits. It reads no holdout price.
 
 5. **Plaintext only.** This module never decrypts. The loader's refusals (`.enc`,
    `.gpg`, `.asc`, anything under `~/Desktop`) apply to every path.
@@ -265,10 +268,81 @@ def grade(submissions, insample_dir, holdout_dir, start=GRADE_START, end=GRADE_E
     return rows, meta
 
 
+# -- the preflight's in-sample reproduction ------------------------------------------------
+
+REPRO_TOL = 1e-9
+# the runs that store the in-sample score the agent saw (`submitted_sharpe`)
+SCORE_DIRS = ("runs/etf_replay", "runs/etf_orientation")
+TIE_FEATURES = ("ret1", "drawdown")       # their _rank columns break exact ties by platform
+
+
+def versions_line() -> str:
+    import numpy, pandas, scipy
+    return (f"python {_platform.python_version()}, numpy {numpy.__version__}, "
+            f"pandas {pandas.__version__}, scipy {scipy.__version__}")
+
+
+def panel_net_scores(panel, weights: dict, cost_bps: float = 5.0,
+                     borrow_bps_yr: float = 50.0, days: int = 252) -> dict:
+    """The in-sample net score of each weight vector on `build_etf_panel`'s panel, with the
+    panel's execution and costs (the computation `grade_span` uses, on the panel)."""
+    ann = np.sqrt(days)
+    out = {}
+    for name, w in weights.items():
+        scores = np.nan_to_num(panel.features @ np.asarray(w, float))
+        wt = scores - scores.mean(axis=1, keepdims=True)
+        gross = np.abs(wt).sum(axis=1, keepdims=True)
+        wt = np.where(gross > 0, wt / np.where(gross > 0, gross, 1.0), wt)
+        prev = np.vstack([np.zeros((1, wt.shape[1])), wt[:-1]])
+        g = np.einsum("tm,tm->t", wt, panel.returns)
+        net = (g - np.abs(wt - prev).sum(axis=1) * cost_bps * 1e-4
+               - np.clip(-wt, 0, None).sum(axis=1) * borrow_bps_yr * 1e-4 / days)
+        sd = net.std(ddof=1)
+        out[name] = float(net.mean() / sd * ann) if sd > 0 else 0.0
+    return out
+
+
+def insample_reproduction(insample_dir, repo: Path | None = None) -> dict:
+    """Build the in-sample panel with `build_etf_panel` from the in-sample CSVs on this
+    machine, recompute every stored agent-seen score, and require agreement to REPRO_TOL.
+    Runs containing a tie-sensitive rank feature are reported separately and never fail.
+    The stored scores come from the committed run files (the sealed submissions carry
+    names and weights only). Nothing under the holdout directory is touched."""
+    from environments.real_panel import ETF_BASE, build_etf_panel
+    from quixote.grammar import weights as grammar_weights
+    repo = REPO if repo is None else repo
+    tie_cols = {2 * i + 1 for i, nm in enumerate(ETF_BASE) if nm in TIE_FEATURES}
+    stored, wts, tied = {}, {}, set()
+    for d in SCORE_DIRS:
+        for p in sorted((Path(repo) / d).glob("cell_*.json")):
+            x = json.loads(p.read_text())
+            sup = x.get("submitted_support")
+            if not sup or x.get("submitted_sharpe") is None:
+                continue
+            support = tuple((int(k), float(v)) for k, v in sup)
+            stored[x["run_id"]] = float(x["submitted_sharpe"])
+            wts[x["run_id"]] = [float(v) for v in grammar_weights(support, 40)]
+            if any(k in tie_cols for k, _ in support):
+                tied.add(x["run_id"])
+    if not stored:
+        raise GradingRefused("no run stores the in-sample score its agent saw; the "
+                             "in-sample reproduction has nothing to compare")
+    got = panel_net_scores(build_etf_panel(insample_dir), wts)
+    diffs = {n: abs(got[n] - stored[n]) for n in stored}
+    main = {n: d for n, d in diffs.items() if n not in tied}
+    worst = max(main.values()) if main else 0.0
+    if worst > REPRO_TOL:
+        bad = max(main, key=main.get)
+        raise GradingRefused(f"in-sample reproduction failed: {bad} differs by {worst:.2e} "
+                             f"(> {REPRO_TOL:g}) from the score its agent saw")
+    return {"compared": len(main), "max_diff": worst,
+            "tie_affected": {n: diffs[n] for n in sorted(tied)}}
+
+
 def run_grading(insample, holdout, submissions, submissions_sha256, sealed_commit,
                 grading_commit, manifest_path, out, window=(GRADE_START, GRADE_END),
                 expected_platform=None, repo: Path | None = None,
-                preflight: bool = False) -> dict:
+                preflight: bool = False, reproduce_insample=None) -> dict:
     """The grading path, in its registered order. `main` calls it with the registered
     window and the pinned platform; only a rehearsal passes anything else, and says so."""
     repo = REPO if repo is None else repo
@@ -283,9 +357,15 @@ def run_grading(insample, holdout, submissions, submissions_sha256, sealed_commi
           f"submissions hash ok; {n_in} in-sample and {n_ho} holdout files match the "
           "manifest", flush=True)
     if preflight:
-        print("grade_real: PREFLIGHT ok — every guard passed; no price was read and nothing "
-              "was graded", flush=True)
-        return {"preflight": True, "platform": list(plat), "grading_commit": head}
+        rep = insample_reproduction(reproduce_insample or insample, repo)
+        print(f"grade_real: in-sample reproduction: {rep['compared']} compared, max |diff| "
+              f"{rep['max_diff']:.2e} (tolerance {REPRO_TOL:g}); tie-affected reported "
+              f"separately: {rep['tie_affected'] or 'none'}", flush=True)
+        print(f"grade_real: versions: {versions_line()}", flush=True)
+        print("grade_real: PREFLIGHT ok — every guard passed; no holdout price was read and "
+              "nothing was graded", flush=True)
+        return {"preflight": True, "platform": list(plat), "grading_commit": head,
+                "reproduction": rep}
     subs = json.loads(Path(submissions).read_text())
     rows, meta = grade(subs, insample, holdout, *window)
     result = {"grades": rows, **meta, "platform": list(plat), "grading_commit": head,

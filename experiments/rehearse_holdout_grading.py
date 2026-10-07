@@ -60,6 +60,8 @@ def main(argv=None) -> int:
     P(f"  HEAD {head[:12]} (stands in for both S and G); platform {gr.platform_now()}")
     P(f"  SUBSTITUTIONS: window {SPLIT}..{STANDIN_END} (registered 2023-01-01..2025-12-31); "
       f"platform pin {gr.platform_now()} (registered {gr.PINNED_PLATFORM})")
+    P("  SUBSTITUTION (preflight): the in-sample reproduction reads the full in-sample CSVs, "
+      "since the stand-in in-sample stops at 2019")
     P("  no holdout file is decrypted, opened or read")
     P("")
 
@@ -98,7 +100,7 @@ def main(argv=None) -> int:
     P("4a. grade_real.run_grading, --preflight:")
     gr.run_grading(ins, sho, subs_path, subs_sha, head, head, rman_path, None,
                    window=(SPLIT, STANDIN_END), expected_platform=gr.platform_now(),
-                   preflight=True)
+                   preflight=True, reproduce_insample=INSAMPLE_DIR)
     P("4b. grade_real.run_grading:")
     res = gr.run_grading(ins, sho, subs_path, subs_sha, head, head, rman_path,
                          tmp / "grades.json", window=(SPLIT, STANDIN_END),

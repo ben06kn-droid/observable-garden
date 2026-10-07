@@ -217,31 +217,90 @@ def test_the_streams_are_the_graded_days_and_reproduce_every_sharpe(split):
     assert np.all((g - n5) - turn5 >= -1e-15)   # gross - net_5 = the same cost + borrow
 
 
-def test_preflight_runs_every_guard_and_reads_no_price(tmp_path, split, monkeypatch, capsys):
-    ins, ho = split
-    r, s, g = _repo(tmp_path)
-    monkeypatch.setattr(gr, "REPO", r)
-    monkeypatch.setattr(gr, "PINNED_PLATFORM", gr.platform_now())
+def _score_runs(repo, ins, entries):
+    """Synthetic run files in <repo>/runs/etf_replay: (name, support, stored score or None
+    for 'the true score', offset)."""
+    from environments.real_panel import build_etf_panel
+    from quixote.grammar import weights as gw
+    panel = build_etf_panel(ins)
+    d = repo / "runs" / "etf_replay"
+    d.mkdir(parents=True, exist_ok=True)
+    for i, (name, sup, off) in enumerate(entries):
+        w = [float(v) for v in gw(tuple((int(k), float(v)) for k, v in sup), 40)]
+        true = gr.panel_net_scores(panel, {name: w})[name]
+        (d / f"cell_etf_{i}_replay_{i}.json").write_text(json.dumps(
+            {"run_id": name, "submitted_support": sup, "submitted_sharpe": true + off}))
+
+
+def _preflight_args(tmp_path, ins, ho, s, g):
     man = {"derived": {t: {"insample": {"sha256": gr.sha256_file(ins / f"{t}.csv")},
                            "holdout": {"sha256": gr.sha256_file(ho / f"{t}.csv")}}
                        for t in TICKERS}}
     (tmp_path / "man.json").write_text(json.dumps(man))
     subs = tmp_path / "subs.json"
     subs.write_text("[]")
+    return ["--insample", str(ins), "--holdout", str(ho), "--submissions", str(subs),
+            "--submissions-sha256", gr.sha256_file(subs), "--sealed-commit", s,
+            "--grading-commit", g, "--manifest", str(tmp_path / "man.json"), "--preflight"]
+
+
+def test_preflight_runs_every_guard_reproduces_in_sample_and_reads_no_holdout_price(
+        tmp_path, split, monkeypatch, capsys):
+    ins, ho = split
+    r, s, g = _repo(tmp_path)
+    monkeypatch.setattr(gr, "REPO", r)
+    monkeypatch.setattr(gr, "PINNED_PLATFORM", gr.platform_now())
+    _score_runs(r, ins, [("a", [[2, 1.0]], 0.0), ("b", [[5, 1.0], [9, -1.0]], 0.0),
+                         ("tie", [[1, 1.0], [6, 1.0]], 0.05)])       # ret1_rank, off by 0.05
     called = []
     monkeypatch.setattr(gr, "load_span", lambda *a: called.append("load") or {})
     monkeypatch.setattr(gr, "load_holdout", lambda *a: called.append("holdout") or {})
-    args = ["--insample", str(ins), "--holdout", str(ho), "--submissions", str(subs),
-            "--submissions-sha256", gr.sha256_file(subs), "--sealed-commit", s,
-            "--grading-commit", g, "--manifest", str(tmp_path / "man.json"), "--preflight"]
+    args = _preflight_args(tmp_path, ins, ho, s, g)
     assert gr.main(args) == 0
-    assert called == [], "preflight must not load any price"
-    assert "PREFLIGHT ok" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert called == [], "preflight must not load any holdout price"
+    assert "in-sample reproduction: 2 compared" in out
+    assert "tie-affected reported separately: {'tie': " in out
+    res = gr.run_grading(ins, ho, tmp_path / "subs.json", gr.sha256_file(tmp_path / "subs.json"),
+                         s, g, tmp_path / "man.json", None, repo=r, preflight=True)
+    assert res["reproduction"]["compared"] == 2
+    assert res["reproduction"]["tie_affected"]["tie"] == pytest.approx(0.05, abs=1e-9)
+    assert res["reproduction"]["max_diff"] <= gr.REPRO_TOL
+    assert "versions: python" in out and "numpy" in out and "pandas" in out and "scipy" in out
+    assert out.strip().endswith("nothing was graded") and "PREFLIGHT ok" in out
     # a guard that fails still refuses under preflight
     bad = list(args)
     bad[bad.index("--submissions-sha256") + 1] = "0" * 64
     with pytest.raises(gr.GradingRefused, match="not the recorded"):
         gr.main(bad)
-    (ho / "AAA.csv").write_text("date,adjclose,volume\n")
-    with pytest.raises(gr.GradingRefused, match="manifest"):
-        gr.main(args)
+
+
+def test_preflight_refuses_when_an_ordinary_score_does_not_reproduce(tmp_path, split, monkeypatch):
+    ins, ho = split
+    r, s, g = _repo(tmp_path)
+    monkeypatch.setattr(gr, "REPO", r)
+    monkeypatch.setattr(gr, "PINNED_PLATFORM", gr.platform_now())
+    _score_runs(r, ins, [("a", [[2, 1.0]], 0.0), ("b", [[5, 1.0]], 2e-9)])
+    with pytest.raises(gr.GradingRefused, match="in-sample reproduction failed: b"):
+        gr.main(_preflight_args(tmp_path, ins, ho, s, g))
+
+
+def test_preflight_refuses_with_no_stored_score_to_compare(tmp_path, split, monkeypatch):
+    ins, ho = split
+    r, s, g = _repo(tmp_path)
+    monkeypatch.setattr(gr, "REPO", r)
+    monkeypatch.setattr(gr, "PINNED_PLATFORM", gr.platform_now())
+    with pytest.raises(gr.GradingRefused, match="nothing to compare"):
+        gr.main(_preflight_args(tmp_path, ins, ho, s, g))
+
+
+def test_panel_net_scores_is_the_class_tables_stream_sharpe(tmp_path, prices):
+    from environments.class_table import streams_for
+    from environments.real_panel import build_etf_panel
+    from quixote.grammar import weights as gw
+    ins = _write(tmp_path / "ins_only", prices, lambda d: d < dt.date(2023, 1, 1))
+    panel = build_etf_panel(ins)
+    sup = ((3, 1.0), (17, -1.0))
+    got = gr.panel_net_scores(panel, {"x": [float(v) for v in gw(sup, 40)]})["x"]
+    st = streams_for(panel, [sup])[0]
+    assert got == pytest.approx(st.mean() / st.std(ddof=1) * np.sqrt(252), abs=1e-12)
