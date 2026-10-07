@@ -2,10 +2,11 @@
 
 **Name.** This registration's subject is **6.5 holdout grading**. ROADMAP's **6.9** is a separate experiment: the sealed **forward** test, whose holdout is calendar time after the 2026 search date (ROADMAP, "6.9 Does PASS predict out-of-sample performance? — the forward test"). Nothing here is 6.9.
 
-**DRAFT — committed, not live. Nothing runs on it, and nothing in it opens the holdout.**
-It fixes the grading sequence and the readouts before anyone is in a position to vary
-them after seeing a number. It goes live by a dated commit once the remaining build item
-exists and passes its tests, and every `[GAP]` below is resolved.
+**LIVE since `3a5483e` (2026-10-06, America/Chicago).** The section "LIVE — 6.5 holdout
+grading" below, with its operator checklist, governs. The text above it is the drafting
+record, read with the dated revisions and withdrawals that follow it. (This status line
+replaces the stale "DRAFT — committed, not live" line, after the live commit. No rule
+changed.)
 
 **One opening only.** The holdout is made plaintext once and graded once, by the
 sequence below, and the plaintext is deleted when grading ends. There is no second
@@ -574,3 +575,15 @@ to the bottom half) the two groups are 15 and 64, not halves. **The median and b
 counts were known from the in-sample run records** (the agents' `predict` fields)
 before the holdout was opened, and no holdout data was involved in finding them. The
 reader labels R-d in the same words.
+
+**Correction to the report that accompanied the live commit, 2026-10-06 (America/Chicago).**
+- The report sent with `3a5483e` gave G's full hash wrongly, as
+  `55a39f694bda4d20ab4edcf45ab9839c2d77a6d4`. Only its first 12 characters were right;
+  the rest was written out instead of copied from git.
+- **The correct G is `55a39f694bda0fdaca6a5f834be96f621eb6c11b`**, as the live section
+  states everywhere.
+- S (`c4272ab7eb86491b9b6b58171b06514fd6f50b4f`) and the live commit
+  (`3a5483e4d2176a5ad8c180d6e858fca52be8d868`) were reported correctly.
+- **The operator follows the hashes in this file, not the report.** Following the
+  report's G would have failed safely at checklist step 5 (`git checkout` of an unknown
+  commit), before anything was read.
