@@ -524,6 +524,20 @@ def reprice_dir(src: Path, dest: Path, B: int, workers: int) -> str:
             results = list(ex.map(reprice_one, payloads))
     else:
         results = [reprice_one(p) for p in payloads]
+    # every observed score must equal the stored B = 200 score exactly, or nothing is
+    # written: a different score means a different panel or table, not a re-price
+    def score(cp):
+        cp = cp or {}
+        return cp.get("submitted_score", cp.get("submitted_score_on_base"))
+    off = [(r["file"], score(r["record"]["class_p"]),
+            score(r["record"]["superseded"]["class_p"]))
+           for r in results if "skip" not in r
+           and (score(r["record"]["class_p"]) is None
+                or score(r["record"]["class_p"]) != score(r["record"]["superseded"]["class_p"]))]
+    if off:
+        raise SystemExit(f"{len(off)} run(s) score differently from their stored class tier "
+                         f"(first: {off[0][0]}: {off[0][1]!r} vs {off[0][2]!r}); nothing "
+                         "is written")
     cs, pf = code_state(), platform_info()
     written, skipped = 0, []
     for r in results:
@@ -538,7 +552,8 @@ def reprice_dir(src: Path, dest: Path, B: int, workers: int) -> str:
         written += 1
     L = [f"price_runs --reprice-to — {src} -> {dest}  (B = {B})",
          f"  {len(files)} run file(s); {written} re-priced record(s) written; "
-         f"{len(skipped)} skipped; no source file touched; no rate is printed here"]
+         f"{len(skipped)} skipped; every observed score equals its stored score exactly; "
+         "no source file touched; no rate is printed here"]
     L += [f"    skipped {f}: {why}" for f, why in skipped]
     text = "\n".join(L)
     (dest / "reprice_readout.txt").write_text(text + "\n")

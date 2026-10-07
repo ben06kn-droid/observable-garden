@@ -132,3 +132,21 @@ def test_class_p_etf_keeps_the_null_maxima_only_when_asked():
     assert M.size == 50 and M.mean() == pytest.approx(kept["null_max_mean"], abs=1e-12)
     assert kept["p_upper"] == (1 + int(np.sum(M >= kept["submitted_score"]))) / 51
     assert {k: v for k, v in kept.items() if k != "null_max_draws"} == plain
+
+
+def test_a_score_that_differs_from_the_stored_one_writes_nothing(priced, tmp_path, monkeypatch):
+    src, path = priced
+    real = pr.reprice_one
+
+    def shifted(payload):
+        r = real(payload)
+        cp = r["record"]["class_p"]
+        key = "submitted_score" if "submitted_score" in cp else "submitted_score_on_base"
+        cp[key] += 1e-9
+        return r
+    monkeypatch.setattr(pr, "reprice_one", shifted)
+    dest = tmp_path / "repriced"
+    with pytest.raises(SystemExit, match="score differently"):
+        pr.main(["--dir", str(src), "--workers", "1", "--B", str(B_NEW),
+                 "--reprice-to", str(dest)])
+    assert not (dest / path.name).exists()
