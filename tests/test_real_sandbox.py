@@ -336,16 +336,22 @@ def test_grading_refuses_a_sealed_archive_or_the_desktop(tmp_path):
 
 def test_grading_scores_a_submission_on_plaintext_holdout_rows(tmp_path):
     """Grading works on a plaintext directory, which is what the author's
-    decrypt-to-temporary-directory step produces."""
-    from experiments.grade_real import grade, load_holdout
+    decrypt-to-temporary-directory step produces. Features come from one build over
+    in-sample and holdout together (`tests/test_grade_real.py` holds the details)."""
+    from experiments.grade_real import grade
     rng = np.random.default_rng(0)
-    days = [dt.date(2023, 1, 1) + dt.timedelta(days=i) for i in range(400)]
+    days = [dt.date(2021, 1, 4) + dt.timedelta(days=i) for i in range(1000)]
+    days = [d for d in days if d.weekday() < 5]
+    for sub, keep in (("ins", lambda d: d < dt.date(2023, 1, 1)),
+                      ("ho", lambda d: d >= dt.date(2023, 1, 1))):
+        (tmp_path / sub).mkdir()
     for tk in ("SPY", "AAA", "BBB"):
         px = 100 * np.exp(np.cumsum(rng.normal(0, 0.01, len(days))))
-        (tmp_path / f"{tk}.csv").write_text(
-            "date,adjclose,volume\n" + "".join(f"{d},{p},1000\n" for d, p in zip(days, px)))
-    holdout = load_holdout(tmp_path)
+        for sub, keep in (("ins", lambda d: d < dt.date(2023, 1, 1)),
+                          ("ho", lambda d: d >= dt.date(2023, 1, 1))):
+            (tmp_path / sub / f"{tk}.csv").write_text("date,adjclose,volume\n" + "".join(
+                f"{d},{p},1000\n" for d, p in zip(days, px) if keep(d)))
     w = np.zeros(40); w[0] = 1.0
-    rows = grade([{"name": "s", "weights": w.tolist()}], holdout)
-    assert rows[0]["n_periods"] == 400
-    assert rows[0]["net_sharpe"] <= rows[0]["gross_sharpe"] + 1e-9    # costs only subtract
+    rows, _ = grade([{"name": "s", "weights": w.tolist()}], tmp_path / "ins", tmp_path / "ho")
+    assert rows[0]["n_periods"] == sum(d >= dt.date(2023, 1, 1) for d in days)
+    assert rows[0]["net_sharpe_5bps"] <= rows[0]["gross_sharpe"] + 1e-9    # costs only subtract
