@@ -99,6 +99,8 @@ def test_mv_combine_diagnostics_carry_effective_parameters_by_block_and_by_c(mv_
     assert set(d["effective_by_c"]) == set(mv_combine.C_GRID)
     tot = [d["effective_by_c"][c]["total"] for c in mv_combine.C_GRID]
     assert all(a >= b for a, b in zip(tot, tot[1:]))        # more penalty, fewer parameters
+    assert len(d["weights"]) == mv_combine.NCOL
+    assert sum(d["abs_weight_by_block"].values()) == pytest.approx(np.abs(d["weights"]).sum())
 
 
 # -- the leak test, every predictor ---------------------------------------------------

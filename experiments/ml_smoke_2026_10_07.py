@@ -40,7 +40,11 @@ def main(argv=None) -> int:
     from learn import leak, mv_combine, stream_tier
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
+    ap.add_argument("--seeds", nargs="+", type=int, default=list(SEEDS),
+                    help="smoke panels (the laptop smoke used 686000 686001; the box smoke "
+                         "uses 686002 686003)")
     a = ap.parse_args(argv)
+    seeds = tuple(a.seeds)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     L: list[str] = []
@@ -55,7 +59,9 @@ def main(argv=None) -> int:
     P("=" * 88)
     preds = predictors()
     eff_rows = []
-    for seed in SEEDS:
+    import platform
+    P(f"platform {platform.system()} {platform.machine()}; seeds {list(seeds)}")
+    for seed in seeds:
         d = pp.make_draw(base, seed, 0.0)
         panel = d.in_sample
         T = panel.features.shape[0]
@@ -82,7 +88,7 @@ def main(argv=None) -> int:
                     eff_rows.append({"seed": seed, "setting": name, "year": dg["year"],
                                      "T_years": dg["T_years"],
                                      "by_c": {str(c): v for c, v in dg["effective_by_c"].items()}})
-            if seed == SEEDS[0]:
+            if seed == seeds[0]:
                 res2 = run(panel)
                 rep = bool(np.array_equal(res["positions"], res2["positions"]))
                 lk = leak.leak_test(run, panel, LEAK_ROWS, seed=seed)

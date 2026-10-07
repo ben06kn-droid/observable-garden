@@ -179,7 +179,9 @@ def run(panel, risk_sizing: bool = True, log=None) -> dict:
              "effective_by_c": eff_by_c, "train_sharpe": sr,
              "sic": sr - eff["total"] / (T_years * sr) if sr != 0 else float("nan"),
              "T_years": T_years, "G": G, "train_rows": int(len(train)),
-             "train_mean_gross": float(np.abs(Ptr / G).sum(axis=1).mean()) if G > 0 else 0.0}
+             "train_mean_gross": float(np.abs(Ptr / G).sum(axis=1).mean()) if G > 0 else 0.0,
+             "weights": [float(x) for x in b],
+             "abs_weight_by_block": {k: float(np.abs(b[idx]).sum()) for k, idx in BIDX.items()}}
         diags.append(d)
         say(f"  refit year {j}: c {c}; effective parameters {eff['total']:.2f} ("
             + ", ".join(f"{k} {eff[k]:.2f}" for k in BLOCKS) + f"); training Sharpe {sr:.3f}; "

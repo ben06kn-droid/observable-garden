@@ -193,12 +193,21 @@ def class_pass_levels(base, cache: FastCache, seed: int, betas, B: int):
     """For each level: (draw, obs (N,), rep (N, B), L) and the seed's overlap moments,
     from ONE computation of F0 and G per seed (b). Levels share the residual draw;
     that is asserted, not assumed."""
+    return class_pass_draws(base, cache, seed, [pp.make_draw(base, seed, b) for b in betas], B)
+
+
+def class_pass_draws(base, cache: FastCache, seed: int, draws, B: int, summary=None):
+    """`class_pass_levels` on draws already made: member draws or planted rules
+    (`environments.planted_rules.RuleDraw`), all from one seed's residual draw. With
+    `summary`, each level's entry is summary(draw, obs, rep, L) instead of the tuple, so
+    the (N, B) replicate array of one level is released before the next is built."""
     from environments.real_sandbox import RealSandbox
     from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
-    draws = [pp.make_draw(base, seed, b) for b in betas]
     for d in draws[1:]:
         if not np.array_equal(d.idx_is, draws[0].idx_is):
             raise AssertionError("levels of one seed must share the residual draw")
+        if not np.array_equal(d.w_star_is, draws[0].w_star_is):
+            raise AssertionError("levels of one seed must share the planted positions")
     panel0 = draws[0].in_sample
     check_panel(panel0)
     T = panel0.features.shape[0]
@@ -236,7 +245,8 @@ def class_pass_levels(base, cache: FastCache, seed: int, betas, B: int):
             pos = var > 0
             rep[s:s + len(X)] = np.where(pos, mean / np.sqrt(np.where(pos, var, 1.0)),
                                          0.0) * ann
-        out.append((d, obs, rep, L))
+        out.append((d, obs, rep, L) if summary is None else summary(d, obs, rep, L))
+        del rep
     return out, (Ea, Ea2, Eak)
 
 
