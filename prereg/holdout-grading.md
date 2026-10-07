@@ -322,28 +322,33 @@ once the days are resampled jointly. **H1 and H2 can therefore detect only gross
 failures**, of more than about one Sharpe unit on average. A smaller failure is
 reported as "not shown", never as "holds well".
 
-## LIVE section — DRAFTED, UNFILLED. Not live
+## LIVE — 6.5 holdout grading, 2026-10-06 (America/Chicago)
 
-It is filled and committed as the live commit only when every `<…>` below is known.
+**This section goes live by this commit (the live commit), a child of G.**
+- `<LIVE>` below is this commit's own hash. A commit cannot contain its own hash, so
+  `<LIVE>` is reported with the commit and filled by the operator from that report.
+- `<HOST_IP>`, `<KEY>`, `<HOST_REPO>`, `<PY>` and `<R_SHA>` are known only at the
+  operator's steps, and are recorded with R.
 
-**Before the host is started (repository side, in order):**
-1. **Step 0, the re-pricing.** Run `python -m experiments.price_runs --dir runs/etf_<arm>
-   --B 1000 --reprice-to runs/etf_repriced_b1000/<arm>` for each of `control`,
-   `declared_class`, `replay` and `orientation`, then commit. Commit: `<R0>`.
-2. **S, the submissions.** Run `python -m experiments.collect_submissions --dirs
-   runs/etf_control runs/etf_declared_class runs/etf_replay runs/etf_orientation --out
-   runs/holdout_grading/submissions.json`, then commit.
-   - S = `<S>`
-   - SHA-256 = `<SUBS_SHA>`
-   - expected count: 80
-3. **G, the grading code and this file**, with every value above filled in. S must be
-   an ancestor of G. G = `<G>`.
-4. **This section, filled.** It is committed as the live commit, with G as its parent
-   or equal to it.
+**Repository side, done before the host is started:**
+1. **Step 0, the re-pricing: done at `847780d`.** All 80 scores equal their stored
+   B = 200 scores exactly. Replay and orientation ran as two one-worker processes in
+   parallel, by the author's go.
+2. **S, the sealed submissions:** **S = `c4272ab7eb86491b9b6b58171b06514fd6f50b4f`**, `runs/holdout_grading/submissions.json`,
+   80 submissions, **SHA-256 `0199f654250bb81dfb12fb6fa2f27891a34f33a2fdd0a1d3cef6f1531ccc9539`**. Pushed. Nothing in it changes from here.
+3. **G, the grading code: G = `55a39f694bda0fdaca6a5f834be96f621eb6c11b`.** S is an ancestor of G. G adds the preflight's
+   in-sample reproduction. The rehearsal at G gives the same output as before, apart
+   from the new preflight lines.
+4. **This section, filled, is the live commit,** with G as its parent.
+
+**Expected package versions** (the laptop's, where 6.5 ran and was priced): **python
+3.14.2, numpy 2.5.3, pandas 3.0.5, scipy 1.18.1.** The grading path also imports arch
+8.0.0, statsmodels 0.15.0, matplotlib 3.11.2, formulaic 1.2.2 and patsy 1.0.3.
 
 **The operator's steps, by hand, in this order.** No agent session runs on the holdout
-host. No step decrypts anything; the second copy cannot be opened (the deviation of
-2026-10-06).
+host. No step decrypts anything: grading reads only the primary copy, in place. The
+second copy exists (the deviation of 2026-10-06 was withdrawn at `06c5b71`) and is not
+used.
 1. **Start the holdout host** `i-0886a189b85d4d051` in the EC2 console. Note its address
    `<HOST_IP>`.
 2. **Log in:** `ssh -i <KEY> ubuntu@<HOST_IP>`.
@@ -354,26 +359,44 @@ host. No step decrypts anything; the second copy cannot be opened (the deviation
    ls -1 | wc -l                                  # must print 40
    ls -1 | sort | sha256sum                       # compare: 385a11f0f29371de85f552350b4277498a48e39bbeff27440fa92b9cbf46e28d
    sha256sum $(ls -1 | sort) | sha256sum          # MUST print 8d92a7b2f527dd619a3944fb248bccc769e26ad99b38d1336fef34dffab031c8
+   cd ~
    ```
 
    **If the content hash differs: stop and report.** The second copy exists, but
    grading uses only the primary; nothing is graded, and the mismatch is recorded as a
-   deviation.
-   - The registration gives only the content command. The file-list command above is
-     the natural reading of "sorted file list", and is a cross-check only.
-4. **Find the repository and its Python environment, without touching the holdout
-   directory.** `find` stops three levels below `/home/ubuntu`, and the holdout directory
-   is five levels down, so it is never entered:
+   deviation. (The registration gives only the content command. The file-list command
+   is a cross-check only.)
+4. **Find the repository and a working Python environment, without touching the
+   holdout directory.** `find` stops three levels below `/home/ubuntu`, and the holdout
+   directory is five levels down, so it is never entered.
 
    ```
    find /home/ubuntu -maxdepth 3 -name .git -type d 2>/dev/null       # candidate repositories
    git -C <CANDIDATE> remote get-url origin                           # must be ...ben06kn-droid/observable-garden(.git)
-   ls -l <HOST_REPO>/.venv/bin/python && <HOST_REPO>/.venv/bin/python -V
-   <HOST_REPO>/.venv/bin/python -c "import numpy, scipy, pandas; print('env ok')"
    ```
 
-   The repository whose origin matches is `<HOST_REPO>`. If none has a `.venv`, stop and
-   report; nothing is installed ad hoc.
+   The repository whose origin matches is `<HOST_REPO>`. Check its environment:
+
+   ```
+   PY=<HOST_REPO>/.venv/bin/python
+   $PY -c "import platform, numpy, pandas, scipy, arch, statsmodels, matplotlib; print(platform.python_version(), numpy.__version__, pandas.__version__, scipy.__version__)"
+   # must print: 3.14.2 2.5.3 3.0.5 1.18.1
+   ```
+
+   **If that fails or prints other versions**, create a pinned environment beside it,
+   and use it from here on:
+
+   ```
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ~/.local/bin/uv venv --python 3.14.2 <HOST_REPO>/.venv-grading
+   ~/.local/bin/uv pip install --python <HOST_REPO>/.venv-grading/bin/python        numpy==2.5.3 pandas==3.0.5 scipy==1.18.1 arch==8.0.0 statsmodels==0.15.0        matplotlib==3.11.2 formulaic==1.2.2 patsy==1.0.3
+   PY=<HOST_REPO>/.venv-grading/bin/python
+   $PY -c "import platform, numpy, pandas, scipy; print(platform.python_version(), numpy.__version__, pandas.__version__, scipy.__version__)"
+   # must print: 3.14.2 2.5.3 3.0.5 1.18.1
+   ```
+
+   If the pinned environment cannot be created, stop and report; nothing else is
+   installed ad hoc.
 5. **Check that the in-sample directory and the manifest exist**, and bring the
    repository to G:
 
@@ -381,34 +404,49 @@ host. No step decrypts anything; the second copy cannot be opened (the deviation
    ls /home/ubuntu/etf/data/raw/etf/insample/*.csv | wc -l           # must print 40
    cd <HOST_REPO>
    git fetch origin
-   git checkout --detach <G>
-   git rev-parse HEAD                                                 # must print <G>
+   git checkout --detach 55a39f694bda0fdaca6a5f834be96f621eb6c11b
+   git rev-parse HEAD                                                 # must print 55a39f694bda0fdaca6a5f834be96f621eb6c11b
    git status --porcelain --untracked-files=no                        # must print nothing
    test -f data/etf_manifest.json && echo "manifest ok"
-   .venv/bin/python -c "import platform; print(platform.system(), platform.machine())"   # must print Linux x86_64
+   $PY -c "import platform; print(platform.system(), platform.machine())"   # must print Linux x86_64
    ```
 
-6. **Preflight: every guard, no price read.**
+6. **Preflight: every guard and the in-sample reproduction, with no holdout price
+   read.**
 
    ```
-   .venv/bin/python -m experiments.grade_real --preflight \
+   $PY -m experiments.grade_real --preflight \
        --insample /home/ubuntu/etf/data/raw/etf/insample \
        --holdout /home/ubuntu/etf/data/raw/etf/holdout \
        --submissions runs/holdout_grading/submissions.json \
-       --submissions-sha256 <SUBS_SHA> --sealed-commit <S> --grading-commit <G>
+       --submissions-sha256 0199f654250bb81dfb12fb6fa2f27891a34f33a2fdd0a1d3cef6f1531ccc9539 \
+       --sealed-commit c4272ab7eb86491b9b6b58171b06514fd6f50b4f \
+       --grading-commit 55a39f694bda0fdaca6a5f834be96f621eb6c11b
    ```
 
-   It must end with "PREFLIGHT ok". Any refusal stops here; report its message.
-   Hashing the holdout CSVs reads their bytes but parses no price.
-7. **Grade, once:**
+   Its output must show:
+   - the line `grade_real: in-sample reproduction: 40 compared, max |diff| … (tolerance
+     1e-09); tie-affected reported separately: …`;
+   - the versions line `python 3.14.2, numpy 2.5.3, pandas 3.0.5, scipy 1.18.1`;
+   - **a last line beginning `grade_real: PREFLIGHT ok`.**
+
+   Any refusal, or any other ending, stops here; report the output.
+7. **The live registration is on origin/main:**
 
    ```
-   .venv/bin/python -m experiments.grade_real \
+   git branch -r --contains <LIVE>                                    # must list origin/main
+   ```
+
+8. **Grade, once:**
+
+   ```
+   $PY -m experiments.grade_real \
        --insample /home/ubuntu/etf/data/raw/etf/insample \
        --holdout /home/ubuntu/etf/data/raw/etf/holdout \
        --submissions runs/holdout_grading/submissions.json \
-       --submissions-sha256 <SUBS_SHA> \
-       --sealed-commit <S> --grading-commit <G> \
+       --submissions-sha256 0199f654250bb81dfb12fb6fa2f27891a34f33a2fdd0a1d3cef6f1531ccc9539 \
+       --sealed-commit c4272ab7eb86491b9b6b58171b06514fd6f50b4f \
+       --grading-commit 55a39f694bda0fdaca6a5f834be96f621eb6c11b \
        --out ~/grades_65_holdout.json
    ```
 
@@ -416,17 +454,17 @@ host. No step decrypts anything; the second copy cannot be opened (the deviation
      output file.**
    - A refusal stops here; report its message.
    - It runs once. A second run is a second opening and is not done.
-8. **Record the grades file's hash:** `sha256sum ~/grades_65_holdout.json`. Write the
+9. **Record the grades file's hash:** `sha256sum ~/grades_65_holdout.json`. Write the
    value down: `<R_SHA>`.
-9. **Copy it back, from the laptop:**
+10. **Copy it back, from the laptop:**
 
-   ```
-   scp -i <KEY> ubuntu@<HOST_IP>:grades_65_holdout.json ~/observable-garden/runs/holdout_grading/grades.json
-   shasum -a 256 ~/observable-garden/runs/holdout_grading/grades.json   # must equal <R_SHA>
-   ```
+    ```
+    scp -i <KEY> ubuntu@<HOST_IP>:grades_65_holdout.json ~/observable-garden/runs/holdout_grading/grades.json
+    shasum -a 256 ~/observable-garden/runs/holdout_grading/grades.json   # must equal <R_SHA>
+    ```
 
-10. **Stop the holdout host** in the EC2 console: **stop, not terminate**. The primary copy
-   on its volume is the sole source and must persist.
+11. **Stop the holdout host** in the EC2 console: **stop, not terminate**. The primary copy
+    on its volume is the grading source and must persist.
 
 **After the operator's steps (repository side):**
 - The grades file is committed **unread** as R.

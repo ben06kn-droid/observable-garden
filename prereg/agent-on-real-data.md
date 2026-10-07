@@ -613,3 +613,15 @@ displayed, and no holdout data was read. **The second copy is usable, the deviat
 withdrawn, and both copies stand as registered.** 6.5 holdout grading
 (`prereg/holdout-grading.md`) still grades from the primary copy on the holdout host, and
 checks its content hash `8d92a7b2…` first.
+
+## Deviation, recorded at 6.5 holdout grading's live commit, 2026-10-06 (America/Chicago): the FAIL-side interval
+
+The registered out-of-sample readout gives the median holdout Sharpe of FAIL submissions
+"with a bootstrap interval over runs". 6.5 holdout grading (`prereg/holdout-grading.md`)
+reports it instead with **a joint stationary block bootstrap over the graded holdout
+days**, applied to all 80 streams at once: mean block length 9 (this registration's own
+gate block length), B = 10,000, seed 690000. The reason is that all runs share one
+holdout, so an interval over runs mixes run-to-run variation with the one shared future,
+and it understates the day-level uncertainty. The point estimate, the median, is
+unchanged. The interval reflects only day-level sampling within this one holdout, not
+other regimes.
