@@ -21,6 +21,8 @@ The refusals run in this order, before any price is read:
 4. **The inputs are the fetched inputs.** Every in-sample and holdout CSV must hash to
    its entry in the single fetch's manifest (`data/etf_manifest.json`), with no file
    missing or extra.
+`--preflight` runs refusals 1-4 and exits before any price is read.
+
 5. **Plaintext only.** This module never decrypts. The loader's refusals (`.enc`,
    `.gpg`, `.asc`, anything under `~/Desktop`) apply to every path.
 
@@ -265,7 +267,8 @@ def grade(submissions, insample_dir, holdout_dir, start=GRADE_START, end=GRADE_E
 
 def run_grading(insample, holdout, submissions, submissions_sha256, sealed_commit,
                 grading_commit, manifest_path, out, window=(GRADE_START, GRADE_END),
-                expected_platform=None, repo: Path | None = None) -> dict:
+                expected_platform=None, repo: Path | None = None,
+                preflight: bool = False) -> dict:
     """The grading path, in its registered order. `main` calls it with the registered
     window and the pinned platform; only a rehearsal passes anything else, and says so."""
     repo = REPO if repo is None else repo
@@ -279,6 +282,10 @@ def run_grading(insample, holdout, submissions, submissions_sha256, sealed_commi
     print(f"grade_real: platform {plat}; HEAD {head[:8]} = grading commit, clean; "
           f"submissions hash ok; {n_in} in-sample and {n_ho} holdout files match the "
           "manifest", flush=True)
+    if preflight:
+        print("grade_real: PREFLIGHT ok — every guard passed; no price was read and nothing "
+              "was graded", flush=True)
+        return {"preflight": True, "platform": list(plat), "grading_commit": head}
     subs = json.loads(Path(submissions).read_text())
     rows, meta = grade(subs, insample, holdout, *window)
     result = {"grades": rows, **meta, "platform": list(plat), "grading_commit": head,
@@ -299,10 +306,16 @@ def main(argv=None) -> int:
     ap.add_argument("--sealed-commit", required=True)
     ap.add_argument("--grading-commit", required=True)
     ap.add_argument("--manifest", default=str(MANIFEST))
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--preflight", action="store_true",
+                    help="run every guard (platform, commit, ancestor, submissions hash, "
+                         "content hashes) and exit before any price is read")
     a = ap.parse_args(argv)
+    if not a.preflight and not a.out:
+        ap.error("--out is required unless --preflight")
     run_grading(a.insample, a.holdout, a.submissions, a.submissions_sha256,
-                a.sealed_commit, a.grading_commit, a.manifest, a.out)
+                a.sealed_commit, a.grading_commit, a.manifest, a.out,
+                preflight=a.preflight)
     return 0
 
 

@@ -215,3 +215,33 @@ def test_the_streams_are_the_graded_days_and_reproduce_every_sharpe(split):
     turn5 = n5 - n10                         # the extra 5 bps of turnover cost
     assert np.all(turn5 >= -1e-15)
     assert np.all((g - n5) - turn5 >= -1e-15)   # gross - net_5 = the same cost + borrow
+
+
+def test_preflight_runs_every_guard_and_reads_no_price(tmp_path, split, monkeypatch, capsys):
+    ins, ho = split
+    r, s, g = _repo(tmp_path)
+    monkeypatch.setattr(gr, "REPO", r)
+    monkeypatch.setattr(gr, "PINNED_PLATFORM", gr.platform_now())
+    man = {"derived": {t: {"insample": {"sha256": gr.sha256_file(ins / f"{t}.csv")},
+                           "holdout": {"sha256": gr.sha256_file(ho / f"{t}.csv")}}
+                       for t in TICKERS}}
+    (tmp_path / "man.json").write_text(json.dumps(man))
+    subs = tmp_path / "subs.json"
+    subs.write_text("[]")
+    called = []
+    monkeypatch.setattr(gr, "load_span", lambda *a: called.append("load") or {})
+    monkeypatch.setattr(gr, "load_holdout", lambda *a: called.append("holdout") or {})
+    args = ["--insample", str(ins), "--holdout", str(ho), "--submissions", str(subs),
+            "--submissions-sha256", gr.sha256_file(subs), "--sealed-commit", s,
+            "--grading-commit", g, "--manifest", str(tmp_path / "man.json"), "--preflight"]
+    assert gr.main(args) == 0
+    assert called == [], "preflight must not load any price"
+    assert "PREFLIGHT ok" in capsys.readouterr().out
+    # a guard that fails still refuses under preflight
+    bad = list(args)
+    bad[bad.index("--submissions-sha256") + 1] = "0" * 64
+    with pytest.raises(gr.GradingRefused, match="not the recorded"):
+        gr.main(bad)
+    (ho / "AAA.csv").write_text("date,adjclose,volume\n")
+    with pytest.raises(gr.GradingRefused, match="manifest"):
+        gr.main(args)
