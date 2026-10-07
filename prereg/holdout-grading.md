@@ -511,3 +511,20 @@ half is mu strictly above the median, and the bottom half is the rest, so ties g
 bottom half. The interval comes from the same joint stationary block bootstrap (mean
 block 9, B = 10,000, seed 690000), with mu fixed and the realized Sharpes resampled
 jointly.
+
+**The relative readouts are descriptive, with no rule. Decided 2026-10-06 (America/Chicago).**
+R-a, R-b, R-c and R-d carry no rule, because **no registered proposition predicts their
+sign**. The gate's refusal said that no submission was distinguishable from noise. It
+did not say the 80 are equal, and nothing predicts whether in-sample score or stated
+belief should order them out of sample, or in which direction.
+
+**The reader prints them as section (5)**, after (1)–(4), in this order: **R-c, R-d,
+R-b, R-a**. Each line gives:
+- the point value;
+- the joint-bootstrap SE and 95% interval;
+- the **stand-in detectable size** beside it: 2.486 times the stand-in SE from the
+  rehearsal, labelled as a stand-in figure.
+
+R-a carries the note that **near-duplicate submissions make its ranks unstable**.
+The reader prints (1)–(5) in order and nothing else. The in-sample score for R-a and R-c
+is each run's stored class-tier `submitted_score`.
