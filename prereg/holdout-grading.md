@@ -1,4 +1,6 @@
-# holdout-grading (6.9): grading 6.5's 80 submissions on the sealed ETF holdout
+# holdout-grading (6.5 holdout grading): grading 6.5's 80 submissions on the sealed ETF holdout
+
+**Name.** This registration's subject is **6.5 holdout grading**. ROADMAP's **6.9** is a separate experiment: the sealed **forward** test, whose holdout is calendar time after the 2026 search date (ROADMAP, "6.9 Does PASS predict out-of-sample performance? — the forward test"). Nothing here is 6.9.
 
 **DRAFT — committed, not live. Nothing runs on it, and nothing in it opens the holdout.**
 It fixes the grading sequence and the readouts before anyone is in a position to vary
@@ -19,7 +21,7 @@ what was realized?
 
 **What this cannot test, stated plainly.** **No submission was certified in 6.5**: the
 class tier issued 0 of 80, and the replay tier no PASS (`prereg/agent-on-real-data.md`).
-**So 6.9 cannot test whether a pass holds out of sample.** The registered PASS-versus-FAIL
+**So 6.5 holdout grading cannot test whether a pass holds out of sample.** The registered PASS-versus-FAIL
 readout is reported as "no PASS". Everything below is about uncertified submissions:
 - whether anything the gate refused would have earned out of sample;
 - whether the gate's lower bounds and the agents' stated beliefs were consistent with
@@ -40,10 +42,10 @@ Three arms ran at 20 against a registered 40 (`agent-on-real-data.md`, deviation
 2026-10-02). There are 80 submissions, not 120.
 
 **The registered 6.5 results are the B = 200 verdicts and class tier in those files.**
-6.9's confidence readouts need confidence fields at B = 1,000, which 6.5 did not compute.
+6.5 holdout grading's confidence readouts need confidence fields at B = 1,000, which 6.5 did not compute.
 They come from a re-pricing (step 0) that writes **new records in a new location**, with
 the B = 200 fields beside them marked as superseded. **The re-priced fields exist only to
-supply the confidence readouts for 6.9.** They change no 6.5 result, and the source run
+supply the confidence readouts for 6.5 holdout grading.** They change no 6.5 result, and the source run
 files are not touched (`experiments/price_runs.py --reprice-to`, `65b47ac`).
 
 ## The sequence — one direction of travel
