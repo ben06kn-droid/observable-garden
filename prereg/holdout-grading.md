@@ -528,3 +528,11 @@ R-b, R-a**. Each line gives:
 R-a carries the note that **near-duplicate submissions make its ranks unstable**.
 The reader prints (1)–(5) in order and nothing else. The in-sample score for R-a and R-c
 is each run's stored class-tier `submitted_score`.
+
+**R-d relabelled, 2026-10-06 (America/Chicago). The definition is unchanged.** R-d
+compares **runs whose stated mean exceeds the median of 0.15 (15 runs) against the rest
+(64 runs)**. The stated means cluster at the median, so under the registered split (ties
+to the bottom half) the two groups are 15 and 64, not halves. **The median and both
+counts were known from the in-sample run records** (the agents' `predict` fields)
+before the holdout was opened, and no holdout data was involved in finding them. The
+reader labels R-d in the same words.
