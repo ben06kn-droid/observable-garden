@@ -587,3 +587,56 @@ reader labels R-d in the same words.
 - **The operator follows the hashes in this file, not the report.** Following the
   report's G would have failed safely at checklist step 5 (`git checkout` of an unknown
   commit), before anything was read.
+
+## Operator record, 2026-10-06 (America/Chicago), about 23:17–23:22
+
+Reported by the author, who carried out the operator steps by hand.
+- **Host:** `i-0886a189b85d4d051` (c7a.8xlarge), address 3.141.165.136.
+- **Step 3:** 40 files. **Content hash
+  `8d92a7b2f527dd619a3944fb248bccc769e26ad99b38d1336fef34dffab031c8`. Match.**
+- **Step 4:** `<HOST_REPO>` = `/home/ubuntu/observable-garden`.
+  - Its `.venv` had python 3.14.7 (numpy 2.5.3, pandas 3.0.5, scipy 1.18.1), not the
+    pinned 3.14.2.
+  - So the pinned environment was created as registered: `.venv-grading`, python
+    3.14.2, the same library pins.
+  - `<PY>` = `/home/ubuntu/observable-garden/.venv-grading/bin/python`.
+- **Step 5:** the checkout of G first aborted (the deviation below). Then HEAD =
+  `55a39f694bda0fdaca6a5f834be96f621eb6c11b`, the tracked tree was clean, and the
+  manifest was present.
+- **Step 6, preflight:**
+  - ancestor ok; platform Linux x86_64; submissions hash ok;
+  - 40 in-sample and 40 holdout files match the manifest;
+  - in-sample reproduction: 40 compared, max |diff| 1.67e-16, tie-affected none;
+  - versions python 3.14.2, numpy 2.5.3, pandas 3.0.5, scipy 1.18.1;
+  - **PREFLIGHT ok.**
+- **Step 7:** the live commit `3a5483e` was listed on origin/main from the host.
+- **Step 8, graded once:** "80 submissions graded over 2023-01-01..2025-12-31; feature
+  matrix 1bf8557627a376cf... (T 5283, 40 assets)".
+- **Steps 9–10:** the grades file's SHA-256 was
+  `b7f4d1a4b7baef46a53d57a04a84e8f354c74dbe169a930a073d80396a1e91be` on the host and on
+  the laptop. It was committed unread as **R = `e4bc84b18a4369ed8c6b162df8e30cad634265b4`**.
+- **Access and the compute box:**
+  - A security-group rule for SSH was added to reach the host.
+  - The compute box (c7a.48xlarge) was started by mistake first. Nothing was run on
+    it.
+- **The hash in the report:** the report that accompanied the live commit printed G
+  wrongly (`55a39f694bda4d20ab4e…`). **The file was right, and the operator used the
+  committed G**, `55a39f694bda0fdaca6a5f834be96f621eb6c11b`. This is also recorded at
+  `53f9733`.
+
+## Deviation, 2026-10-06 (America/Chicago): untracked files moved aside on the holdout host before checking out G
+
+The checklist's step 5 (`git checkout --detach <G>`) first aborted. Four **untracked**
+files in `figures/` on the host would have been overwritten by files tracked at G:
+- `fixed_sequence_replay_cost.txt`
+- `fixed_sequence_replay_data.pkl`
+- `heterogeneous_and_fat_cellA_replication.txt`
+- `heterogeneous_and_fat_cellA_replication_data.pkl`
+
+They were **moved, not deleted**, to `~/moved_aside_2026-10-06` on the host, and the
+checkout then succeeded. The checklist did not provide for this.
+- **What it touched:** only files outside the tracked tree, which no grading step reads.
+- **What it did not touch:** the holdout directory, the in-sample directory, the
+  manifest, S and G.
+- **Why the grading is unaffected:** the tracked tree at G was clean, which the
+  `grade_real` guard checks, and the preflight passed.
