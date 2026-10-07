@@ -143,6 +143,33 @@ def main(argv=None) -> int:
           f"q75 {q[2]:+.3f}")
     P(f"   periods graded per submission: {sorted({r['n_periods'] for r in g})}; "
       f"first earned {g[0]['first_earned']}, last {g[0]['last_earned']}")
+
+    # 8. detectability from the stand-in streams, with the reader's joint bootstrap
+    from experiments import holdout_grading_read as hr
+    X = np.array([r["stream"]["net_5bps"] for r in g])
+    C = hr.bootstrap_counts(X.shape[1])
+    bs = hr.boot_sharpes(X, C)
+    mus = {}
+    for d in DIRS:
+        for f in Path(gr.REPO / d).glob("cell_*.json"):
+            x = json.loads(f.read_text())
+            if x.get("submitted_support") and (x.get("prediction") or {}).get("mean") is not None:
+                mus[x["run_id"]] = True
+    has = np.array([r["name"] in mus for r in g])
+    se1 = float(bs.mean(axis=0).std(ddof=1))
+    se2 = float(bs[has].mean(axis=0).std(ddof=1))
+    P("")
+    P(f"8. DETECTABILITY, STAND-IN FIGURES (2020-2022 in-sample split, not the holdout): joint "
+      f"stationary block bootstrap over {X.shape[1]} graded days, mean block {hr.BLOCK_LENGTH}, "
+      f"B {hr.B_BOOT}, seed {hr.SEED_BOOT}")
+    P(f"   H1: SE of mean(realized net 5 bps - L_0.90) over {len(g)} = {se1:.4f} (L is fixed, so "
+      f"it is the SE of the mean realized Sharpe); smallest mean shortfall detected at one-sided "
+      f"0.05 with 80% power = 2.486 SE = {2.486 * se1:.3f}")
+    P(f"   H2: SE of mean(mu - realized net 5 bps) over {int(has.sum())} = {se2:.4f}; smallest "
+      f"mean overstatement detected = 2.486 SE = {2.486 * se2:.3f}")
+    P(f"   (for comparison, the across-run SD of the stand-in net 5 bps Sharpe is "
+      f"{float(X.mean(axis=1).size and hr.sharpe(X).std(ddof=1)):.3f}; the joint bootstrap does "
+      "not average it away, because all streams share the same days)")
     (out / "rehearsal.txt").write_text("\n".join(L) + "\n")
     return 0
 
