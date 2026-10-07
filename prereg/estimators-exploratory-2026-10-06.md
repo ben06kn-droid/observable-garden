@@ -268,3 +268,35 @@ run.**
   available for every submission including bracketed runs, and the conditional table
   at 42d5b06 showed it the less biased base for extend-while-improving among certified
   submissions. If neither branch is met, no point estimate is registered."
+
+## Closing Reading, 2026-10-06 (America/Chicago). Exploratory
+
+On `42d5b06` (the conditional table) and `7b7651b` (the threshold candidates), with rows
+`e3edce1` and `80ccb64`. 100 design panels per level, certified at the class tier at
+alpha 0.05. Against holdout SR_pop unless stated.
+
+**The conditional overstatement.** The bias corrections are near-unbiased over all
+panels, but among certified submissions they overstate at the lower planted levels:
+- EB for the class argmax: +0.166 at 0.5 (n 14), +0.056 at 1.0 (n 68), -0.047 at 1.5
+  (n 98);
+- EBs for extend-while-improving: +0.273 at 0.5 (n 3), +0.178 at 1.0 (n 22), +0.038 at
+  1.5 (n 47).
+
+Certification selects panels whose score ran high, so a correction averaged over all
+panels is too small for the certified ones.
+
+**The threshold candidates remove the overstatement and cost accuracy.** On the decision
+rows (1.0, 1.5, pooled 0.5+1.0):
+
+| row | ET bias | ET RMSE | ETm bias | ETm RMSE | base RMSE |
+|---|---|---|---|---|---|
+| class argmax (base EB) | -0.103 to -0.259 | 0.390-0.507 | -0.075 to -0.101 | 0.329-0.343 | 0.245-0.305 |
+| extend-while-improving (base EBs) | -0.134 to -0.237 | 0.439-0.515 | -0.018 to -0.048 | 0.285-0.342 | 0.251-0.288 |
+
+Neither candidate qualified, and no point estimate is registered (`prereg/point-estimate.md`,
+closed at `b222b45`).
+
+**Consequence (the author's).** The intervention arm will show the **90% lower bound**
+(`L_0.90`, `quixote/confidence.py`) beside a certified verdict, not a point estimate.
+[Note: no registration yet defines an intervention arm. This records the author's plan,
+which that arm's own registration will have to state.]
