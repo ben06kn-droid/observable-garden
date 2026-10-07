@@ -99,3 +99,30 @@ about that specification's annualized Sharpe ratio on data you have not seen".
   denoised member's SR_pop is higher. Level 0: m+ is negative, the ratio is not a
   capture, and is labelled so.
 - **The answers** are one sentence each, after the tables, citing the table.
+
+## Reading, 2026-10-06 (America/Chicago). Exploratory findings
+
+From the one run's output, `6726871` (`runs/diagnostics/estimators_2026-10-06.txt`;
+code `b2e3a40`, run on the c7a.48xlarge, as its commit records). **Exploratory, on 100
+panels per level**; in-sample target unless stated. Hypotheses for a registration, not
+results.
+
+a. **EBs is near-unbiased for extend-while-improving at all four levels**: bias +0.055,
+   0.000, -0.013, -0.009 at 0, 0.5, 1.0, 1.5; RMSE 0.239-0.268, lower than E0's and
+   E2's at every level.
+b. **EB is near-unbiased for the class argmax at the planted levels** (+0.008, -0.027,
+   -0.019 at 0.5, 1.0, 1.5) and **overstates by +0.166 at level 0**.
+c. **The correction must match the procedure.** EB applied to extend-while-improving
+   is biased **-0.097 to -0.178** (low at every level).
+d. **EH (halving) is unbiased only at level 0.5**: for the class argmax, +0.446 at
+   level 0 and -0.623 at 1.5.
+e. **The 90% selection set is not a coverage set.** It contains m+ on 0, 46, 69 and
+   84% of panels, with median size 331, 208, 106 and 46, at 0, 0.5, 1.0 and 1.5.
+f. **The denoised selector (highest f) does not beat the realized argmax at any
+   level.** Its median capture is at or below the argmax's at every planted level, and
+   it is higher on only 11-16% of panels. **Dropped.**
+g. **Consequence:** identity recovery is limited by sample length, and **capture is
+   the recovery measure to carry forward** (the realized argmax's median capture
+   0.732, 0.902, 0.931 at 0.5, 1.0, 1.5). [Note: T was fixed at 3,019 in-sample days in
+   this run; sample length was not varied, so the dependence on it is inferred from
+   the width of the selection set at fixed T, not measured.]
