@@ -126,3 +126,30 @@ g. **Consequence:** identity recovery is limited by sample length, and **capture
    0.732, 0.902, 0.931 at 0.5, 1.0, 1.5). [Note: T was fixed at 3,019 in-sample days in
    this run; sample length was not varied, so the dependence on it is inferred from
    the width of the selection set at fixed T, not measured.]
+
+## Addendum, 2026-10-06 (America/Chicago): error conditional on certification. Exploratory
+
+**Why.** A point estimate is to be shown only beside a certified verdict, and certified
+submissions are selected for high scores. The unconditional biases above (`6726871`) are
+therefore not the quantity a display rule depends on.
+
+**What will be tabulated**, exploratory, before any number is computed:
+- **Submissions and estimates:**
+  - the realized class argmax, with E0, EH and EB;
+  - extend-while-improving, with E0, EH, EBs, and EB as the fallback.
+- **Certification:** the class tier at alpha = 0.05,
+  `p_class = (1 + #{M_b >= S}) / (B + 1) < 0.05`, the centred class null exactly as
+  defined above.
+- **Per submission and per level (0, 0.5, 1.0, 1.5):**
+  - the number certified out of 100;
+  - among certified submissions only, the bias, MAE and RMSE of each estimate against
+    in-sample SR_pop and against holdout SR_pop.
+  - A cell with no certified submission is reported as n 0, never as a zero error.
+
+**Source.** The run of `b2e3a40` saved no per-panel rows: it wrote only the text tables.
+The rows therefore come from **a regeneration on the same seeds, 640150-640249, with the
+committed code unchanged plus a per-panel dump**. The dump records each panel's score,
+p_class, every estimate and both targets. The regeneration starts only after a further
+go; its outputs must reproduce `6726871`'s tables, checked before the tabulation is read.
+The order is: this addendum alone, then the dump and tabulation code, then the run,
+then the output.
