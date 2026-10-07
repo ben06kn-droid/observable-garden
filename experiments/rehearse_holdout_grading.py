@@ -95,7 +95,11 @@ def main(argv=None) -> int:
     P("")
 
     # 4. the grading path itself
-    P("4. grade_real.run_grading:")
+    P("4a. grade_real.run_grading, --preflight:")
+    gr.run_grading(ins, sho, subs_path, subs_sha, head, head, rman_path, None,
+                   window=(SPLIT, STANDIN_END), expected_platform=gr.platform_now(),
+                   preflight=True)
+    P("4b. grade_real.run_grading:")
     res = gr.run_grading(ins, sho, subs_path, subs_sha, head, head, rman_path,
                          tmp / "grades.json", window=(SPLIT, STANDIN_END),
                          expected_platform=gr.platform_now())
@@ -170,6 +174,32 @@ def main(argv=None) -> int:
     P(f"   (for comparison, the across-run SD of the stand-in net 5 bps Sharpe is "
       f"{float(X.mean(axis=1).size and hr.sharpe(X).std(ddof=1)):.3f}; the joint bootstrap does "
       "not average it away, because all streams share the same days)")
+
+    # 9. the relative readouts R-a, R-b, R-c (6d324b7), stand-in: the in-sample score is
+    # recomputed over the earned dates before the split, so it does not overlap the window
+    ins_scores = gr.grade_span(subs, dates, F, earn, dates[gr.WARM + 2],
+                               SPLIT - dt.timedelta(days=1), costs_bps=(5.0,))
+    sc = {r["name"]: r["net_sharpe_5bps"] for r in ins_scores}
+    mu_of = {}
+    for d in DIRS:
+        for f in Path(gr.REPO / d).glob("cell_*.json"):
+            x = json.loads(f.read_text())
+            if x.get("submitted_support"):
+                m = (x.get("prediction") or {}).get("mean")
+                mu_of[x["run_id"]] = float(m) if m is not None else np.nan
+    names = [r["name"] for r in g]
+    real = hr.sharpe(X)
+    rel = hr.relative_readouts([sc[n_] for n_ in names], [mu_of[n_] for n_ in names],
+                               names, real, bs)
+    P("")
+    P("9. RELATIVE READOUTS, STAND-IN FIGURES (in-sample score over earned dates before "
+      f"{SPLIT}; realized = stand-in net 5 bps; joint bootstrap as in 8)")
+    for k, lab in (("R-a", "Spearman(in-sample score, realized)"),
+                   ("R-b", "Spearman(mu, realized)"),
+                   ("R-c", "top half minus bottom half by in-sample score, mean realized")):
+        pt, se, lo, hi = rel[k]
+        P(f"   {k} {lab:<62} n {rel['n'][k]:2d}  point {pt:+.3f}  bootstrap SE {se:.3f}  "
+          f"[{lo:+.3f}, {hi:+.3f}]")
     (out / "rehearsal.txt").write_text("\n".join(L) + "\n")
     return 0
 

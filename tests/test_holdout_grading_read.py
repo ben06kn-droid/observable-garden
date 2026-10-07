@@ -96,3 +96,33 @@ def test_a_missing_record_refuses(tmp_path):
     next(rep.glob("*.json")).unlink()
     with pytest.raises(SystemExit, match="missing"):
         hr.load(gp, rep, [runs])
+
+
+def test_relative_readouts_match_scipy_and_their_definitions():
+    from scipy.stats import spearmanr
+    rng = np.random.default_rng(3)
+    n, B = 20, 300
+    score = rng.normal(size=n)
+    real = 0.5 * score + rng.normal(size=n)
+    boot = real[:, None] + 0.3 * rng.normal(size=(n, B))
+    mu = score + rng.normal(size=n)
+    mu[4] = np.nan
+    names = [f"r{i:02d}" for i in range(n)]
+    out = hr.relative_readouts(score, mu, names, real, boot)
+    assert out["R-a"][0] == pytest.approx(spearmanr(score, real).statistic, abs=1e-12)
+    has = ~np.isnan(mu)
+    assert out["R-b"][0] == pytest.approx(spearmanr(mu[has], real[has]).statistic, abs=1e-12)
+    top, bot = hr.halves(score, names)
+    assert top.sum() == bot.sum() == 10 and not (top & bot).any()
+    assert score[top].min() >= score[bot].max()
+    assert out["R-c"][0] == pytest.approx(real[top].mean() - real[bot].mean(), abs=1e-12)
+    se = np.std([spearmanr(score, boot[:, b]).statistic for b in range(B)], ddof=1)
+    assert out["R-a"][1] == pytest.approx(se, abs=1e-12)
+    assert out["n"] == {"R-a": 20, "R-b": 19, "R-c": 10}
+
+
+def test_halves_break_ties_by_name():
+    # three tied at 1.0 compete for two top-half places: "a" and "b" win on name
+    top, bot = hr.halves(np.array([1.0, 1.0, 1.0, 0.0]), ["c", "b", "a", "d"])
+    assert list(top) == [False, True, True, False]
+    assert list(bot) == [True, False, False, True]

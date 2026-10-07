@@ -70,6 +70,54 @@ def pct(a, q):
     return float(np.percentile(a, q))
 
 
+# -- relative readouts (defined 6d324b7; no rule yet) -----------------------------------
+
+def _ranks(a: np.ndarray) -> np.ndarray:
+    from scipy.stats import rankdata
+    return rankdata(a, axis=0, method="average")
+
+
+def spearman_fixed(x: np.ndarray, Y: np.ndarray) -> np.ndarray:
+    """Spearman of a fixed vector x (n,) with each column of Y (n, B): (B,)."""
+    rx = _ranks(np.asarray(x, float))
+    rx = (rx - rx.mean()) / rx.std()
+    rY = _ranks(np.asarray(Y, float))
+    rY = (rY - rY.mean(axis=0)) / rY.std(axis=0)
+    return (rx[:, None] * rY).mean(axis=0)
+
+
+def halves(score: np.ndarray, names: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """Top and bottom halves by score, descending; ties broken by run name."""
+    order = sorted(range(len(score)), key=lambda i: (-score[i], names[i]))
+    h = len(order) // 2
+    top = np.zeros(len(score), bool)
+    bot = np.zeros(len(score), bool)
+    top[order[:h]] = True
+    bot[order[-h:]] = True
+    return top, bot
+
+
+def relative_readouts(score, mu, names, real: np.ndarray, boot: np.ndarray) -> dict:
+    """R-a, R-b, R-c: (point, bootstrap SE, 2.5%, 97.5%). `real` (n,) and `boot` (n, B)
+    are the realized net Sharpes and their joint-bootstrap replicates; `score` and `mu`
+    are fixed (mu may hold NaN where a run states none)."""
+    score = np.asarray(score, float)
+    mu = np.asarray(mu, float)
+    out = {}
+
+    def pack(point, reps):
+        return (float(point), float(np.std(reps, ddof=1)), pct(reps, 2.5), pct(reps, 97.5))
+    out["R-a"] = pack(spearman_fixed(score, real[:, None])[0], spearman_fixed(score, boot))
+    has = ~np.isnan(mu)
+    out["R-b"] = pack(spearman_fixed(mu[has], real[has][:, None])[0],
+                      spearman_fixed(mu[has], boot[has]))
+    top, bot = halves(score, list(names))
+    out["R-c"] = pack(real[top].mean() - real[bot].mean(),
+                      boot[top].mean(axis=0) - boot[bot].mean(axis=0))
+    out["n"] = {"R-a": int(score.size), "R-b": int(has.sum()), "R-c": int(top.sum())}
+    return out
+
+
 # -- CRPS -----------------------------------------------------------------------------
 
 def crps_normal(mu, sd, y):
