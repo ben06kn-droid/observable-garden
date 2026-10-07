@@ -433,3 +433,18 @@ is read** (see the known defect above).
   leak test and a bit-for-bit repeat for all four settings, on the box; seconds per
   panel; no outcome printed.
 - **Numbers from the laptop and the box are not mixed in one table.**
+
+## Reader choices accepted, 2026-10-07 (America/Chicago), before any pilot run
+
+The author accepted these reader choices in the reader committed at `cf03b03`. No pilot
+output exists at this commit.
+- **R3, the linear shadow:** each cell shows two figures side by side. One is the 5a
+  figure from the design block (685000–685999). The other is the median shadow share of
+  the pilot's own panels, computed per panel from the class's population Sharpes at that
+  panel's c.
+- **R3, the ceiling:** each panel's ceiling uses 5c's formula,
+  `1 / sqrt(1 + effective parameters / (T_years * level^2))`. The effective parameters are
+  mv_combine's at the c that refit chose. The value is averaged over refits and shown for
+  risk sizing on and off.
+- **The control fails level:** if it does, the registered carry-forward rule does not say
+  what goes forward. The reader then decides nothing and prints "STOP and ask".
