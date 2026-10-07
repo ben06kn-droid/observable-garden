@@ -125,6 +125,16 @@ def relative_readouts(score, mu, names, real: np.ndarray, boot: np.ndarray) -> d
     return out
 
 
+def r_d_label(mu: np.ndarray) -> str:
+    """R-d's label, in the words of the relabelling (2026-10-06): the median and the two
+    counts come from the stated means, which are in-sample records."""
+    mu = np.asarray(mu, float)
+    top, bot = mu_halves(mu)
+    med = float(np.median(mu[~np.isnan(mu)]))
+    return (f"runs whose stated mean exceeds the median of {med:.2f} ({int(top.sum())} runs) "
+            f"against the rest ({int(bot.sum())} runs), mean realized difference")
+
+
 def mu_halves(mu: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """R-d's split (703beed/649089f): among runs with a stated mean, the top half is mu
     strictly above the median, the bottom half the rest (ties to the bottom)."""
@@ -319,14 +329,14 @@ def read(g, rows, B=B_BOOT) -> str:
     score = np.array([c["submitted_score"] for c in cp])
     rel = relative_readouts(score, muf, names, real["net_5bps"], boot["net_5bps"])
     labels = {"R-c": "top half minus bottom half by in-sample score, mean realized",
-              "R-d": "top half minus bottom half by stated mean mu, mean realized",
+              "R-d": r_d_label(muf),
               "R-b": "Spearman(stated mean mu, realized)",
               "R-a": "Spearman(in-sample score, realized)"}
     for k in ("R-c", "R-d", "R-b", "R-a"):
         pt, se, lo, hi = rel[k]
         n_ = rel["n"][k]
         n_ = f"{n_[0]}/{n_[1]}" if isinstance(n_, tuple) else str(n_)
-        P(f"   {k} {labels[k]:<62} n {n_}  point {pt:+.3f}  SE {se:.3f}  "
+        P(f"   {k} {labels[k]} n {n_}  point {pt:+.3f}  SE {se:.3f}  "
           f"[{lo:+.3f}, {hi:+.3f}]  stand-in detectable {2.486 * STANDIN_SE[k]:.3f}"
           + ("  (near-duplicate submissions make its ranks unstable)" if k == "R-a" else ""))
     return "\n".join(L)

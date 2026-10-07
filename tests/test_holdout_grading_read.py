@@ -1,4 +1,9 @@
-"""The 6.5 holdout grading reader, on synthetic grades and re-priced records."""
+"""The 6.5 holdout grading reader, on synthetic grades and re-priced records.
+
+Four warnings are expected and fine: the synthetic fixture gives every run the same
+in-sample score, so R-a's ranks and R-c's split are degenerate there (constant input to
+the Spearman correlation and the halves). The real runs' scores differ.
+"""
 import json
 
 import numpy as np
@@ -145,3 +150,9 @@ def test_section_5_prints_r_c_r_d_r_b_r_a_with_the_stand_in_detectable_size(tmp_
         assert f"stand-in detectable {2.486 * hr.STANDIN_SE[k]:.3f}" in ln
         assert " SE " in ln and "[" in ln
     assert "near-duplicate" in sec[3] and all("near-duplicate" not in ln for ln in sec[:3])
+
+
+def test_r_d_is_labelled_in_the_relabelling_words():
+    mu = np.array([0.15] * 64 + [0.2] * 15 + [np.nan])
+    assert hr.r_d_label(mu).startswith(
+        "runs whose stated mean exceeds the median of 0.15 (15 runs) against the rest (64 runs)")
