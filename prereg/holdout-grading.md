@@ -296,3 +296,22 @@ replaces every across-run Wilson, t and over-runs bootstrap interval above, incl
 - **It is computed on the class tier for all 80 runs.** The replay gate's version would
   need the replay null's draws, which no record stores. It is not computed, and that
   is stated in the output.
+
+## Detectability under the joint bootstrap, 2026-10-06 (America/Chicago): stand-in figures
+
+These replace the n = 80 figures above, which assumed independent runs. They come from
+the rehearsal on the 2020–2022 in-sample split (`runs/holdout_grading_rehearsal/rehearsal.txt`),
+with 756 graded days and the reader's joint bootstrap (mean block 9, B = 10,000, seed
+690000). **They are stand-in figures, not holdout figures.**
+- **H1:** the SE of mean(realized net 5 bps - `L_0.90`) over 80 is **0.488**. The
+  smallest mean shortfall detected (one-sided 0.05, 80% power, 2.486 SE) is **about
+  1.21 Sharpe**.
+- **H2:** the SE of mean(mu - realized) over 79 is **0.488**. The smallest mean
+  overstatement detected is **about 1.21 Sharpe**.
+
+**What the figures mean.** The 80 streams are graded on the same days and largely share
+their day-to-day variation, so their mean is nearly as noisy as one three-year Sharpe.
+The across-run SD of the stand-in Sharpes (0.315) is not the uncertainty of the mean
+once the days are resampled jointly. **H1 and H2 can therefore detect only gross
+failures**, of more than about one Sharpe unit on average. A smaller failure is
+reported as "not shown", never as "holds well".
