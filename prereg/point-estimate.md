@@ -260,3 +260,29 @@ not in the committed table**:
 | EB, class argmax | 0.5 | 14 | +0.166 | +0.015 |
 | EBs, extend-while-improving | 0.5 | 3 | +0.273 | +0.127 |
 | EBs, extend-while-improving | 1.0 | 22 | +0.178 | +0.112 |
+
+## Closed 2026-10-06 (America/Chicago). No point estimate is registered
+
+**Neither branch of the decision rule was met** at `7b7651b`. The rule is in
+`prereg/estimators-exploratory-2026-10-06.md`, addendum `382ac84` and correction
+`7420d90`. Results among certified submissions, against holdout SR_pop:
+- **ET and ETm** keep the mean overstatement at or below +0.10 on every decision row.
+- **Their RMSE is above the base estimate's** on every decision row. On the class argmax
+  (base EB): ET 0.390-0.507 and ETm 0.329-0.343, against 0.245-0.305. On
+  extend-while-improving (base EBs): ET 0.439-0.515 and ETm 0.285-0.342, against
+  0.251-0.288.
+- Branch 2 needs the class-argmax row to pass, and it fails on RMSE for both
+  candidates.
+
+**No point estimate is registered, and this draft is closed.** Nothing in it went live.
+
+**An observation made after the fact, and not acted on.** The plain EB-base estimate for
+extend-while-improving, which carries no decision under the addendum, has these
+results against holdout:
+- at or below +0.10 at the decision levels: bias +0.048 at 1.0 (RMSE 0.175, n 22),
+  -0.054 at 1.5 (RMSE 0.274, n 47), and +0.063 pooled over 0.5 and 1.0 (RMSE 0.177,
+  n 25);
+- at level 0.5 alone: **+0.167, RMSE 0.189, n 3** (in-sample +0.230).
+
+It was noticed after the table existed, it was not a candidate, and no rule was
+revised for it.
