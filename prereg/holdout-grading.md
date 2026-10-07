@@ -503,3 +503,11 @@ live commit** (text, not yet appended):
 > variation with the one shared future and understates the day-level uncertainty. The
 > point estimate (the median) is unchanged. The interval still reflects only day-level
 > sampling within this one holdout, not other regimes.
+
+**R-d, defined 2026-10-06 (America/Chicago), before any code.** The mean realized
+holdout net Sharpe (5 bps) of the top half of runs by stated mean mu, minus that of the
+bottom half. It uses the 79 runs with a stated mean, split at the median of mu: the top
+half is mu strictly above the median, and the bottom half is the rest, so ties go to the
+bottom half. The interval comes from the same joint stationary block bootstrap (mean
+block 9, B = 10,000, seed 690000), with mu fixed and the realized Sharpes resampled
+jointly.
