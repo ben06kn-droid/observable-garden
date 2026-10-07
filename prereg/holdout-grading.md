@@ -361,19 +361,46 @@ host. No step decrypts anything; the second copy cannot be opened (the deviation
    deviation.
    - The registration gives only the content command. The file-list command above is
      the natural reading of "sorted file list", and is a cross-check only.
-4. **Bring the repository to G**, at `<HOST_REPO>` `[GAP: the host's repository path and
-   Python environment are not recorded in the repository]`:
+4. **Find the repository and its Python environment, without touching the holdout
+   directory.** `find` stops three levels below `/home/ubuntu`, and the holdout directory
+   is five levels down, so it is never entered:
 
    ```
+   find /home/ubuntu -maxdepth 3 -name .git -type d 2>/dev/null       # candidate repositories
+   git -C <CANDIDATE> remote get-url origin                           # must be ...ben06kn-droid/observable-garden(.git)
+   ls -l <HOST_REPO>/.venv/bin/python && <HOST_REPO>/.venv/bin/python -V
+   <HOST_REPO>/.venv/bin/python -c "import numpy, scipy, pandas; print('env ok')"
+   ```
+
+   The repository whose origin matches is `<HOST_REPO>`. If none has a `.venv`, stop and
+   report; nothing is installed ad hoc.
+5. **Check that the in-sample directory and the manifest exist**, and bring the
+   repository to G:
+
+   ```
+   ls /home/ubuntu/etf/data/raw/etf/insample/*.csv | wc -l           # must print 40
    cd <HOST_REPO>
    git fetch origin
    git checkout --detach <G>
-   git rev-parse HEAD                             # must print <G>
-   git status --porcelain --untracked-files=no    # must print nothing
+   git rev-parse HEAD                                                 # must print <G>
+   git status --porcelain --untracked-files=no                        # must print nothing
+   test -f data/etf_manifest.json && echo "manifest ok"
    .venv/bin/python -c "import platform; print(platform.system(), platform.machine())"   # must print Linux x86_64
    ```
 
-5. **Grade, once:**
+6. **Preflight: every guard, no price read.**
+
+   ```
+   .venv/bin/python -m experiments.grade_real --preflight \
+       --insample /home/ubuntu/etf/data/raw/etf/insample \
+       --holdout /home/ubuntu/etf/data/raw/etf/holdout \
+       --submissions runs/holdout_grading/submissions.json \
+       --submissions-sha256 <SUBS_SHA> --sealed-commit <S> --grading-commit <G>
+   ```
+
+   It must end with "PREFLIGHT ok". Any refusal stops here; report its message.
+   Hashing the holdout CSVs reads their bytes but parses no price.
+7. **Grade, once:**
 
    ```
    .venv/bin/python -m experiments.grade_real \
@@ -389,16 +416,16 @@ host. No step decrypts anything; the second copy cannot be opened (the deviation
      output file.**
    - A refusal stops here; report its message.
    - It runs once. A second run is a second opening and is not done.
-6. **Record the grades file's hash:** `sha256sum ~/grades_65_holdout.json`. Write the
+8. **Record the grades file's hash:** `sha256sum ~/grades_65_holdout.json`. Write the
    value down: `<R_SHA>`.
-7. **Copy it back, from the laptop:**
+9. **Copy it back, from the laptop:**
 
    ```
    scp -i <KEY> ubuntu@<HOST_IP>:grades_65_holdout.json ~/observable-garden/runs/holdout_grading/grades.json
    shasum -a 256 ~/observable-garden/runs/holdout_grading/grades.json   # must equal <R_SHA>
    ```
 
-8. **Stop the holdout host** in the EC2 console: **stop, not terminate**. The primary copy
+10. **Stop the holdout host** in the EC2 console: **stop, not terminate**. The primary copy
    on its volume is the sole source and must persist.
 
 **After the operator's steps (repository side):**
@@ -462,3 +489,17 @@ stand-in SEs go to the author, who decides.
 **On the stand-in (2020–2022)**, the full in-sample score would overlap the stand-in
 window. So there, and only there, the in-sample score is recomputed over the stand-in's
 own in-sample part: the periods whose earned return is dated before 2020-01-01.
+
+**Drafted 2026-10-06: the deviation to append to `prereg/agent-on-real-data.md` at the
+live commit** (text, not yet appended):
+
+> **Deviation, recorded at 6.5 holdout grading's live commit: the FAIL-side interval.**
+> The registered out-of-sample readout gives the median holdout Sharpe of FAIL
+> submissions "with a bootstrap interval over runs". 6.5 holdout grading
+> (`prereg/holdout-grading.md`) reports it instead with **a joint stationary block
+> bootstrap over the graded holdout days**, applied to all 80 streams at once: mean
+> block length 9 (this registration's own gate block length), B = 10,000, seed 690000.
+> The reason: all runs share one holdout, so an interval over runs mixes run-to-run
+> variation with the one shared future and understates the day-level uncertainty. The
+> point estimate (the median) is unchanged. The interval still reflects only day-level
+> sampling within this one holdout, not other regimes.
