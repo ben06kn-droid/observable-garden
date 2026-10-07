@@ -118,6 +118,12 @@ any step.
 
 ## The readouts, in the order the reader prints them
 
+**Read this first.** H1 and H2 stay as rules, but on the stand-in their detectable size is
+about 1.2 Sharpe (see "Detectability under the joint bootstrap" below). **Both will most
+likely report "not shown". If they do, that result is uninformative, not reassuring**:
+it means the test could not see a failure smaller than about one Sharpe unit, not that
+the bounds or the stated expectations were right.
+
 All are read once from R and the step-0 records, by the reader.
 - **The realized holdout Sharpe** of a submission is its grade, net at 5 bps, unless
   stated.
