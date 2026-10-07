@@ -159,8 +159,44 @@ def tabulate(c_rows, decision_lines=True) -> str:
             L.append(f"   {cand}: {'QUALIFIES' if ok else 'does not qualify'}; pooled RMSE "
                      f"(mean of the two decision rows, 0.5+1.0, holdout) {pooled:.3f}")
         q = [c for c, ok in qual.items() if ok]
+
+        def passes(cand, name, base):
+            out = True
+            for lab in ("1.0", "1.5", "0.5+1.0"):
+                m, r_, n = dec[(name, base, lab, cand)]
+                _, rb, _ = dec[(name, base, lab, "base")]
+                out &= n > 0 and m <= 0.10 and r_ <= rb
+            return out
         if not q:
-            L.append("   -> neither qualifies: no point estimate is registered")
+            # second branch (correction 7420d90): the failure is only the EWI-EBs row,
+            # and the candidate passes on the class-argmax row and the EWI row under EB
+            L += ["", "   SECOND BRANCH (correction 7420d90): class argmax (EB) and "
+                  "extend-while-improving under base EB"]
+            q2 = []
+            for cand in ("ET", "ETm"):
+                ca = passes(cand, "class argmax", "EB")
+                ewi_eb = passes(cand, "extend-while-improving", "EB")
+                only_ebs = ca and not passes(cand, "extend-while-improving", "EBs")
+                for lab in ("1.0", "1.5", "0.5+1.0"):
+                    m, r_, n = dec[("extend-while-improving", "EB", lab, cand)]
+                    _, rb, _ = dec[("extend-while-improving", "EB", lab, "base")]
+                    L.append(f"   {cand:<4} extend-while-improving   base EB  {lab:>7}: mean "
+                             f"{m:+.3f}, RMSE {r_:.3f} vs base {rb:.3f}, n {n}")
+                L.append(f"   {cand}: class-argmax row {'passes' if ca else 'fails'}; EWI under "
+                         f"EB {'passes' if ewi_eb else 'fails'}; failed branch 1 only on the "
+                         f"EWI-EBs row: {'yes' if only_ebs else 'no'}")
+                if ca and ewi_eb and only_ebs:
+                    q2.append(cand)
+            if not q2:
+                L.append("   -> neither branch is met: no point estimate is registered")
+            else:
+                best = min(q2, key=lambda c: np.mean(
+                    [dec[("class argmax", "EB", "0.5+1.0", c)][1],
+                     dec[("extend-while-improving", "EB", "0.5+1.0", c)][1]]))
+                L.append(f"   -> second branch: {best} under base EB goes forward as the single "
+                         "estimate for every searcher"
+                         + (" (both met it; the lower pooled RMSE, by analogy with branch 1's "
+                            "tie rule)" if len(q2) == 2 else ""))
         elif len(q) == 1:
             L.append(f"   -> {q[0]} goes forward")
         else:
