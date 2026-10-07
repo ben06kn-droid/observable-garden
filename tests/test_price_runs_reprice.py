@@ -98,12 +98,37 @@ def test_an_etf_run_is_routed_through_class_p_etf_at_the_new_B(priced, monkeypat
     seen = {}
     real_basis = pr._basis
 
-    def spy(sandbox, table, seed, sup, B):
-        seen["B"] = B
+    def spy(sandbox, table, seed, sup, B, keep_draws=False):
+        seen["B"], seen["keep_draws"] = B, keep_draws
         return {"p_upper": 0.5, "B": B, "confidence": {"B": B, "C0": 0.5}}
     monkeypatch.setattr(pr, "panel_of", lambda d: "etf")
     monkeypatch.setattr(pr, "_basis", lambda panel, seed: real_basis("s0", seed))
     monkeypatch.setattr(pr, "class_p_etf", spy)
     r = pr.reprice_one((str(path), B_NEW))
     assert seen["B"] == B_NEW
+    assert seen["keep_draws"] is True, "the re-price mode stores the class-null maxima"
     assert r["record"]["class_p"]["confidence"]["B"] == B_NEW
+
+
+def test_class_p_etf_keeps_the_null_maxima_only_when_asked():
+    """The draws are the M_b the p-value and the confidence curve were computed from."""
+    import tempfile
+    import numpy as np
+    from environments import planted_panel as pp
+    from environments.planted_view import agent_view
+    from environments.real_sandbox import RealSandbox
+    from tests.test_price_runs_planted import _panel
+    base = pp.base_from(_panel(K=5))
+    draw = pp.make_draw(base, 640011, 1.0)
+    view, mask = agent_view(draw.in_sample, 640011)
+    inv = pp.invariants_for(base, cache_dir=tempfile.mkdtemp())
+    table, _ = pr.planted_table(base, draw, view, mask, inv=inv)
+    sb = RealSandbox(view, spec_class=pp.CLS)
+    sup = [list(x) for x in table.members[7]]
+    plain = pr.class_p_etf(sb, table, 640011, sup, 50)
+    kept = pr.class_p_etf(sb, table, 640011, sup, 50, keep_draws=True)
+    assert "null_max_draws" not in plain
+    M = np.asarray(kept["null_max_draws"])
+    assert M.size == 50 and M.mean() == pytest.approx(kept["null_max_mean"], abs=1e-12)
+    assert kept["p_upper"] == (1 + int(np.sum(M >= kept["submitted_score"]))) / 51
+    assert {k: v for k, v in kept.items() if k != "null_max_draws"} == plain

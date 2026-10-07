@@ -194,7 +194,7 @@ def prior_weighted(sandbox, table, seed: int, short_list, support, B: int,
             "list_null_max_mean": float(N_b.mean())}
 
 
-def class_p_etf(sandbox, table, seed: int, support, B: int) -> dict:
+def class_p_etf(sandbox, table, seed: int, support, B: int, keep_draws: bool = False) -> dict:
     """The declared-class p on the ETF panel, from the class table.
 
     Replicate rows are drawn exactly as `quixote.certify.three_nulls` draws them:
@@ -218,7 +218,10 @@ def class_p_etf(sandbox, table, seed: int, support, B: int) -> dict:
             "class_max": float(class_max), "block_length": L,
             "null_max_mean": float(M_b.mean()), "B": B,
             "basis": "class table (stored net streams)",
-            "guard_floor": None, "guard_cap": None}
+            "guard_floor": None, "guard_cap": None,
+            # the B class-null maxima themselves, only when asked (the re-price mode):
+            # they make the registered sr_deflated interval exact
+            **({"null_max_draws": [float(x) for x in M_b]} if keep_draws else {})}
 
 
 # Verdict fields added after runs were priced in-line: `--check` compares a re-price
@@ -478,7 +481,7 @@ def reprice_one(payload) -> dict:
         verdict, computable, vevents = rec.verdict, rec.certifying_null_computable, rec.events
     sup = d.get("submitted_support")
     if panel == "etf":
-        cp = class_p_etf(sandbox, table, seed, sup, B)
+        cp = class_p_etf(sandbox, table, seed, sup, B, keep_draws=True)
         sl = events_of(d, "short_list")
         if sl:
             cp["prior_weighted"] = prior_weighted(sandbox, table, seed,
