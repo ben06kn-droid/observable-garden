@@ -129,3 +129,95 @@ shapes is recorded as a null finding.
 ## e. The rule carried forward
 
 **A learned component may cost power, never validity.**
+
+## Revision, 2026-10-07 (America/Chicago): resolutions, a second predictor, and two known tensions
+
+Appended before any code. Still exploratory and not a registration.
+
+### a. The six conflicts with the repository, resolved
+
+1. **Costs:** the panel's own cost and borrow function (`RealPanel` `cost_rate` and
+   `borrow_rate`; on the planted panel, 5 bps one-way per unit of turnover and 50 bps a
+   year on short notional). The script's flat 1 bp is not used.
+2. **Families:** the repository's map. These are the complete-linkage families at tau
+   0.8 of the 40 single-feature weight paths (`6726871`): {0,1}, {2,3}, {4,5,24,25},
+   {6,7}, {8,9,26,27,28,29}, {10,11,12,13}, {14,…,19}, {20,21}, {22,23}, {30,31},
+   {32,33}, {34,35}, {36,37}, {38,39}. The map is a fixed input, not the script's
+   consecutive blocks.
+3. **Standardisation:** all 40 features are re-standardised across assets each day by
+   the pipeline itself. The 20 rank features are not unit-variance as stored.
+4. **Alignment unchanged.** A panel row's return is the return its positions earn
+   (signal at the close of t, held from the close of t+1 to t+2). An input at row t
+   uses features at rows up to t and row-returns at rows up to t-2.
+5. **The five-day average** of predictions before positions are formed is new to the
+   repository, and is stated as such.
+6. **Sharpe ratios use ddof 1**, as everywhere in the repository.
+
+### b. "Platform-independent" withdrawn
+
+The claim is **repeatability on one pinned platform**: this laptop, Darwin arm64,
+Python 3.14.2, numpy 2.5.3, scipy 1.18.1, and LightGBM at the version pinned when it is
+installed. BLAS summation order and LightGBM's floating-point arithmetic may differ on
+other platforms. No claim is made about them.
+
+### c. The certification bootstrap
+
+**The bootstrap window is the scored days only.** The **block length is the class rule**
+(`select_block_length`, as the class null uses it) applied to that window. Both are fixed
+at registration.
+
+### d. A second predictor: mv_combine, designed from theory and tested nowhere
+
+**mv_combine was designed from theory on 2026-10-07 and has been tested nowhere, not
+even on synthetic data.** It is specified below and built side by side with ridge_stack
+(the stress test's stack, ported with the resolutions above) and a plain-ridge control.
+- **Basis signals:**
+  - 14 family signals (A), their squares (B) and their 91 pairwise products (C);
+  - 42 family-by-state interactions (D), from three market states;
+  - one tree portfolio (T).
+- **Basis portfolios** are risk-sized (signal divided by the asset's trailing
+  volatility), or not, as a switch. They are then demeaned, set to unit gross and
+  averaged over five days.
+- **The combination** is a mean-variance weight vector `b = (Sigma + diag(gamma))^-1 mu`
+  on the 162 columns' net returns, with one ridge penalty per block, proportional to
+  the block's variance. The penalty's scale is chosen by leave-one-year-out Sharpe
+  inside the training window.
+- **Positions** are the weighted sum, divided by its training mean gross and capped at a
+  gross of 2.
+
+The full specification is in the build request of 2026-10-07 (Part 2B), and the code
+will follow it. **No new method is claimed.**
+
+**Prior art, checked against Crossref on 2026-10-07.** For each: DOI, title, authors,
+journal, volume, issue, pages and year. For the last three, the journal DOI was looked
+up directly after the search returned working-paper versions. Only the metadata was
+checked; none of the texts was re-read for this note.
+- Kozak, S., Nagel, S. & Santosh, S. (2020), "Shrinking the cross-section", *Journal of
+  Financial Economics* 135(2), 271–292, DOI 10.1016/j.jfineco.2019.06.008. A penalised
+  mean-variance combination of many characteristic portfolios.
+- Brandt, M. W., Santa-Clara, P. & Valkanov, R. (2009), "Parametric Portfolio Policies:
+  Exploiting Characteristics in the Cross-Section of Equity Returns", *Review of
+  Financial Studies* 22(9), 3411–3447, DOI 10.1093/rfs/hhp003. Weights as functions of
+  characteristics, fitted on portfolio returns.
+- Paulsen, D. & Söhl, J. (2020), "Noise fit, estimation error and a Sharpe information
+  criterion", *Quantitative Finance* 20(6), 1027–1043, DOI 10.1080/14697688.2020.1718746.
+  The in-sample Sharpe less effective parameters over time, as printed per refit.
+- Grinold, R. C. (1994), "Alpha is Volatility Times IC Times Score", *The Journal of
+  Portfolio Management* 20(4), 9–16, DOI 10.3905/jpm.1994.409482. Risk sizing.
+- Gârleanu, N. & Pedersen, L. H. (2013), "Dynamic Trading with Predictable Returns and
+  Transaction Costs", *The Journal of Finance* 68(6), 2309–2340, DOI 10.1111/jofi.12080.
+  Smoothing positions against costs.
+- Nagel, S. (2012), "Evaporating Liquidity", *Review of Financial Studies* 25(7),
+  2005–2039, DOI 10.1093/rfs/hhs066. Returns to short-term reversal conditioned on market
+  volatility, the motivation for the state interactions.
+
+### e. Two known tensions, stated in advance
+
+1. **The penalty against the planted edge.** mv_combine's penalty shrinks low-variance
+   directions hardest. The generator plants its edge along a random rule, whatever that
+   rule's variance. **So mv_combine may look worse on planted panels than it would on
+   real data**, where edges need not sit in low-variance directions.
+2. **Risk sizing against the planted edge.** Risk sizing assumes expected return scales
+   with volatility; planted edges do not follow that.
+
+**The pilot therefore reports mv_combine with risk sizing on and with it off.**
