@@ -253,3 +253,18 @@ under the EB base is reported and carries no decision.
   RMSE against holdout.
 - **Neither qualifies:** no point estimate is registered, and `prereg/point-estimate.md`
   is closed with that recorded.
+
+**Correction to the addendum above (`382ac84`), 2026-10-06 (America/Chicago), before the
+run.**
+- **The decision rows are confirmed by the author:** the class argmax under base EB, and
+  extend-while-improving under base EBs.
+- **A second branch is added, stated in advance:**
+
+  "If no candidate qualifies on the decision rows only because the
+  extend-while-improving row under base EBs fails, and a candidate does satisfy the
+  same rule on both the class-argmax row and the extend-while-improving row under base
+  EB, then that candidate under base EB goes forward as the single estimate for every
+  searcher. Reason, stated before the run: the EB base needs no replay, so it is
+  available for every submission including bracketed runs, and the conditional table
+  at 42d5b06 showed it the less biased base for extend-while-improving among certified
+  submissions. If neither branch is met, no point estimate is registered."
