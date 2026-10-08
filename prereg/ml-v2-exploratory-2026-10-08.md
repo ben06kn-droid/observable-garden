@@ -122,14 +122,17 @@ ETF V has 2 columns: 1 and 5.** Binance would have all five.
 
 ## C. Views
 
-A view = (information, horizon, target, regime).
+A view = (information, horizon, **neutrality**, regime). (The lever was changed from target
+to neutrality on 2026-10-08; see "Change: neutrality replaces the target lever" below.)
 - **Information:** any non-empty subset of the panel's available blocks. The ETF panel has
   P, X and V, so 7 subsets.
 - **Horizon h ∈ {1, 5, 20} rows.** The target is the forward h-row return: the sum of the
   earned returns of rows t … t+h−1, which are the row returns of t+1+d … t+h+d. **The
   embargo is h + 1 + d rows.**
-- **Target:** raw, or net of the equal-weighted market (the same sum, minus the
-  equal-weighted average's sum).
+- **Target, for every view:** version 1's cs of that forward h-row return, demeaned
+  across assets and divided by the cross-sectional SD each row. Under group neutrality it
+  is demeaned within the asset's group instead (see below).
+- **Neutrality:** market or group (see below).
 - **Regime:** always, or one of 6 gated regimes: market vol high or low, trailing market
   return up or down, dispersion high or low.
   - The states are `learn/inputs.py`'s three (vol, sum, dispersion), from the panel's own
@@ -141,9 +144,65 @@ A view = (information, horizon, target, regime).
   - **The regime gates positions only.** It does not change the fit.
 - **On the ETF panel:** 7 × 3 × 2 × 7 = **294 views**.
 
+## Change: neutrality replaces the target lever (author, 2026-10-08, before any code)
+
+**Why.** As first specified, the target lever (raw or net of the equal-weighted market)
+was nearly a no-op.
+- Positions are demeaned.
+- A per-row market component is orthogonal to cross-sectionally standardised columns.
+- So raw and net would differ only through the square, product and tree terms.
+
+**Now:**
+- **Every view's target is version 1's cs(forward h-row return).**
+- **The second lever is NEUTRALITY,** with two choices:
+  - **market:** the target is cs(forward h-row return), and positions are demeaned across
+    all assets, then scaled to unit gross.
+  - **group:** the target is the forward h-row return demeaned **within the asset's
+    group**, then divided by the row's cross-sectional SD of those group-demeaned values.
+    Positions (the prediction) are demeaned within each group, then scaled to unit gross
+    overall.
+- **The menu sizes are unchanged:** 7 × 3 × 2 × 7 = 294 views on ETF.
+- **Part 5's nested menus:**
+  1. the base view;
+  2. information × horizon (21);
+  3. plus neutrality (42);
+  4. plus regime (294).
+- **No dedicated planted rule for neutrality in the pilot.** The neutrality lever's value is
+  measured only by level and by its effect on the bar.
+
+**The groups: an exact rule.** The groups at row t use rows ≤ t only.
+1. **Returns:** the same returns block X uses (on planted ETF panels, the real ETF row
+   returns behind the pinned rows), over the trailing 252 rows ending at t.
+2. **Correlation:** the 252-row correlation matrix (ddof 1). An asset with zero variance in
+   the window has correlation 0 with every other asset. The distance is d = 1 − ρ.
+3. **Clustering:** average linkage (UPGMA) agglomerative clustering. Each cluster is
+   identified by its smallest asset index.
+   - Each step merges the pair of clusters with the smallest average distance.
+   - **Ties are broken by asset index:** the pair whose (smaller id, larger id) is
+     lexicographically smallest.
+   - Merging stops at **5 clusters.**
+4. **Small groups are merged:** any cluster with fewer than 3 assets goes into its nearest
+   cluster, by average distance, with ties to the smaller id.
+   - Small clusters are processed in order of size, then of id, until every group has 3 or
+     more assets.
+5. **Labels:** groups are numbered by their smallest asset index. Before 252 rows of
+   history there are no groups.
+6. **Recomputed at each refit:** the groups used by a fit, for its training targets, and
+   by the positions until the next refit, are those at the refit row.
+   - Groups are computed for every row and looked up at the refit row.
+
+On planted ETF panels the per-row groups are a fixed real input, built once, hashed and
+pinned with X and V, like P.
+
+**Two choices the author's rule left open, settled here:**
+- **The SD divided by** under group neutrality is that of the group-demeaned values across
+  all assets in the row.
+- **Groups do not change between refits.** A view's group positions until the next refit
+  use the refit row's groups, so that the fit and the positions share one grouping.
+
 ## D. The learner
 
-There is one learner per (information, horizon, target, memory). It is version 1's
+There is one learner per (information, horizon, neutrality, memory). It is version 1's
 ridge_stack structure, re-implemented in `learn2`; version 1's code is not imported for
 the fit.
 - **Ridge blocks:**
@@ -179,8 +238,8 @@ the fit.
   regime-gated. It is not rescaled, and it is costed once, on the averaged book.
 - **Stored per view, as the robustness reading:** the nine variants' pairwise position
   correlations (positions only).
-- **Caching:** the fit depends on (information, horizon, target, memory) only. Rates and
-  regimes are applied afterwards, and the fits are cached by that key.
+- **Caching:** the fit depends on (information, horizon, neutrality, memory) only. Rates
+  and regimes are applied afterwards, and the fits are cached by that key.
 
 ## F. The menu tier
 
@@ -191,7 +250,7 @@ the fit.
     common scored window.
   - With one view this equals the supplied-streams tier, and that is tested.
 - **The base view,** priced as one declared strategy for the head-to-head with version 1:
-  all available blocks, h = 5, raw, always.
+  all available blocks, h = 5, market-neutral, always.
 
 ## G. Checks
 
