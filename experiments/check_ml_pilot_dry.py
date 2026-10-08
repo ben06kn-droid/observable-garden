@@ -46,12 +46,12 @@ def problems(row: dict) -> list[str]:
     return bad
 
 
-def check(d: Path) -> tuple[list[str], bool]:
+def check(d: Path, name: str = "pilot.jsonl") -> tuple[list[str], bool]:
     L = []
     prov = json.loads((d / "provenance.json").read_text())
-    f = d / "pilot.jsonl"
+    f = d / name
     if not f.exists():
-        return [f"no pilot.jsonl in {d} (partial: {(d / 'pilot.jsonl.partial').exists()})"], False
+        return [f"no {name} in {d} (partial: {(d / (name + '.partial')).exists()})"], False
     rows = [json.loads(x) for x in f.read_text().splitlines() if x.strip()]
     tasks = {(r["kind"], r["seed"]) for r in rows}
     want = {(k, s) for k, s, _ in prov["task_list"]}
@@ -80,8 +80,10 @@ def check(d: Path) -> tuple[list[str], bool]:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", required=True)
+    ap.add_argument("--file", default="pilot.jsonl",
+                    help="the rows file (the confirmation writes results.jsonl)")
     a = ap.parse_args(argv)
-    L, ok = check(Path(a.dir))
+    L, ok = check(Path(a.dir), a.file)
     text = "\n".join(L)
     (Path(a.dir) / "dry_check.txt").write_text(text + "\n")
     print(text)

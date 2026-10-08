@@ -22,6 +22,11 @@ HEAD equals --expect-head; the platform is Linux x86_64.
 
     python -m experiments.ml_confirm_ridge_stack --out runs/ml_confirm/ridge_stack \
         --workers 150 --wheel ~/WHEEL.whl --expect-head <commit>
+
+Dry run (checked by `experiments.check_ml_pilot_dry --file results.jsonl`; no outcome printed):
+
+    python -m experiments.ml_confirm_ridge_stack --out runs/ml_confirm_dry/ridge_stack \
+        --dry-seeds 689900 689901 --workers 2 --wheel ~/WHEEL.whl --expect-head <commit>
 """
 from __future__ import annotations
 
@@ -52,8 +57,24 @@ CARRY_SEED = 689999                  # the reader's paired bootstrap, recorded h
 PREDICTORS = ("ridge_stack", "control")
 
 
+DRY_BLOCK = range(689900, 689910)            # dry run and box smoke; never read
+
+
 def levels_for(seed: int, shape: str) -> tuple:
+    if seed in DRY_BLOCK:
+        return (1.0, 1.5, 2.5)
     return (1.0, 1.5, 2.5) if seed - RULE_SEEDS[shape] < ALL_LEVELS else (1.5,)
+
+
+def dry_tasks(seeds, shape: str = "gated") -> list[tuple]:
+    """One planted task (all three levels) on seeds[0] and one level-0 task on seeds[1],
+    both from 689900-689909: the full task path, for a dry run."""
+    a, b = (int(x) for x in seeds)
+    if a == b or a not in DRY_BLOCK or b not in DRY_BLOCK:
+        raise SystemExit("--dry-seeds takes two distinct seeds from 689900-689909")
+    if shape not in RULE_SEEDS:
+        raise SystemExit(f"--dry-shape must be one of {list(RULE_SEEDS)}")
+    return [("planted", a, shape), ("level0", b, None)]
 
 
 def tasks() -> list[tuple]:
@@ -188,6 +209,9 @@ def main(argv=None) -> int:
     ap.add_argument("--workers", type=int, default=150)
     ap.add_argument("--wheel", required=True, help="the LightGBM wheel file that was installed")
     ap.add_argument("--expect-head", required=True, help="the commit carrying the committed runner")
+    ap.add_argument("--dry-seeds", nargs=2, type=int, default=None,
+                    help="dry run: one planted and one level-0 task on two seeds from 689900-689909")
+    ap.add_argument("--dry-shape", default="gated")
     a = ap.parse_args(argv)
     bad = refusals(a.expect_head, a.wheel)
     if bad:
@@ -197,10 +221,10 @@ def main(argv=None) -> int:
     if (out / "results.jsonl").exists():
         raise SystemExit(f"{out / 'results.jsonl'} exists; not overwriting")
     _init()
-    todo = tasks()
+    todo = dry_tasks(a.dry_seeds, a.dry_shape) if a.dry_seeds else tasks()
     (out / "provenance.json").write_text(json.dumps(
         {**provenance(a.expect_head), "tasks": len(todo), "workers": a.workers,
-         "dry_run": False, "task_list": todo}, indent=1))
+         "dry_run": bool(a.dry_seeds), "task_list": todo}, indent=1))
     t0 = time.time()
     done = 0
     with open(out / "results.jsonl.partial", "w") as fh, \

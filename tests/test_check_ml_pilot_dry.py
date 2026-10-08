@@ -59,3 +59,11 @@ def test_a_missing_task_is_flagged(tmp_path):
     _write(tmp_path, _rows()[:3])
     L, ok = C.check(tmp_path)
     assert not ok and any("MISSING" in x for x in L)
+
+
+def test_the_checker_reads_a_named_rows_file(tmp_path):
+    _write(tmp_path, _rows())
+    (tmp_path / "pilot.jsonl").rename(tmp_path / "results.jsonl")
+    assert not C.check(tmp_path)[1]
+    L, ok = C.check(tmp_path, "results.jsonl")
+    assert ok and L[-1] == "DRY RUN CHECK: PASS"

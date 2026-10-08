@@ -44,3 +44,12 @@ def test_every_refusal_fires_and_a_good_setup_passes(tmp_path):
                        or "ancestor" in r for r in rest), rest
     finally:
         C.WHEEL_SHA256, C.LIB_SHA256 = C_w, C_l
+
+
+def test_dry_tasks_are_one_planted_task_at_three_levels_and_one_level0_task():
+    import pytest
+    assert C.dry_tasks([689900, 689901]) == [("planted", 689900, "gated"), ("level0", 689901, None)]
+    assert C.levels_for(689900, "gated") == (1.0, 1.5, 2.5)
+    for bad in ([689000, 689901], [689900, 689900], [689900, 689910]):
+        with pytest.raises(SystemExit):
+            C.dry_tasks(bad)

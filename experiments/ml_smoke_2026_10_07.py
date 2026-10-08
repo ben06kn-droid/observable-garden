@@ -43,6 +43,8 @@ def main(argv=None) -> int:
     ap.add_argument("--seeds", nargs="+", type=int, default=list(SEEDS),
                     help="smoke panels (the laptop smoke used 686000 686001; the box smoke "
                          "uses 686002 686003)")
+    ap.add_argument("--predictors", nargs="+", default=None,
+                    help="a subset of the four settings (the confirmation smoke: ridge_stack control)")
     a = ap.parse_args(argv)
     seeds = tuple(a.seeds)
     out = Path(a.out)
@@ -55,9 +57,14 @@ def main(argv=None) -> int:
     t_all = time.time()
     base = pp.load_base()
     cache = pf.build(base.in_sample, base.members)
-    P("ML smoke, cost only — level-0 planted panels on 686000-686999; no outcome printed")
+    P("ML smoke, cost only — level-0 planted panels; no outcome printed")
     P("=" * 88)
     preds = predictors()
+    if a.predictors:
+        unknown = set(a.predictors) - set(preds)
+        if unknown:
+            raise SystemExit(f"unknown predictors {sorted(unknown)}; choose from {list(preds)}")
+        preds = {k: v for k, v in preds.items() if k in a.predictors}
     eff_rows = []
     import platform
     P(f"platform {platform.system()} {platform.machine()}; seeds {list(seeds)}")
@@ -97,6 +104,10 @@ def main(argv=None) -> int:
                 P(f"   {'':<20} repeatability (two runs, positions bit-identical): {rep}; leak "
                   f"test at rows {list(LEAK_ROWS)}: {'PASS' if ok else 'FAIL'} (a later change "
                   f"was visible after d: {seen})")
+    if not eff_rows:
+        P(f"wall {time.time() - t_all:.0f} s")
+        (out / "smoke.txt").write_text("\n".join(L) + "\n")
+        return 0
     P("")
     P("5b. mv_combine EFFECTIVE PARAMETERS on level-0 panels, by c (mean over refits; first "
       "and last refit)")
