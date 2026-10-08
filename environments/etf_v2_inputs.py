@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 
 PINNED = Path(__file__).resolve().parent.parent / "data" / "pinned" / "etf_v2_inputs.npz"
-PINNED_SHA256 = ""                           # set from pin()'s output
+PINNED_SHA256 = "50dec72709fd6779852e5bc91419cb22d6e3a0b689bde0929e5aff14e7006d80"  # arm64, 2026-10-08
 WARM = 252 + 1
 
 
