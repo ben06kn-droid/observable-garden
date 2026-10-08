@@ -448,3 +448,74 @@ output exists at this commit.
   risk sizing on and off.
 - **The control fails level:** if it does, the registered carry-forward rule does not say
   what goes forward. The reader then decides nothing and prints "STOP and ask".
+
+## The pilot's outcome, 2026-10-07 (America/Chicago). EXPLORATORY
+
+The pilot ran on the box at `fce5627`: 300 of 300 tasks, 800 rows, no failures or
+retries.
+- **Raw outputs** were committed before the read at `302c447`, with the run record and
+  one deviation: two untracked box files were moved aside before the pull, and their blobs
+  equal `fce5627`'s.
+- **The read** ran once, by the committed reader, and was committed unedited at
+  `e3cdf2f` (`runs/ml_pilot/2026-10-07/read.txt`).
+- **Level:** all four predictors hold level (R1).
+
+The carry-forward rule, as the reader printed it:
+
+```
+CARRY-FORWARD (level 1.5, pooled over rules, n = 200 paired; bootstrap B = 10000, seed 687999)
+   rate control              0.260
+   rate ridge_stack          0.590
+   rate mv_combine risk on   0.045
+   rate mv_combine risk off  0.080
+   risk off - risk on                 +0.035  [+0.005, +0.065]
+   mv_combine risk off - control      -0.180  [-0.250, -0.115]
+   ridge_stack - control              +0.330  [+0.255, +0.405]
+   mv_combine setting: mv_combine risk off
+   carried forward: ridge_stack  (qualified: ridge_stack; highest rate carried forward)
+```
+
+**ridge_stack is carried forward** under the registered rule; the author accepted the
+outcome.
+
+**mv_combine is parked.** It is untuned, and it is not to be adjusted on the 687000
+block.
+
+### Two weak spots of ridge_stack: observations, not claims
+
+**Corner: capture below the linear shadow at levels 1.0 and 1.5, not at 2.5.** Pooled
+median net capture, against the median shadow share on the same panels (R3):
+
+| level | ridge_stack net capture | shadow share, same panels |
+|---|---|---|
+| 1.0 | 0.059 | 0.323 |
+| 1.5 | 0.230 | 0.322 |
+| 2.5 | 0.371 | 0.327 |
+
+**State-gated: no better than the control.** Pooled certifications and median net
+capture (R2, R3):
+
+| level | certifications, ridge_stack | certifications, control | net capture, ridge_stack | net capture, control |
+|---|---|---|---|---|
+| 1.0 | 10/50 | 14/50 | 0.273 | 0.314 |
+| 1.5 | 28/50 | 33/50 | 0.384 | 0.435 |
+| 2.5 | 46/50 | 46/50 | 0.507 | 0.528 |
+
+**Block S** (the state-interaction ridge block) **is off in 3,500 of 6,300 ridge_stack
+refits** (R4). That count pools every at-cost panel: all four rules at every level, and
+level 0. It is not specific to the gated rule.
+
+### Limits
+
+- **Exploratory.** Nothing here is a claim.
+- **n = 50 per cell.**
+- **The rule shapes are invented.** No claim is made that real edges take these shapes.
+- **The bars differ, and that accounts for part of the gain over the class tier.**
+  - ridge_stack is priced as ONE declared strategy, through the supplied-streams tier.
+  - The class tier prices the maximum over its 82,240 members.
+
+### Cosmetic, for later
+
+- In R4 the reader labels ridge_stack's penalty blocks 0–3; they should read L, Q, I, S.
+- A penalty that is off prints as 1000000.0; it should print as "off".
+- Neither changes a number.
