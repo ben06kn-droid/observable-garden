@@ -182,15 +182,15 @@ def load_span(insample_dir: str | Path, holdout_dir: str | Path) -> dict:
 def build_span(prices: dict):
     """`build_etf_panel`'s computation over the whole span, untrimmed:
     (dates, tickers, F (T, M, 40), earn (T, M) with NaN where undefined)."""
-    from environments.real_panel import ETF_BASE, _etf_base_signals, _rank, _zscore
+    from environments.real_panel import ETF_BASE, _etf_base_signals, _rank, _zscore, declared_market
     tickers = sorted(prices)
     common = sorted(set.intersection(*(set(prices[t][0]) for t in tickers)))
     idx = {t: {d: i for i, d in enumerate(prices[t][0])} for t in tickers}
     P = np.array([[prices[t][1][idx[t][d]] for t in tickers] for d in common])
     logp = np.log(P)
     r = np.vstack([np.full((1, len(tickers)), np.nan), P[1:] / P[:-1] - 1.0])
-    spy = tickers.index("SPY") if "SPY" in tickers else 0
-    sig = _etf_base_signals(logp, np.nan_to_num(r), spy)
+    r0 = np.nan_to_num(r)
+    sig = _etf_base_signals(logp, r0, declared_market(tickers, r0))
     feats = []
     for nm in ETF_BASE:
         feats += [_zscore(sig[nm]), _rank(sig[nm])]

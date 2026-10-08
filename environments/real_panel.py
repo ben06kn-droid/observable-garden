@@ -186,10 +186,19 @@ ETF_BASE = ["ret1", "mom5", "mom21", "mom63", "mom126", "mom252", "mom12_1",
             "skew63", "maxret21"]
 
 
-def _etf_base_signals(logp: np.ndarray, r: np.ndarray, spy: int) -> dict:
+def _etf_base_signals(logp: np.ndarray, r: np.ndarray, market: np.ndarray) -> dict:
     """`prereg/etf-features.md`'s twenty base signals, each from data through the
-    close of t."""
+    close of t. `market` is the panel's DECLARED market return series, (T,), aligned with
+    r's rows (the ETF panel declares SPY's column); beta252 and idvol63 regress on it.
+    There is no default: a panel without a declared market series is an error."""
     T, M = r.shape
+    if market is None:
+        raise ValueError("no declared market series: beta252 and idvol63 need one")
+    market = np.asarray(market, dtype=float)
+    if market.shape != (T,):
+        raise ValueError(f"market series has shape {market.shape}, not ({T},)")
+    if np.isnan(market).any():
+        raise ValueError("market series contains NaN")
     cum = np.cumsum(np.nan_to_num(r), axis=0)
 
     def mom(k):
@@ -211,25 +220,29 @@ def _etf_base_signals(logp: np.ndarray, r: np.ndarray, spy: int) -> dict:
     sig["ma_spread"] = _roll(logp, 50, lambda a: a.mean(axis=0)) - \
         _roll(logp, 200, lambda a: a.mean(axis=0))
     sig["drawdown"] = logp - _roll(logp, 252, lambda a: a.max(axis=0))
-    mkt = r[:, spy]
 
-    def _beta(a):
-        x = a[:, spy]
+    def _roll_mkt(w, fn):
+        """`_roll` over r with the market's same trailing window passed beside it."""
+        out = np.full((T, M), np.nan)
+        for t in range(w - 1, T):
+            out[t] = fn(r[t - w + 1:t + 1], market[t - w + 1:t + 1])
+        return out
+
+    def _beta(a, x):
         xc = x - x.mean()
         denom = float(xc @ xc)
         return (xc @ (a - a.mean(axis=0))) / denom if denom > 0 else np.zeros(a.shape[1])
 
-    sig["beta252"] = _roll(r, 252, _beta)
+    sig["beta252"] = _roll_mkt(252, _beta)
 
-    def _idvol(a):
-        x = a[:, spy]
+    def _idvol(a, x):
         xc = x - x.mean()
         denom = float(xc @ xc)
         b = (xc @ (a - a.mean(axis=0))) / denom if denom > 0 else np.zeros(a.shape[1])
         resid = a - a.mean(axis=0) - np.outer(xc, b)
         return resid.std(axis=0, ddof=1)
 
-    sig["idvol63"] = _roll(r, 63, _idvol)
+    sig["idvol63"] = _roll_mkt(63, _idvol)
 
     def _skew(a):
         c = a - a.mean(axis=0)
@@ -238,8 +251,16 @@ def _etf_base_signals(logp: np.ndarray, r: np.ndarray, spy: int) -> dict:
 
     sig["skew63"] = _roll(r, 63, _skew)
     sig["maxret21"] = _roll(r, 21, lambda a: a.max(axis=0))
-    _ = mkt
     return sig
+
+
+def declared_market(tickers: list, r: np.ndarray, name: str = "SPY") -> np.ndarray:
+    """The ETF panel's declared market series: `name`'s return column. Refuses, with no
+    fallback, if the panel has no such column."""
+    if name not in tickers:
+        raise ValueError(f"declared market series {name!r} is not in the panel; there is "
+                         "no fallback")
+    return r[:, tickers.index(name)]
 
 
 def build_etf_panel(directory=None) -> RealPanel:
@@ -253,8 +274,8 @@ def build_etf_panel(directory=None) -> RealPanel:
     P = np.array([[panel[t][1][idx[t][d]] for t in tickers] for d in common])
     logp = np.log(P)
     r = np.vstack([np.full((1, len(tickers)), np.nan), P[1:] / P[:-1] - 1.0])
-    spy = tickers.index("SPY") if "SPY" in tickers else 0
-    sig = _etf_base_signals(logp, np.nan_to_num(r), spy)
+    r0 = np.nan_to_num(r)
+    sig = _etf_base_signals(logp, r0, declared_market(tickers, r0))
 
     feats, names = [], []
     for nm in ETF_BASE:
