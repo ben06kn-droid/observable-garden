@@ -6,7 +6,7 @@ Computed and printed:
 - the class tier: the fast kernel's acceptance and a check of its streams against the
   registered `streams_for` (the maximum absolute difference only), its build time, and the
   class null maximum at the 95% and 97.5% points (demeaned streams, stationary bootstrap,
-  B = 1,000, block length by the class rule), with seconds per pricing call;
+  B = 5,000, block length by the class rule), with seconds per pricing call;
 - ridge_stack (as pinned at fce5627; the laptop's macOS LightGBM pin): its scored window,
   and its null bar at 95% and 97.5% from the DEMEANED stream, with seconds per call;
 - for each bar, the true net Sharpe certified with 80% power (normal approximation, below);
@@ -21,10 +21,13 @@ standard error sqrt((1 + SR^2 / 2) / T_years) (Lo 2002, iid); the certified true
 is the SR solving SR - z_0.80 * se(SR) = bar, z_0.80 = 0.8416. It ignores selection: for
 the class tier it is the Sharpe of a single member that is also the class's best.
 
-Seeds 692000 (class null), 692001 (ridge null), 692002 (leak test), from the block
-692000-692999 (seed_block_check: NO COLLISION on 2026-10-07).
+Re-run 2026-10-07 after the weighted split was fixed from null-only quantities (ridge_stack
+at p < 0.04, class tier at p < 0.01): the 96% and 99% points at B = 5,000, on the PINNED X
+(average ranks for exact ties). Seeds 692003 (class null), 692004 (ridge null), 692005
+(leak test); the first run used 692000-692002 at B = 1,000 on the earlier rank definition
+and is superseded. Block 692000-692999: seed_block_check NO COLLISION.
 
-    python -m experiments.french_design_quantities --out runs/french_design/2026-10-07
+    python -m experiments.french_design_quantities --out runs/french_design/2026-10-07-weighted
 """
 from __future__ import annotations
 
@@ -36,9 +39,9 @@ from pathlib import Path
 
 import numpy as np
 
-B = 1000
-SEED_CLASS, SEED_RIDGE, SEED_LEAK = 692000, 692001, 692002
-QUANTILES = (0.95, 0.975)
+B = 5000                             # 2026-10-07 re-run: B 5,000 for the 96% and 99% points
+SEED_CLASS, SEED_RIDGE, SEED_LEAK = 692003, 692004, 692005
+QUANTILES = (0.96, 0.99)             # ridge_stack certifies at p < 0.04, the class tier at p < 0.01
 Z80 = 0.8416212335729143
 LEAK_ROWS = (1000, 1700, 2300)
 CHECK_MEMBERS = 256
@@ -100,7 +103,9 @@ def main(argv=None) -> int:
     P("=" * 88)
     P(f"platform {platform.system()} {platform.machine()}; python {platform.python_version()}; "
       f"lightgbm {lightgbm.__version__} (laptop: macOS pin; not box numbers)")
-    panel = build_french_panel()
+    from environments.french_panel import PINNED_X_SHA256
+    panel = build_french_panel()                 # the pinned X, refused on mismatch
+    P(f"X: the pinned French X, SHA-256 {PINNED_X_SHA256}")
     T, M, K = panel.features.shape
     ed = panel.meta["earned_dates"]
     P(f"panel: T {T} feature rows ({panel.meta['dates'][0]} .. {panel.meta['dates'][-1]}), earned "

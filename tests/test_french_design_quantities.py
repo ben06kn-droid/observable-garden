@@ -13,5 +13,5 @@ def test_the_certified_sharpe_solves_the_stated_equation(bar, T):
 
 
 def test_the_seeds_are_the_checked_block():
-    assert (D.SEED_CLASS, D.SEED_RIDGE, D.SEED_LEAK) == (692000, 692001, 692002)
-    assert D.B == 1000 and D.QUANTILES == (0.95, 0.975)
+    assert (D.SEED_CLASS, D.SEED_RIDGE, D.SEED_LEAK) == (692003, 692004, 692005)
+    assert D.B == 5000 and D.QUANTILES == (0.96, 0.99)
