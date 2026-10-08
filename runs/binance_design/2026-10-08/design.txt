@@ -1,0 +1,27 @@
+Binance USDT-M perpetuals, 4h: outcome-free design quantities (in-sample only). PROVISIONAL: unpinned build
+========================================================================================
+platform Darwin arm64; lightgbm 4.7.0 (laptop)
+panel: 7116 feature rows, earned bars 2022-01-01T00:00:00+00:00 .. 2025-03-31T20:00:00+00:00; 50 contracts; 40 features; ppy 2190
+   contracts dead before the end of the in-sample window: 7
+
+CLASS TIER: fast kernel accepts the panel (no mask); cache opened/built in 560 s
+   fast vs registered streams_for on 128 members: max relative difference 5.9e-16
+   slow path (streams_for): 0.5 s for 128 members -> about 6 min for one pass over all 82240 (observed streams only; a null pass needs the streams again or 82,240 x 7116 in memory, 4.7 GB)
+   window: all 7116 rows (2022-01-01T00:00:00+00:00 .. 2025-03-31T20:00:00+00:00), 3.25 years; block length 3; B 5000, seed 695000
+   null maximum at 0.950: 2.573; certified with 80% power: 3.040
+   null maximum at 0.960: 2.657; certified with 80% power: 3.125
+   null maximum at 0.975: 2.806; certified with 80% power: 3.273
+   null maximum at 0.990: 3.049; certified with 80% power: 3.517
+   seconds per class-tier pricing call (fast kernel, B 5000): 90.2
+
+RIDGE_STACK, one declared stream (code as pinned at fce5627)
+   252-row 'years' = 42 days; refits every 252 rows; scored rows 756..7115 (6360 rows, 2.90 years; earned bars 2022-05-07T00:00:00+00:00 .. 2025-03-31T20:00:00+00:00)
+   block length 3; B 5000, seed 695001
+   null bar at 0.950 (demeaned stream): 0.960; certified with 80% power: 1.454
+   null bar at 0.960 (demeaned stream): 1.012; certified with 80% power: 1.506
+   null bar at 0.975 (demeaned stream): 1.136; certified with 80% power: 1.630
+   null bar at 0.990 (demeaned stream): 1.311; certified with 80% power: 1.805
+   seconds per pricing call: predictor 328 + tier 21.1
+   bit-for-bit repeat (positions): True; leak test at rows [1256, 3558, 6816]: PASS (a later change was visible after d: True)
+
+power: SR - 0.8416 * sqrt((1 + SR^2/(2 ppy)) / T_years) = bar (Lo 2002, iid)
