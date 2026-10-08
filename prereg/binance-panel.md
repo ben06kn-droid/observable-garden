@@ -338,3 +338,19 @@ Decided on 2026-10-08 and written in above:
 2. **The universe parameters:** top 50, the formation month, full-month trading, and the
    stablecoin and index exclusions. Also left open until item C.
 3. **The bar size:** 4h, or one of the daily variants (item C).
+
+## Note, 2026-10-08 (America/Chicago): held unread; not registered with ridge_stack version 1
+
+The author read item C's comparison (`28194a4`) and decided:
+- **Every variant needs a gross Sharpe above 2.1.** At 80% power the stream's gross floor
+  is 2.135–3.396 across the four variants (section l). That holds at 95% and 96%, and on
+  4h bars as on daily.
+- **This panel is not registered, and not read, with ridge_stack version 1.**
+- **It is held unread** until a version-2 predictor has been confirmed on planted panels.
+- **The bar size, the split of the 5% and the universe settings stay open.** They will be
+  chosen from version 2's own design numbers, not from section k or section l.
+- **The taker fee stays unverified** (section f). The author will supply it from the
+  author's own fee table.
+- **Nothing more is fetched, run or read on this panel until then.** The data already
+  fetched stays as it is: the in-sample CSVs, the quarantined raw zips, the manifests and
+  the recorded holdout checksums.
