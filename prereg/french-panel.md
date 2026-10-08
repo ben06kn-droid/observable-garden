@@ -1,8 +1,9 @@
-# French 49-industry panel: DRAFT, NOT LIVE
+# French 49-industry panel: a registration, 2026-10-07 (America/Chicago)
 
-**Status: DRAFT, NOT LIVE.** It is committed so the author can read the full text. It is
-not a registration, and nothing in it binds until a separate, dated commit makes it live.
-- The author's decisions of 2026-10-07 are folded in.
+**Status: LIVE, 2026-10-07 (America/Chicago).**
+- The author read the draft at `71f466d`, decided its open points and added section k.
+  This text was then committed alone, together with `prereg/DATASET_LEDGER.md`.
+- Amendments are append-only and dated.
 - No agent session has run and no box has been used.
 - No outcome on this data has been read: no realised Sharpe, p-value or certification.
 - The windows were fixed before any price was read, in `prereg/new-panels-audit-2026-10-06.md`.
@@ -104,13 +105,31 @@ not a registration, and nothing in it binds until a separate, dated commit makes
   Those last-bit differences change z-scores, and can flip ranks between values that are
   nearly tied. It was not tested, because no box was used. **So all French pricing runs
   on the laptop** (arm64), on the pinned X.
-- **One consequence, for the author's decision:** on the laptop, ridge_stack runs with the
-  macOS LightGBM pin, not the confirmation's Linux pin.
-  - The macOS pin is LightGBM 4.7.0, wheel
-    `lightgbm-4.7.0-py3-none-macosx_12_0_arm64.whl`, SHA-256
-    `129535462686f274df179133643118c5c5c5667167fe6c3a28d955f0b3c8e868`.
-  - The code and settings are those of `fce5627`. Only the platform's LightGBM build
-    differs.
+- **LightGBM: the macOS pin is accepted for this panel** (author, 2026-10-07).
+  - **The pin:** LightGBM 4.7.0, wheel `lightgbm-4.7.0-py3-none-macosx_12_0_arm64.whl`,
+    SHA-256 `129535462686f274df179133643118c5c5c5667167fe6c3a28d955f0b3c8e868`.
+  - **The installed library:** `lib_lightgbm.dylib`, SHA-256
+    `bc392db609d97730a9ed2acec7a56529b356c03dfad39bebf689523fed7dff18`.
+  - The code and settings are those of `fce5627`.
+- **The limit of that pin:**
+  - ridge_stack's level and power were confirmed on the **Linux** build (`77f3ee1`,
+    `d746a78`).
+  - Tree fits may differ in the last digits between the two builds.
+  - On the laptop, **the leak test passed on this panel** (rows 1000, 1700, 2300; seed
+    692005; `e099d46`).
+  - **The bit-for-bit repeat has not yet been run on this panel.** The read's runner runs
+    it first, on positions only, and refuses to price if two fits are not bit-identical
+    (section k).
+- **The read's start-up refusals.** The runner refuses to start unless every one of these
+  holds:
+  - the platform is Darwin arm64;
+  - LightGBM is 4.7.0, the wheel file given has the macOS pin's SHA-256, and the installed
+    `lib_lightgbm.dylib` has the SHA-256 above;
+  - the pinned X file has SHA-256 `07488718…d3fc` (`build_french_panel` refuses as well);
+  - the four `learn/` blobs at HEAD equal the pinned ones (section g);
+  - there are no tracked changes;
+  - this registration's commit is an ancestor of HEAD;
+  - HEAD equals the commit named on the command line.
 
 ## e. Costs
 
@@ -180,8 +199,8 @@ panel had been computed.
 
 ## h. Dataset ledger entry (before any run)
 
-No ledger file exists yet. **`prereg/DATASET_LEDGER.md` is created with this entry in
-the same commit that makes this registration live.** It is not created before then.
+**`prereg/DATASET_LEDGER.md` is created with this entry, in the same commit that makes
+this registration live.**
 
 | field | value |
 |---|---|
@@ -250,6 +269,59 @@ the Sharpe of a single member that is also the class's best.
   against their lower bounds.
 - **If nothing certifies:** the refusals are still graded, against their lower bounds.
   The registration then says that this panel could not test whether a pass holds.
+
+## k. The in-sample read (scripted, no agents)
+
+**Two tests only, run once, in this order.**
+1. **ridge_stack's stream through the supplied-streams tier.**
+   - Window: its scored rows 756–2515 (1,760 rows).
+   - Replicates: B = 5,000, block length by the class rule, `default_rng(693000)`.
+   - **Certified iff p < 0.04.**
+2. **The class maximum against the class null.**
+   - Window: all 2,516 rows; 82,240 members, fast kernel.
+   - Replicates: B = 5,000, block length by the class rule, `default_rng(693001)`.
+   - **Certified iff p < 0.01.**
+
+**Seeds:** block 693000–693999 (`experiments.seed_block_check`: NO COLLISION,
+2026-10-07). Only 693000 and 693001 are used.
+
+**Recorded for each test, whatever the verdict.** These are the objects the holdout
+grading will use:
+- the observed net Sharpe;
+- p;
+- the 90% lower bound;
+- the confidence curve (`quixote.confidence.confidence`, all its fields).
+
+For the class, the identity of the best member is also recorded: its feature indices,
+signs and feature names.
+
+**Before pricing:** two ridge_stack fits on this panel must give bit-identical positions.
+If they do not, nothing is priced and the read stops.
+
+**Both branches for each test.**
+- **Certified:** "certified in-sample at the registered weight; whether it holds is the
+  holdout grading's question."
+- **Refused:** "refused; consistent with the registered detection floor; no further
+  reading."
+
+**What this read means for agents.**
+- **Every agent submission on this panel is a class member.** So no agent session can
+  certify if the class maximum is refused.
+- **The ML tier has one stream.**
+- **Agent sessions on this panel are therefore a separate, behavioural cell,** registered
+  later. **Agents are not told this read's outcome.**
+
+**The holdout grading is a separate registration.**
+- It is written after this read and before any holdout row is parsed.
+- It grades the stream and the class's best member, **in both branches**.
+- **A known item it must settle:** continuing the walk-forward and the features across the
+  2019/2020 boundary without restarting state. That covers ridge_stack's fits and states,
+  the 252-row feature lookbacks and the gated-state history, as recorded for the
+  state-gated rule at `f41583b`.
+
+**The zip** stays quarantined at `~/Desktop/og-quarantine/french/` for this read, since no
+agent session is involved. It moves to the holdout host before any agent session and
+before any grading.
 
 ## What does not fit the ETF builder's assumptions
 
