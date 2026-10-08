@@ -15,7 +15,7 @@ import numpy as np
 # Re-pinned 2026-10-08 with groups on market-residual returns (note, design change 1). The
 # first pin (etf_v2_inputs.npz, SHA-256 50dec727...6d80, groups on raw returns) is superseded.
 PINNED = Path(__file__).resolve().parent.parent / "data" / "pinned" / "etf_v2_inputs_r2.npz"
-PINNED_SHA256 = ""                           # set from pin()'s output
+PINNED_SHA256 = "3ff15481cc4a81b62ee09e49610b5b776d9eb2f989b7a2fca53bb241a1696700"  # arm64, 2026-10-08, residual groups
 WARM = 252 + 1
 
 
