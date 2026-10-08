@@ -360,3 +360,175 @@ quantities (`ff0ea89`).
    1's now, before the pilot.
 3. **The dispersion-regime plant moving its own state slightly** (addendum, item 2) is
    accepted, and recorded.
+
+## The version-2 pilot, 2026-10-08 (America/Chicago). EXPLORATORY: no claim rests on it
+
+This section is committed alone, before the pilot script.
+
+**The outcome-free figures it rests on** (`a570241`): the base view's turnover and cost drag
+under each grid, on level-0 panels 696010–696012, with version 1 for comparison.
+
+| | turnover per row | per unit gross | cost per year | cost drag (Sharpe) |
+|---|---|---|---|---|
+| G1 {1.0, 0.3, 0.1} | 0.127 | 0.184 | 0.0161 | 0.273 |
+| G2 {0.5, 0.2, 0.1} | 0.077 | 0.113 | 0.0097 | 0.169 |
+| G3 {0.3, 0.1, 0.03} | 0.045 | 0.072 | 0.0057 | 0.107 |
+| version 1 | 0.164 | 0.164 | 0.0207 | 0.247 |
+
+The re-pinned groups (`59fe966`, SHA-256 `3ff15481…6700`) give 4 groups on 2,947 rows, 3
+on 1,279, 2 on 44 and 5 on 6, out of 4,276.
+
+### Panels: seed block 697000–697999
+
+The block was re-checked against every pre-registration: **NO COLLISION**.
+
+**Planted:** 7 shapes × 50 seeds, each seed at levels 0.5, 1.0, 1.5 and 2.5 (one residual
+draw and one set of rule features per seed).
+
+| shape | seeds |
+|---|---|
+| U | 697000–697049 |
+| corner | 697050–697099 |
+| product | 697100–697149 |
+| gated | 697150–697199 |
+| lead-lag | 697200–697249 |
+| volume-conditioned | 697250–697299 |
+| regime-only | 697300–697349 |
+
+**Level 0:** 100 panels, 697400–697499, at the registered cost, and the same panels at zero
+cost.
+
+**Seeds:**
+- Each panel's tiers use its own seed.
+- **The paired bootstrap** for the rules uses `default_rng(697999)`, B = 10,000.
+
+### Streams and menus
+
+**Single streams, each priced as one declared strategy** through the supplied-streams
+tier (B = 1,000, block length by the class rule), each on its own scored window:
+- version 2's base view under G1, G2 and G3 (all blocks, h = 5, market-neutral, always),
+  from row 763;
+- version 1 (ridge_stack at `fce5627`), from row 756;
+- the plain ridge (version 1's control), from row 756.
+
+**Beside them,** on the at-cost panels: the class tier (the fast kernel's class maximum
+against the class null, B = 1,000, the whole window).
+
+**The full menu, 294 views, under each grid,** is computed on 380 panels:
+- the 100 level-0 panels, at cost and at zero cost;
+- the first 20 seeds of each shape at levels 1.0 and 1.5: 280 panels.
+
+**Menu streams** share one window, from row 778 (756 + 20 + 1 + 1). A menu's tier is the
+joint-bootstrap maximum over its views' demeaned streams (B = 1,000, the class rule's
+block length).
+
+**The nested menus:**
+
+| menu | views |
+|---|---|
+| base | 1 |
+| information × horizon (market, always) | 21 |
+| + neutrality (always) | 42 |
+| + regime | 294 |
+
+**The tiered scheme, per grid:** certified iff any of these holds:
+- the base view's single-stream p < 0.02;
+- the 42-menu maximum's p < 0.02;
+- the 294-menu maximum's p < 0.01.
+
+**Each shape's natural view, for R3, defined now:**
+
+| shape | information must include | regime |
+|---|---|---|
+| U, corner, product | P | always |
+| gated | P | vol_high (the rule's gate is the vol state above its expanding median) |
+| lead-lag | X | always |
+| volume-conditioned | P and V | always |
+| regime-only | P | the drawn regime |
+
+Horizon and neutrality are free. A winning view "matches" iff its information includes the
+required blocks and its regime is the required one.
+
+### Reads, once, in this order
+
+**R1, level,** zero cost then at cost, on the 100 level-0 panels. It covers:
+- each single stream;
+- the menu maximum for the 21-, 42- and 294-view menus, under each grid (certified iff the
+  best view's menu-tier p < 0.05);
+- the tiered scheme, under each grid;
+- the class tier, at cost only.
+
+**A stream or scheme fails level iff the lower Wilson end of its rate exceeds 0.05.** At
+n = 100 that is 10 or more certifications. A true rate of 0.123 or more is detected with
+80% power, and a scheme exactly at 0.05 fails with probability 0.028.
+
+**R2, power of the single streams,** by shape × level, pooled, fast and slow, with Wilson
+intervals and cell counts, and the class tier beside them. Cells with fewer than 5 panels
+are marked thin.
+
+**R3, the menu, on the 280 panels, by shape** (and pooled), under each grid. Certification
+rates of:
+- (a) the base view alone at 5%;
+- (b) the menu maximum over 21, 42 and 294 views at 5%;
+- (c) the tiered scheme.
+
+Also: which view wins (the menu maximum's view), and whether it matches the shape's natural
+view.
+
+**R4, descriptive,** planted panels against null:
+- capture: population net and gross Sharpe of the base view's book over its window, as a
+  share of the plant's;
+- turnover and cost drag, raw and per unit gross;
+- the share of refits with a penalty at a grid edge (planted panels, not only level 0);
+- the robustness reading: the mean pairwise correlation of the nine variants' positions.
+
+### Rules stated now, both branches
+
+**Grid.**
+- Among the grids whose base view holds level (R1, zero cost), the one with the **highest
+  pooled certification rate at levels 0.5–1.5** (7 shapes × 50 × 3 = 1,050 panels) is
+  carried forward. **Ties go to the slower grid** (G3 before G2 before G1).
+- If no grid holds level, none is carried forward and version 1 stays.
+
+**Replacement.** With the carried grid, version 2's base view **replaces version 1 iff**:
+- its pooled rate at 0.5–1.5 over all seven shapes exceeds version 1's;
+- the paired 95% interval for the difference excludes zero (B = 10,000, seed 697999); and
+- the base view holds level.
+
+**Otherwise version 1 stays.**
+
+**Fairness flag (not a rule).** The same paired difference is computed on version 1's
+original four shapes alone (600 panels). If its lower end is below −0.05, the report says
+**version 2 wins only where the plant uses its new inputs, and the decision returns to the
+author.**
+
+**Menu pricing: descriptive only.** (a), (b) and (c) are reported side by side. **No scheme
+is chosen by rule in this pilot.**
+
+### Detectability, stated before the run
+
+Paired difference in certification rate, 80% power, normal approximation. p01 is the share
+of panels the comparator certifies and the candidate does not. The assumption is stated,
+not estimated.
+
+| comparison | n | p01 = 0 | 0.02 | 0.05 | 0.10 |
+|---|---|---|---|---|---|
+| replacement (7 shapes × 50 × levels 0.5–1.5) | 1,050 | 0.008 | 0.021 | **0.031** | 0.043 |
+| fairness flag (4 original shapes) | 600 | 0.013 | 0.030 | 0.043 | 0.058 |
+| R3, one shape (20 seeds × 2 levels) | 40 | 0.164 | 0.197 | 0.234 | 0.281 |
+| R3, pooled | 280 | 0.027 | 0.049 | 0.068 | 0.089 |
+
+- **R3 per-shape rates** have a 95% Wilson half-width of about 0.15 at a rate of 0.5
+  (n = 40).
+- **R2 cells** have about 0.13 (n = 50).
+- **R3 by shape is therefore coarse.** Only differences of about 0.2 or more between
+  schemes are detectable.
+
+### Platform
+
+- **The pilot runs on the box only,** with the Linux LightGBM pin (wheel SHA-256
+  `d23e922a…ebb7`, installed `lib_lightgbm.so` `573d57e8…616a`).
+- **The pinned inputs** are copied with their hashes checked on arrival:
+  - the ETF P pin (`4b461070…b7ba`);
+  - the re-pinned v2 inputs (`3ff15481…6700`).
+- **Laptop and box numbers are not mixed.**
