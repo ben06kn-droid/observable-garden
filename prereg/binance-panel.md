@@ -48,9 +48,8 @@ collected in **"Open choices"** at the end.
 - **Holdout:** 2025-04-01 00:00 onward.
   - The monthly archive runs to **2026-09**. For the 50 contracts it lists 1,664 holdout
     files (klines and funding); these were counted only.
-  - **Open:** the holdout end. Either 2026-09-30 20:00 (the last complete month in the
-    monthly archive), or the fetch date, which needs the daily files for 2026-10-01 to
-    10-07.
+  - **Decided (B4, 2026-10-08): the holdout ends at 2026-09-30,** with the last bar
+    opening 20:00. That is the last complete month in the monthly archive.
 
 ## c. Universe, point in time
 
@@ -89,7 +88,8 @@ the bar after its last bar with trades (`count > 0` and `volume > 0`) if either:
 - it never trades again in-sample (the archive's filler rows have zero trades and a
   constant price, and later months may be absent); or
 - its next trade comes only after a silence of 180 or more bars (30 days). That is treated
-  as a new contract, which is not entered.
+  as a new contract, which is not entered. **Decided (B3): dead from the silence, no
+  re-entry** (this applies to ICPUSDT and TLMUSDT).
 
 The audit's file-size heuristic is not used.
 
@@ -100,12 +100,32 @@ The audit's file-size heuristic is not used.
 
 ## d. The tradable mask: options and costs
 
-The fast kernel refuses masks. **Proposed: d3, no mask; a dead contract becomes idle
-capital.**
-- After its death a contract has return 0, funding 0 and cost 0.
-- It stays in the cross-section, and its features follow its flat price.
-- Any weight on it earns nothing and costs nothing to change. That is the settled position
-  after a delisting.
+The fast kernel refuses masks. **Decided (B1, 2026-10-08): d3, no mask; a dead contract
+becomes idle capital.**
+- **Its returns.** The last traded bar's return is earned in full by any position held
+  over it. Every later bar earns 0, with funding 0 and cost 0.
+  - The death bar is the first bar after the last trade.
+  - A trade decided at the close of bar t executes at the close of t+1, so it is costed iff
+    bar t+1 is live.
+- **Its features are finite and deterministic.** From the death bar on, every one of its
+  20 base signals is set to NaN *before* the cross-sectional transforms. Any ±inf (a zero
+  volatility in a ratio) is set to NaN first.
+  - So it drops out of that row's z-score mean and standard deviation, and out of its rank
+    count.
+  - Both transforms map a missing value to 0, so **all 40 of its features are exactly 0.**
+  - Zero volatility therefore never produces a NaN, or a divide-by-zero, in X.
+  - Tested in `tests/test_binance_panel.py`: all-zero features after death, a finite X,
+    and live ranks still spanning [−1, 1].
+- **The weight a strategy can place on it is not zero.** A class member and ridge_stack
+  both demean their scores across all 50 contracts.
+  - So a dead contract (score 0) receives **minus the row's mean score, divided by the
+    row's gross score.**
+  - A class member is a signed sum of up to three features, so its mean score is the mean
+    of those features over the 50, and the dead weight is −mean/gross.
+  - ridge_stack's basis portfolios are each demeaned the same way, so its dead weight is the
+    combination of those.
+  - That weight earns nothing and costs nothing. Its size is measured in item C (the share
+    of gross held in dead contracts).
 - Positions remain a function of X alone, so the fast kernel and the pinned ridge_stack
   both run unchanged.
 - **The distortion:** books may hold dead contracts, which dilutes them. There is no
@@ -115,7 +135,7 @@ capital.**
 |---|---|---|
 | **d1** slow path with a mask | `streams_for` with `tradable` False after a death | Class pass: about 6 min per pass over the 82,240 members (measured on 128). A null pass needs the streams again, chunked, or 4.7 GB in memory, which does not fit the laptop. So roughly 10–15 min per class pricing call, against 90 s on the fast kernel. **And ridge_stack's pinned code (`learn/`, `fce5627`) has no mask:** it would trade dead contracts. A mask means changing `learn/` and breaking the pin. |
 | **d2** survivors only | the contracts live through the whole window: 43 of the 50 | **Survivorship:** the 7 dead contracts (6.98% of formation volume) are removed, among them LUNA's collapse. **Bound:** at most 7 of 50 contracts, and at most 14% of the equal-weight cross-section, is affected. The bias is towards survivors' returns, with no estimate of its sign for a long-short book. |
-| **d3** (proposed) idle after death | as above | No code change; fast kernel. Weights on dead contracts dilute books. |
+| **d3** (decided) idle after death | as above | No code change; fast kernel. Weights on dead contracts dilute books. |
 
 ## e. Returns and funding
 
@@ -135,29 +155,50 @@ capital.**
   - **An archive hole:** 15 of the 50 contracts have no 4h rows for **2022-02-26 00:00 –
     02-28 20:00** and **2022-04-01 00:00 – 04-02 20:00**, 30 bars in all. Carrying the
     close puts the whole move across each hole into one bar.
-  - **Open:** fill those bars from another archive file (the daily 4h files, or 1h
-    monthly files aggregated), or carry the close as now.
-- **Signals use the same total return,** price change plus funding. The alternative not
-  taken is price-only signals with funding in the earned return only.
+  - **Decided (B2): fill them from the archive's daily 4h files,** only if those agree with
+    the monthly file on the overlapping bars. Otherwise the close is carried and the bars
+    flagged.
+    - **The tolerance:** a relative difference of at most 1e-9 on open, high, low, close,
+      volume and quote volume, and an equal trade count, on every bar of the days just
+      before and just after each hole.
+    - **The result:** all 15 contracts were **filled**, 30 bars each. Each hole had 12
+      overlap bars, and the maximum relative difference was **0**: the files are
+      identical where they overlap.
+    - The daily files were verified against their CHECKSUM and quarantined.
+    - Code: `data/fetch_binance_fill.py` (`a9d8801`). Manifest:
+      `data/binance_fill_manifest.json` (`96b683e`).
+    - **A fill never overrides a monthly row.**
+  - The same check also filled ICPUSDT's and TLMUSDT's missing months during their
+    silences. Both remain dead from the silence (B3).
+- **Decided (B7): signals are price-only. Funding enters the earned return only.** The
+  signals use close-to-close price returns, and so does the market series they use. The
+  alternative not taken is total-return signals.
 
 ## f. Costs
 
-- **Proposed: 10 bps one-way per unit of turnover,** charged on live contracts. It is
-  **taker fee 5 bps + slippage 5 bps.** There is **no borrow term:** shorts pay or receive
-  funding instead.
-- **Sources, as stated assumptions:**
-  - **The taker fee** is Binance's published USDⓈ-M fee schedule at the regular (VIP 0)
-    tier: 0.05% taker, and it was 0.04% earlier in the window. **Not re-checked today.**
-  - **The slippage** is an assumption with no measured source here. It is plausible for
-    the most liquid contracts and optimistic for the thinner ones in the top 50.
+- **Decided (B5): 10 bps one-way per unit of turnover,** charged on live contracts. **It is
+  an assumption.** It is made of a taker fee of 5 bps and slippage of 5 bps. There is **no
+  borrow term:** shorts pay or receive funding instead.
+- **The taker fee, re-checked on 2026-10-08: not confirmed from the published schedule.**
+  - Binance's USDⓈ-M fee-rate table (`binance.com/en/fee/futureFee`) showed no rates
+    without a login ("No records found").
+  - Binance's futures fee FAQ (`binance.com/en/support/faq/360033544231`, last updated
+    2026-05-01) states "a Regular User's maker fee is 0.02% and a Regular User's taker fee
+    is 0.05%". It labels this as a calculation with **hypothetical** fee rates.
+  - A search summary reported 0.04% taker at Level 0. That could not be traced to a page
+    and is not relied on.
+  - **So the 5 bps taker half is the FAQ's illustrative regular-user rate,** not a
+    confirmed schedule figure. It is stated as such.
+- **The slippage half (5 bps) is unmeasured,** and is said to be. It is plausible for the
+  most liquid contracts and optimistic for the thinner ones in the top 50.
 - **Alternatives:**
   - a per-contract slippage from formation-month volume;
   - a sensitivity read at 5 and 20 bps.
 
 ## g. Market series
 
-The equal-weighted average of the **live** contracts' returns, each bar. The alternative
-not taken is to average all 50, with dead contracts at 0.
+**Decided (B6):** the equal-weighted average of the **live** contracts' price returns,
+each bar. The alternative not taken is to average all 50, with dead contracts at 0.
 
 ## h. Features: the same code, different horizons
 
@@ -213,7 +254,11 @@ not taken is to average all 50, with dead contracts at 0.
   agents, contract names and dates are masked: assets are `C00`–`C49`, and rows are
   indexed. Whether recall leaks through anyway is stated as a limit, not measured.
 
-## k. Outcome-free design quantities (PROVISIONAL: unpinned build)
+## k. Outcome-free design quantities (PROVISIONAL: unpinned build, before B1–B7)
+
+These figures predate decisions B1–B7: total-return signals, unfilled holes, and dead
+contracts' features following their flat price. Item C recomputes the stream's figures on
+the decided build.
 
 **Source:** `experiments/binance_design_quantities.py` (`d0667f0`); output in
 `runs/binance_design/2026-10-08` (`6537bd3`).
@@ -238,22 +283,18 @@ SR − 0.8416 · sqrt((1 + SR² / (2 · 2,190)) / T_years) = bar.
 
 ## Open choices (for the author)
 
-1. **The mask: d3** (proposed: idle after death, fast kernel, pinned code), **d1** (slow
-   path; breaks the `learn/` pin), or **d2** (survivors only, 43 contracts).
-2. **The archive hole** (15 contracts; 2022-02-26 to 02-28 and 2022-04-01 to 04-02): fill
-   it from another archive file, or carry the close.
-3. **Relisting:** ICPUSDT (silent 108 days from 2022-06-10) and TLMUSDT (silent 294 days
-   from 2022-06-09) resumed trading.
-   - Proposed: dead from the silence, no re-entry.
-   - Alternative: re-enter at relisting. This is observable when it happens, so there is no
-     look-ahead, but it is a mask-like entry.
-4. **The holdout end:** 2026-09-30 (the last monthly file), or the fetch date (daily
-   files).
-5. **Costs:** 10 bps one-way (taker 5 + slippage 5), or another figure, or a sensitivity
-   read.
-6. **The market series:** the live-contract average, or all 50.
-7. **Signals:** on total return (proposed), or on price return only.
-8. **The split of the 5%** between the class tier and the stream. The class tier's
-   80%-power Sharpe is above 3 at every weight on this 3.25-year window (section k).
-9. **The universe parameters:** top 50, October 2021 formation, full-month trading, and
-   the stablecoin and index exclusions.
+Decided on 2026-10-08 and written in above:
+- B1: d3, idle after death;
+- B2: holes filled (all 15, an exact match on the overlaps);
+- B3: no re-entry after a silence;
+- B4: the holdout ends at 2026-09-30;
+- B5: 10 bps, an assumption;
+- B6: the live-contract market;
+- B7: price-only signals.
+
+**Still open:**
+1. **The split of the 5%** between the class tier and the stream. It is left open until
+   item C (bar size) is done.
+2. **The universe parameters:** top 50, the formation month, full-month trading, and the
+   stablecoin and index exclusions. Also left open until item C.
+3. **The bar size:** 4h, or one of the daily variants (item C).
