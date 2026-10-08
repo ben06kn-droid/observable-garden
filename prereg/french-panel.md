@@ -342,3 +342,45 @@ before any grading.
 - **Missing-value codes:** none (section a).
 - **Industries with gaps:** none. All 49 have a value on every in-sample day.
 - **Not a tradable instrument** (section e).
+
+## Amendment 1, 2026-10-08 (America/Chicago): the 80%-power figures are corrected
+
+**What was wrong.** Sections i and j gave each bar's 80%-power Sharpe by solving
+SR − 0.8416 · sqrt((1 + SR²/2) / T_years) = bar. That uses the ANNUALISED Sharpe where
+Lo's (2002) iid formula uses the per-period one. The correct annualised form is
+**SR − 0.8416 · sqrt((1 + SR² / (2 · ppy)) / T_years) = bar**, with ppy = 252. The old
+formula overstated every power figure. The bars themselves (the null quantiles) are
+unaffected.
+
+**Corrected figures, current run** (`e099d46`; the bars are unchanged):
+
+| tier | bar | 80%-power Sharpe as given | **corrected** |
+|---|---|---|---|
+| class, 96% | 1.302 | 1.721 | **1.569** |
+| class, 99% (registered weight, p < 0.01) | 1.412 | 1.850 | **1.679** |
+| stream, 96% (registered weight, p < 0.04) | 0.666 | 1.065 | **0.985** |
+| stream, 99% | 0.877 | 1.311 | **1.196** |
+
+**Superseded first run** (`522151f`), for the record:
+
+| tier | as given | **corrected** |
+|---|---|---|
+| class, 95% / 97.5% | 1.695 / 1.791 | **1.546 / 1.628** |
+| stream, 95% / 97.5% | 1.001 / 1.122 | **0.930 / 1.035** |
+
+**Section j's ceiling, corrected:**
+- An edge whose true net Sharpe is below **0.985** will usually be refused by the stream
+  tier.
+- An edge below **1.679** will usually be refused by the class tier.
+- This remains the detection floor of the window, not a defect.
+
+**What depended on them: no verdict.**
+- The in-sample read (`31622d6`, `fc92cdb`) decided each test by its p-value against the
+  registered weight: p < 0.04 for the stream, p < 0.01 for the class. Neither decision uses
+  a power figure.
+- **The reason given for the weights stands, at about 1.6–1.7.** The class tier's
+  80%-power Sharpe at its 96% point is 1.569, and at its 99% point 1.679, against "about
+  1.7" when the weights were set. The weights are unchanged.
+
+The code for the corrected formula is `experiments.binance_design_quantities.certified_sharpe`
+(tested in `tests/test_binance_design_quantities.py`).
