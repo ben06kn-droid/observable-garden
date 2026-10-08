@@ -130,3 +130,17 @@ def test_the_pin_is_written_once_and_refused_on_mismatch(tmp_path, monkeypatch):
         fp.pinned_features(f, "0" * 64, (345, 4, 40))
     with pytest.raises(SystemExit, match="no pinned"):
         fp.pinned_features(f, "", (345, 4, 40))
+
+
+@pytest.mark.skipif(__import__("platform").machine() != "arm64",
+                    reason="the French X pin was built on arm64; see prereg/french-panel.md")
+def test_the_french_build_rebuilds_the_pin_on_arm64_and_the_panel_serves_it(tmp_path):
+    import hashlib
+    try:
+        p = fp.build_french_panel(pinned=False)
+    except (FileNotFoundError, SystemExit) as e:
+        pytest.skip(f"French in-sample data unavailable: {e}")
+    f = tmp_path / "x.npy"
+    np.save(f, np.ascontiguousarray(p.features, dtype=np.float64))
+    assert hashlib.sha256(f.read_bytes()).hexdigest() == fp.PINNED_X_SHA256
+    assert np.array_equal(fp.build_french_panel().features, p.features)

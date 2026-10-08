@@ -27,7 +27,7 @@ from environments.real_panel import (ETF_BASE, ETF_BORROW_BPS_YR, ETF_COST_BPS, 
 WARM = 252 + 1
 LAG = 2
 PINNED_X = Path(__file__).resolve().parent.parent / "data" / "pinned" / "french49_X.npy"
-PINNED_X_SHA256 = ""                 # set from pin_features' output when the pin is written
+PINNED_X_SHA256 = "07488718c8c48b6d872c580f1dc3a3c0e87fb8a4c6403131b0beddd55ea3d3fc"  # arm64, numpy 2.5.3
 PINNED_X_SHAPE = (2516, 49, 40)
 
 
