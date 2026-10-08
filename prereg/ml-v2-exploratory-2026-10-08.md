@@ -301,3 +301,35 @@ from that.
 3. A cost-only smoke on level-0 planted ETF panels (a fresh checked seed block).
 4. Outcome-free design quantities: the script is committed before its run.
 5. Stop and report. The pilot needs the author's go.
+
+## Addendum, 2026-10-08: points settled during the build
+
+Three corrections and clarifications, recorded before the version-2 code is committed.
+1. **Group clustering arithmetic.** Average-linkage distances are kept by the
+   Lance–Williams update: the size-weighted mean of the merged clusters' distances. In
+   exact arithmetic that equals the mean of the pairwise distances. Ties are taken at
+   float64 equality, and broken by asset index as stated.
+   - The literal rule (the mean recomputed at each step) is kept as
+     `learn2.blocks.cluster_bruteforce`.
+   - The two agree on untied inputs, which is tested. On inputs built to tie exactly, the
+     two arithmetics can resolve a tie differently: 5 of 80 such synthetic cases.
+   - **The definition is the incremental one.**
+2. **The regime-only plant and the learner's states: a correction.** The note said the
+   plant's regime equals the learner's state input on planted panels. That holds for the
+   **vol** and **sum** states, which are built from the equal-weighted market, and a
+   dollar-neutral plant cannot move that market. It does **not** hold exactly for the
+   **dispersion** state, the cross-sectional SD of returns, which the plant moves
+   slightly.
+   - The same was recorded for the existing gated rule at `92f7ea1`: the correlation
+     with the gate moved from 0.463 to 0.469.
+   - A regime-only plant on a dispersion regime is therefore seen through a slightly
+     moved state.
+3. **The volume-conditioned plant.** The P column is demeaned **within the active assets**
+   (those above the row's median of V_b). The inactive assets are exactly 0. The
+   positions are then scaled to unit gross.
+
+**And an observation from building the real-ETF groups.** The group rule (5 clusters,
+groups under 3 merged) collapses on the real ETF data. On the last in-sample row it
+leaves **2 groups, of 7 and 33 assets.** Average linkage isolates small outlying
+clusters, which the merge step then absorbs. The distribution over all rows is reported
+with the build. The rule is as the author specified, and it is not changed here.
