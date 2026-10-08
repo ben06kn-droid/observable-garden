@@ -61,8 +61,8 @@ def test_funding_sign_a_long_pays_a_positive_rate_and_a_short_receives_it():
     fr = [[int(t[5]), 8.0, 0.001]]                                       # funding at the open of bar 5
     a = bp.align(t, kl, fr)
     assert a["funding"][4] == 0.001 and a["funding"].sum() == 0.001      # the bar ENDING at that time
-    r, alive = bp.returns_from([a], len(t))
-    assert r[4, 0] == pytest.approx(-0.001)                              # long earns -rate
+    r, rp, alive = bp.returns_from([a], len(t))
+    assert r[4, 0] == pytest.approx(-0.001) and rp[4, 0] == 0.0          # signals never see funding                              # long earns -rate
     w_short = -1.0
     assert w_short * r[4, 0] == pytest.approx(+0.001)                    # short receives it
 
@@ -74,7 +74,7 @@ def test_gaps_carry_the_close_and_a_delisting_kills_the_contract():
     a = bp.align(t, kl[:300], [])                                        # no rows after bar 301
     assert a["dead"] == 302 and a["gap_bars"] == 2
     assert a["close"][10] == a["close"][9] == 109.0
-    r, alive = bp.returns_from([a], len(t))
+    r, rp, alive = bp.returns_from([a], len(t))
     assert not alive[302:, 0].any() and alive[:302, 0].all() and np.all(r[302:, 0] == 0)
     # filler rows (zero trades, constant price) after the last trade are a death, not trading
     kl2 = [[int(x), 1, 1, 1, 50.0, 5.0, 500.0, 7] for x in t[:200]] + \
@@ -86,19 +86,57 @@ def test_gaps_carry_the_close_and_a_delisting_kills_the_contract():
     assert bp.align(t, kl3, [])["dead"] == 100
 
 
-def test_dead_contracts_are_free_and_idle_and_the_market_averages_live_ones():
-    T, M = 600, 4
+def test_dead_contracts_are_free_idle_and_have_all_features_exactly_zero():
+    T, M = 700, 5
     rng = np.random.default_rng(0)
     r = 0.01 * rng.standard_normal((T, M))
     alive = np.ones((T, M), bool)
     alive[400:, 3] = False
-    r[400:, 3] = 0.0
-    p = bp.panel_from_arrays(_times(T), list("abcd"), r, alive)
-    assert p.features.shape == (T - 253 - 2, M, 40) and not np.isnan(p.features).any()
-    k = 399 - 253                    # feature row 399 executes at the close of bar 400, dead
-    assert np.all(p.cost_rate[k:, 3] == 0) and np.all(p.cost_rate[:k, 3] == 10e-4)
+    r[400:, 3] = 0.0                                   # flat price after death: zero volatility
+    p = bp.panel_from_arrays(_times(T), list("abcde"), r, alive, rp=r)
+    assert p.features.shape == (T - 253 - 2, M, 40)
+    assert np.isfinite(p.features).all()
+    k = 400 - 253                                      # feature row of the death bar
+    assert np.all(p.features[k:, 3, :] == 0.0) and np.any(p.features[k - 1, 3, :] != 0.0)
+    # the live contracts' ranks span [-1, 1] without the dead one
+    j = p.feature_names.index("mom21_rank")
+    assert np.allclose(np.sort(p.features[k + 10, [0, 1, 2, 4], j]), [-1, -1 / 3, 1 / 3, 1])
+    k2 = 399 - 253                                     # feature row 399 executes at the close of bar 400, dead
+    assert np.all(p.cost_rate[k2:, 3] == 0) and np.all(p.cost_rate[:k2, 3] == 10e-4)
     assert np.all(p.borrow_rate == 0) and p.periods_per_year == 2190.0
     assert np.allclose(p.returns[0], r[255])
+
+
+def test_signals_are_price_only_and_earned_returns_carry_funding():
+    T, M = 600, 4
+    rng = np.random.default_rng(1)
+    rp = 0.01 * rng.standard_normal((T, M))
+    fund = np.zeros((T, M))
+    fund[::2] = 0.0005
+    alive = np.ones((T, M), bool)
+    a = bp.panel_from_arrays(_times(T), list("abcd"), rp - fund, alive, rp=rp)
+    b = bp.panel_from_arrays(_times(T), list("abcd"), rp, alive, rp=rp)
+    assert np.array_equal(a.features, b.features)                      # funding never enters X
+    assert np.allclose(a.returns, (rp - fund)[255:T])
+
+
+def test_the_daily_spec_starts_the_month_after_formation_with_the_warm_up_inside():
+    s = bp.daily_spec("2021-11")
+    g = bp.grid(s)
+    assert s.ppy == 365 and s.relist_gap == 30
+    assert g[0] == int(dt.datetime(2021, 11, 1, tzinfo=dt.timezone.utc).timestamp() * 1000)
+    assert g[-1] == int(dt.datetime(2025, 3, 31, tzinfo=dt.timezone.utc).timestamp() * 1000)
+
+
+def test_a_fill_never_overrides_a_monthly_row(tmp_path):
+    t = _times(4)
+    (tmp_path / "X_4h.csv").write_text("open_time,open,high,low,close,volume,quote_volume,count\n"
+                                       f"{t[0]},1,1,1,10,1,1,1\n{t[2]},1,1,1,12,1,1,1\n")
+    (tmp_path / "X_4h_fill.csv").write_text("open_time,open,high,low,close,volume,quote_volume,count\n"
+                                            f"{t[1]},1,1,1,11,1,1,1\n{t[2]},1,1,1,99,1,1,1\n")
+    (tmp_path / "X_funding.csv").write_text("calc_time,funding_interval_hours,rate\n")
+    kl, _ = bp.load_symbol("X", tmp_path)
+    assert sorted((r[0], r[4]) for r in kl) == [(t[0], 10.0), (t[1], 11.0), (t[2], 12.0)]
 
 
 def test_the_loader_refuses_holdout_rows(tmp_path):
@@ -108,3 +146,18 @@ def test_the_loader_refuses_holdout_rows(tmp_path):
     from data.etf_loader import HoldoutRefused
     with pytest.raises(HoldoutRefused):
         bp.load_symbol("X", tmp_path)
+
+
+def test_fill_runs_and_agreement_rules():
+    from data import fetch_binance_fill as ff
+    d = dt.date
+    assert ff.runs_of_days([d(2022, 2, 27), d(2022, 2, 26), d(2022, 4, 1), d(2022, 2, 28), d(2022, 4, 2)]) == \
+        [[d(2022, 2, 26), d(2022, 2, 27), d(2022, 2, 28)], [d(2022, 4, 1), d(2022, 4, 2)]]
+    a = [1, 10.0, 11.0, 9.0, 10.5, 100.0, 1000.0, 7]
+    assert ff.agree(a, list(a))[0]
+    b = list(a)
+    b[4] = 10.5 * (1 + 1e-6)
+    assert not ff.agree(a, b)[0]
+    c = list(a)
+    c[7] = 8
+    assert not ff.agree(a, c)[0]
