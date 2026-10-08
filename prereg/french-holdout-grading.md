@@ -181,14 +181,15 @@ There are two objects (n = 2). **No pooled test.**
     Below −1.00 or above 3.00 it reports the end value and says so.
 
 **What size of difference is visible.** The standard error of an annualised Sharpe over
-6.64 years is about sqrt((1 + SR²/2) / 6.64), assuming iid returns:
+6.64 years is about sqrt((1 + SR² / (2 · 252)) / 6.64), by Lo's iid formula with ppy 252.
+(Corrected on 2026-10-08: the earlier table used (1 + SR²/2) and overstated it.)
 
 | at SR | standard error |
 |---|---|
 | 0 | 0.388 |
-| 0.547 | 0.416 |
-| 0.679 | 0.430 |
-| 1.0 | 0.475 |
+| 0.547 | 0.388 |
+| 0.679 | 0.388 |
+| 1.0 | 0.388 |
 
 A difference between realised and in-sample Sharpe smaller than about **0.8** (two
 standard errors) will usually not be distinguishable from noise.
