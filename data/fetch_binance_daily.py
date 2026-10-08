@@ -21,6 +21,26 @@ from concurrent.futures import ThreadPoolExecutor
 from data import fetch_binance as fb
 
 FORMATIONS = ("2020-09", "2021-01", "2021-10")
+
+
+def _retrying(fn, tries: int = 5):
+    """A network call retried with backoff; the CHECKSUM verification is unchanged."""
+    import time
+
+    def call(*a, **k):
+        for i in range(tries):
+            try:
+                return fn(*a, **k)
+            except fb.FetchRefused:
+                raise
+            except Exception:
+                if i == tries - 1:
+                    raise
+                time.sleep(2 ** i)
+    return call
+
+
+fb._get = _retrying(fb._get)
 MANIFEST = fb.REPO / "data" / "binance_daily_manifest.json"
 
 
