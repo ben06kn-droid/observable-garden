@@ -5,10 +5,10 @@ Computed and printed:
 - the panel's shape and windows;
 - the class tier: the fast kernel's acceptance and a check of its streams against the
   registered `streams_for` (the maximum absolute difference only), its build time, and the
-  class null maximum at the 95% and 97.5% points (demeaned streams, stationary bootstrap,
+  class null maximum at the 96% and 99% points (demeaned streams, stationary bootstrap,
   B = 5,000, block length by the class rule), with seconds per pricing call;
 - ridge_stack (as pinned at fce5627; the laptop's macOS LightGBM pin): its scored window,
-  and its null bar at 95% and 97.5% from the DEMEANED stream, with seconds per call;
+  and its null bar at 96% and 99% from the DEMEANED stream, with seconds per call;
 - for each bar, the true net Sharpe certified with 80% power (normal approximation, below);
 - whether ridge_stack's leak test passes on this panel (positions only).
 
