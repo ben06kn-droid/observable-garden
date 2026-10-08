@@ -82,8 +82,8 @@ computed, and the grader refuses if any fails.
    |p_t − p_{t−1}| · cost_rate + max(−p_t, 0) · borrow_rate, summed over industries, to
    1e-15.
    - t is the feature row 2019-12-30 and t−1 is the feature row 2019-12-27.
-   - The comparison is against zero for p_{t−1} in place of the carried position, so a
-     restart is visible.
+   - A restarted book, with p_{t−1} = 0, would give a different cost, so this check fails
+     on a restart.
 
 ## 4. Platform: the proposal
 
