@@ -46,13 +46,13 @@ def target_positions(pred: np.ndarray, neutrality: str, groups: np.ndarray | Non
     p = np.nan_to_num(pred)
     if neutrality == "group":
         out = np.zeros_like(p)
-        for t in range(T):
-            if refit_of[t] < 0:
-                continue
-            g = groups[refit_of[t]]
+        for s0 in np.unique(refit_of[refit_of >= 0]):
+            rows = refit_of == s0
+            g = groups[s0]
             for lab in np.unique(g):
                 m = g == lab
-                out[t, m] = p[t, m] - p[t, m].mean()
+                blk = p[np.ix_(rows, m)]
+                out[np.ix_(rows, m)] = blk - blk.mean(axis=1, keepdims=True)
     else:
         out = p - p.mean(axis=1, keepdims=True)
     out[refit_of < 0] = 0.0
@@ -75,6 +75,14 @@ class FitCache:
     def __init__(self, inp: Ln.Inputs):
         self.inp = inp
         self.fits: dict = {}
+        self.targets: dict = {}
+
+    def target(self, info, h, neutrality, memory) -> np.ndarray:
+        key = (tuple(info), h, neutrality, memory)
+        if key not in self.targets:
+            f = self.get(info, h, neutrality, memory)
+            self.targets[key] = target_positions(f["pred"], neutrality, self.inp.groups, f["refit_of"])
+        return self.targets[key]
 
     def get(self, info, h, neutrality, memory) -> dict:
         key = (tuple(info), h, neutrality, memory)
@@ -88,8 +96,7 @@ def variant_books(cache: FitCache, info, h, neutrality) -> dict:
     first = Ln.FIRST + timing.embargo(h, cache.inp.d)
     out = {}
     for mem in MEMORIES:
-        f = cache.get(info, h, neutrality, mem)
-        tgt = target_positions(f["pred"], neutrality, cache.inp.groups, f["refit_of"])
+        tgt = cache.target(info, h, neutrality, mem)
         for a in RATES:
             out[(a, mem)] = rate_book(tgt, a, first)
     return out
