@@ -333,3 +333,30 @@ groups under 3 merged) collapses on the real ETF data. On the last in-sample row
 leaves **2 groups, of 7 and 33 assets.** Average linkage isolates small outlying
 clusters, which the merge step then absorbs. The distribution over all rows is reported
 with the build. The rule is as the author specified, and it is not changed here.
+
+## Design changes before the pilot, 2026-10-08 (author). No outcome has been read
+
+These are **design changes**. No real-panel outcome, and no planted-panel outcome, has been
+read: the only version-2 numbers so far are the smoke (cost only) and the null-only design
+quantities (`ff0ea89`).
+
+1. **Groups cluster on market-residual returns.** At row t, the window is the trailing 252
+   real ETF row returns.
+   - Each asset's return is replaced by its residual on the real market (SPY), r_u − β_t ·
+     m_u. Here β_t is the asset's OLS beta fitted on that same window: one beta per
+     window.
+   - The correlation of those residuals feeds the same linkage, cut (5), merge (under 3)
+     and tie rules as before.
+   - The inputs file is re-pinned.
+   - **If the rule still rarely reaches 4–5 groups, it is kept and reported. It is not
+     tuned further.**
+2. **Three trading-rate grids.** The fits do not depend on the rate, so the base view, and
+   the menu where it is computed, are scored under:
+   - **G1** {1.0, 0.3, 0.1}, as built;
+   - **G2** {0.5, 0.2, 0.1};
+   - **G3** {0.3, 0.1, 0.03}.
+
+   Each grid's outcome-free base-view turnover and cost drag are reported beside version
+   1's now, before the pilot.
+3. **The dispersion-regime plant moving its own state slightly** (addendum, item 2) is
+   accepted, and recorded.
