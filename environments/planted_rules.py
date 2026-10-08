@@ -31,6 +31,11 @@ from environments import planted_panel as pp
 from learn import inputs as I
 
 RULES = ("U", "corner", "product", "gated")
+# Version 2's three shapes (`prereg/ml-v2-exploratory-2026-10-08.md`, H). They are drawn and
+# built by separate branches below; the four shapes above are untouched.
+RULES_V2 = ("leadlag", "volcond", "regime")
+REGIMES_GATED = ("vol_high", "vol_low", "mkt_up", "mkt_down", "disp_high", "disp_low")
+N_X = 10
 CORNER_A = 0.8
 FAST_TURNOVER = 0.5
 
@@ -48,6 +53,43 @@ class RuleDraw:
     idx_is: np.ndarray
     idx_ho: np.ndarray
     m_star: None = None        # a rule is not a class member
+
+
+def draw_features_v2(seed: int, shape: str, n_v: int = 2, K: int = 40) -> dict:
+    """Features for a version-2 shape, from the seed's planted-member child, as
+    `draw_features` draws. leadlag: an X column; volcond: a P column a and a V column b;
+    regime: a P column a and one of the six gated regimes."""
+    rng = np.random.default_rng(pp.children(seed)[1])
+    if shape == "leadlag":
+        return {"shape": shape, "x": int(rng.integers(N_X))}
+    if shape == "volcond":
+        return {"shape": shape, "a": int(rng.integers(K)), "b": int(rng.integers(n_v))}
+    if shape == "regime":
+        return {"shape": shape, "a": int(rng.integers(K)),
+                "g": REGIMES_GATED[int(rng.integers(len(REGIMES_GATED)))]}
+    raise ValueError(shape)
+
+
+def rule_positions_v2(features: np.ndarray, rule: dict, residual_returns, v2: dict) -> np.ndarray:
+    """Positions for a version-2 shape on one segment. `v2` holds that segment's pinned X and
+    V (real-data inputs, `environments.etf_v2_inputs`)."""
+    shape = rule["shape"]
+    if shape == "leadlag":
+        return I.unit(v2["X"][:, :, rule["x"]])
+    za = I.zscore_features(features)[:, :, rule["a"]]
+    if shape == "volcond":
+        vb = v2["V"][:, :, rule["b"]]
+        active = vb > np.median(vb, axis=1, keepdims=True)
+        n = active.sum(axis=1, keepdims=True)
+        mu = np.where(n > 0, (za * active).sum(axis=1, keepdims=True) / np.maximum(n, 1), 0.0)
+        s = np.where(active, za - mu, 0.0)
+        g = np.abs(s).sum(axis=1, keepdims=True)
+        return np.where(g > 0, s / np.where(g > 0, g, 1.0), 0.0)
+    if shape == "regime":
+        from learn2.states import market_states, regime_gates
+        on = regime_gates(market_states(residual_returns, 1))[rule["g"]]
+        return I.unit(za) * on[:, None]
+    raise ValueError(shape)
 
 
 def draw_features(seed: int, shape: str, family_of=None) -> dict:
@@ -108,6 +150,8 @@ def make_draw_rule(base, seed: int, beta: float, shape: str, rule: dict | None =
                    block_length: int = pp.BLOCK_LENGTH) -> RuleDraw:
     from dataclasses import replace
     from estimator.bootstrap import stationary_bootstrap_indices
+    if shape in RULES_V2:
+        return make_draw_rule_v2(base, seed, beta, shape, rule, block_length)
     rule = rule or draw_features(seed, shape)
     ch = pp.children(seed)
     idx_is = stationary_bootstrap_indices(base.E_is.shape[0], block_length,
@@ -117,6 +161,34 @@ def make_draw_rule(base, seed: int, beta: float, shape: str, rule: dict | None =
     E_is, E_ho = base.E_is[idx_is], base.E_ho[idx_ho]
     w_is = rule_positions(base.in_sample.features, rule, E_is)
     w_ho = rule_positions(base.holdout.features, rule, E_ho)
+    c = pp.planted_scale(base.in_sample, base.Sigma_is, w_is, beta)
+    return RuleDraw(seed=seed, beta=beta, c=c, rule=rule,
+                    in_sample=replace(base.in_sample, returns=E_is + c * w_is),
+                    holdout=replace(base.holdout, returns=E_ho + c * w_ho),
+                    w_star_is=w_is, w_star_ho=w_ho, idx_is=idx_is, idx_ho=idx_ho)
+
+
+def make_draw_rule_v2(base, seed: int, beta: float, shape: str, rule: dict | None = None,
+                      block_length: int = pp.BLOCK_LENGTH, v2: dict | None = None) -> RuleDraw:
+    """A version-2 shape planted as every rule is: residuals resampled by the seed's
+    children, c net-targeted to `beta`. `v2` = {"is": ..., "ho": ...} segment inputs; by
+    default the pinned real-ETF inputs sliced to the base's segments."""
+    from dataclasses import replace
+    from estimator.bootstrap import stationary_bootstrap_indices
+    if v2 is None:
+        from environments import etf_v2_inputs as E2
+        pinned = E2.load()
+        v2 = {"is": E2.for_segment(base.in_sample, pinned), "ho": E2.for_segment(base.holdout, pinned)}
+    rule = rule or draw_features_v2(seed, shape, n_v=v2["is"]["V"].shape[2],
+                                    K=base.in_sample.features.shape[2])
+    ch = pp.children(seed)
+    idx_is = stationary_bootstrap_indices(base.E_is.shape[0], block_length,
+                                          np.random.default_rng(ch[0]))
+    idx_ho = stationary_bootstrap_indices(base.E_ho.shape[0], block_length,
+                                          np.random.default_rng(ch[2]))
+    E_is, E_ho = base.E_is[idx_is], base.E_ho[idx_ho]
+    w_is = rule_positions_v2(base.in_sample.features, rule, E_is, v2["is"])
+    w_ho = rule_positions_v2(base.holdout.features, rule, E_ho, v2["ho"])
     c = pp.planted_scale(base.in_sample, base.Sigma_is, w_is, beta)
     return RuleDraw(seed=seed, beta=beta, c=c, rule=rule,
                     in_sample=replace(base.in_sample, returns=E_is + c * w_is),
