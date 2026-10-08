@@ -161,3 +161,9 @@ def test_fill_runs_and_agreement_rules():
     c = list(a)
     c[7] = 8
     assert not ff.agree(a, c)[0]
+
+
+def test_daily_fetch_helpers():
+    from data import fetch_binance_daily as fd
+    assert fd.next_month("2020-09") == "2020-10" and fd.next_month("2020-12") == "2021-01"
+    assert fd.FORMATIONS == ("2020-09", "2021-01", "2021-10")
