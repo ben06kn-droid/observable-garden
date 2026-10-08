@@ -29,8 +29,10 @@ and no other predictor.
   `8f394fe34bea54d41b9aafed410425ee8f8e252ede3c71a7c1cd20bab83040de`).
 - **1,674 rows**, about **6.64 years** at 252 a year. The fetch counted the rows from their
   date field; their values were never parsed.
-  - The last date was not recorded. The grader records it when it splits the zip on the
-    host.
+  - **Open question: the last holdout date.** It was not recorded at the fetch, and it is
+    not read now. The grader records it when it splits the zip on the host. Whether the
+    window should be cut at a stated date instead (e.g. a month end) is left open for the
+    author.
 - **Graded periods:** the 1,674 periods whose earned return is dated in the window.
   - The first is the return dated 2020-01-02, earned by the position formed at the close of
     2019-12-30.
@@ -96,7 +98,9 @@ digit.
 
 **Proposed, in order:**
 
-**Step 0: a feasibility check, outcome-free for the holdout.** It needs the author's go.
+**Step 0: a feasibility check, outcome-free for the holdout.** Its design was approved on
+2026-10-07, but it is **not run now**. It is queued for the next box session and needs
+the author's go then.
 - **Where:** on the compute box (c7a, Linux x86_64; not the holdout host). The in-sample
   CSV only is copied there, with its hash checked. That copy is a stated departure, as the
   ETF in-sample copy was.
@@ -128,7 +132,19 @@ these tolerances:
 The grader refuses on any failure. Holdout values then come from the host's own spanning
 build. **Cost:** the host's normal use; the grading itself takes minutes.
 
-**Option B, if a tolerance cannot be met: an arm64 macOS holdout host.**
+**Option A2, a possibility that needs the author's decision. No numbers are fixed here.**
+- **When it applies:** step 0 misses the 3-decimal match on ridge_stack's in-sample net
+  Sharpe ONLY because some refits choose different penalties or stack weights on Linux.
+  The z-feature, rank and member-2937 tolerances must all be met.
+- **Then a looser tolerance may be fixed,** from step 0's numbers alone and before any
+  holdout value is computed. It has two parts:
+  - ridge_stack's in-sample net Sharpe within a stated band of 0.547;
+  - the correlation of its in-sample positions with the laptop's above a stated value.
+- **Both numbers, and the decision to use A2 at all, are the author's.** They are recorded
+  in a dated amendment before the grader runs. If the author declines, Option B applies.
+
+**Option B, if a tolerance cannot be met (and A2 is not taken): an arm64 macOS holdout
+host.**
 - **What:** an EC2 Mac instance (mac2 family, Apple silicon), not the agent machine. It
   runs the same Python 3.14.2, numpy 2.5.3 and scipy 1.18.1, and the macOS LightGBM pin.
 - **Requirement:** **bit-identity** with the pinned X on rows 0–2515, and the in-sample
