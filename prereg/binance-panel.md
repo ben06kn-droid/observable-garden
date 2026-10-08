@@ -281,6 +281,46 @@ SR − 0.8416 · sqrt((1 + SR² / (2 · 2,190)) / T_years) = bar.
   - the bit-for-bit repeat of positions: **True**;
   - the leak test at rows 1256, 3558 and 6816: **PASS**.
 
+## l. Item C: bar size, cost drag and the floor (outcome-free; PROVISIONAL unpinned builds)
+
+**Source:** `experiments/binance_design_c.py`, committed before its run at `6ca2e0a`; output
+in `runs/binance_design_c/2026-10-08`.
+- **Builds:** the decided ones (B1–B7), on the laptop.
+- **Replicates:** B = 5,000, with stream seeds 695010–695013 and class seeds
+  695020–695023.
+- **Not computed:** no mean return, Sharpe or p-value.
+
+**The daily variants.**
+- UTC daily bars, ppy 365, the same row-based code.
+- The data starts in the month after formation and runs to 2025-03-31. **The 253-row
+  warm-up lies inside that span,** because no earlier data exists for the 2020-09 formation
+  (the archive starts in 2020-01).
+- ridge_stack then needs 3 × 252 rows of training. That is why its scored windows are
+  short.
+
+**ridge_stack's stream:**
+
+| variant | qualifying / universe / dead in-sample | scored rows (years) | turnover per row (per year) | cost per year | annualised vol | cost drag (Sharpe) | dead share of gross | bar 95% → net / gross at 80% power | bar 96% → net / gross |
+|---|---|---|---|---|---|---|---|---|---|
+| 4h (2021-10) | 126 / 50 / 7 | 6,360 (2.90) | 0.156 (341.5) | 0.322 | 0.253 | **1.273** | 0.045 | 1.039 → **1.533 / 2.806** | 1.103 → 1.597 / 2.871 |
+| daily 2020-09 | 44 / 44 / 3 | 632 (1.73) | 0.152 (55.3) | 0.055 | 0.214 | 0.256 | 0.011 | 1.238 → **1.879 / 2.135** | 1.305 → 1.946 / 2.202 |
+| daily 2021-01 | 79 / 50 / 4 | 509 (1.39) | 0.131 (47.8) | 0.048 | 0.212 | 0.224 | 0.003 | 1.428 → **2.143 / 2.366** | 1.519 → 2.234 / 2.458 |
+| daily 2021-10 | 126 / 50 / 7 | 236 (0.65) | 0.106 (38.5) | 0.038 | 0.217 | 0.177 | 0.001 | 2.022 → **3.076 / 3.253** | 2.165 → 3.219 / 3.396 |
+
+**The class tier, daily variants** (bar → net Sharpe at 80% power; the class's
+gross-versus-net is not computed):
+
+| variant | rows (years) | 95% | 96% |
+|---|---|---|---|
+| daily 2020-09 | 1,388 (3.80) | 2.101 → 2.535 | 2.133 → 2.567 |
+| daily 2021-01 | 1,265 (3.47) | 2.170 → 2.625 | 2.211 → 2.666 |
+| daily 2021-10 | 992 (2.72) | 2.460 → 2.973 | 2.499 → 3.012 |
+
+The 4h class tier, on the earlier build (section k), was 2.573 → 3.040 at 95%.
+
+**Gross floor** = the net floor plus the cost drag at 10 bps. The cost drag is cost per
+year divided by the stream's annualised volatility.
+
 ## Open choices (for the author)
 
 Decided on 2026-10-08 and written in above:
