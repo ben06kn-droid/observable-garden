@@ -224,6 +224,17 @@ the fit.
   - Each refit trains on the rows whose targets are realised before it.
   - For the rolling settings, only the last 252 or 756 of those rows are used.
   - The 64-row warm-up drop is kept.
+- **Conventions settled before coding (2026-10-08):**
+  - **The embargo:** a refit at row s trains on rows t ≤ s − (h + 1 + d) only. For h = 1
+    and d = 1 that is version 1's rule: its last 2 rows before each refit are removed.
+  - **Trees are refit at every refit,** not every second one as in version 1, since each
+    tree fit is small. Their out-of-fold predictions use the same 3 blocked folds.
+  - **The ridge's out-of-fold predictions for the stack** are nested. For each fold, the
+    penalties are chosen by the other two folds alone (each fitted on one and scored on the
+    other, with the embargo at the edges). The penalties for the final fit are chosen over
+    all 3 folds.
+  - **A view's first scored row is 756 + h + 1 + d.** A menu's streams are compared on
+    their common window, from the latest first row in the menu.
 - **Every refit whose chosen penalty sits at a grid edge is reported,** for any block at
   its smallest or largest value; "off" counts as the largest.
 - **The prediction is turned into a target position:** demeaned across assets and scaled to
