@@ -12,8 +12,10 @@ from pathlib import Path
 
 import numpy as np
 
-PINNED = Path(__file__).resolve().parent.parent / "data" / "pinned" / "etf_v2_inputs.npz"
-PINNED_SHA256 = "50dec72709fd6779852e5bc91419cb22d6e3a0b689bde0929e5aff14e7006d80"  # arm64, 2026-10-08
+# Re-pinned 2026-10-08 with groups on market-residual returns (note, design change 1). The
+# first pin (etf_v2_inputs.npz, SHA-256 50dec727...6d80, groups on raw returns) is superseded.
+PINNED = Path(__file__).resolve().parent.parent / "data" / "pinned" / "etf_v2_inputs_r2.npz"
+PINNED_SHA256 = ""                           # set from pin()'s output
 WARM = 252 + 1
 
 
@@ -34,7 +36,7 @@ def build_full():
     mkt = declared_market(tickers, r0)
     X = Bk.build_X(r0, mkt)
     V, vnames = Bk.build_V(Vol, P, r0)
-    G = Bk.build_groups(r0)
+    G = Bk.build_groups(r0, mkt)
     T = len(common)
     keep = slice(WARM, T - 2)
     return common[keep], X[keep], V[keep], G[keep], vnames

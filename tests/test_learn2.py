@@ -189,3 +189,32 @@ def test_turnover_is_reported_raw_and_per_unit_gross():
     st = Vw.turnover_stats(book, inp, np.arange(5, 40))
     assert st["turnover_per_unit_gross"] == pytest.approx((0.7 + 0.6) / (0.7 * 30))
     assert st["mean_gross"] == pytest.approx(0.7 * 30 / 35)
+
+
+def test_groups_on_market_residuals_use_one_window_beta():
+    rng = np.random.default_rng(7)
+    T, M = 300, 9
+    m = 0.01 * rng.standard_normal(T)
+    r = np.outer(m, np.linspace(0.5, 1.5, M)) + 0.01 * rng.standard_normal((T, M))
+    G = Bk.build_groups(r, m)
+    t = 280
+    R, x = r[t - 251:t + 1], m[t - 251:t + 1]
+    xc = x - x.mean()
+    beta = (xc @ (R - R.mean(axis=0))) / (xc @ xc)
+    E = R - np.outer(x, beta)
+    sd = E.std(axis=0, ddof=1)
+    Z = (E - E.mean(axis=0)) / sd
+    C = Z.T @ Z / 251
+    np.fill_diagonal(C, 1.0)
+    assert np.array_equal(G[t], Bk.cluster(1.0 - C))
+    res = Lk.leak_block(lambda rr: Bk.build_groups(rr, m), (r,), (270,))
+    assert all(x_["identical_up_to_t"] for x_ in res)
+
+
+def test_rate_grids_change_books_not_fits(inp, cache):
+    v = (("X",), 1, "market", "always")
+    a = Vw.view_book(cache, v, rates=Vw.RATE_GRIDS["G1"])
+    b = Vw.view_book(cache, v, rates=Vw.RATE_GRIDS["G3"])
+    assert set(k[0] for k in b["variants"]) == {0.3, 0.1, 0.03}
+    assert np.array_equal(a["variants"][(0.3, "roll252")], b["variants"][(0.3, "roll252")])
+    assert not np.array_equal(a["book"], b["book"])

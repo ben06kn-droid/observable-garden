@@ -17,6 +17,7 @@ from learn2 import states as S
 from learn2 import timing
 
 RATES = (1.0, 0.3, 0.1)
+RATE_GRIDS = {"G1": (1.0, 0.3, 0.1), "G2": (0.5, 0.2, 0.1), "G3": (0.3, 0.1, 0.03)}
 HORIZONS = (1, 5, 20)
 NEUTRALITY = ("market", "group")
 MEMORIES = tuple(Ln.MEMORIES)
@@ -91,20 +92,20 @@ class FitCache:
         return self.fits[key]
 
 
-def variant_books(cache: FitCache, info, h, neutrality) -> dict:
+def variant_books(cache: FitCache, info, h, neutrality, rates=RATES) -> dict:
     """{(a, memory): book}, all from the view's first scored row."""
     first = Ln.FIRST + timing.embargo(h, cache.inp.d)
     out = {}
     for mem in MEMORIES:
         tgt = cache.target(info, h, neutrality, mem)
-        for a in RATES:
+        for a in rates:
             out[(a, mem)] = rate_book(tgt, a, first)
     return out
 
 
-def view_book(cache: FitCache, view: tuple, gates: dict | None = None) -> dict:
+def view_book(cache: FitCache, view: tuple, gates: dict | None = None, rates=RATES) -> dict:
     info, h, neutrality, regime = view
-    vb = variant_books(cache, info, h, neutrality)
+    vb = variant_books(cache, info, h, neutrality, rates)
     book = np.mean(np.stack(list(vb.values())), axis=0)
     if gates is None:
         gates = S.regime_gates(S.market_states(cache.inp.earned, cache.inp.d))

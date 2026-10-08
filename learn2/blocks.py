@@ -184,14 +184,23 @@ def cluster(dist: np.ndarray, k: int = N_GROUPS, min_size: int = MIN_GROUP) -> n
     return labels
 
 
-def build_groups(r: np.ndarray) -> np.ndarray:
+def build_groups(r: np.ndarray, market: np.ndarray | None = None) -> np.ndarray:
     """(T, M) group labels from the trailing 252-row correlation of row returns r; -1
-    before the window is full."""
+    before the window is full. With `market` (the note's design change 1, 2026-10-08), each
+    return in the window is replaced by its residual on the market, r_u - beta_t m_u, with
+    beta_t the asset's OLS beta on that same window (one beta per window)."""
     r = np.nan_to_num(np.asarray(r, float))
     T, M = r.shape
+    m = None if market is None else np.nan_to_num(np.asarray(market, float))
     out = np.full((T, M), -1, dtype=int)
     for t in range(WIN - 1, T):
         R = r[t - WIN + 1:t + 1]
+        if m is not None:
+            x = m[t - WIN + 1:t + 1]
+            xc = x - x.mean()
+            vx = float(xc @ xc)
+            beta = (xc @ (R - R.mean(axis=0))) / vx if vx > 0 else np.zeros(M)
+            R = R - np.outer(x, beta)
         sd = R.std(axis=0, ddof=1)
         live = sd > 0
         Zs = np.zeros_like(R)
