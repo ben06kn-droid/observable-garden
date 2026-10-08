@@ -78,6 +78,13 @@ def weight_matrix(members, K: int) -> np.ndarray:
     return Wf
 
 
+def panel_x_sha256(panel) -> str:
+    """SHA-256 of the panel's OWN feature array (float64, C order, raw bytes), recorded in
+    the cache manifest. (Manifests written before 2026-10-07 carry `pinned_x_sha256`, the
+    ETF pin's file hash, whatever the panel.) The cache key is unchanged."""
+    return hashlib.sha256(np.ascontiguousarray(panel.features, dtype=np.float64).tobytes()).hexdigest()
+
+
 def cache_key(panel, members, name: str) -> str:
     h = hashlib.sha256()
     h.update(pp.PINNED_X_SHA256.encode())
@@ -150,7 +157,7 @@ def build(panel, members, name: str = "planted-signed-3", cache_dir=None,
         gm.flush(); km.flush()
         del gm, km
         (tmp / "manifest.json").write_text(json.dumps(
-            {"key": key, "version": VERSION, "pinned_x_sha256": pp.PINNED_X_SHA256,
+            {"key": key, "version": VERSION, "panel_x_sha256": panel_x_sha256(panel),
              "panel_hash": _panel_hash(panel), "class": name, "N": N, "T": T,
              "build_secs": time.time() - t0}, indent=1))
         os.replace(tmp, final)

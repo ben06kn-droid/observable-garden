@@ -89,3 +89,44 @@ def test_the_panel_uses_the_equal_weighted_market_and_the_etf_timing():
     assert np.allclose(p.features[:, :, j], _zscore(sig["beta252"])[253:598])
     assert np.allclose(p.cost_rate, 5e-4) and np.allclose(p.borrow_rate, 50e-4 / 252)
     assert not np.isnan(p.features).any()
+
+
+def test_average_ranks_give_exact_ties_their_mean_rank_and_match_rank_without_ties():
+    from environments.real_panel import _rank
+    x = np.array([[0.01, 0.02, 0.02, -0.01, np.nan], [3.0, 1.0, 2.0, 5.0, 4.0]])
+    out = fp.rank_average(x)
+    # row 0: valid n = 4; ranks -0.01:0, 0.01:1, 0.02 tie at (2+3)/2 = 2.5
+    assert np.allclose(out[0], [2 * 1 / 3 - 1, 2 * 2.5 / 3 - 1, 2 * 2.5 / 3 - 1, -1.0, 0.0])
+    assert np.array_equal(out[1], _rank(x[1:2])[0])
+    assert out[0, 1] == out[0, 2]                         # independent of order
+    y = x.copy()
+    y[0, [1, 2]] = y[0, [2, 1]]
+    assert np.array_equal(fp.rank_average(y), out)
+
+
+def test_the_panel_ranks_use_average_ranks_and_the_etf_rank_is_unchanged():
+    dates = _days("2008-12-29", 600)
+    rng = np.random.default_rng(2)
+    r = np.round(0.01 * rng.standard_normal((600, 6)), 4)  # quantised, as the library's data
+    p = fp.panel_from_returns(dates, [f"i{j}" for j in range(6)], r)
+    from environments.real_panel import _etf_base_signals
+    sig = _etf_base_signals(np.cumsum(np.log1p(r), axis=0), r, r.mean(axis=1))
+    j = p.feature_names.index("ret1_rank")
+    assert np.array_equal(p.features[:, :, j], fp.rank_average(sig["ret1"])[253:598])
+
+
+def test_the_pin_is_written_once_and_refused_on_mismatch(tmp_path, monkeypatch):
+    dates = _days("2008-12-29", 600)
+    r = 0.01 * np.random.default_rng(3).standard_normal((600, 4))
+    monkeypatch.setattr(fp, "build_french_panel",
+                        lambda pinned=False: fp.panel_from_returns(dates, list("abcd"), r))
+    f = tmp_path / "x.npy"
+    sha = fp.pin_features(f)
+    with pytest.raises(SystemExit, match="written once"):
+        fp.pin_features(f)
+    X = fp.pinned_features(f, sha, (345, 4, 40))
+    assert X.shape == (345, 4, 40)
+    with pytest.raises(SystemExit, match="refused"):
+        fp.pinned_features(f, "0" * 64, (345, 4, 40))
+    with pytest.raises(SystemExit, match="no pinned"):
+        fp.pinned_features(f, "", (345, 4, 40))

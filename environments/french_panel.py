@@ -5,16 +5,46 @@ t+2, a 252 + 1 row warm-up, 5 bps one-way and 50 bps/yr borrow (an assumption: i
 portfolios are not directly tradable). The declared market series is the equal-weighted
 average of the 49 returns. The price path for the moving-average signals is the
 compounded return index, log p_t = sum of log(1 + r) through t.
+
+**This panel's rank features use AVERAGE ranks for exact ties** (`rank_average`), its own
+feature definition: the data are quantised to 0.01%, so exact ties are common, and the ETF
+builder's `_rank` breaks them by sort order. The ETF path is unchanged.
+
+**X is pinned**, as the ETF X is: `build_french_panel` loads `data/pinned/french49_X.npy`
+and refuses it unless its SHA-256 is `PINNED_X_SHA256`; there is no rebuild fallback.
+`pin_features` writes the pin once.
 """
 from __future__ import annotations
+
+import hashlib
+from pathlib import Path
 
 import numpy as np
 
 from environments.real_panel import (ETF_BASE, ETF_BORROW_BPS_YR, ETF_COST_BPS, ETF_DAYS,
-                                     RealPanel, _etf_base_signals, _rank, _zscore)
+                                     RealPanel, _etf_base_signals, _zscore)
 
 WARM = 252 + 1
 LAG = 2
+PINNED_X = Path(__file__).resolve().parent.parent / "data" / "pinned" / "french49_X.npy"
+PINNED_X_SHA256 = ""                 # set from pin_features' output when the pin is written
+PINNED_X_SHAPE = (2516, 49, 40)
+
+
+def rank_average(x: np.ndarray) -> np.ndarray:
+    """Cross-sectional rank per period mapped to [-1, 1], exact ties taking their AVERAGE
+    rank; NaN is zeroed and a period with fewer than 2 values is all zero, as `_rank`."""
+    from scipy.stats import rankdata
+    T, M = x.shape
+    out = np.zeros((T, M))
+    for t in range(T):
+        row = x[t]
+        ok = ~np.isnan(row)
+        n = int(ok.sum())
+        if n < 2:
+            continue
+        out[t, ok] = 2.0 * (rankdata(row[ok], method="average") - 1.0) / (n - 1) - 1.0
+    return out
 
 
 def market_series(r: np.ndarray) -> np.ndarray:
@@ -28,7 +58,7 @@ def panel_from_returns(dates, names, r: np.ndarray, name: str = "french49-daily"
     sig = _etf_base_signals(logp, r, market_series(r))
     feats, fnames = [], []
     for nm in ETF_BASE:
-        feats += [_zscore(sig[nm]), _rank(sig[nm])]
+        feats += [_zscore(sig[nm]), rank_average(sig[nm])]
         fnames += [f"{nm}_z", f"{nm}_rank"]
     F = np.stack(feats, axis=2)
     earn = np.full_like(r, np.nan)
@@ -50,7 +80,45 @@ def panel_from_returns(dates, names, r: np.ndarray, name: str = "french49-daily"
               "in_sample_end": "2019-12-31"})
 
 
-def build_french_panel(path=None) -> RealPanel:
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def pinned_features(path=None, sha256: str | None = None, shape=PINNED_X_SHAPE) -> np.ndarray:
+    """The pinned X, or a refusal. Never rebuilds."""
+    path = Path(path) if path is not None else PINNED_X
+    sha256 = PINNED_X_SHA256 if sha256 is None else sha256
+    if not sha256:
+        raise SystemExit("no pinned French X is registered yet (PINNED_X_SHA256 is empty)")
+    if not path.exists():
+        raise SystemExit(f"pinned French X missing: {path}; it is not rebuilt here")
+    got = _file_sha256(path)
+    if got != sha256:
+        raise SystemExit(f"pinned French X {path} has SHA-256 {got}, not {sha256}; refused")
+    X = np.load(path)
+    if tuple(X.shape) != tuple(shape):
+        raise SystemExit(f"pinned French X has shape {X.shape}, not {shape}")
+    return X
+
+
+def pin_features(path=None) -> str:
+    """Build X from the in-sample CSV and write it once; returns the file's SHA-256."""
+    path = Path(path) if path is not None else PINNED_X
+    if path.exists():
+        raise SystemExit(f"{path} exists; the pin is written once")
+    p = build_french_panel(pinned=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(path, np.ascontiguousarray(p.features, dtype=np.float64))
+    return _file_sha256(path)
+
+
+def build_french_panel(path=None, pinned: bool = True) -> RealPanel:
+    """The panel. With `pinned` (the default) its features ARE the pinned X, refused on a
+    hash or shape mismatch; returns, costs and dates come from the in-sample CSV."""
+    from dataclasses import replace
     from data.french_loader import INSAMPLE_CSV, load_insample
     dates, names, r = load_insample(path or INSAMPLE_CSV)
-    return panel_from_returns(dates, names, r)
+    panel = panel_from_returns(dates, names, r)
+    if pinned:
+        panel = replace(panel, features=pinned_features())
+    return panel

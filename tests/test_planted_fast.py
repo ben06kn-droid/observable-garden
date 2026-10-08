@@ -102,4 +102,7 @@ def test_the_cache_is_built_once_keyed_and_read_only(base, tmp_path):
     assert len(list(tmp_path.glob("fast_*"))) == 4        # two caches, two lock files
     import json
     man = json.loads((tmp_path / f"fast_{c1.key}" / "manifest.json").read_text())
-    assert man["pinned_x_sha256"] == pp.PINNED_X_SHA256
+    import hashlib
+    assert man["panel_x_sha256"] == hashlib.sha256(np.ascontiguousarray(
+        base.in_sample.features, dtype=np.float64).tobytes()).hexdigest()
+    assert "pinned_x_sha256" not in man
