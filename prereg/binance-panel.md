@@ -1,7 +1,8 @@
 # Binance USDT-margined perpetuals, 4h, formation 2021-01: a registration DRAFT, NOT LIVE
 
-**Status: DRAFT, NOT LIVE (rewritten 2026-10-09, America/Chicago).** It is committed for the
-author's reading. Nothing in it binds until a separate, dated commit makes it live.
+**Status: DRAFT, NOT LIVE (rewritten 2026-10-09, America/Chicago; revised the same day with
+the author's decisions on timing (d = 0), the class tier, the split and the pre-live
+records).** It is committed for the author's reading. Nothing in it binds until a separate, dated commit makes it live.
 - No agent session has run on this panel, and no box has been used for it.
 - **No outcome has been read:** no realised mean, Sharpe, p-value or certification.
 - **No holdout row (2025-04-01 onward) has been downloaded or parsed.**
@@ -10,8 +11,6 @@ author's reading. Nothing in it binds until a separate, dated commit makes it li
   holdout at 2025-04-01 before any price was read.
 - The earlier draft text (4h formation 2021-10, version 1's ridge_stack, flat 10 bps) is
   kept below as an appendix. **Where it differs from this body, this body governs.**
-
-**Items marked [AUTHOR]** are open points for the author before this goes live.
 
 ## a. Data
 
@@ -37,10 +36,15 @@ author's reading. Nothing in it binds until a separate, dated commit makes it li
 - **Where the files are:**
   - the raw zips: `~/Desktop/og-quarantine/binance/`, refused by every loader;
   - the derived CSVs: `data/raw/binance_4h_2021-01/` (gitignored).
-- **The definition of the data is the pinned arrays** (section h), not the derived CSVs.
-  - [AUTHOR] Before going live, a hash of every derived CSV in
-    `data/raw/binance_4h_2021-01/` is to be written to the dataset ledger, as was done for
-    French's in-sample CSV.
+- **The definition of the data is the pinned arrays** (section h). The derived CSVs are
+  hashed as well:
+  - every one of the 190 files in `data/raw/binance_4h_2021-01/` (50 contracts × kline,
+    taker and funding, and 20 × fill and fill taker), with its SHA-256 and row count, in
+    `data/binance_4h_2021-01_derived_manifest.json` (`ebf6b1a`; code
+    `data/fetch_binance_holdout_checksums.py`);
+  - **combined SHA-256 `5ae9a12fa37c73b34bbf862029665f2ba1ce0fbac2c0acfbd348e6f60ba31cb8`**:
+    the SHA-256 of the lines "<file name> <file SHA-256>", sorted by name;
+  - that entry goes into the dataset ledger (section q).
 
 ## b. Windows
 
@@ -49,12 +53,15 @@ author's reading. Nothing in it binds until a separate, dated commit makes it li
   after formation.
 - **Warm-up:** the first 253 bars, 2021-02-01 00:00 to 2021-03-15 00:00. They feed features
   and blocks only.
-- **Feature rows: 8,865,** the first at 2021-03-15 04:00.
-  - Feature row t earns bar t + 2. The earned bars run from 2021-03-15 12:00 to
-    2025-03-31 20:00: 4.05 years.
-  - **The class tier scores all 8,865 rows.**
-- **Version 2's stream scores from feature row 763** (first scored row 756 + h 5 + 1 + d 1).
-  Its earned bars run from 2021-07-20 16:00 to 2025-03-31 20:00: **8,102 rows, 3.70 years**.
+- **Feature rows: 8,866,** the first at 2021-03-15 04:00 and the last at 2025-03-31 16:00.
+  - **At d = 0 (section i), feature row t earns bar t + 1.** The earned bars run from
+    2021-03-15 08:00 to 2025-03-31 20:00: 4.05 years.
+  - **The class tier scores all 8,866 rows.**
+- **Version 2's stream scores from feature row 762** (first scored row 756 + embargo
+  h 5 + 1 + d 0). Its earned bars run from 2021-07-20 08:00 to 2025-03-31 20:00: **8,104
+  rows, 3.70 years**.
+- The descriptive d = 1 stream (section k) has 8,865 feature rows and scores 8,102, from
+  2021-07-20 16:00.
 - **Holdout: 2025-04-01 00:00 to 2026-09-30 20:00** (decision B4: the last complete month
   in the monthly archive). That is 18 months, 3,288 bars, 1.50 years.
 
@@ -100,16 +107,17 @@ scored years).
   0, its earned returns are 0, its funding is 0, and its trades cost 0.
 - **Adopted 2026-10-09 (proposal (b)): the closure rule for version 2's stream.**
   - Applied after the model; learn2 is untouched.
-  - The position in a contract is zero on every row whose earned bar is dead. So the exit
-    trades at the close of the last live bar, which is the death bar's carried price.
+  - The position in a contract is zero on every row whose earned bar is dead. At d = 0 the
+    exit then trades at the close of the last live bar, the last price at which the
+    contract traded, which the death bar carries.
   - That trade is costed by the cost rule (section f).
   - **The freed gross is NOT redeployed.**
-  - **Effect on the design numbers:** the dead-contract gross share falls from 0.019 to 0;
-    turnover per unit gross rises from 0.0795 to 0.0797; cost per year, drag and the bars
-    are unchanged to the digits shown (section l).
-- **[AUTHOR] The class tier.** Its members also place small weights on dead contracts,
-  which earn and cost nothing. The fast kernel takes no mask, and the closure is not
-  applied to the class. Confirm.
+  - **Effect on the design numbers at d = 0:** the dead-contract gross share falls from
+    0.015 to 0; turnover per unit gross rises from 0.0943 to 0.0946; cost per year, drag
+    and the bars are unchanged to the digits shown (section l).
+- **The class tier (accepted by the author, 2026-10-09):** its members also place small
+  weights on dead contracts, which earn and cost nothing. The fast kernel takes no mask,
+  and the closure is not applied to the class.
 
 ## e. Returns and funding
 
@@ -143,6 +151,8 @@ scored years).
     no prior bars and lies inside the warm-up. 47 are months whose 30-day window falls after a
     contract's death; dead contracts cost nothing in any case.
 - **The floor:** 1 bp on the half-spread, so no trade costs less than 6 bps.
+- **A trade is costed at its execution bar,** in that bar's month: at d = 0, the bar t at
+  whose close it fills, iff bar t is live (section i).
 - **Dead contracts cost nothing** after their exit.
 - **No borrow:** shorts pay or receive funding, which is in the return.
 - **The rates are pinned** (section h). The same rates price the class tier's members and
@@ -193,14 +203,32 @@ The equal-weighted average of the **live** contracts' price returns, each bar
   - **V** (5 columns): logvol_ratio, taker_last, taker_mean21, count_ratio, amihud21;
   - **F** (3 columns): the funding paid in each bar (clarification of 2026-10-09);
   - **the neutrality groups:** from the trailing 252-row market-residual correlation.
-- **Pinned** (`environments/binance_pins.py`, `086f6ad`), built once on the laptop (arm64,
-  Python 3.14, numpy 2.5.3) and served only at these hashes, with no rebuild on a mismatch:
+- **Pinned** (`environments/binance_pins.py`), built once on the laptop (arm64, Python 3.14,
+  numpy 2.5.3) and served only at these hashes, with no rebuild on a mismatch.
+  **The registered stream and the class tier use the d = 0 pins** (`ef8f0a7`); the
+  descriptive d = 1 stream (section k) uses the d = 1 pins (`086f6ad`).
 
   | file (`data/pinned/`, gitignored) | contents | SHA-256 |
   |---|---|---|
-  | `binance_4h_2021-01_X.npy` | P, (8865, 50, 40) | `e6ff168cc06dbe795b90d73edfeafad332f886417331f2e921404ad677e8e257` |
-  | `binance_4h_2021-01_v2.npz` | X, V, F, groups | `47c688ee76ba8e9f5070a31e4ff155a0d702e6e7a72bc99aee5c4e224206e6c5` |
-  | `binance_4h_2021-01_costs.npz` | per-row cost rates (8865, 50); the monthly EDGE table | `74be4b19b9fad50cc878aae82d4b616b1ec93f12026aedf8aa51a45033399789` |
+  | `binance_4h_2021-01_d0_X.npy` | P at d = 0, (8866, 50, 40) | `da66f540df2102eed75c9ca2580eb44ccc733835e9cbac0f2bb04a73cf12eafa` |
+  | `binance_4h_2021-01_d0_v2.npz` | X, V, F, groups at d = 0 | `602325699910ebf3adc4326aaa8c150c993a1e1711a732f5a429a07d5f644164` |
+  | `binance_4h_2021-01_d0_costs.npz` | cost rates at d = 0, (8866, 50); the monthly EDGE table | `9fe8813e06cdd7dc8dd3ac70b5b0d34bd4dd3e7ba0f5d59a2798ae5c482acecf` |
+  | `binance_4h_2021-01_X.npy` | P at d = 1, (8865, 50, 40) | `e6ff168cc06dbe795b90d73edfeafad332f886417331f2e921404ad677e8e257` |
+  | `binance_4h_2021-01_v2.npz` | X, V, F, groups at d = 1 | `47c688ee76ba8e9f5070a31e4ff155a0d702e6e7a72bc99aee5c4e224206e6c5` |
+  | `binance_4h_2021-01_costs.npz` | cost rates at d = 1 | `74be4b19b9fad50cc878aae82d4b616b1ec93f12026aedf8aa51a45033399789` |
+
+- **What the change of timing changed in the pins:**
+  - **P and the v2 blocks:** a new file each, because d = 0 has one more feature row (the
+    last bar's features now earn the window's last bar). Every shared row is bit-identical
+    to the d = 1 pin: features and blocks use data up to each bar's close, not the earned
+    return.
+  - **The cost rates:** the monthly EDGE table is identical. The per-row rates differ on
+    52 rows, where the execution bar moves across a month edge or a death.
+  - **Not pinned, because they are built from the pins and the panel:** the earned
+    returns, the market states learn2 computes from them, and the class tier's fast
+    tables. The tables were rebuilt for d = 0, in 1,936 s on the laptop (section l).
+  - The builder change (`0869120`) leaves d = 1 as it was: the three d = 1 pins rebuild
+    bit-identically after it.
 
 - **Platform: the laptop only** (Darwin arm64), as on French. A Linux rebuild is not
   expected to match the hashes bit for bit.
@@ -209,15 +237,25 @@ The equal-weighted average of the **live** contracts' price returns, each bar
   - **The learn2 blobs are the confirmation's** (`083c734`; `experiments/ml_v2_confirm_2026_10_09.py`,
     `PINNED_V2`), unchanged at HEAD.
 
-## i. Timing
+## i. Timing (decided by the author, 2026-10-09: d = 0)
 
-- **Signal at the close of bar t; the trade executes at the close of bar t+1; the position
-  earns bar t+2,** from the close of t+1 to the close of t+2. In learn2's terms, d = 1.
-- The cost of row t's trade is charged iff bar t+1 is live.
-- **[AUTHOR] "timing with no delay".** The author's request names "timing with no delay".
-  As built, there is a one-bar execution delay, and every design number here uses it.
-  Trading at the close of bar t itself (d = 0, earning bar t+1) would change the panel's
-  returns and every number. Which is meant?
+- **The signal is formed at the close of bar t, and the trade fills at that close.** In a
+  continuous market that is the same instant as the next bar's open. **The position earns
+  bar t+1,** from the close of t to the close of t+1. In learn2's terms d = 0, and the
+  embargo is h + 1 + d = 6 rows, as coded.
+- **The trade is costed iff bar t is live,** at the cost rule's rate for bar t's month.
+- **The assumption, stated plainly:**
+  - every trade fills at the bar's closing price;
+  - the half-spread and the fee are the whole allowance for slippage;
+  - **this is optimistic** by the seconds it takes to compute the signal and send the
+    order after the close. The price can move in that time, and nothing here charges for
+    it.
+- **How much depends on immediacy is shown, not tested:** the same stream at d = 1, with a
+  one-bar delay, is reported beside the d = 0 result (sections k and m).
+- **The builder:** `environments.binance_panel.panel_from_arrays(..., lag=1)` (`0869120`).
+  It sets `meta["delay"] = 0`, which learn2 reads. Tested: at lag 1 each row earns the
+  next bar; a trade on a contract's death bar costs nothing, and the bar before it is
+  costed.
 
 ## j. Sealing
 
@@ -226,9 +264,16 @@ The equal-weighted average of the **live** contracts' price returns, each bar
 - **At grading, the holdout months (2025-04 to 2026-09) are fetched directly on the
   holdout host** from data.binance.vision, each file verified against its published
   CHECKSUM there.
-- **[AUTHOR] Before going live:** record the published CHECKSUM text (a hash, no data) of
-  every holdout-month 4h kline and funding file for the 50 contracts. That fixes the
-  holdout's identity now, as the 2021-10 fetch did for its universe.
+- **The holdout's identity is fixed now.** The published CHECKSUM text of every
+  holdout-month 4h kline and funding file for the 50 contracts is recorded in
+  `data/binance_4h_2021-01_holdout_checksums.json` (`ebf6b1a`; code
+  `data/fetch_binance_holdout_checksums.py`, committed before its run).
+  - **Only CHECKSUM files were fetched,** each a line of text with a hash. No holdout data
+    zip was downloaded, and the code refuses any other URL.
+  - **Recorded:** 1,660 files present. 140 contract-month files are absent from the
+    listing.
+  - **At grading,** each holdout file fetched on the holdout host must match its recorded
+    hash, or the grading refuses.
 - **The data is public, so the seal is procedural.** It stops this pipeline from reading
   the holdout. It does not stop anyone from fetching it.
 - **Limit, recall:** 2025–2026 may lie inside the agent model's training data. No agent is
@@ -237,98 +282,137 @@ The equal-weighted average of the **live** contracts' price returns, each bar
 
 ## k. What may be tried, declared up front
 
-Exactly two things:
-1. **Version 2's base view as one declared stream:**
+Exactly two things may certify:
+1. **Version 2's base view as one declared stream, at d = 0:**
    - all four blocks (P X V F); horizon 5; market neutrality; regime always;
    - memories M2 (rolling 756, expanding); rate grid G3 (0.3, 0.1, 0.03); L grid
      {1, 3, 10, 30};
    - the closure rule (section d) after the model;
-   - priced through the supplied-streams tier over its 8,102 scored rows.
+   - priced through the supplied-streams tier over its 8,104 scored rows.
 2. **The class tier:** `SubsetClass`, max_size 3, signed (82,240 members), fast kernel,
-   over all 8,865 rows.
+   over all 8,866 rows, at d = 0.
+
+**And one thing is looked at but cannot certify:**
+3. **The same stream at d = 1** (the one-bar delay), on the d = 1 pins, with everything
+   else as in item 1.
+   - Its observed net Sharpe and its 95% interval are reported beside the d = 0 result.
+   - **No p-value, no certificate, no claim.** It is a second stream, looked at to show
+     how much of the result depends on immediacy. It does not enter the 5%.
 
 **Block length, both tiers (adopted 2026-10-09, proposal (a)):** the median of the base
-columns' Politis–White lengths over the whole in-sample window after warm-up (8,865 rows).
+columns' Politis–White lengths over the whole in-sample window after warm-up (8,866 rows).
 - For the class tier, that is its own window, so the class rule is unchanged.
 - For the stream, it replaces the scored-window median. The stream's tier
   (`learn/stream_tier.py`) is not changed. The read script computes the block length and
   draws the bootstrap rows itself.
-- On this panel the whole-window median is 1.92, so L = 2.
+- On this panel the whole-window median is 1.91 at d = 0, so L = 2.
 
-**The split of the 5% (proposed; [AUTHOR] to confirm):**
+**The split of the 5% (confirmed by the author, 2026-10-09):**
 - **The stream certifies iff its p < 0.04.**
 - **The class tier certifies iff its p < 0.01.**
 - The family-wise error over the two is at most 5% (Bonferroni).
 
-**Why:** the class tier's 80%-power net Sharpe is 2.44 even at its 95% point (section l).
-An edge it could certify must be very large at any weight.
-- Against an even split (2.5% each), the class's net floor rises from 2.547 to 2.664
-  (+0.12).
-- The stream's gross floor falls from 2.007 to 1.923 (−0.08).
+**Why:** the class tier's 80%-power net Sharpe is 2.46 even at its 95% point (section l,
+d = 0). An edge it could certify must be very large at any weight.
+- Against an even split (2.5% each), the class's net floor rises from 2.562 to 2.670
+  (+0.11).
+- The stream's gross floor falls from 2.173 to 2.067 (−0.11).
 
 This is the French split, chosen for the same reason. **It was set from the design
 numbers alone,** before any outcome was computed.
 
 ## l. Outcome-free design quantities
 
-**Source:** `experiments/binance_design_chosen.py`, committed before its run at
-`086f6ad`; output `runs/binance_design_chosen/2026-10-09` (`7f0e2c9`). Pinned inputs;
-laptop; B = 5,000; seeds 695056 (stream) and 695057 (class).
+**Sources:**
+- d = 0: `experiments/binance_design_d0.py`, committed before its run at `ef8f0a7`; output
+  `runs/binance_design_d0/2026-10-09` (`fda86df`); seeds 695058 (stream), 695059 (class),
+  695060 and 695061 (leak tests).
+- d = 1: `experiments/binance_design_chosen.py` (`086f6ad`); output
+  `runs/binance_design_chosen/2026-10-09` (`7f0e2c9`); seeds 695056 and 695057.
+- Both: pinned inputs; the laptop; the cost rule; the closure; the whole-window block
+  length; B = 5,000.
 - **Not computed:** no observed score, realised mean, Sharpe or p-value.
 - **Power:** Lo's iid formula with ppy 2,190: the certified SR solves
   SR − 0.8416 · sqrt((1 + SR²/4,380) / T_years) = bar.
 - **Gross needed** = net at 80% power + cost drag. The cost drag is cost per year divided by
   the stream's annualised volatility.
 
-**The stream (closure applied; block length 2):**
+**The stream, d = 0 (registered) beside d = 1 (descriptive):**
 
-| cost | turnover per unit gross | cost per year | drag | bar 95% → net / gross | 96% | 97.5% | 99% |
-|---|---|---|---|---|---|---|---|
-| flat 10 bps | 0.0797 | 0.1195 | 0.713 | 0.837 → 1.275 / 1.988 | 0.896 → 1.333 / 2.047 | 0.978 → 1.416 / 2.129 | 1.166 → 1.604 / 2.317 |
-| **the rule** | 0.0797 | 0.0987 | **0.589** | 0.837 → 1.275 / **1.864** | 0.896 → 1.334 / **1.923** | 0.980 → 1.417 / 2.007 | 1.166 → 1.604 / 2.193 |
+| timing | rows | years | L | bar 95% → net / gross | bar 96% → net / gross | drag | turnover per unit gross | cost per year | dead share | ann. vol | mean gross |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **d = 0** | 8,104 | 3.70 | 2 | 0.839 → 1.277 / 1.992 | 0.914 → **1.351 / 2.067** | **0.715** | **0.0946** | 0.1142 | 0 | 0.160 | 0.664 |
+| d = 1 | 8,102 | 3.70 | 2 | 0.837 → 1.275 / 1.864 | 0.896 → 1.334 / 1.923 | 0.589 | 0.0797 | 0.0987 | 0 | 0.168 | 0.685 |
 
-- **Per-row cost under the rule** (live rows of the scored window): median 7.63 bps; 5%
-  6.00, 25% 6.59, 75% 9.04, 95% 11.85; mean 8.15. 12.3% of rows are at the 6 bps minimum.
-- **Per contract (median):** BTC, ETH and BNB 6.0 bps; most between 6.3 and 9.0; the
-  highest are EOS 10.4, YFII 10.8 and CRV 12.2.
-- **The book:** mean gross 0.685; annualised volatility 0.168; seconds per fit 65
-  (rolling 756) and 206 (expanding).
+- At d = 0 the stream's bars at 97.5% and 99% are 1.020 → 1.458 / 2.173 and
+  1.178 → 1.616 / 2.331.
+- **d = 0 trades more:** turnover per unit gross is 19% higher, and the cost drag 0.13
+  higher. So at d = 0 the gross Sharpe needed rises by 0.14, although the bar barely
+  moves.
+  - The fit at d = 0 predicts the returns of bars t+1 to t+5 rather than t+2 to t+6, with
+    the most recent bar's information one bar fresher. That its targets change faster is
+    a plausible reading, not a measured one.
+- **Per-row cost under the rule, d = 1** (live rows of the scored window): median 7.63 bps;
+  5% 6.00, 25% 6.59, 75% 9.04, 95% 11.85; mean 8.15; 12.3% of rows at the 6 bps
+  minimum.
+  - Per contract (median): BTC, ETH and BNB 6.0 bps; most between 6.3 and 9.0; the highest
+    EOS 10.4, YFII 10.8 and CRV 12.2.
+  - At d = 0 the rates are the same apart from 52 rows (section h).
+- **At flat 10 bps (d = 1, for reference):** drag 0.713, gross needed 1.988 at 95% and
+  2.047 at 96%.
+- **Seconds per fit at d = 0:** 121 (rolling 756) and 1,144 (expanding). The run shared the
+  laptop's cores with two other jobs. At d = 1, run alone, they were 65 and 206.
 
-**The class tier (8,865 rows, 4.05 years, block length 2):**
+**The class tier (block length 2):**
 
-| cost | 95% | 96% | 97.5% | 99% |
-|---|---|---|---|---|
-| flat 10 bps | 2.017 → 2.436 | 2.062 → 2.481 | 2.124 → 2.542 | 2.242 → 2.660 |
-| **the rule** | 2.019 → 2.438 | 2.059 → 2.478 | 2.128 → 2.547 | 2.245 → **2.664** |
+| timing | rows | 95% | 96% | 97.5% | 99% |
+|---|---|---|---|---|---|
+| **d = 0** | 8,866 (4.05 years) | 2.037 → 2.456 | 2.076 → 2.495 | 2.144 → 2.562 | 2.251 → **2.670** |
+| d = 1 | 8,865 | 2.019 → 2.438 | 2.059 → 2.478 | 2.128 → 2.547 | 2.245 → 2.664 |
 
 - The class's cost drag is not computed. Its bar is on demeaned streams, so a gross figure
   would need each member's drag.
+- **The fast kernel's tables were rebuilt for d = 0:** 1,936 s, against 778 s for d = 1,
+  with three jobs sharing the cores. The null pass took 127 s.
 
-**Checks on this panel** (`5941c66`, the same code and data apart from the fill):
-version 2's leak test and every block's leak test pass, including the taker column, and
-two fits give bit-identical positions.
+**Checks at d = 0 on this panel** (`fda86df`):
+- **Leak tests:** all pass. The learner's book is bit-identical up to t = 4,814 when every
+  input after it is replaced, and the change is visible after it. Each block builder
+  passes the same test: X (on returns), V (on volume, taker volume and trade count),
+  F (on funding), and the groups.
+  - The block builders do not depend on d. X's test on the market series also passed on
+    the same builder at d = 1 (`d4d2824`, `4102600`).
+- **Bit-for-bit repeat:** two fits in separate processes give identical positions.
 
 ## m. The in-sample read (scripted, no agents)
 
 **Two tests only, run once, in this order:**
-1. **Version 2's stream through the supplied-streams tier.**
-   - Window: its 8,102 scored rows.
+1. **Version 2's stream at d = 0 through the supplied-streams tier.**
+   - Window: its 8,104 scored rows.
    - Block length by section k's rule; B = 5,000; `default_rng(701000)`.
    - **Certified iff p < 0.04.**
 2. **The class maximum against the class null.**
-   - Window: all 8,865 rows; 82,240 members; the fast kernel.
+   - Window: all 8,866 rows at d = 0; 82,240 members; the fast kernel.
    - Block length by the class rule; B = 5,000; `default_rng(701001)`.
    - **Certified iff p < 0.01.**
 
-**Seeds:** block 701000–701999 (`experiments.seed_block_check`: NO COLLISION, 2026-10-09).
-Only 701000 and 701001 are used.
+**Then, descriptive only: the d = 1 stream** (section k, item 3).
+- Its observed net Sharpe over its 8,102 scored rows.
+- Its 95% interval: the 2.5% and 97.5% points of the Sharpe over B = 5,000 stationary
+  bootstrap resamples of the stream, with the block length by section k's rule,
+  `default_rng(701002)`.
+- It is printed after both tests' verdicts, under the line "descriptive, not a test:
+  the same stream with a one-bar delay". **It carries no p-value and no verdict.**
 
-**Before pricing:** two version 2 fits must give bit-identical positions. If they do not,
-nothing is priced and the read stops.
+**Seeds:** block 701000–701999 (`experiments.seed_block_check`: NO COLLISION, 2026-10-09).
+Only 701000, 701001 and 701002 are used.
+
+**Before pricing:** two version 2 fits at d = 0 must give bit-identical positions, and so
+must two at d = 1. If either pair differs, nothing is priced and the read stops.
 
 **The runner's start-up refusals:**
 - Darwin arm64, and the macOS LightGBM pin;
-- the three pins at their hashes;
+- the six pins at their hashes (three at d = 0, three at d = 1);
 - the learn2 blobs equal the confirmation's;
 - no tracked changes;
 - this registration's live commit is an ancestor of HEAD;
@@ -348,11 +432,11 @@ signs.
 
 | tier | certifies iff | bar | true net Sharpe certified with 80% power | gross Sharpe needed |
 |---|---|---|---|---|
-| version 2 stream | p < 0.04 | 0.896 | **1.334** | **1.923** |
-| class tier | p < 0.01 | 2.245 | **2.664** | not computed |
+| version 2 stream, d = 0 | p < 0.04 | 0.914 | **1.351** | **2.067** |
+| class tier, d = 0 | p < 0.01 | 2.251 | **2.670** | not computed |
 
 - **A refusal is the more likely outcome.**
-  - The stream must earn a net Sharpe above about 1.33, a gross above about 1.92, to be
+  - The stream must earn a net Sharpe above about 1.35, a gross above about 2.07, to be
     certified with 80% power.
   - Most cross-sectional rules on liquid crypto contracts are not expected to clear that
     after costs.
@@ -379,12 +463,33 @@ signs.
 
 ## p. Stated limits
 
+- **Fills at the close (d = 0) are optimistic** by the seconds between the close and an
+  order (section i). The d = 1 stream shows how much depends on that.
 - **A US resident cannot trade this venue.** Binance's USDT-margined perpetuals are not
   offered to US persons. The results are about the method on this data, not an
   implementable strategy for the author.
 - The fee is an assumption, and the spread estimate is checked on only 12 contract-days.
 - The funding, gaps and deaths are as the archive records them. The archive's own errors
   are not checked beyond the CHECKSUMs and the fill's overlap test.
+
+## q. Dataset ledger entry (before any run)
+
+**`prereg/DATASET_LEDGER.md` gets this entry in the same commit that makes this
+registration live.**
+
+| field | value |
+|---|---|
+| dataset | Binance USDT-margined perpetuals, 4h, formation 2021-01, top 50 |
+| fetched | 2026-10-08 (formation, funding) and 2026-10-09 (4h klines, fill), laptop; manifests in section a |
+| derived CSVs | `data/raw/binance_4h_2021-01/`, 190 files; combined SHA-256 `5ae9a12fa37c73b34bbf862029665f2ba1ce0fbac2c0acfbd348e6f60ba31cb8` (`data/binance_4h_2021-01_derived_manifest.json`) |
+| grid | 2021-02-01 00:00 – 2025-03-31 20:00 UTC, 9,120 bars |
+| scored in-sample | d = 0: earned bars 2021-03-15 08:00 – 2025-03-31 20:00 (8,866; class), stream from 2021-07-20 08:00 (8,104) |
+| holdout | 2025-04-01 00:00 – 2026-09-30 20:00; never downloaded to the laptop; 1,660 published CHECKSUMs recorded (`data/binance_4h_2021-01_holdout_checksums.json`) |
+| raw zips | `~/Desktop/og-quarantine/binance/` (in-sample only) |
+| pinned | d = 0: X `da66f540df2102eed75c9ca2580eb44ccc733835e9cbac0f2bb04a73cf12eafa`, v2 `602325699910ebf3adc4326aaa8c150c993a1e1711a732f5a429a07d5f644164`, costs `9fe8813e06cdd7dc8dd3ac70b5b0d34bd4dd3e7ba0f5d59a2798ae5c482acecf`; d = 1: X `e6ff168cc06dbe795b90d73edfeafad332f886417331f2e921404ad677e8e257`, v2 `47c688ee76ba8e9f5070a31e4ff155a0d702e6e7a72bc99aee5c4e224206e6c5`, costs `74be4b19b9fad50cc878aae82d4b616b1ec93f12026aedf8aa51a45033399789` (arm64) |
+| pricing platform | laptop (arm64) only |
+| reads so far | outcome-free design quantities, and the book-ticker spread check |
+| outcome reads | none |
 
 ---
 
