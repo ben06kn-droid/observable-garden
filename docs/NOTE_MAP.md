@@ -1,6 +1,6 @@
 # A reader's map from the note to the repository
 
-The note is `docs/note.md`, *Fixed and adaptive candidate sets under the DSR*, short draft.
+The note is `docs/note.md`, *Fixed and adaptive candidate sets under the DSR*.
 Each row is one claim in the note, in the note's order (Sections 3 to 6, then the
 closing).
 
@@ -67,7 +67,7 @@ estimated here.
 | 24 | On a panel of real ETFs, no submission passed. | §8 | — | `agent-on-real-data` (6.5) and its holdout grading | grading live `3a5483e` | grades `e4bc84b`, read `0426352` (`runs/holdout_grading/read.txt`) | `experiments/grade_real.py`, `experiments/holdout_grading_read.py`; not recorded |
 | 25 | ridge_stack, one strategy declared in advance, kept the nominal error rate and passed planted non-linear edges far more often than the class. | §8 | P3 (a class of one) | `ml-ridge-stack-confirmation` | live `77f3ee1` | raw `06358c8`, read `d746a78` (`runs/ml_confirm/ridge_stack/read.txt`) | `experiments/ml_confirm_ridge_stack.py`; 1,116 s on a c7a.48xlarge (run record) |
 | 26 | On one real panel of industry portfolios, ridge_stack has not yet produced a pass. | §8 | — | `french-panel`, in-sample read | live `de9da1b` | raw `31622d6`, read `fc92cdb` (`runs/french_insample/2026-10-07/read.txt`) | `experiments/french_insample_read.py`; 1 min 37 s on the laptop (run record) |
-| 27 | The limit values come from scripts, and each measured value from a named, pre-registered experiment. | §8, reproduction | all | — | the ledger, `EXPERIMENTS.md` | — | `experiments/limit_model.py`, `experiments/size_integral.py` |
+| 27 | The limit values come from two scripts, and each measured value from a named experiment; those of Sections 4 to 6 were pre-registered. | §8, reproduction | all | — | the ledger, `EXPERIMENTS.md` | — | `experiments/limit_model.py`, `experiments/size_integral.py` |
 
 Rows 3, 19 and 24 point to experiments whose outputs are spread over several files. The
 ledger rows in `EXPERIMENTS.md` give the full commit lists.
