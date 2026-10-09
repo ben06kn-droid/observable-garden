@@ -532,3 +532,24 @@ not estimated.
   - the ETF P pin (`4b461070…b7ba`);
   - the re-pinned v2 inputs (`3ff15481…6700`).
 - **Laptop and box numbers are not mixed.**
+
+## The author's decisions after the version-2 pilot, 2026-10-08 (America/Chicago)
+
+The pilot read (`fe7c7ca`) was accepted as printed. Version 2 did not replace version 1:
+the difference was +0.013 [−0.010, +0.036], and the fairness flag fired. On that basis
+the author decided:
+1. **Version 1 stays the registered model** (ridge_stack at `fce5627`).
+2. **The 294-view menu is not taken to registration.** On the 280 menu panels (grid G3),
+   the menu maximum certified fewer panels than the base view alone:
+
+   | scheme | certified, of 280 |
+   |---|---|
+   | 21-view menu maximum | 90 |
+   | 42-view menu maximum | 106 |
+   | 294-view menu maximum | 94 |
+   | tiered scheme | 108 |
+   | **base view alone** | **114** |
+
+3. **The view levers are retained only for a later, behavioural agent cell.**
+4. **Version 2 gets one further exploratory round.** Its design is to be proposed, and
+   nothing is run before the author's go.
