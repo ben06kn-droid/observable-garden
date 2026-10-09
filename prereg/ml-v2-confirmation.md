@@ -196,3 +196,17 @@ over version 1 in certifying planted edges, on fresh seeds.
   - In all, about 150,000 laptop cell-seconds. At the box's 1.7× under load on 180
     workers, that is about 25 minutes of run plus a tail.
   - With setup, the smoke and the dry run, about **50 box minutes, roughly $9.**
+
+## Amendment 1, 2026-10-09 (America/Chicago): how the seed blocks were re-checked
+
+The live commit (`083c734`) says both blocks were re-checked with NO COLLISION. The exact
+check, recorded here because the live text did not state it:
+- **Without an exclusion,** `experiments.seed_block_check --ranges 699000-699999` (and
+  `700000-700999`) reports overlaps. **Every overlap it reports is a range in this file's
+  own seed table** (699000–699559, 699900–699909, 700000–700399), which the checker now
+  scans.
+- **With this file excluded** (`--exclude prereg/ml-v2-confirmation.md`, the usage the
+  checker documents for a registration checking its own blocks), both blocks report **NO
+  COLLISION** against the other 48 files: 245 explicit ranges and 8 master seeds.
+
+No seed, block or rule changes.
