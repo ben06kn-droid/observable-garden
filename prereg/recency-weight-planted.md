@@ -181,3 +181,81 @@ Measured on the laptop (Darwin arm64, one thread) on random data of the same sha
 3. Where it runs: the laptop overnight, or the box (about $12–15).
 4. Whether a 10-year null arm is also wanted, to tie these results to the French
    in-sample window (n_eff 8.7 years).
+
+## Amendment 1, 2026-10-09 (America/Chicago): the author's answers, and two non-stationary null arms
+
+**Answers to the [AUTHOR] points:**
+1. **The class tier is in the null arms only:** yes.
+2. **β and n:** as written.
+3. **Where:** on the box, and only on the author's own typed go. In the same box session,
+   the three version-2 confirmation logs left on its disk (`logs/v2c_smoke.log`,
+   `logs/v2c_run.log`, `logs/v2c_dry.log`) are fetched one file at a time. The rsync exit
+   status is reported for each, and each file is checked against what the confirmation's
+   run record (`1ba8df7`) recorded about it.
+4. **No 10-year null arm.**
+
+**Addition: two non-stationary null arms.** The row-resampled panels are stationary by
+construction. So nothing else in this plan checks the note's section c (the null mixes
+periods). These two arms do.
+- **Stream tier only;** 40 years (10,080 rows); 1,000 panels each.
+- Each panel runs the weighted statistic with the fixed centring, and the unweighted
+  statistic, on the same bootstrap index sets. A failure can then be attributed to the
+  weights or to the block length.
+
+**How the shift is applied.** The registered block-length rule measures dependence on the
+panel's base columns, not on the declared stream. A shift applied to the declared stream
+alone would be invisible to it. **So each shift is applied to every stream on the panel,
+the declared stream and the base columns alike,** as a change in the market would be.
+Each stream's population mean stays exactly 0.
+
+| arm | shift | seeds |
+|---|---|---|
+| NV40, volatility shift | every stream multiplied by 2 on the oldest 75% of rows (rows 0 to 7,559) | 706000–706999 |
+| NA40, dependence shift | on the most recent 25% of rows only (rows 7,560 to 10,079): y_t = (x_t + 0.3·x_{t−1} + 0.3·x_{t−2}) / sqrt(1.18) | 707000–707999 |
+
+- **NA40's division by sqrt(1 + 0.3² + 0.3²) is proposed** in place of the author's
+  unscaled form.
+  - Without it, the recent rows' variance also rises by about 18%, which mixes a
+    volatility shift into the dependence shift.
+  - With it, the marginal variance is unchanged when x is serially uncorrelated, and the
+    mean is still exactly 0.
+  - **[AUTHOR]:** the scaled form or the unscaled one.
+- **Seed blocks** checked with `experiments.seed_block_check` on 2026-10-09: NO COLLISION
+  for 706000–706999 and 707000–707999.
+- **Block length:** by the registered rule (the Politis–White median of the base columns)
+  on the whole window.
+  - **In every panel of every arm,** the Politis–White median on the last n_eff rows is
+    also recorded beside it: 3,634 rows at 40 years, 3,208 at 20 years. So the comparison
+    exists wherever it is needed.
+
+**Expectations:**
+- **NV40:** the weighted fixed-centring rate does not fail at either level (the lower 95%
+  Wilson end at or below 0.04, and at or below 0.08). The unweighted rate is reported
+  beside it, with no expectation.
+- **NA40: no expectation is registered.** Both branches:
+  - **It does not fail:** the weighted certificate's size holds under this dependence
+    shift on these panels.
+  - **It fails:** the weighted reads' block-length rule is reopened before any real
+    registration uses the weighted statistic. The unweighted rate and the two recorded
+    Politis–White medians are read beside it, to attribute the failure to the weights or
+    to the block length.
+
+**Detectability (n = 1,000; the one-sided Wilson test):**
+
+| level | true rate → probability of failing |
+|---|---|
+| 0.04 | 0.05 → 0.35; 0.06 → 0.84; 0.07 → 0.99 |
+| 0.08 | 0.10 → 0.64; 0.11 → 0.92; 0.12 → 0.99 |
+
+**The updated cost table** (one core; to be re-measured by the smoke):
+
+| arm | panels | per panel | total, one core |
+|---|---|---|---|
+| N20 | 1,000 | about 110 s | 31 h |
+| N40 | 1,000 | about 150 s | 42 h |
+| C20, D20, E20 | 1,200 | about 15 s | 5 h |
+| NV40, NA40 (2 stream tests each, plus 2 Politis–White medians) | 2,000 | about 35 s | 19 h |
+| **total** | 5,200 | | **about 97 core-hours** |
+
+On the box (180 workers, 1.7× under load), that is about 55 minutes of run, about 1.4
+box-hours with setup, roughly $15–18.
