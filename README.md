@@ -83,6 +83,18 @@ can't license a correction, **DEGENERATE** when the statistic breaks.
   a threshold of 0.04); the best of 82,240 rules reached **0.68** (p = 0.96
   against 0.01). Both are consistent with the detection floor registered in
   advance. (`EXPERIMENTS.md`, French 49-industry, in-sample read.)
+- French holdout, 2020-01 to 2026-08 (1,674 days): the learned strategy's
+  net Sharpe was **+0.017** [-0.741, +0.791], below its in-sample 90% lower
+  bound of +0.065; the best rule's was **-0.001** [-0.754, +0.776], above its
+  bound of -0.518. Both were refused in-sample, so this cannot test whether a
+  pass holds. (`EXPERIMENTS.md`, French holdout grading.)
+- Machine-learning version 2 (planted panels, registered confirmation): it
+  held its false-positive rate (13 of 400 null panels certified at zero cost)
+  and replaced version 1. At five times the registered cost its certification
+  rate was **+0.091** [+0.072, +0.111] higher than version 1's; at the
+  registered cost it was no worse beyond the 0.03 margin (+0.013 [-0.013,
+  +0.038]). Intervals are 97.5%. (`EXPERIMENTS.md`, ML version 2,
+  confirmation.)
 
 **Not yet shown:** no certificate has been earned on real data, so whether a
 pass holds out of sample is untested there.

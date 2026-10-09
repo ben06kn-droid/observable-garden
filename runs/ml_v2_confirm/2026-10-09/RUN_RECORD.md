@@ -44,3 +44,8 @@
   fetch failed and the box was stopped anyway. The logs remain on the stopped box under
   `~/observable-garden/logs/`. Their content quoted above was read over ssh before the stop.
   The outputs (results, provenance, the dry run with its check, the smoke) were fetched.
+
+## Note, 2026-10-09 (after the read)
+The three box logs (`logs/v2c_smoke.log`, `logs/v2c_run.log`, `logs/v2c_dry.log`) remain on
+the stopped compute box under `~/observable-garden/logs/`. They are to be fetched at the next
+box session, one rsync call per file.
