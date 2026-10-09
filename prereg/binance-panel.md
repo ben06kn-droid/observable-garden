@@ -1,8 +1,10 @@
-# Binance USDT-margined perpetuals, 4h, formation 2021-01: a registration DRAFT, NOT LIVE
+# Binance USDT-margined perpetuals, 4h, formation 2021-01: a registration
 
-**Status: DRAFT, NOT LIVE (rewritten 2026-10-09, America/Chicago; revised the same day with
-the author's decisions on timing (d = 0), the class tier, the split and the pre-live
-records).** It is committed for the author's reading. Nothing in it binds until a separate, dated commit makes it live.
+**Status: LIVE, 2026-10-09 (America/Chicago).**
+- The author read the draft at `a727ec6`, settled its open points, and added the holdout
+  death rule (`8e40708`). This text was then committed alone, together with this panel's
+  entry in `prereg/DATASET_LEDGER.md`.
+- Amendments are append-only and dated.
 - No agent session has run on this panel, and no box has been used for it.
 - **No outcome has been read:** no realised mean, Sharpe, p-value or certification.
 - **No holdout row (2025-04-01 onward) has been downloaded or parsed.**
