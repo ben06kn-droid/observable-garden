@@ -73,8 +73,9 @@ def rate_book(target: np.ndarray, a: float, first: int) -> np.ndarray:
 class FitCache:
     """Fits by (information, horizon, neutrality, memory)."""
 
-    def __init__(self, inp: Ln.Inputs):
+    def __init__(self, inp: Ln.Inputs, grids: dict | None = None):
         self.inp = inp
+        self.grids = grids
         self.fits: dict = {}
         self.targets: dict = {}
 
@@ -88,24 +89,25 @@ class FitCache:
     def get(self, info, h, neutrality, memory) -> dict:
         key = (tuple(info), h, neutrality, memory)
         if key not in self.fits:
-            self.fits[key] = Ln.fit_cell(self.inp, info, h, neutrality, memory)
+            self.fits[key] = Ln.fit_cell(self.inp, info, h, neutrality, memory, self.grids)
         return self.fits[key]
 
 
-def variant_books(cache: FitCache, info, h, neutrality, rates=RATES) -> dict:
+def variant_books(cache: FitCache, info, h, neutrality, rates=RATES, memories=MEMORIES) -> dict:
     """{(a, memory): book}, all from the view's first scored row."""
     first = Ln.FIRST + timing.embargo(h, cache.inp.d)
     out = {}
-    for mem in MEMORIES:
+    for mem in memories:
         tgt = cache.target(info, h, neutrality, mem)
         for a in rates:
             out[(a, mem)] = rate_book(tgt, a, first)
     return out
 
 
-def view_book(cache: FitCache, view: tuple, gates: dict | None = None, rates=RATES) -> dict:
+def view_book(cache: FitCache, view: tuple, gates: dict | None = None, rates=RATES,
+              memories=MEMORIES) -> dict:
     info, h, neutrality, regime = view
-    vb = variant_books(cache, info, h, neutrality, rates)
+    vb = variant_books(cache, info, h, neutrality, rates, memories)
     book = np.mean(np.stack(list(vb.values())), axis=0)
     if gates is None:
         gates = S.regime_gates(S.market_states(cache.inp.earned, cache.inp.d))
@@ -114,6 +116,7 @@ def view_book(cache: FitCache, view: tuple, gates: dict | None = None, rates=RAT
     keys = list(vb)
     flat = [vb[k][first:].ravel() for k in keys]
     corr = np.corrcoef(np.stack(flat)) if all(f.std() > 0 for f in flat) else None
+    # (with fewer memories the correlation matrix is smaller: len(rates) * len(memories))
     return {"book": book, "first": first, "variants": vb, "variant_keys": keys,
             "variant_corr": corr}
 

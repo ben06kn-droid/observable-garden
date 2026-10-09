@@ -159,10 +159,11 @@ def _mse(w, cols, G, b, yy):
     return yy - 2 * w @ b[cols] + w @ G[np.ix_(cols, cols)] @ w
 
 
-def _choose(pairs, blocks, idx, D):
+def _choose(pairs, blocks, idx, D, grids=None):
     """The grid point with the least total held-out error over (train, test) Gram pairs."""
     import itertools
-    grid = list(itertools.product(*(GRIDS[b] for b in blocks)))
+    grids = grids or GRIDS
+    grid = list(itertools.product(*(grids[b] for b in blocks)))
     best = (np.inf, None)
     for al in grid:
         tot = 0.0
@@ -191,14 +192,18 @@ def _folds(rows: np.ndarray, emb: int):
     return out
 
 
-def _edges(al, blocks) -> list[str]:
-    return [b for a, b in zip(al, blocks) if a in (GRIDS[b][0], GRIDS[b][-1])]
+def _edges(al, blocks, grids=None) -> list[str]:
+    grids = grids or GRIDS
+    return [b for a, b in zip(al, blocks) if a in (grids[b][0], grids[b][-1])]
 
 
 # -- the walk-forward -------------------------------------------------------------------------
 
-def fit_cell(inp: Inputs, info: tuple, h: int, neutrality: str, memory: str) -> dict:
-    """Predictions (T, M), NaN outside the scored rows; refit rows; edge reports."""
+def fit_cell(inp: Inputs, info: tuple, h: int, neutrality: str, memory: str,
+             grids: dict | None = None) -> dict:
+    """Predictions (T, M), NaN outside the scored rows; refit rows; edge reports. `grids`
+    overrides the penalty grids per block (the second pilot's L grid)."""
+    grids = {**GRIDS, **(grids or {})}
     d = inp.d
     T, M = inp.earned.shape
     emb = timing.embargo(h, d)
@@ -236,7 +241,7 @@ def fit_cell(inp: Inputs, info: tuple, h: int, neutrality: str, memory: str) -> 
                 grams[key] = _gram(Z, y, rr)
             return grams[key]
         outer = [(gram(("tr", k), tr), gram(("ho", k), ho)) for k, (ho, tr) in enumerate(folds)]
-        al = _choose(outer, blocks, idx, D)
+        al = _choose(outer, blocks, idx, D, grids)
         # nested out-of-fold ridge predictions, and tree out-of-fold predictions
         oof_r = np.zeros((len(rows), M))
         oof_t = np.zeros((len(rows), M))
@@ -255,7 +260,7 @@ def fit_cell(inp: Inputs, info: tuple, h: int, neutrality: str, memory: str) -> 
                 tj = tj[(tj < hj[0] - emb) | (tj > hj[-1] + emb)]
                 if len(tj):
                     inner.append((gram(("in", j, jo), tj), gram(("ho", j), hj)))
-            al_k = _choose(inner, blocks, idx, D) if inner else al
+            al_k = _choose(inner, blocks, idx, D, grids) if inner else al
             Gt, bt, _, nt = gram(("tr", k), tr)
             cols, w = _solve(Gt, bt, nt, al_k, blocks, idx, D)
             ii = [pos[t] for t in ho]
@@ -271,6 +276,6 @@ def fit_cell(inp: Inputs, info: tuple, h: int, neutrality: str, memory: str) -> 
             w2[1] * bst.predict(Xt[sc].reshape(-1, Xt.shape[2])).reshape(len(sc), M)
         refit_of[sc] = s
         diags.append({"refit": int(s), "train_rows": int(len(rows)), "penalties": dict(zip(blocks, al)),
-                      "at_edge": _edges(al, blocks), "stack": [float(w2[0]), float(w2[1])]})
+                      "at_edge": _edges(al, blocks, grids), "stack": [float(w2[0]), float(w2[1])]})
     return {"pred": pred, "first": first, "refit_of": refit_of, "diagnostics": diags,
             "info": tuple(info), "h": h, "neutrality": neutrality, "memory": memory}

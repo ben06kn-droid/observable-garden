@@ -218,3 +218,22 @@ def test_rate_grids_change_books_not_fits(inp, cache):
     assert set(k[0] for k in b["variants"]) == {0.3, 0.1, 0.03}
     assert np.array_equal(a["variants"][(0.3, "roll252")], b["variants"][(0.3, "roll252")])
     assert not np.array_equal(a["book"], b["book"])
+
+
+def test_a_penalty_grid_override_is_used_and_reported(inp):
+    g = {"L": (1.0, 3.0, 10.0, 30.0)}
+    f = Ln.fit_cell(inp, ("P",), 5, "market", "roll252", grids=g)
+    for d in f["diagnostics"]:
+        assert d["penalties"]["L"] in g["L"]
+        assert ("L" in d["at_edge"]) == (d["penalties"]["L"] in (1.0, 30.0))
+    cache = Vw.FitCache(inp, grids=g)
+    assert cache.get(("P",), 5, "market", "roll252")["diagnostics"] == f["diagnostics"]
+
+
+def test_memory_set_m2_averages_six_variants_from_the_same_fits(inp, cache):
+    v = (("X",), 1, "market", "always")
+    m1 = Vw.view_book(cache, v, rates=Vw.RATE_GRIDS["G3"])
+    m2 = Vw.view_book(cache, v, rates=Vw.RATE_GRIDS["G3"], memories=("roll756", "expand"))
+    assert len(m2["variants"]) == 6 and all(k[1] != "roll252" for k in m2["variants"])
+    assert np.array_equal(m2["variants"][(0.1, "expand")], m1["variants"][(0.1, "expand")])
+    assert np.allclose(m2["book"], np.mean(np.stack(list(m2["variants"].values())), axis=0))
