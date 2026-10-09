@@ -354,3 +354,77 @@ The author read item C's comparison (`28194a4`) and decided:
 - **Nothing more is fetched, run or read on this panel until then.** The data already
   fetched stays as it is: the in-sample CSVs, the quarantined raw zips, the manifests and
   the recorded holdout checksums.
+
+## Scoping note, 2026-10-08 (America/Chicago): a spread estimate for version 2's cost model
+
+**Status:** a scoping note only, in a draft that stays DRAFT, NOT LIVE.
+- No estimate has been computed and no panel outcome has been read.
+- Nothing was downloaded beyond directory listings.
+- The panel stays held unread (note of 2026-10-08 above).
+
+**1. Book-ticker (best bid and ask) files on data.binance.vision, `futures/um`.**
+- **Present:** `bookTicker` exists under both `monthly/` and `daily/`, for 315 symbols. 48
+  of this draft's 50 universe contracts have it. LUNAUSDT does not.
+- **But the dates are short:** for the contracts checked (BTC, ETH, SOL, AXS, SUSHI), the
+  monthly files cover only **2023-05 to 2024-04** (12 months, each with a CHECKSUM file).
+  BTCUSDT's daily files cover 2023-05-16 to 2024-03-30 (320 days).
+- **And the files are very large** (zipped, per contract-month, minimum / median /
+  maximum):
+
+  | contract | per month |
+  |---|---|
+  | BTCUSDT | 38 MB / 4.4 GB / 8.3 GB |
+  | ETHUSDT | 31 MB / 3.3 GB / 8.4 GB |
+  | SOLUSDT | 24 MB / 1.6 GB / 4.0 GB |
+  | AXSUSDT | 5 MB / 374 MB / 812 MB |
+  | SUSHIUSDT | 5 MB / 281 MB / 783 MB |
+
+  A BTCUSDT daily file has a median of 146 MB.
+- **So book-ticker data does not cover 2022–2025.** It covers about a year in the middle,
+  and the universe for that year would be some hundreds of GB. It can serve only as a
+  **check** on a bar-based estimator, over 2023-05 to 2024-04, on a few contracts.
+
+**2. Estimators from bar data.** The references were checked against Crossref on
+2026-10-08. The biases listed are those that follow from each construction; they were not
+re-verified from the papers' text.
+
+| estimator | reference |
+|---|---|
+| Roll | Roll, R. (1984), "A Simple Implicit Measure of the Effective Bid-Ask Spread in an Efficient Market", *Journal of Finance* 39(4), 1127–1139. doi:10.1111/j.1540-6261.1984.tb03897.x |
+| Corwin–Schultz high–low | Corwin, S. A., and Schultz, P. (2012), "A Simple Way to Estimate Bid-Ask Spreads from Daily High and Low Prices", *Journal of Finance* 67(2), 719–760. doi:10.1111/j.1540-6261.2012.01729.x |
+| Abdi–Ranaldo close–high–low | Abdi, F., and Ranaldo, A. (2017), "A Simple Estimation of Bid-Ask Spreads from Daily Close, High, and Low Prices", *Review of Financial Studies* 30(12), 4437–4480. doi:10.1093/rfs/hhx084 |
+| EDGE (open, high, low, close) | Ardia, D., Guidotti, E., and Kroencke, T. A. (2024), "Efficient estimation of bid–ask spreads from open, high, low, and close prices", *Journal of Financial Economics* 161, 103916. doi:10.1016/j.jfineco.2024.103916 |
+
+- **Roll (serial covariance of price changes).** It is undefined whenever the covariance is
+  positive, and it is noisy. In a trending or momentum period it is often undefined.
+- **Corwin–Schultz.** It separates volatility from spread by comparing one- and two-period
+  high–low ranges. Its period estimates are often negative, and the usual zero floor then
+  biases it upward. Volatility not captured by the two-period assumption also leaks in.
+  There is no overnight gap on a 24/7 venue, which removes one of its known adjustments.
+- **Abdi–Ranaldo.** It uses the close and the high–low midpoint. Like Corwin–Schultz it
+  depends on how volatility scales within the bar, and averaging over a window is needed.
+- **EDGE.** It combines all four prices. By its own account it is unbiased and has the
+  least variance among such estimators under its assumptions. Its sensitivity to bar
+  frequency and to trade discreteness on crypto contracts is not known here.
+
+**3. A proposed per-contract cost rule** (for the author's decision; nothing is
+computed):
+- **cost_rate_i(t) = 5 bps (the fee, an assumption) + ŝ_i(m) / 2,** the estimated
+  half-spread.
+- **The estimate ŝ_i(m)** is EDGE's spread for contract i from the 1h bars of the 30 days
+  **before** month m begins. It is re-estimated once a month, applied to every bar of
+  month m, and floored at 0.
+- **No look-ahead:** each month's cost uses only bars that closed before that month
+  started. A dead contract's cost stays 0 (decision B1).
+- **A check before use** (outcome-free; it reads only quotes and prices):
+  - over 2023-05 to 2024-04, compare ŝ with the book-ticker time-weighted quoted spread for
+    two or three contracts (BTC, a mid-cap such as AXS, a thin one such as SUSHI);
+  - download only those contract-months, each verified against its CHECKSUM;
+  - report bias and rank correlation.
+- **The alternative,** if the check shows EDGE biased on these bars: Abdi–Ranaldo on the
+  same window, with the same check.
+
+**Recommendation:**
+- EDGE on trailing-30-day 1h bars, re-estimated monthly;
+- the book-ticker check on 2–3 contracts first;
+- a fixed 5 bps fee on top.
