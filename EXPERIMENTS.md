@@ -268,3 +268,19 @@ that is **stronger than the policy** for a searcher whose own moves, not the fil
 produce its statistic. **`faithful-stop`'s 0.0080 is the size of that price**, and
 it is conservative — the safe direction — but it is not free, and a reader should
 not take a faithful searcher's low rate as evidence of anything but this.
+
+## Cells closed or held since 2026-10-06 (ledger entries added 2026-10-08)
+
+Each outcome is quoted as its reader (or script) printed it. Nothing new is interpreted
+here. "Raw" is the commit holding the outputs before any read.
+
+| cell | registration or note | live | raw | read | outcome, as printed | status |
+|---|---|---|---|---|---|---|
+| estimators (exploratory) | `prereg/estimators-exploratory-2026-10-06.md` | exploratory; note `5400b9e` | `e3edce1`, `80ccb64` | `42d5b06`, `7b7651b`; closing reading `6808704` | "ET: does not qualify; pooled RMSE (mean of the two decision rows, 0.5+1.0, holdout) 0.500" / "ETm: does not qualify; pooled RMSE … 0.310" | closed |
+| 6.5 holdout grading | `prereg/holdout-grading.md` | `3a5483e` | `e4bc84b` (R), step 0 `847780d` | `0426352` | "PASS against FAIL: no PASS (the registered B = 200 results); 80 FAIL" | closed |
+| new-panels audit | `prereg/new-panels-audit-2026-10-06.md` | audit; note `8c928ff` | `ca7be15`, `181ead1`, `de9d977` | no reader (an audit) | "the 0.05 bar (q95) at size <= 1 is 0.714, 0.317 below the size <= 3 bar 1.031" | closed |
+| ML pipeline, version-1 pilot (exploratory) | `prereg/ml-pipeline-exploratory-2026-10-07.md` | pilot section `2388f50` | `302c447` | `e3cdf2f`; outcome note `85f293a` | "carried forward: ridge_stack  (qualified: ridge_stack; highest rate carried forward)" | closed |
+| ridge_stack confirmation | `prereg/ml-ridge-stack-confirmation.md` | `77f3ee1` | `06358c8` | `d746a78` | "decision: the claim holds iff the lower end exceeds 0 -> HOLDS" | closed |
+| French 49-industry, in-sample read | `prereg/french-panel.md` | `de9da1b` (amendment 1 `e1cda69`) | `31622d6` | `fc92cdb` | (i) "-> refused; consistent with the registered detection floor; no further reading." / (ii) "-> refused; consistent with the registered detection floor; no further reading." | in-sample closed; holdout grading drafted (`prereg/french-holdout-grading.md`, DRAFT, NOT LIVE) |
+| Binance design quantities | `prereg/binance-panel.md` (DRAFT, NOT LIVE) | not live | `6537bd3`, `28194a4` | no read (design quantities) | "1d-2020-09 … gross needed 2.135" (the lowest gross floor; every variant above 2.1) | held unread (`4f5fdd8`) |
+| ML version 2, design quantities | `prereg/ml-v2-exploratory-2026-10-08.md` | exploratory; note `6c34389` | `ff0ea89`, grids `a570241` | no read (design quantities) | "+ regime  294  1.067 … 175.1 \| 2646  1.244 … 1712.0" | the version-2 pilot is running (`817f8d2`, box) |
