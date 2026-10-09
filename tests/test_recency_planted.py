@@ -82,3 +82,16 @@ def test_the_task_lists_and_the_smoke_seeds():
     assert len(t) == 5200 and len(set(t)) == 5200
     assert {a for a, _ in P.smoke_tasks()} == set(P.SEEDS) and all(705900 <= s <= 705909 for _, s in P.smoke_tasks())
     assert P.refusals("0" * 40)
+
+
+def test_the_dry_checker_on_a_synthetic_pool(fake_pool, tmp_path):
+    from experiments import check_recency_planted_dry as C
+    out = tmp_path / "dry"
+    out.mkdir()
+    rows = [P.one(t, Bn=20) for t in P.smoke_tasks()]
+    (out / "results.jsonl").write_text("\n".join(json.dumps(r, default=float) for r in rows))
+    (out / "provenance.json").write_text(json.dumps({"platform": "x", "dry_run": True}))
+    L, ok = C.check(out)
+    assert ok and L[-1] == "DRY RUN CHECK: PASS"
+    (out / "results.jsonl").write_text("\n".join(json.dumps(r, default=float) for r in rows[:-1]))
+    assert not C.check(out)[1]
