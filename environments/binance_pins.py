@@ -28,7 +28,9 @@ FILES_D0 = {"X": PIN_DIR / "binance_4h_2021-01_d0_X.npy", "v2": PIN_DIR / "binan
 SHA256 = {"X": "e6ff168cc06dbe795b90d73edfeafad332f886417331f2e921404ad677e8e257",       # arm64, 2026-10-09
           "v2": "47c688ee76ba8e9f5070a31e4ff155a0d702e6e7a72bc99aee5c4e224206e6c5",
           "costs": "74be4b19b9fad50cc878aae82d4b616b1ec93f12026aedf8aa51a45033399789"}
-SHA256_D0 = {"X": "", "v2": "", "costs": ""}       # set from the d = 0 pin's output
+SHA256_D0 = {"X": "da66f540df2102eed75c9ca2580eb44ccc733835e9cbac0f2bb04a73cf12eafa",    # arm64, 2026-10-09
+             "v2": "602325699910ebf3adc4326aaa8c150c993a1e1711a732f5a429a07d5f644164",
+             "costs": "9fe8813e06cdd7dc8dd3ac70b5b0d34bd4dd3e7ba0f5d59a2798ae5c482acecf"}
 
 
 def files(delay: int) -> tuple[dict, dict]:
