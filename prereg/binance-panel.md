@@ -440,3 +440,22 @@ conflict:
 - **P, X and the neutrality groups stay price-only.** X and the groups are built from
   price-only bar returns and the live-average market of price-only returns.
 - Funding still enters the earned return as in section e.
+
+## Correction, 2026-10-09 (America/Chicago): the builder dropped the taker-buy columns
+
+- **What was wrong.** `data/fetch_binance.py`'s `parse_klines` kept eight of the archive's
+  twelve kline columns. It dropped `taker_buy_volume` and `taker_buy_quote_volume` in
+  error when the in-sample CSVs were written (4h, the 4h fills, and the three daily
+  formations).
+- **What was done** (`data/rebuild_binance_taker.py`, `1cb047c`, fix `27ffc6a`; manifest
+  `data/binance_taker_manifest.json`):
+  - no download;
+  - each quarantined zip was re-read at the SHA-256 recorded when it was fetched;
+  - the rebuilt rows' first eight fields were checked equal to the existing derived CSVs;
+  - `{SYM}_{bar}_taker.csv` files were written beside them. The existing CSVs are
+    unchanged.
+- **When.** Restored before any outcome was read on this panel, and before its X is
+  pinned (`PINNED_X_SHA256` is still empty).
+- **Effect.** Version 2's V block on Binance has all five columns: logvol_ratio,
+  taker_last, taker_mean21, count_ratio, amihud21. Version 1's 40 features never used
+  volume and are unaffected.
