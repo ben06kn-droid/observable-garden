@@ -33,13 +33,33 @@ can't license a correction, **DEGENERATE** when the statistic breaks.
   searcher from nominal to **1.35%**, which is power thrown away.
 - A PASS is not a promise. Reverse the true signal and its advantage erodes
   from **+0.46** to **+0.08**. It never inverts.
+- Real-data holdout (ETF panel, 80 agent submissions): none was certified
+  in-sample. On the sealed 2023-2025 holdout their median net Sharpe was
+  **+0.71** [-0.28, +1.74], not distinguishable from zero; the gate's lower
+  bounds held; the agents' stated confidence did not rank their strategies.
+  (`EXPERIMENTS.md`, 6.5 holdout grading.)
+- Machine-learning arm (planted panels, registered confirmation): held its
+  false-positive rate (14 of 400 null panels certified at zero cost) and
+  certified a planted non-linear edge at net Sharpe 1.5 in **59%** of panels
+  against **14%** for the rule-class tier, a difference of **+0.45** [+0.40,
+  +0.50]. The edges were planted by construction; part of the gain is the
+  lower bar a single declared strategy faces. (`EXPERIMENTS.md`, ridge_stack
+  confirmation.)
+- French 49-industry panel, 2010-2019, in-sample: neither registered test
+  certified. The learned strategy's net Sharpe was **0.55** (p = 0.074 against
+  a threshold of 0.04); the best of 82,240 rules reached **0.68** (p = 0.96
+  against 0.01). Both are consistent with the detection floor registered in
+  advance. (`EXPERIMENTS.md`, French 49-industry, in-sample read.)
+
+**Not yet shown:** no certificate has been earned on real data, so whether a
+pass holds out of sample is untested there.
 
 ## Next: a gate for agents that think
 
-*In build. Pre-registered before it runs. Nothing in this section is a
-result yet.*
+*Where it stands: the agent arm and a real-data holdout have been run; their
+results are recorded in `EXPERIMENTS.md`.*
 
-An agent doesn't search a fixed menu. It decides what to try next. The new
+An agent doesn't search a fixed menu. It decides what to try next. The second
 gate prices the decisions, not just the trials:
 
 - **Replays what can be replayed.** Moves are typed and harness-executed, so
