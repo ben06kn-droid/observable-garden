@@ -46,3 +46,7 @@
     1872 bytes, 06:17 host time. No refusal: start-up checks, Option A tolerances and
     no-restart checks all passed (the grader writes grades only after all of them pass).
 11. [L] Only grades.json fetched at 06:19:10 UTC (SHA-256 8d3dd68d3ac96e5e4fde906769bf897644cb7fcbcb110ad9d4e5d56fe92c0246). Committed with this record before the read.
+12. [L] Read once (`read.txt`), committed unedited at fa1e13c0494d3fc7b476d7dfc75208532927d0a5 and pushed.
+13. The author stopped the holdout host (stop, not terminate). At 06:21:50 UTC ssh to
+    18.216.184.59 timed out. The holdout CSV and the zip stay on the stopped host's disk
+    (~/french_holdout/); no copy exists elsewhere.
