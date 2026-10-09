@@ -24,6 +24,10 @@ lower bound and the confidence fields; for the class, the best member. The runne
 
     python -m experiments.binance_insample_read --out runs/binance_insample/2026-10-09 \\
         --wheel ~/og-wheels/lightgbm-4.7.0-py3-none-macosx_12_0_arm64.whl --expect-head <commit>
+
+Dry path (a synthetic Binance-shaped panel; never this panel; no pin is opened):
+
+    python -m experiments.binance_insample_read --dry --out runs/binance_insample_dry/<date>
 """
 from __future__ import annotations
 
@@ -191,6 +195,37 @@ def run_read(d0: tuple, d1: tuple, members, B: int = B, seeds=(SEED_STREAM, SEED
     return out
 
 
+# -- the synthetic panel for the dry path -------------------------------------------------
+
+def synthetic(lag: int, seed: int = 11, M: int = 8, n_rows: int = 900) -> tuple:
+    """(raw, v2 blocks, costs) for a synthetic Binance-shaped panel at timing lag."""
+    from environments import binance_costs as K
+    from environments import binance_panel as bp
+    from experiments import binance_design_v2_4h as E
+    rng = np.random.default_rng(seed)
+    T = bp.WARM + n_rows + 2
+    times = 1_609_459_200_000 + np.arange(T, dtype=np.int64) * bp.BAR_MS
+    rp = 0.01 * rng.standard_normal((T, M))
+    rp[0] = 0
+    alive = np.ones((T, M), bool)
+    alive[T - 200:, M - 1] = False
+    rp[T - 200:, M - 1] = 0
+    fund = 1e-5 * rng.standard_normal((T, M))
+    panel = bp.panel_from_arrays(times, [f"S{j}" for j in range(M)], rp - fund, alive, rp=rp, lag=lag)
+    market = (rp * alive).sum(axis=1) / alive.sum(axis=1)
+    close = np.where(alive, np.exp(np.cumsum(rp, axis=0)), np.nan)
+    vol = np.where(alive, np.exp(rng.standard_normal((T, M))) * 1e6, np.nan)
+    raw = {"panel": panel, "WARM": bp.WARM, "LAG": lag, "rp": rp, "market": market, "close": close,
+           "volume": vol, "count": np.where(alive, 1000.0, np.nan), "taker": vol * 0.5, "funding": fund,
+           "info": {f"S{j}": {"alive_earned": alive[bp.WARM + lag:, j].tolist()} for j in range(M)}}
+    blk = E.build_blocks(raw)
+    O = np.vstack([close[:1], close[:-1]])
+    starts, hs = K.monthly_half_spreads(times, O, np.fmax(O, close) * 1.001, np.fmin(O, close) * 0.999,
+                                        close, alive)
+    rates = K.cost_rates(times, starts, K.fill_months(hs), alive, bp.WARM, lag)
+    return raw, blk, {"rates": rates}
+
+
 def main(argv=None) -> int:
     from environments.class_table import members_in_order
     from environments.planted_panel import CLS
@@ -198,10 +233,21 @@ def main(argv=None) -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--wheel")
     ap.add_argument("--expect-head")
+    ap.add_argument("--dry", action="store_true", help="a synthetic Binance-shaped panel; never this panel")
     a = ap.parse_args(argv)
     out = Path(a.out)
     if (out / "results.json").exists():
         raise SystemExit(f"{out / 'results.json'} exists; the read runs once")
+    if a.dry:
+        out.mkdir(parents=True, exist_ok=True)
+        members = members_in_order(CLS, 40)[:256]
+        rec = {"dry_run": True, "panel": "synthetic Binance-shaped panel (8 contracts, 900 rows); not this panel",
+               "registration": REGISTRATION}
+        rec.update(run_read(synthetic(1), synthetic(2), members, B=200, cache_dir=out / "cache",
+                            cache_name="binance-dry"))
+        (out / "results.json").write_text(json.dumps(rec, indent=1, default=float))
+        print(f"dry results written to {out / 'results.json'}")
+        return 0
     bad = refusals(a.expect_head or "", a.wheel)
     if bad:
         raise SystemExit("REFUSED:\n  " + "\n  ".join(bad))
