@@ -269,3 +269,15 @@ runner uses the exact discrete value, round((Σw)² / Σw²):
 - 3,208 rows at 20 years (3,207.87), unchanged.
 
 Nothing else changes. Found by the runner's test before any planted panel was drawn.
+
+## Amendment 3, 2026-10-09 (America/Chicago): the author's answers on NA40's form and the reader's seed
+
+1. **NA40 keeps the scaled form,** y_t = (x_t + 0.3·x_{t−1} + 0.3·x_{t−2}) / sqrt(1.18) on
+   the most recent 25% of rows. It shifts dependence only, as amendment 1 proposed. The
+   runner already uses it.
+2. **The reader's paired-bootstrap seed is registered: 705999.** It is in the checked block
+   704000–705999 and outside the smoke and dry seeds (705900–705909). The reader
+   (`experiments/read_recency_planted.py`, `b40b72c`) uses `default_rng(705999)` for every
+   paired interval (B 10,000), drawn in the reader's fixed order.
+
+Nothing else changes.
