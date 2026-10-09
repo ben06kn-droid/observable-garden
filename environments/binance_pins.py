@@ -22,7 +22,9 @@ PIN_DIR = REPO / "data" / "pinned"
 NAME = "4h-2021-01"
 FILES = {"X": PIN_DIR / "binance_4h_2021-01_X.npy", "v2": PIN_DIR / "binance_4h_2021-01_v2.npz",
          "costs": PIN_DIR / "binance_4h_2021-01_costs.npz"}
-SHA256 = {"X": "", "v2": "", "costs": ""}         # set from the pin's output
+SHA256 = {"X": "e6ff168cc06dbe795b90d73edfeafad332f886417331f2e921404ad677e8e257",       # arm64, 2026-10-09
+          "v2": "47c688ee76ba8e9f5070a31e4ff155a0d702e6e7a72bc99aee5c4e224206e6c5",
+          "costs": "74be4b19b9fad50cc878aae82d4b616b1ec93f12026aedf8aa51a45033399789"}
 
 
 def ohlc_grid(name: str = NAME):
