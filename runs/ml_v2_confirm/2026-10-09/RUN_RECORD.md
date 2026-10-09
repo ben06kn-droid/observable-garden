@@ -49,3 +49,17 @@
 The three box logs (`logs/v2c_smoke.log`, `logs/v2c_run.log`, `logs/v2c_dry.log`) remain on
 the stopped compute box under `~/observable-garden/logs/`. They are to be fetched at the next
 box session, one rsync call per file.
+
+## Logs fetched, 2026-10-09 23:28 UTC (the recency planted box session)
+
+The box was restarted at 18.223.134.213. The three logs were fetched one rsync call each:
+- **rsync exit status:** v2c_smoke 0, v2c_run 0, v2c_dry 0.
+- **SHA-256:**
+  - `logs/v2c_smoke.log` 0fb3e4413c74725e273c32631dfd27cc899deb199cfce429d3b0c19a8f62540c (29,645 bytes);
+  - `logs/v2c_run.log` 9c65e50816e4275f6ee293fdbd4185a9eeaa172f4f6da1c82ecaba1ea65684ec (83,528 bytes);
+  - `logs/v2c_dry.log` bd8c1097e386be83329523684f960013278c039bc775b42c2277cb4ab838fff7 (781 bytes).
+- **Checked against the content quoted above.** This record held no hashes.
+  - smoke: 7 lines with PASS; "wall 537 s"; "[exit 0]";
+  - run: "960/960 tasks"; "wall 2059 s; 960 tasks; no outcome printed"; "[exit 0]";
+  - dry: "2/2 tasks"; "[exit 0]".
+  All found.
