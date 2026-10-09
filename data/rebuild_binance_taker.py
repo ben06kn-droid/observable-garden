@@ -111,8 +111,11 @@ def rebuild_fill(sym: str, runs: list[dict], derived: Path, out: Path, root: Pat
         if run.get("decision") != "filled":
             continue
         for day in run["days"]:
+            sha = run["files"].get(day, "")
+            if len(sha) != 64:                    # no daily file that day (recorded as absent)
+                continue
             key = f"data/futures/um/daily/klines/{sym}/4h/{sym}-4h-{day}.zip"
-            rows += [r for r in parse_klines_taker(quarantined(key, run["files"][day], root)) if r[0] in keep]
+            rows += [r for r in parse_klines_taker(quarantined(key, sha, root)) if r[0] in keep]
             n += 1
     if sorted(r[:8] for r in rows) != sorted(read_derived(derived)):
         raise RebuildRefused(f"{sym}: the rebuilt fill rows differ from {derived.name}")
