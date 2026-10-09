@@ -665,3 +665,40 @@ with probability 0.028.
 - **In the same session, after the pilot is fetched and before the box stops:** the French
   holdout grading's step 0 (`2c0f25b`), as its commands set out
   (`docs/french_step0_box_commands.md`). It reads no holdout row.
+
+## The second pilot's outcome, 2026-10-09. EXPLORATORY
+
+The author accepted the read as printed. The raw outputs were committed before the read at
+`4a0e621`; the read is at `9e4f6a7` (`runs/ml_v2_pilot2/2026-10-09/read.txt`).
+
+**As printed:**
+- **Level:** no stream fails. At zero cost: v2 M1 3/100, v2 M2 2/100, version 1 0/100,
+  plain ridge 1/100.
+- **The registered arm:**
+  - memory set carried: **M2**;
+  - "v2 base M2 - version 1 **+0.037 [+0.009, +0.066]** -> version 2 replaces version 1";
+  - fairness +0.025 [−0.018, +0.068], no flag.
+- **The high-cost arm (×5.0):**
+  - memory set carried: **M2**;
+  - "**+0.077 [+0.057, +0.097]** -> version 2 replaces version 1";
+  - fairness +0.075 [+0.050, +0.102], no flag.
+- **"the two cost arms agree".**
+
+**The configuration carried forward** to a confirmation:
+- version 2's base view: P, X, V; h 5; market-neutral; always;
+- **memory set M2:** rolling 756 and expanding;
+- **rate grid G3:** {0.3, 0.1, 0.03};
+- **L penalty grid {1, 3, 10, 30};**
+- everything else as built: Q {0.3, 1, 3, off}, I and S {1, 3, 10, off}, 3 embargoed
+  folds, trees, and a non-negative stack.
+
+**Caveats:**
+- **This pilot is exploratory.**
+- **Three settings were chosen on pilot results:** the memory set, the rate grid and the
+  L grid. So the gain over version 1 measured here is **optimistic** for the
+  configuration as chosen. A confirmation on fresh seeds is needed before any claim.
+- **L still sits at its top value (30)** in 44–65% of version 2's refits on planted panels
+  (by memory), and 68–72% on null panels. **The L grid is not to be widened again.**
+- **Lead-lag certifications were lower** than in the first pilot: 9 of 50 at level 1.5 in
+  the registered arm, against 22 of 50 under G3 in the first pilot. The seeds were
+  different, so this is not a paired comparison.
