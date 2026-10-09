@@ -428,3 +428,15 @@ computed):
 - EDGE on trailing-30-day 1h bars, re-estimated monthly;
 - the book-ticker check on 2–3 contracts first;
 - a fixed 5 bps fee on top.
+
+## Clarification, 2026-10-09 (America/Chicago): B7 and version 2's funding block
+
+The author's clarification, recorded so that two decisions of 2026-10-08 do not read as a
+conflict:
+- **B7 ("signals are price-only") applies to version 1's registered 40 features (P).**
+- **Version 2's design adds an F block (funding), approved the same day.** On Binance, F
+  stays in version 2's base view: the funding paid in each bar, whose calc time is at or
+  before that bar's close.
+- **P, X and the neutrality groups stay price-only.** X and the groups are built from
+  price-only bar returns and the live-average market of price-only returns.
+- Funding still enters the earned return as in section e.
