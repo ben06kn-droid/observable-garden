@@ -158,6 +158,31 @@ host.**
 **Not proposed:** grading on the laptop. It would put holdout rows on the agent machine,
 which the parent registration's seal rules out (section f).
 
+### Step 0's result, and the platform decision (2026-10-09; still DRAFT, NOT LIVE)
+
+Step 0 ran on 2026-10-09: the laptop reference, then the comparison on the compute box
+(c7a.48xlarge, Linux x86_64, the Linux LightGBM pin). Outputs are in
+`runs/french_step0/2026-10-09/`, committed at `4a0e621`. **It is in-sample only, and no
+holdout row was read.** It printed:
+
+| Option A check | result | tolerance | verdict |
+|---|---|---|---|
+| z-features, largest difference against the pinned arm64 X | 6.223e-14 | ≤ 1e-9 | PASS |
+| rank entries differing | 2 of 2,465,680 | ≤ 246 | PASS |
+| member 2937, in-sample net Sharpe | 0.679 | 0.679 to 3 decimals | PASS |
+| ridge_stack, in-sample net Sharpe | 0.547 | 0.547 to 3 decimals | PASS |
+
+ridge_stack had 7 refits. Its penalties differed on 0 of them; its stack weights differed
+by more than 1e-9 on all 7. Its positions correlate with the laptop's at 1.000000 over the
+scored rows.
+
+**Decision:**
+- **Option A is adopted.** The Linux holdout host is the grading platform.
+- **Options A2 and B are not needed,** and are kept above as the record of what was
+  considered.
+
+The no-restart checks of section 3 run on the host's own builds, as before.
+
 ## 5. Quantities, descriptive
 
 There are two objects (n = 2). **No pooled test.**
@@ -205,36 +230,56 @@ lower bound.
 - **Always stated, in both branches:** "**Both graded objects were refused in-sample.
   This grading cannot test whether a pass holds.**"
 
-## 7. Operator steps
+## 7. Operator steps (Option A: the Linux holdout host)
 
-Each step happens only on the author's go.
+Each step happens only on the author's go. **The host** is the holdout host,
+`i-0886a189b85d4d051` (c7a.8xlarge, Linux x86_64). No agent session runs on it.
 
-1. **The zip to the holdout host.** The author starts the host and sends its IP.
-   - Copy `~/Desktop/og-quarantine/french/49_Industry_Portfolios_daily_CSV.zip` to the
-     host (Option A), or to the Mac host (Option B).
-   - Run `sha256sum` on arrival. It must equal `8f394fe3…40de`; on a mismatch, stop.
-   - Only after the match: delete the laptop copy, and record the deletion and its time.
-2. **The pinned environment on the host:**
-   - the repository at the registered grader commit, with a clean tree and HEAD checked;
-   - Python 3.14 in `.venv`;
-   - **the Linux LightGBM pin:** wheel
-     `lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl`, SHA-256
-     `d23e922acd891e77212e4d0fbcee9ba973c96dee479491341d05ba595357ebb7`, installed
-     `lib_lightgbm.so` SHA-256
-     `573d57e8a2c6290c2271b99b87afa7a802e796eafc9e8d66aefa0913cbc1616a` (or the macOS pin,
-     under Option B);
-   - the in-sample CSV (`1547da6f…c04e`) and the pinned X (`07488718…d3fc`), each checked
-     on arrival.
-3. **The split, on the host:** the grader cuts the value-weighted block of the zip into the
-   holdout CSV (2020-01-01 onward). It hashes it and records its row count (which must be
-   1,674) and its last date. The holdout CSV never leaves the host.
-4. **The grader:**
-   - runs its refusals (section 4's tolerances and the pins);
-   - runs the no-restart checks (section 3);
-   - computes section 5's quantities;
-   - writes `grades.json`, printing no value.
-5. **Fetch and commit `grades.json` and the run record, before the read.** Only that file
-   and the record leave the host.
+1. **Move the zip to the host, checking its hash on arrival.** The author starts the host
+   and sends its IP.
+
+   ```
+   scp ~/Desktop/og-quarantine/french/49_Industry_Portfolios_daily_CSV.zip HOST:~/french_holdout/
+   ssh HOST 'echo "8f394fe34bea54d41b9aafed410425ee8f8e252ede3c71a7c1cd20bab83040de  ~/french_holdout/49_Industry_Portfolios_daily_CSV.zip" | sha256sum -c'
+   ```
+
+   - **On a mismatch, stop.**
+   - **Only after OK:** delete the laptop copy (`rm` the quarantined zip), check that it is
+     gone, and record the deletion and its time in the run record.
+2. **Set up the grading environment on the host:**
+   - the repository at the registered grader commit, with a clean tree and HEAD checked
+     against the commit named in the go;
+   - Python 3.14 in a dedicated `.venv-grading`;
+   - **the Linux LightGBM pin:** the wheel
+     `lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl`.
+     - Check it with `sha256sum -c` against
+       `d23e922acd891e77212e4d0fbcee9ba973c96dee479491341d05ba595357ebb7` before
+       installing.
+     - The installed `lib_lightgbm.so` must hash to
+       `573d57e8a2c6290c2271b99b87afa7a802e796eafc9e8d66aefa0913cbc1616a`.
+   - the in-sample CSV (`1547da6f…c04e`) and the pinned X (`07488718…d3fc`), each
+     copied and checked with `sha256sum -c` on arrival.
+3. **The split, on the host:**
+   - the grader cuts the value-weighted block of the zip into the holdout CSV,
+     2020-01-01 onward;
+   - it hashes the CSV;
+   - it records the row count, which must be 1,674, and the last date (the open question
+     in section 2);
+   - **the holdout CSV never leaves the host.**
+4. **Run the grader on the host, in this order:**
+   1. **its start-up refusals:** the pins above, the clean tree and HEAD;
+   2. **section 4's Option A tolerances,** re-checked on the host's own build against the
+      pinned X and the in-sample read. It refuses on any failure;
+   3. **section 3's no-restart checks:**
+      - bit-identical in-sample positions from the spanning and the in-sample-only runs;
+      - bit-identical features on rows 0–2515;
+      - the first holdout trade costed from the carried position.
+
+      **It refuses on any failure, before any holdout value is computed;**
+   4. **section 5's quantities;**
+   5. it writes `grades.json`, printing no value.
+5. **Fetch and commit `grades.json` and the run record before the read.** Only those
+   leave the host.
 6. **Read once** with the committed reader, which is tested on made-up rows before the
    grading runs. Commit its output unedited.
 7. **Stop the host** (stop, not terminate).
