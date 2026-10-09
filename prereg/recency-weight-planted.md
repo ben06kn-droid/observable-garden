@@ -259,3 +259,13 @@ Each stream's population mean stays exactly 0.
 
 On the box (180 workers, 1.7× under load), that is about 55 minutes of run, about 1.4
 box-hours with setup, roughly $15–18.
+
+## Amendment 2, 2026-10-09 (America/Chicago): the last-n_eff row counts, exactly
+
+Amendment 1 gave the last n_eff rows as 3,634 at 40 years and 3,208 at 20 years. Those
+came from the continuous approximation n_eff ≈ (2h / ln 2)(1 − a)/(1 + a) times 252. The
+runner uses the exact discrete value, round((Σw)² / Σw²):
+- **3,607 rows at 40 years** (3,607.30), not 3,634;
+- 3,208 rows at 20 years (3,207.87), unchanged.
+
+Nothing else changes. Found by the runner's test before any planted panel was drawn.
