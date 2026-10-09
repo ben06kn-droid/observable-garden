@@ -88,3 +88,16 @@ def test_the_report_renders_from_synthetic_results(raw):
     L = D.report(res, json.loads(D.V1_TABLE.read_text()))
     assert any(x.startswith("COMPARISON") for x in L) and sum(x.split()[:1] == ["v2"] for x in L) == 4
     assert "bit-for-bit repeat (positions, separate process): True" in "\n".join(L)
+
+
+def test_configure_sets_and_resets_the_calendar_variant():
+    from learn2 import learner as Ln
+    try:
+        cfg = D.configure("4h-cal")
+        assert Ln.FIRST == 2190 and Ln.MEMORIES["roll2190"] == 2190 and D.MEMORIES == ("roll2190", "expand")
+        s = D.settings(7116, 2190.0, 1, cfg)["carried_forward"]
+        assert s["first_scored_row"] == 2197 and s["scored_rows"] == 7116 - 2197 and s["refits"] == len(range(2197, 7116, 252))
+        D.configure("4h")
+        assert Ln.FIRST == 756 and D.MEMORIES == ("roll756", "expand")
+    finally:
+        D.configure("4h")

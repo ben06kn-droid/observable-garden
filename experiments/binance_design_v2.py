@@ -55,13 +55,30 @@ import numpy as np
 B = 5000
 Q = 0.95
 VARIANTS = ("4h", "1d-2020-09", "1d-2021-01", "1d-2021-10")
-SEED_STREAM = {v: 695040 + i for i, v in enumerate(VARIANTS)}
-SEED_LEAK = {v: 695044 + i for i, v in enumerate(VARIANTS)}
+SEED_STREAM = {**{v: 695040 + i for i, v in enumerate(VARIANTS)}, "4h-cal": 695048}
+SEED_LEAK = {**{v: 695044 + i for i, v in enumerate(VARIANTS)}, "4h-cal": 695049}
+# The calendar-memory middle variant on 4h bars (author, 2026-10-09): first scored row
+# after 2,190 rows (one year), memories rolling 2,190 and expanding, refit every 252 rows.
+CONFIG = {"carried": {"first": 756, "memories": {"roll756": 756, "expand": None}},
+          "4h-cal": {"first": 2190, "memories": {"roll2190": 2190, "expand": None}}}
+ALL = VARIANTS + ("4h-cal",)
 H, NEUTRALITY, REGIME = 5, "market", "always"
 RATES = (0.3, 0.1, 0.03)                         # G3
-MEMORIES = ("roll756", "expand")                 # M2
+MEMORIES = ("roll756", "expand")                 # M2 (configure() sets it per variant)
 L_GRID = {"L": (1.0, 3.0, 10.0, 30.0)}
 V1_TABLE = Path("runs/binance_design_c/2026-10-08/design_c.json")
+
+
+def configure(name: str) -> dict:
+    """Set the learner's first scored row and memories for this variant (every job calls
+    it, so a reused worker never carries one variant's settings into the next)."""
+    global MEMORIES
+    from learn2 import learner as Ln
+    cfg = CONFIG.get(name, CONFIG["carried"])
+    Ln.FIRST = cfg["first"]
+    Ln.MEMORIES = {"roll252": 252, "roll756": 756, "expand": None, **cfg["memories"]}
+    MEMORIES = tuple(cfg["memories"])
+    return cfg
 
 
 # -- raw arrays on the bar grid ------------------------------------------------------------
@@ -87,7 +104,7 @@ def raw_variant(name: str) -> dict:
     from data import fetch_binance as fb
     from data import fetch_binance_daily as fd
     from environments import binance_panel as bp
-    if name == "4h":
+    if name in ("4h", "4h-cal"):
         man = json.loads(fb.MANIFEST.read_text())
         symbols, directory, spec = man["universe"], bp.INSAMPLE_DIR, bp.FOUR_H
         u = {"formation": "2021-10", "universe": len(symbols)}
@@ -154,19 +171,20 @@ def sha(a: np.ndarray) -> str:
 
 # -- settings in rows ----------------------------------------------------------------------
 
-def settings(T: int, ppy: float, d: int = 1) -> dict:
+def settings(T: int, ppy: float, d: int = 1, cfg: dict | None = None) -> dict:
     """The carried-forward row settings on a panel of T rows, in rows and years, and the
     time-matched alternative (rows scaled so each setting spans the calendar time it spans
     on the ETF panel at 252 rows a year). Arithmetic only."""
     from learn2 import blocks as Bk
     from learn2 import learner as Ln
     from learn2 import timing
+    cfg = cfg or CONFIG["carried"]
     emb = timing.embargo(H, d)
-    first = Ln.FIRST + emb
+    first = cfg["first"] + emb
     scored = max(T - first, 0)
-    reg = {"first_scored_row": first, "refit_rows": Ln.REFIT, "roll756_rows": 756,
+    reg = {"memory_rows": {k: v for k, v in cfg["memories"].items()}, "first_scored_row": first, "refit_rows": Ln.REFIT, "roll756_rows": 756,
            "block_window_rows": Bk.WIN, "short_window_rows": Bk.SHORT, "scored_rows": scored,
-           "scored_years": scored / ppy, "refits": len(range(first, T, Ln.REFIT)),
+           "scored_years": scored / ppy, "refits": len(range(first, T, Ln.REFIT)), "days_per_row": 365.0 / ppy,
            "years": {"first_scored_row": first / ppy, "refit": Ln.REFIT / ppy, "roll756": 756 / ppy,
                      "block_window": Bk.WIN / ppy}}
     k = ppy / 252.0
@@ -222,7 +240,7 @@ def quantities(name: str, raw: dict, B_null: int = B) -> dict:
                        "missing": ["V: taker_last, taker_mean21 (no taker volume in the derived CSVs)"]
                                   + ([f"F: no funding rows for {no_funding}"] if no_funding else []),
                        "groups_warm_from_row": int(np.argmax((blk["G"] >= 0).all(axis=1)))},
-            "settings": settings(T, ppy, inp.d),
+            "settings": settings(T, ppy, inp.d, CONFIG.get(name, CONFIG["carried"])),
             "stream": {"rows": int(len(rows)), "years": years, "first": eo[rows[0]], "last": eo[rows[-1]],
                        **ts, "ann_vol": vol, "cost_drag_sharpe": drag, "dead_gross_share": dead_share,
                        "block_length": int(L), "B": B_null, "seed": SEED_STREAM[name],
@@ -261,7 +279,7 @@ def job_block_leak(name: str, raw: dict | None = None) -> dict:
     from learn2 import timing
     raw = raw if raw is not None else raw_variant(name)
     T = raw["rp"].shape[0]
-    first = Ln.FIRST + timing.embargo(H, 1)
+    first = Ln.FIRST + timing.embargo(H, 1)                  # as configure() set it
     t = raw["WARM"] + first + (T - raw["WARM"] - raw["LAG"] - first) // 2
     seed = SEED_LEAK[name]
     rp, m = raw["rp"], raw["market"]
@@ -279,6 +297,7 @@ JOBS = {"main": job_main, "leak": job_leak, "block_leak": job_block_leak}
 
 def run_job(task):
     kind, name = task
+    configure(name)
     t0 = time.time()
     r = JOBS[kind](name)
     r["job_seconds"] = time.time() - t0
@@ -291,7 +310,8 @@ def report(res: dict, v1: dict) -> list[str]:
     L = ["Binance design quantities, version 2 (outcome-free; provisional unpinned builds)",
          f"platform {platform.system()} {platform.machine()}; base view, M2, G3, L {{1, 3, 10, 30}}; flat 10 bps",
          "=" * 100]
-    for v in VARIANTS:
+    present = [v for v in ALL if ("main", v) in res]
+    for v in present:
         m, lk, bl = res[("main", v)], res[("leak", v)], res[("block_leak", v)]
         st, se, b = m["settings"], m["stream"], m["blocks"]
         cf, tm = st["carried_forward"], st["time_matched_not_run"]
@@ -300,13 +320,24 @@ def report(res: dict, v1: dict) -> list[str]:
         L.append(f"   blocks: {' '.join(b['available'])}  (P {b['P']}, X {b['X']}, V {len(b['V'])} = {', '.join(b['V'])}, "
                  f"F {b['F']}); groups warm from row {b['groups_warm_from_row']}")
         L.append(f"   missing: {'; '.join(b['missing'])}")
-        L.append(f"   settings (carried forward, rows): first scored {cf['first_scored_row']} ({cf['years']['first_scored_row']:.2f} y), "
-                 f"refit {cf['refit_rows']} ({cf['years']['refit']:.2f} y), roll756 ({cf['years']['roll756']:.2f} y), "
-                 f"block window {cf['block_window_rows']} ({cf['years']['block_window']:.2f} y), short {cf['short_window_rows']}; "
+        L.append(f"   settings (rows): first scored {cf['first_scored_row']} ({cf['years']['first_scored_row']:.2f} y), "
+                 f"refit {cf['refit_rows']} ({cf['years']['refit']:.2f} y), "
+                 + "".join(f"{k} {r} ({r / st['ppy']:.2f} y), " for k, r in cf.get("memory_rows", {"roll756": 756}).items() if r)
+                 + f"block window {cf['block_window_rows']} ({cf['years']['block_window']:.2f} y), short {cf['short_window_rows']}; "
                  f"{cf['refits']} refits")
         for mem, rr in m["refits"].items():
             if rr:
                 L.append(f"      {mem}: training rows at first refit {rr[0]['train_rows']}, at last {rr[-1]['train_rows']}")
+        if v.startswith("4h"):
+            cfg = CONFIG.get(v, CONFIG["carried"])
+            dpr = 365.0 / st["ppy"]
+            L.append(f"   in calendar days (4 h = 1/6 day): first scored row {cf['first_scored_row']} = "
+                     f"{cf['first_scored_row'] * dpr:.0f} d; refit 252 = {252 * dpr:.0f} d; block window 252 = {252 * dpr:.0f} d; "
+                     + "; ".join(f"{k} " + (f"{r} = {r * dpr:.0f} d" if r else "all rows") for k, r in cfg["memories"].items()))
+            for mem, rr in m["refits"].items():
+                if rr:
+                    L.append(f"      {mem}: training at first refit {rr[0]['train_rows']} rows = {rr[0]['train_rows'] * dpr:.0f} d, "
+                             f"at last {rr[-1]['train_rows']} rows = {rr[-1]['train_rows'] * dpr:.0f} d")
         L.append(f"   scored window: {se['rows']} rows, {se['years']:.2f} years ({se['first'][:10]} .. {se['last'][:10]})")
         L.append(f"   time-matched alternative (x{tm['scale']:.3f}; NOT run): first scored {tm['first_scored_row']}, "
                  f"refit {tm['refit_rows']}, roll756 -> {tm['roll756_rows']}, block window {tm['block_window_rows']}; "
@@ -327,11 +358,16 @@ def report(res: dict, v1: dict) -> list[str]:
     L.append("COMPARISON (stream; net and gross Sharpe needed for 80% power at the 95% bar; flat 10 bps)")
     L.append(f"{'variant':<11} {'ver':<3} {'rows':>5} {'years':>5} {'turn':>7} {'cost/y':>7} {'drag':>6} "
              f"{'bar95':>6} {'net80':>6} {'gross':>6} {'s/fit':>6}")
-    for v in VARIANTS:
-        a = v1[v]["stream"]
-        b5 = a["bars"]["0.95"]
-        L.append(f"{v:<11} {'v1':<3} {a['rows']:>5} {a['years']:>5.2f} {a['turnover_per_row']:>7.4f} {a['cost_per_year']:>7.4f} "
-                 f"{a['cost_drag_sharpe']:>6.3f} {b5['bar']:>6.3f} {b5['net_80']:>6.3f} {b5['gross_80']:>6.3f} {a['seconds_run']:>6.0f}")
+    for v in present:
+        if v not in v1:
+            L.append(f"{v:<11} {'v1':<3} {'(no version-1 figure for this variant)'}")
+            a = None
+        else:
+            a = v1[v]["stream"]
+            b5 = a["bars"]["0.95"]
+        if a is not None:
+            L.append(f"{v:<11} {'v1':<3} {a['rows']:>5} {a['years']:>5.2f} {a['turnover_per_row']:>7.4f} {a['cost_per_year']:>7.4f} "
+                     f"{a['cost_drag_sharpe']:>6.3f} {b5['bar']:>6.3f} {b5['net_80']:>6.3f} {b5['gross_80']:>6.3f} {a['seconds_run']:>6.0f}")
         m = res[("main", v)]
         se = m["stream"]
         fit = np.mean([x for k, x in m["seconds"].items() if k.startswith("fit_")])
@@ -347,6 +383,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--variants", nargs="+", default=list(VARIANTS), choices=list(ALL))
+    ap.add_argument("--prior", help="an earlier design_v2.json whose variants join this table (not re-run)")
     a = ap.parse_args(argv)
     out = Path(a.out)
     if (out / "design_v2.json").exists():
@@ -354,13 +392,20 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     v1 = json.loads(V1_TABLE.read_text())
     # the 4h jobs first (the long ones), so the daily ones fill in around them
-    tasks = [("main", "4h"), ("leak", "4h")] + [(k, v) for v in VARIANTS[1:] for k in ("main", "leak")] + \
-            [("block_leak", v) for v in VARIANTS]
+    vs = list(a.variants)
+    tasks = [(k, v) for v in vs for k in ("main", "leak")] + [("block_leak", v) for v in vs]
     res = {}
+    if a.prior:
+        for key, r in json.loads(Path(a.prior).read_text()).items():
+            kind, name = key.split(" ", 1)
+            if name not in vs:
+                res[(kind, name)] = r
     t0 = time.time()
     with ProcessPoolExecutor(a.workers) as ex:
         for kind, name, r in ex.map(run_job, tasks):
             res[(kind, name)] = r
+            if a.prior:
+                r["prior"] = None
             print(f"{kind} {name} done ({r['job_seconds']:.0f} s; {time.time() - t0:.0f} s elapsed)", flush=True)
     L = report(res, v1)
     L.append(f"wall {time.time() - t0:.0f} s")
