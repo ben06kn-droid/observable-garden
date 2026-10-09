@@ -116,13 +116,14 @@ def fill_months(hs: np.ndarray) -> np.ndarray:
 
 
 def cost_rates(times_ms, starts, hs_filled, alive, warm: int, lag: int) -> np.ndarray:
-    """The panel's (rows, M) cost rate: row k's trade executes at grid bar warm + k + 1; its
+    """The panel's (rows, M) cost rate: row k's trade executes at grid bar warm + k + lag - 1
+    (the next bar's close at lag 2, d = 1; the same bar's close at lag 1, d = 0); its
     month's half-spread, floored, plus the fee; 0 where the execution bar is dead. A month
     with no estimate at all (before any history) takes FEE + FLOOR."""
     times_ms = np.asarray(times_ms, np.int64)
     T = len(times_ms)
     rows = np.arange(warm, T - lag)
-    ex = rows + 1
+    ex = rows + (lag - 1)
     k = np.searchsorted(np.asarray(starts, np.int64), times_ms[ex], side="right") - 1
     hs = hs_filled[k]
     rate = FEE + np.maximum(np.where(np.isfinite(hs), hs, 0.0), FLOOR)

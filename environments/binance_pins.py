@@ -21,10 +21,18 @@ REPO = Path(__file__).resolve().parent.parent
 PIN_DIR = REPO / "data" / "pinned"
 NAME = "4h-2021-01"
 FILES = {"X": PIN_DIR / "binance_4h_2021-01_X.npy", "v2": PIN_DIR / "binance_4h_2021-01_v2.npz",
-         "costs": PIN_DIR / "binance_4h_2021-01_costs.npz"}
+         "costs": PIN_DIR / "binance_4h_2021-01_costs.npz"}            # d = 1 (lag 2)
+# d = 0 (lag 1; author, 2026-10-09): one more feature row, and costs at the same bar's close
+FILES_D0 = {"X": PIN_DIR / "binance_4h_2021-01_d0_X.npy", "v2": PIN_DIR / "binance_4h_2021-01_d0_v2.npz",
+            "costs": PIN_DIR / "binance_4h_2021-01_d0_costs.npz"}
 SHA256 = {"X": "e6ff168cc06dbe795b90d73edfeafad332f886417331f2e921404ad677e8e257",       # arm64, 2026-10-09
           "v2": "47c688ee76ba8e9f5070a31e4ff155a0d702e6e7a72bc99aee5c4e224206e6c5",
           "costs": "74be4b19b9fad50cc878aae82d4b616b1ec93f12026aedf8aa51a45033399789"}
+SHA256_D0 = {"X": "", "v2": "", "costs": ""}       # set from the d = 0 pin's output
+
+
+def files(delay: int) -> tuple[dict, dict]:
+    return (FILES, SHA256) if delay == 1 else (FILES_D0, SHA256_D0)
 
 
 def ohlc_grid(name: str = NAME):
@@ -47,10 +55,10 @@ def ohlc_grid(name: str = NAME):
     return times, O, H, L, C, tr
 
 
-def build(estimator: str) -> dict:
+def build(estimator: str, delay: int = 1) -> dict:
     from environments import binance_costs as K
     from experiments.binance_design_v2_4h import build_blocks, raw_4h
-    raw = raw_4h(NAME)
+    raw = raw_4h(NAME, lag=1 + delay)
     blk = build_blocks(raw)
     times, O, H, L, C, tr = ohlc_grid(NAME)
     alive = raw["alive"]
@@ -68,23 +76,25 @@ def _sha(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
-def pin(estimator: str) -> dict:
-    for p in FILES.values():
+def pin(estimator: str, delay: int = 1) -> dict:
+    F, _ = files(delay)
+    for p in F.values():
         if p.exists():
             raise SystemExit(f"{p} exists; pins are written once")
-    b = build(estimator)
+    b = build(estimator, delay)
     PIN_DIR.mkdir(parents=True, exist_ok=True)
-    np.save(FILES["X"], b["X"])
-    with open(FILES["v2"], "wb") as fh:
+    np.save(F["X"], b["X"])
+    with open(F["v2"], "wb") as fh:
         np.savez(fh, **b["v2"])
-    with open(FILES["costs"], "wb") as fh:
+    with open(F["costs"], "wb") as fh:
         np.savez(fh, **b["costs"])
-    return {k: _sha(p) for k, p in FILES.items()}
+    return {k: _sha(p) for k, p in F.items()}
 
 
-def load(which: str, sha256: str | None = None):
-    p = FILES[which]
-    want = SHA256[which] if sha256 is None else sha256
+def load(which: str, sha256: str | None = None, delay: int = 1):
+    F, S = files(delay)
+    p = F[which]
+    want = S[which] if sha256 is None else sha256
     if not want:
         raise SystemExit(f"no pinned {which} is registered yet")
     if not p.exists() or _sha(p) != want:
@@ -95,6 +105,7 @@ def load(which: str, sha256: str | None = None):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--estimator", required=True, choices=("edge", "abdi_ranaldo"))
+    ap.add_argument("--delay", type=int, default=1, choices=(0, 1))
     a = ap.parse_args()
-    for k, v in pin(a.estimator).items():
-        print(f"{k}: {FILES[k].name} SHA-256 {v}")
+    for k, v in pin(a.estimator, a.delay).items():
+        print(f"{k}: {files(a.delay)[0][k].name} SHA-256 {v}")

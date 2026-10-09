@@ -212,7 +212,10 @@ def signals(rp: np.ndarray, alive: np.ndarray) -> dict:
 
 
 def panel_from_arrays(times, symbols, r, alive, rp=None, spec: BarSpec = FOUR_H,
-                      name=None) -> RealPanel:
+                      name=None, lag: int = LAG) -> RealPanel:
+    """`lag` = 1 + d: feature row t earns bar t + lag. lag 2 (d = 1, the default): the trade
+    decided at the close of t executes at the close of t+1. lag 1 (d = 0): it executes at
+    the close of t itself, and is costed iff bar t is live."""
     T, M = r.shape
     rp = r if rp is None else rp
     sig = signals(rp, alive)
@@ -222,11 +225,11 @@ def panel_from_arrays(times, symbols, r, alive, rp=None, spec: BarSpec = FOUR_H,
         fnames += [f"{nm}_z", f"{nm}_rank"]
     F = np.stack(feats, axis=2)
     earn = np.full_like(r, np.nan)
-    earn[:-LAG] = r[LAG:]
-    keep = slice(WARM, T - LAG)
+    earn[:-lag] = r[lag:]
+    keep = slice(WARM, T - lag)
     # the trade decided at the close of bar t executes at the close of bar t+1: it is costed
     # iff bar t+1 is live (after a delisting the position is settled; changing it is free)
-    exec_live = np.vstack([alive[1:], alive[-1:]])
+    exec_live = alive if lag == 1 else np.vstack([alive[lag - 1:], np.repeat(alive[-1:], lag - 1, axis=0)])
     cost = np.where(exec_live, COST_BPS * 1e-4, 0.0)
     to_iso = lambda t: dt.datetime.fromtimestamp(int(t) / 1000, dt.timezone.utc).isoformat()
     return RealPanel(
@@ -236,11 +239,12 @@ def panel_from_arrays(times, symbols, r, alive, rp=None, spec: BarSpec = FOUR_H,
         cost_rate=cost[keep], borrow_rate=np.zeros((T, M))[keep],
         session_start=np.zeros(T, dtype=bool)[keep], session_end=np.zeros(T, dtype=bool)[keep],
         flat_overnight=False,
-        meta={"open_times": [to_iso(t) for t in times[WARM:T - LAG]],
-              "earned_opens": [to_iso(t) for t in times[WARM + LAG:T]],
-              "symbols": list(symbols), "alive_earned": alive[WARM + LAG:T].tolist(),
+        meta={"open_times": [to_iso(t) for t in times[WARM:T - lag]],
+              "earned_opens": [to_iso(t) for t in times[WARM + lag:T]],
+              "symbols": list(symbols), "alive_earned": alive[WARM + lag:T].tolist(), "delay": lag - 1,
               "prereg": "prereg/binance-panel.md (draft)", "ppy": spec.ppy, "bar": spec.bar,
-              "timing": "signal at close of bar t; held close t+1 to close t+2",
+              "timing": ("signal at close of bar t; held close t+1 to close t+2" if lag == 2 else
+                         "signal and fill at close of bar t; held close t to close t+1"),
               "cost_bps_one_way": COST_BPS, "borrow": "none (funding in returns)"})
 
 

@@ -167,3 +167,25 @@ def test_daily_fetch_helpers():
     from data import fetch_binance_daily as fd
     assert fd.next_month("2020-09") == "2020-10" and fd.next_month("2020-12") == "2021-01"
     assert fd.FORMATIONS == ("2020-09", "2021-01", "2021-10")
+
+
+def test_lag_one_is_d_zero_earning_the_next_bar_and_costing_the_same_bar():
+    import numpy as np
+    from environments import binance_panel as bp
+    T, M = bp.WARM + 40, 3
+    rng = np.random.default_rng(3)
+    rp = 0.01 * rng.standard_normal((T, M))
+    rp[0] = 0
+    alive = np.ones((T, M), bool)
+    alive[bp.WARM + 20:, 2] = False
+    rp[bp.WARM + 20:, 2] = 0
+    times = np.arange(T, dtype=np.int64) * bp.BAR_MS
+    p2 = bp.panel_from_arrays(times, ["a", "b", "c"], rp, alive, rp=rp)
+    p1 = bp.panel_from_arrays(times, ["a", "b", "c"], rp, alive, rp=rp, lag=1)
+    assert p1.features.shape[0] == p2.features.shape[0] + 1
+    assert np.array_equal(p1.features[:-1], p2.features)
+    assert np.allclose(p1.returns[5], rp[bp.WARM + 6]) and np.allclose(p2.returns[5], rp[bp.WARM + 7])
+    k = 20                                     # row k is grid bar WARM + 20, the death bar
+    assert p1.cost_rate[k, 2] == 0 and p1.cost_rate[k - 1, 2] > 0
+    assert p2.cost_rate[k - 1, 2] == 0 and p2.cost_rate[k - 2, 2] > 0
+    assert p1.meta["delay"] == 0 and p2.meta["delay"] == 1

@@ -97,14 +97,16 @@ def spec_for(name: str):
     return fm["universe"], fb.REPO / "data" / "raw" / f"binance_4h_{f}", spec, u
 
 
-def raw_4h(name: str) -> dict:
+def raw_4h(name: str, lag: int | None = None) -> dict:
+    """`lag` = 1 + d (default: the panel builder's 2, d = 1)."""
     from environments import binance_panel as bp
+    lag = bp.LAG if lag is None else lag
     symbols, directory, spec, u = spec_for(name)
     times = bp.grid(spec)
     loaded = [bp.load_symbol(s, directory, "4h") for s in symbols]
     al = [bp.align(times, kl, fr, relist_gap=spec.relist_gap) for kl, fr in loaded]
     r, rp, alive = bp.returns_from(al, len(times))
-    panel = bp.panel_from_arrays(times, symbols, r, alive, rp=rp, spec=spec)
+    panel = bp.panel_from_arrays(times, symbols, r, alive, rp=rp, spec=spec, lag=lag)
     kc = [D.kline_columns(times, kl, a["dead"]) for (kl, _), a in zip(loaded, al)]
     tk = np.full((len(times), len(symbols)), np.nan)
     pos = {t: i for i, t in enumerate(times.tolist())}
@@ -119,9 +121,9 @@ def raw_4h(name: str) -> dict:
     market = np.where(live_n > 0, (rp * alive).sum(axis=1) / np.maximum(live_n, 1), 0.0)
     close = np.where(alive, np.stack([a["close"] for a in al], axis=1), np.nan)
     info = {s: {"dead_bar": a["dead"], "gap_bars": a["gap_bars"],
-                "alive_earned": alive[bp.WARM + bp.LAG:, j].tolist(), "funding_rows": len(fr)}
+                "alive_earned": alive[bp.WARM + lag:, j].tolist(), "funding_rows": len(fr)}
             for j, (s, a, (_, fr)) in enumerate(zip(symbols, al, loaded))}
-    return {"panel": panel, "info": info, "universe": u, "spec": spec, "WARM": bp.WARM, "LAG": bp.LAG,
+    return {"panel": panel, "info": info, "universe": u, "spec": spec, "WARM": bp.WARM, "LAG": lag,
             "rp": rp, "market": market, "alive": alive, "close": close,
             "volume": np.stack([k["volume"] for k in kc], axis=1),
             "count": np.stack([k["count"] for k in kc], axis=1), "taker": tk,
