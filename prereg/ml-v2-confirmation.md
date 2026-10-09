@@ -10,6 +10,9 @@ outcome `ec50498`) found version 2's base view ahead of version 1 in both cost a
 of its settings were chosen on that pilot's results. This confirmation tests the chosen
 configuration, named in advance, on fresh panels.
 
+**Revised 2026-10-09 (still DRAFT):** the claims are now H (high-cost superiority) and R
+(registered-cost non-inferiority, margin 0.03); see section 4.
+
 ## 1. The predictor
 
 **Version 2's base view, exactly as configured at the second pilot** (code unchanged
@@ -78,62 +81,75 @@ panels.
 - **If version 2 fails level, both power claims below are void, and that is the result.**
   Their numbers are shown, labelled void.
 
-## 4. The primary and the co-primary
+## 4. The two claims (revised 2026-10-09; still DRAFT)
 
-**Primary, registered costs:** version 2 minus version 1, in the pooled certification
-rate at levels 1.0 and 1.5 over the seven shapes (n = 1,120 paired).
+Both claims use the pooled certification rate at levels 1.0 and 1.5 over the seven shapes
+(n = 1,120 paired panels), and version 2 minus version 1.
 
-**Co-primary, high costs (×5.0):** the same difference, on the same panels.
+**Each is judged on a 97.5% paired bootstrap interval** (Bonferroni over the pair; B =
+10,000, `default_rng(699999)`, panels resampled with replacement).
 
-**Both claims share one family:** each is judged on a **97.5%** paired bootstrap interval
-(Bonferroni over the two; B = 10,000, `default_rng(699999)`, panels resampled with
-replacement).
+**Claim H: high cost (×5.0), superiority.**
+- **H holds iff the lower end of its 97.5% interval exceeds 0.**
+- Holds: "At five times the registered costs, version 2 certifies more planted edges than
+  version 1."
+- Does not hold: "Not shown at high costs at n = 1,120."
 
-**A claim holds iff the lower end of its 97.5% interval exceeds zero, and level held.**
+**Claim R: registered cost, non-inferiority with margin 0.03.**
+- **R holds iff the lower end of its 97.5% interval exceeds −0.03.**
+- Holds: "At registered costs, version 2 certifies no fewer planted edges than version 1,
+  beyond a margin of 0.03."
+- Does not hold: "Non-inferiority at registered costs is not shown at n = 1,120."
+- **Why the margin is 0.03.** It is under half the second pilot's high-cost gain
+  (0.077 / 2 = 0.0385). It is also far smaller than the gap between version 1 and the
+  plain ridge at registered cost in that pilot (0.366 − 0.231 = 0.135). So a loss inside
+  the margin is small next to what either learned predictor adds over a plain ridge.
+- **The margin is fixed here, before any confirmation outcome exists.**
 
-**Each branch, in plain words:**
-- **Registered holds:** "At registered costs, on these planted shapes, version 2
-  certifies more panels than version 1." Otherwise: "Not shown at registered costs at
-  n = 1,120."
-- **High holds:** "At five times the registered costs, version 2 certifies more panels
-  than version 1." Otherwise: "Not shown at high costs at n = 1,120."
+**Version 2 replaces version 1 iff level holds AND H holds AND R holds.**
 
-**The four joint outcomes:**
+**The four joint outcomes, with level held:**
 
-| registered | high | what is said |
+| H | R | in plain words |
 |---|---|---|
-| holds | holds | Version 2 certifies more planted edges than version 1 at both cost levels. |
-| holds | does not hold | The gain is shown at registered costs only. At high costs it is not shown. |
-| does not hold | holds | The gain is shown only when costs are high. That is consistent with version 2's lower turnover rather than better prediction, and is stated as such. |
-| does not hold | does not hold | The confirmation failed at n = 1,120. Version 1 stays. |
+| holds | holds | Version 2 is better under heavy costs, and no worse beyond 0.03 at registered costs. **Version 2 replaces version 1.** |
+| holds | does not hold | Better under heavy costs, possibly worse otherwise. **Version 2 is not adopted as the default.** It is offered only for high-cost panels. |
+| does not hold | holds | No worse, and no gain shown. **Version 1 stays.** |
+| does not hold | does not hold | Neither is shown. **Version 1 stays.** |
 
-## 5. Sizing and detectability
+**If level fails, both claims are void and version 1 stays.**
 
-The size is set from the pilot **only as a planning input**. The pilot was exploratory,
-its settings were chosen on its own results, and its gain is optimistic.
+## 5. Sizing and power (planning inputs only)
 
-**The registered primary:**
-- **The pilot's numbers:** the gain was +0.037. On the pilot's 700 paired panels,
-  version 1 alone certified p01 = 0.0586 of them and version 2 alone 0.0957.
-- **The sample needed:** at one-sided α = 0.0125 (the 97.5% interval) and 80% power, a
-  difference of 0.037 under p01 = 0.0586 needs n ≈ 1,061 paired panels. That is 76 seeds
-  per shape at two levels. **The draft uses 80 seeds per shape: n = 1,120.**
-- **Detectable at n = 1,120:**
+**The sample size is kept at n = 1,120 paired panels per arm** (7 shapes × 80 seeds × 2
+levels).
 
-  | p01 | 0 | 0.02 | 0.05 | 0.0586 | 0.10 |
-  |---|---|---|---|---|---|
-  | smallest detectable difference | 0.009 | 0.023 | 0.034 | **0.036** | 0.046 |
+The figures below use the second exploratory pilot **only as a planning input.** Its
+settings were chosen on its own results, so its gains are optimistic. In its registered
+arm, version 1 alone certified p01 = 0.0586 of the paired panels.
 
-  **So the pilot's +0.037 is at the edge of detection.** A true gain below it would
-  usually be missed.
+**Claim R** (normal approximation; one-sided α = 0.0125; margin 0.03):
 
-**The high-cost co-primary:** the pilot's gain was +0.077 with p01 = 0 (version 1 alone
-certified no panel). That needs only n ≈ 114, or 146 at p01 = 0.01, so it is not the
-constraint.
+| true difference | power at the pilot's p01 = 0.0586 | at p01 = 0.05 | at p01 = 0.10 |
+|---|---|---|---|
+| 0 | **0.755** | 0.825 | 0.501 |
+| +0.01 | **0.935** | 0.964 | 0.752 |
+| +0.02 | **0.989** | 0.995 | 0.908 |
+
+**So if the two versions are truly equal at registered cost, R is shown about three times
+in four.**
+
+**Claim H:** at the pilot's high-cost gain (+0.077, with p01 = 0 or 0.01) its power is
+above 0.99. At half that gain (+0.0385, p01 = 0.01) it is 0.999.
 
 ## 6. Secondary, descriptive
 
 No claim rests on these.
+- **Superiority at registered cost:** version 2 minus version 1 at registered cost, with
+  its 97.5% interval.
+  - The pilot's +0.037 is **at the edge of detectability** at this n (0.036 at p01 =
+    0.0586), and is **likely optimistic**, since three settings were chosen on that
+    pilot.
 - the same difference on version 1's **original four shapes** alone (U, corner, product,
   gated), per arm;
 - the difference **by shape**, per arm;
@@ -167,7 +183,8 @@ over version 1 in certifying planted edges, on fresh seeds.
   2. The runner and reader are committed, the reader tested on made-up rows.
   3. A box smoke, then the run, with a dry run on 699900–699909 alongside.
   4. The raw outputs are committed before the read.
-  5. The read runs once: level, then the primary and co-primary, then the secondaries.
+  5. The read runs once: level, then claims H and R and the joint outcome, then the
+     secondaries.
      Its output is committed unedited.
 - **Projected cost:**
   - A planted seed task covers two levels. It runs version 2 with 2 memories, version 1,
