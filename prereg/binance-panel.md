@@ -1009,3 +1009,12 @@ conflict:
 - **Effect.** Version 2's V block on Binance has all five columns: logvol_ratio,
   taker_last, taker_mean21, count_ratio, amihud21. Version 1's 40 features never used
   volume and are unaffected.
+
+## Amendment 1, 2026-10-09 (America/Chicago): how the seed block was re-checked at the live commit
+
+At the live commit (`ecc07f0`), `experiments.seed_block_check --ranges 701000-701999`:
+- **without an exclusion,** reports overlaps. Every one is this file's own statement of the
+  range (section m);
+- **with `--exclude prereg/binance-panel.md`,** reports **NO COLLISION**.
+
+Nothing else changes.
