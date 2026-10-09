@@ -1,8 +1,11 @@
-# Version 2 confirmation: DRAFT, NOT LIVE
+# Version 2 confirmation: a registration, 2026-10-09 (America/Chicago)
 
-**Status: DRAFT, NOT LIVE.** It is committed for the author's review. It is not a
-registration, and nothing in it binds until a separate, dated commit makes it live.
-- No code for this test exists yet, and nothing has been run.
+**Status: LIVE, 2026-10-09 (America/Chicago).**
+- The author accepted the draft at `ad15ae6`, and this text is committed alone, before any
+  code for this test.
+- Both seed blocks were re-checked at this commit: 699000–699999 and 700000–700999, NO
+  COLLISION.
+- Amendments are append-only and dated.
 - No holdout row is involved.
 
 **Where it comes from.** The second exploratory pilot (`9e4f6a7`; note section `4688d5e`;
@@ -10,7 +13,7 @@ outcome `ec50498`) found version 2's base view ahead of version 1 in both cost a
 of its settings were chosen on that pilot's results. This confirmation tests the chosen
 configuration, named in advance, on fresh panels.
 
-**Revised 2026-10-09 (still DRAFT):** the claims are now H (high-cost superiority) and R
+**Revised 2026-10-09, before going live:** the claims are now H (high-cost superiority) and R
 (registered-cost non-inferiority, margin 0.03); see section 4.
 
 ## 1. The predictor
@@ -81,7 +84,7 @@ panels.
 - **If version 2 fails level, both power claims below are void, and that is the result.**
   Their numbers are shown, labelled void.
 
-## 4. The two claims (revised 2026-10-09; still DRAFT)
+## 4. The two claims
 
 Both claims use the pooled certification rate at levels 1.0 and 1.5 over the seven shapes
 (n = 1,120 paired panels), and version 2 minus version 1.
