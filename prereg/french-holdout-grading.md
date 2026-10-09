@@ -29,10 +29,9 @@ and no other predictor.
   `8f394fe34bea54d41b9aafed410425ee8f8e252ede3c71a7c1cd20bab83040de`).
 - **1,674 rows**, about **6.64 years** at 252 a year. The fetch counted the rows from their
   date field; their values were never parsed.
-  - **Open question: the last holdout date.** It was not recorded at the fetch, and it is
-    not read now. The grader records it when it splits the zip on the host. Whether the
-    window should be cut at a stated date instead (e.g. a month end) is left open for the
-    author.
+  - **The holdout ends at the zip's last row** (author, 2026-10-09). Its date is not read
+    now. The grader records it at the split on the host and writes it into the grades
+    file.
 - **Graded periods:** the 1,674 periods whose earned return is dated in the window.
   - The first is the return dated 2020-01-02, earned by the position formed at the close of
     2019-12-30.
@@ -177,7 +176,8 @@ by more than 1e-9 on all 7. Its positions correlate with the laptop's at 1.00000
 scored rows.
 
 **Decision:**
-- **Option A is adopted.** The Linux holdout host is the grading platform.
+- **Option A is adopted.** The grading platform is the Linux holdout host: the 6.5 holdout
+  host, `i-0886a189b85d4d051` (c7a.8xlarge). **The compute box is not used for grading.**
 - **Options A2 and B are not needed,** and are kept above as the record of what was
   considered.
 
@@ -230,59 +230,123 @@ lower bound.
 - **Always stated, in both branches:** "**Both graded objects were refused in-sample.
   This grading cannot test whether a pass holds.**"
 
-## 7. Operator steps (Option A: the Linux holdout host)
+## 7. Going live, and the operator checklist (Option A, the 6.5 holdout host)
 
-Each step happens only on the author's go. **The host** is the holdout host,
-`i-0886a189b85d4d051` (c7a.8xlarge, Linux x86_64). No agent session runs on it.
+**Going live.**
+- **This registration goes live as its own dated commit** (call it LIVE).
+- The grader and its reader are written **after** LIVE. **Each refuses to run unless LIVE
+  is an ancestor of HEAD.**
+- The reader is tested on made-up rows before the grading runs.
+- The grader commit that runs on the host (call it G) is named in the author's go.
+- **Script names below are those to be written after LIVE:**
+  - `experiments/french_holdout_split.py`;
+  - `experiments/french_holdout_grade.py`;
+  - `experiments/read_french_holdout.py`.
 
-1. **Move the zip to the host, checking its hash on arrival.** The author starts the host
-   and sends its IP.
+**The checklist, in order.** [L] runs on the laptop and [H] on the holdout host.
+**Nothing runs without the author's go.**
+
+1. **[L] Push G,** and record LIVE and G in the run record.
+2. **[author] Start the holdout host,** `i-0886a189b85d4d051`, and send its IP. On the
+   laptop, set `HOST` to that address (ssh user `ubuntu`, the project key).
+3. **[L] Copy the zip to the host:**
 
    ```
+   ssh HOST 'mkdir -p ~/french_holdout'
    scp ~/Desktop/og-quarantine/french/49_Industry_Portfolios_daily_CSV.zip HOST:~/french_holdout/
-   ssh HOST 'echo "8f394fe34bea54d41b9aafed410425ee8f8e252ede3c71a7c1cd20bab83040de  ~/french_holdout/49_Industry_Portfolios_daily_CSV.zip" | sha256sum -c'
    ```
 
-   - **On a mismatch, stop.**
-   - **Only after OK:** delete the laptop copy (`rm` the quarantined zip), check that it is
-     gone, and record the deletion and its time in the run record.
-2. **Set up the grading environment on the host:**
-   - the repository at the registered grader commit, with a clean tree and HEAD checked
-     against the commit named in the go;
-   - Python 3.14 in a dedicated `.venv-grading`;
-   - **the Linux LightGBM pin:** the wheel
-     `lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl`.
-     - Check it with `sha256sum -c` against
-       `d23e922acd891e77212e4d0fbcee9ba973c96dee479491341d05ba595357ebb7` before
-       installing.
-     - The installed `lib_lightgbm.so` must hash to
-       `573d57e8a2c6290c2271b99b87afa7a802e796eafc9e8d66aefa0913cbc1616a`.
-   - the in-sample CSV (`1547da6f…c04e`) and the pinned X (`07488718…d3fc`), each
-     copied and checked with `sha256sum -c` on arrival.
-3. **The split, on the host:**
-   - the grader cuts the value-weighted block of the zip into the holdout CSV,
-     2020-01-01 onward;
-   - it hashes the CSV;
-   - it records the row count, which must be 1,674, and the last date (the open question
-     in section 2);
-   - **the holdout CSV never leaves the host.**
-4. **Run the grader on the host, in this order:**
-   1. **its start-up refusals:** the pins above, the clean tree and HEAD;
-   2. **section 4's Option A tolerances,** re-checked on the host's own build against the
-      pinned X and the in-sample read. It refuses on any failure;
-   3. **section 3's no-restart checks:**
-      - bit-identical in-sample positions from the spanning and the in-sample-only runs;
-      - bit-identical features on rows 0–2515;
-      - the first holdout trade costed from the carried position.
+4. **[H] Check the zip's hash on the host:**
 
-      **It refuses on any failure, before any holdout value is computed;**
-   4. **section 5's quantities;**
-   5. it writes `grades.json`, printing no value.
-5. **Fetch and commit `grades.json` and the run record before the read.** Only those
-   leave the host.
-6. **Read once** with the committed reader, which is tested on made-up rows before the
-   grading runs. Commit its output unedited.
-7. **Stop the host** (stop, not terminate).
+   ```
+   echo "8f394fe34bea54d41b9aafed410425ee8f8e252ede3c71a7c1cd20bab83040de  $HOME/french_holdout/49_Industry_Portfolios_daily_CSV.zip" | sha256sum -c
+   ```
+
+   It must print `OK`. **On anything else, stop:** the laptop copy is kept, and nothing
+   further runs.
+5. **ZIP-DELETE: the named operator step,** run only on the author's explicit go, given
+   after step 4 prints OK.
+   - **Its confirmation line, written by the author:** "ZIP-DELETE confirmed: host
+     SHA-256 OK for 8f394fe3…40de at <UTC time>; delete the laptop copy."
+   - **[L] Then:**
+
+     ```
+     rm ~/Desktop/og-quarantine/french/49_Industry_Portfolios_daily_CSV.zip
+     ls ~/Desktop/og-quarantine/french/      # must no longer list the zip
+     ```
+
+   - The deletion, its time and the confirmation line go into the run record.
+6. **[L] Copy the grading inputs:** the in-sample CSV, the pinned X and the Linux
+   LightGBM wheel.
+
+   ```
+   scp data/raw/french_insample/french49_vw_daily.csv HOST:observable-garden/data/raw/french_insample/
+   scp data/pinned/french49_X.npy HOST:observable-garden/data/pinned/
+   scp ~/og-wheels/lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl HOST:~
+   ```
+
+7. **[H] Repository at G, clean, with LIVE as an ancestor:**
+
+   ```
+   cd ~/observable-garden && git fetch origin && git checkout G && git rev-parse HEAD   # must equal G
+   git status --porcelain --untracked-files=no | wc -l                                  # must be 0
+   git merge-base --is-ancestor LIVE HEAD && echo ancestor-ok
+   ```
+
+8. **[H] Check the hashes, and set up the grading environment:**
+
+   ```
+   W=lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+   echo "d23e922acd891e77212e4d0fbcee9ba973c96dee479491341d05ba595357ebb7  $HOME/$W" | sha256sum -c
+   echo "1547da6fe357bab194a22ce04ff80effc45ed61c6955325b179213be0b87c04e  data/raw/french_insample/french49_vw_daily.csv" | sha256sum -c
+   echo "07488718c8c48b6d872c580f1dc3a3c0e87fb8a4c6403131b0beddd55ea3d3fc  data/pinned/french49_X.npy" | sha256sum -c
+   .venv-grading/bin/pip install --no-deps ~/$W
+   .venv-grading/bin/python -c "import lightgbm, hashlib, pathlib; p = pathlib.Path(lightgbm.__file__).parent / 'lib' / 'lib_lightgbm.so'; print(lightgbm.__version__, hashlib.sha256(p.read_bytes()).hexdigest())"
+   # must print 4.7.0 573d57e8a2c6290c2271b99b87afa7a802e796eafc9e8d66aefa0913cbc1616a
+   ```
+
+9. **[H] The split** (section 2):
+
+   ```
+   .venv-grading/bin/python -m experiments.french_holdout_split --zip ~/french_holdout/49_Industry_Portfolios_daily_CSV.zip \
+       --out ~/french_holdout/holdout.csv
+   ```
+
+   - It records the holdout CSV's SHA-256, its row count (which must be 1,674) and its
+     last date.
+   - **The holdout CSV never leaves the host.**
+10. **[H] Grade:**
+
+    ```
+    .venv-grading/bin/python -m experiments.french_holdout_grade --holdout ~/french_holdout/holdout.csv \
+        --out runs/french_holdout/<date> --expect-head G
+    ```
+
+    It runs, in order, refusing on any failure before any holdout value is computed:
+    - the start-up refusals (the pins, the clean tree, HEAD = G, LIVE an ancestor);
+    - section 4's Option A tolerances, on the host's own build;
+    - section 3's no-restart checks.
+
+    It then computes section 5's quantities and writes `grades.json`, with the holdout's
+    last date, printing no value.
+11. **[L] Fetch only the grades and the run record:**
+
+    ```
+    rsync -avz HOST:observable-garden/runs/french_holdout/ runs/french_holdout/
+    ```
+
+    **Commit `grades.json` and the run record before the read.**
+12. **[L] Read once,** then commit its output unedited and push:
+
+    ```
+    .venv/bin/python -m experiments.read_french_holdout --dir runs/french_holdout/<date>
+    ```
+
+13. **[L] Stop the host** (stop, not terminate), and record its state:
+
+    ```
+    ssh HOST 'sudo shutdown -h now'
+    ```
 
 ## 8. Known items
 
