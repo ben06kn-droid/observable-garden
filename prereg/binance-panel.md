@@ -119,6 +119,45 @@ scored years).
   weights on dead contracts, which earn and cost nothing. The fast kernel takes no mask,
   and the closure is not applied to the class.
 
+**Death in the holdout: the general rule (author, 2026-10-09).**
+- **A contract is dead from the EARLIER of:**
+  - (i) the registered death rule: dead from the bar after its last bar with trades, or
+    from the start of a silence of 30 days (180 bars) or more; and
+  - (ii) the first bar for which the archive has no kline row.
+- **Its position is closed at the last available bar's price.** The exit is costed, and the
+  position stays zero after.
+- **Funding listed after death is ignored.**
+- **Where it is applied:** on the holdout host at grading, from the rows there. (ii) is
+  decided from the archive's listing.
+- **The in-sample read is unaffected.** No in-sample contract is missing a kline row for
+  any bar it is live; (ii) adds nothing before 2025-04-01.
+
+**Listing facts found on 2026-10-09.** These come from file listings and checksum files
+only; **no holdout row was read.** The 140 absent holdout contract-month files
+(`data/binance_4h_2021-01_holdout_checksums.json`) belong to nine contracts. For each,
+the absence runs without a break to 2026-09 for that file type.
+
+| contract | in-sample death | absent (holdout months) | kline file sizes in the listing |
+|---|---|---|---|
+| YFIIUSDT | 2022-04-12 | klines and funding, 2025-04 – 2026-09 | none listed |
+| WAVESUSDT | 2024-06-11 | funding from 2025-07 | about 1.5 KB every month: the filler size |
+| FTMUSDT | 2025-01-06 | funding from 2025-07 | the same |
+| OMGUSDT | 2025-01-31 | funding from 2025-07 | the same |
+| MKRUSDT | none | funding from 2025-10 | about 9 KB to 2025-08, 3.6 KB in 2025-09, then 1.5 KB |
+| ALPHAUSDT | none | funding from 2025-10 | about 9 KB to 2025-08, 7.0 KB in 2025-09, then 1.5 KB |
+| SXPUSDT | none | funding from 2026-01; klines from 2026-06 | about 8.6 KB to 2025-11, 2.8 KB in 2025-12, 1.5 KB to 2026-05, then none |
+| LRCUSDT | none | funding from 2026-04 | about 8.8 KB to 2026-02, 7.1 KB in 2026-03, then 1.5 KB |
+| **EOSUSDT** | none | **klines from 2025-06** | 8.7 KB in 2025-04, 6.1 KB in 2025-05, then **none**; **funding files continue (about 0.7 KB) through 2026-09** |
+
+- **The filler pattern:** after a delisting, the archive keeps a kline file of about 1.5 KB
+  each month (zero-trade rows at a constant price). The funding files stop a few months
+  later. The three contracts that die in-sample follow it.
+- **The pattern suggests delistings within the holdout for MKR, ALPHA, SXP and LRC.** Rule
+  (i) decides each one at grading, from the rows.
+- **EOSUSDT's kline files stop after 2025-05, while its funding files continue. Rule (ii)
+  covers it:** it is dead from the first bar with no kline row, and its later funding is
+  ignored.
+
 ## e. Returns and funding
 
 - **Return:** r_t = close_t / close_{t−1} − 1 − F_t. F_t is the sum of the funding rates
@@ -460,9 +499,16 @@ signs.
   - it cannot separate a decayed edge from noise.
 - **The holdout is the archive's last complete month at going live** (B4). It is not
   extended later.
+- **Deaths in the holdout** follow the general rule in section d: dead from the earlier of
+  the registered death rule and the first bar with no kline row. They are decided on the
+  holdout host at grading. The listing already points to five holdout deaths (EOS, MKR,
+  ALPHA, SXP, LRC; section d).
 
 ## p. Stated limits
 
+- **A delisted contract is settled by the venue at a final price,** which may differ from
+  its last bar's close. Closing at the last bar's price ignores that difference. Up to five
+  of the 50 contracts are affected in the holdout.
 - **Fills at the close (d = 0) are optimistic** by the seconds between the close and an
   order (section i). The d = 1 stream shows how much depends on that.
 - **A US resident cannot trade this venue.** Binance's USDT-margined perpetuals are not
