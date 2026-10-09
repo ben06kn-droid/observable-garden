@@ -126,3 +126,60 @@ Part 2).
 - **It trades power for recency.** On a constant edge it has less power than the
   unweighted statistic, because it discards effective data (the table in section a). That
   cost is stated in advance and measured in Part 2.
+
+## Amendment 1, 2026-10-09 (America/Chicago): the null's centring (section b), and sections e and f
+
+Section b above stays as written. This amendment replaces its centring.
+
+**The fix.** Each stream is centred by its UNWEIGHTED mean over the scored rows:
+x0_t = x_t − mean(x).
+- Everything else in b is unchanged: the same index sets, weights at position, and the same
+  p convention.
+- Each class member is centred by its own unweighted mean, and the members are resampled
+  jointly.
+
+**Why** (the author's reviewer; the centring by m_w was the reviewer's error):
+- Under the stationary bootstrap every position draws uniformly from the pool. So
+  E*[y_t] = mean(x0) = mean(x) − c for a centring constant c.
+- With c = m_w, the replicates' weighted mean is centred at mean(x) − m_w, not 0. That
+  shift is negatively tied to the observed statistic.
+- So the test compares bootstrap noise (variance about σ²/n_eff) against
+  D = 2·m_w − mean(x).
+
+**Re-derived here; this agrees with one refinement.**
+- Under a stationary null: Var(m_w) = σ²/n_eff, Var(mean) = σ²/n, and
+  Cov(m_w, mean) = σ²/n.
+- So Var(D) = σ²/n_eff · (4 − 3·n_eff/n). That is 4× the null's variance in the limit
+  n ≫ n_eff, and (4 − 3·n_eff/n)× in general.
+- Normal approximation, levels 0.04 / 0.08:
+
+  | window | n_eff/n | factor | sd ratio | predicted rate |
+  |---|---|---|---|---|
+  | 10 years | 0.87 | 1.40 | 1.18 | 0.069 / 0.117 |
+  | 40 years | 0.36 | 2.92 | 1.71 | 0.153 / 0.206 |
+
+- **With c = mean(x):** E*[y_t] = 0. The replicates' weighted mean and the observed m_w then
+  have the same null distribution, about N(0, σ²/n_eff), and the size is nominal to first
+  order.
+
+**The reviewer's check, recorded as the reviewer's, not as a registered result.**
+iid normal streams; a simple bootstrap; B = 400; 600 trials; h = 1,260 rows.
+
+| window | as written (0.04 / 0.08) | fixed (0.04 / 0.08) |
+|---|---|---|
+| 10 years | 0.060 / 0.113 | 0.035 / 0.075 |
+| 40 years | 0.150 / 0.202 | 0.038 / 0.083 |
+
+These agree with the predictions above. Part 2 measures the difference on this project's
+own planted panels.
+
+**Section e:** L90 uses the null from the fixed centring.
+
+**Section f on 4h panels:** the performance line uses the last **2,190 and 6,570 rows**
+(1 and 3 years). On daily panels it is unchanged: 252 and 756.
+
+**The equal-weights limit.** With unweighted centring, h → ∞ reproduces the current null
+exactly, not only the current statistic: the same centred streams, the same index sets,
+and equal weights, so the same replicates. (With equal weights m_w = mean(x), so the
+as-written centring reproduces it too. The limit cannot tell the two apart; they differ
+only at finite h.)
