@@ -252,6 +252,10 @@ Prado & Porcu, eq. 12), which the type-I rate at a single α does not capture.
 | 0.3 | 40 | 11.3% | 12.0% | 0.129 |
 | 0.3 | 80 | 13.7% | 14.0% | 0.169 |
 
+Quadrature check: `experiments/size_integral.py` computes the limit type-I column by
+quadrature of the size integral; it agrees with this table to 0.001, with a largest
+difference of 0.0009 (ω = 0, K = 80).
+
 Every measured value lies inside its 95% interval, and the pre-registered
 trend test found growth in K at both correlations (p = 0.0001; SCOPE.md, Winner-chasing).
 
