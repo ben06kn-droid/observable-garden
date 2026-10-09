@@ -1,5 +1,38 @@
 # observable-garden
 
+This repository asks whether the best result of a search over trading strategies can
+be told apart from the best of many tries on pure noise when the search is adaptive.
+It shows that a null built only from the strategies a search logged errs in a direction
+set by what the search builds on. It also shows that a record letting the search be
+re-run under the null repairs it. On synthetic panels the test (called the gate in this
+repository) keeps its error rate and certifies planted edges; on real data no strategy
+has yet earned a certificate.
+
+**The note:** `docs/note.md`, *Fixed and adaptive candidate sets under the DSR*.
+`docs/NOTE_MAP.md` maps each of its claims to the experiment, registration, commits and
+script behind it. Its limit values are computed two ways, by Monte Carlo in
+`experiments/limit_model.py` and by quadrature in `experiments/size_integral.py`, and
+the two agree to 0.001.
+
+**Where things are:**
+- `estimator/`, `garden/`, `quixote/`: the gate: its estimators, the `garden` audit
+  command, and the harness that replays an agent's logged search.
+- `environments/`, `searchers/`, `learn/`, `learn2/`: the panels (real and planted), the scripted searchers, and the machine-learning predictors.
+- `experiments/`: one script per experiment, with its reader.
+- `prereg/` and `EXPERIMENTS.md`: the pre-registrations, and the ledger of every
+  experiment with its commits.
+- `runs/`, `figures/`, `docs/`: raw outputs, result files, and the note with its map.
+
+**Run it:**
+- **The test suite:** `pip install -e ".[dev]"`, then `pytest -q`, from the repository
+  root. That is about 1,340 tests, and about 12 minutes on a laptop.
+  - Three files skip without the agent SDK, which the dependencies do not install.
+  - The machine-learning tests also need LightGBM 4.7.0, which is pinned and installed
+    from its wheel.
+- **One small experiment, end to end:** `python -m experiments.size_integral`. It
+  computes the winner-anchored limit error rate by quadrature at THEORY.md's eight
+  (ω, K) cells, and prints them beside the table. It takes under one second.
+
 **Every backtest is the best of many tries. Nobody writes down the tries.
 An agent does.**
 
