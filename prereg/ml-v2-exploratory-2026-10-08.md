@@ -553,3 +553,115 @@ the author decided:
 3. **The view levers are retained only for a later, behavioural agent cell.**
 4. **Version 2 gets one further exploratory round.** Its design is to be proposed, and
    nothing is run before the author's go.
+
+## The second version-2 pilot, 2026-10-09 (America/Chicago). EXPLORATORY: no claim rests on it
+
+The author accepted the draft (`06c3c16`) with changes. This section is committed alone,
+before any script.
+
+### What changes from the first pilot, and why
+
+1. **The L penalty grid becomes {1, 3, 10, 30}, for version 2 only.** Version 1 is
+   unchanged.
+   - **The reason:** in the refit records (`b5826e8`; laptop refits of 140 already-read
+     pilot panels), version 2's L penalty sat at its largest value (3) in **87–95% of its
+     refits on planted panels**, and 96–98% on null panels.
+   - Its smallest value (0.3) was chosen in 0–3%.
+   - Q, I and S are unchanged. Their smallest non-off value is chosen in at most 12% of
+     refits, and "off" is a legitimate choice.
+2. **The trading-rate grid is fixed at G3** {0.3, 0.1, 0.03}, as the first pilot carried
+   forward.
+3. **Two memory sets, scored from the same stored fits:**
+   - **M1** = rolling 252, rolling 756 and expanding, as built;
+   - **M2** = rolling 756 and expanding only.
+   - **Why M2 is included:** on product plants at level 1.5, rolling 252 captured a
+     median **0.055** of the plant, against **0.312** for rolling 756 and **0.512** for
+     expanding (`b5826e8`).
+   - **Caveat:** planted edges are constant, so a longer memory is favoured by
+     construction. This says nothing about edges that decay.
+4. **Per-refit records are stored this time:** penalties and stack weights for every
+   refit of version 2 (per memory) and of version 1, and capture per memory setting. No
+   later refit should be needed.
+
+### Streams, cost arms, panels
+
+**Streams, each as one declared strategy** (the supplied-streams tier, B = 1,000):
+- version 2's base view (P, X, V; h 5; market; always) under G3 and the revised L grid,
+  for memory set M1 and for M2;
+- version 1;
+- the plain ridge.
+
+There is no menu and no class tier.
+
+**Two cost arms, on the same panels.** The fits are shared; only the streams' costs
+differ.
+- **Registered:** 5 bps one-way, 50 bps a year borrow.
+- **High-cost: both rates × 5.0,** so 25 bps one-way and 250 bps a year borrow.
+  - The multiplier was set from a null-only quantity: version 1's median cost drag on the
+    first pilot's 100 level-0 panels at registered cost was 0.197 Sharpe (`fe7c7ca`, R4),
+    and 1.0 / 0.197 = 5.08, rounded to 5.0.
+  - Version 1's median drag in the high-cost arm is reported as a check.
+
+**Panels, on the seed block 698000–698999** (`seed_block_check`: NO COLLISION):
+- **Planted:** 7 shapes × 50 seeds at levels 1.0 and 1.5, seeds 698000–698349, in the
+  first pilot's shape order (U, corner, product, gated, lead-lag, volume-conditioned,
+  regime-only; 50 seeds each).
+- **Level 0:** 100 panels, 698400–698499, at the registered cost, the high cost and zero
+  cost.
+- **The paired bootstrap:** seed 698999, B = 10,000.
+
+### Reads, once, in order
+
+**R1, level, per cost arm:** each stream on the 100 level-0 panels, at zero cost and at
+that arm's cost. A stream fails iff the lower Wilson end of its **zero-cost** rate
+exceeds 0.05: at n = 100, 10 or more certifications.
+
+**R2, power:** each stream by shape × level × arm, pooled, fast and slow. Cells with
+fewer than 5 panels are marked thin.
+
+**R3, descriptive:**
+- capture, turnover and cost drag per arm and memory set;
+- the L penalty's distribution under the revised grid, and the other blocks';
+- capture by memory setting;
+- version 1's median cost drag in the high-cost arm.
+
+### Rules, per cost arm, both branches
+
+1. **Memory set.** Among M1 and M2, those whose base view holds level are eligible. The
+   one with the **higher pooled certification rate at levels 1.0 and 1.5** (700 panels) is
+   carried forward, **with ties to M1.**
+   - If neither holds level, none is carried forward, and version 1 stays in that arm.
+2. **Replacement.** With the carried memory set, version 2's base view replaces version 1
+   in that arm iff:
+   - its pooled rate at 1.0–1.5 over all seven shapes (700 paired panels) exceeds
+     version 1's, with a paired 95% interval (B = 10,000, seed 698999) excluding zero;
+     and
+   - it holds level.
+
+   **Otherwise version 1 stays in that arm.**
+3. **The fairness flag (not a rule):** the same paired difference on version 1's original
+   four shapes (400 panels). If its lower end is below −0.05, the report says version 2
+   wins only where the plant uses its new inputs, and the decision returns to the author.
+4. **If the two cost arms disagree** on the memory set or on replacement, the report
+   states both, and **the decision returns to the author.**
+
+### Detectability, stated before the run
+
+80% power, normal approximation; p01 is the share of panels version 1 certifies and
+version 2 does not.
+
+| comparison | n | p01 = 0 | 0.02 | 0.05 | 0.10 |
+|---|---|---|---|---|---|
+| replacement, per arm | 700 | 0.011 | 0.027 | **0.039** | 0.053 |
+| fairness flag, per arm | 400 | 0.019 | 0.039 | 0.055 | 0.073 |
+
+At n = 100, level detects a true rate of 0.123 or more, and one exactly at 0.05 fails
+with probability 0.028.
+
+### Platform, and the same box session
+
+- **Box only,** with the Linux LightGBM pin and the v2 inputs pin (`3ff15481…6700`), both
+  hash-checked, and a box smoke first.
+- **In the same session, after the pilot is fetched and before the box stops:** the French
+  holdout grading's step 0 (`2c0f25b`), as its commands set out
+  (`docs/french_step0_box_commands.md`). It reads no holdout row.
