@@ -1,11 +1,12 @@
-# French 49-industry panel: holdout grading. DRAFT, NOT LIVE
+# French 49-industry panel: holdout grading, a registration, 2026-10-09 (America/Chicago)
 
-**Status: DRAFT, NOT LIVE.** It is committed for the author's review. It is not a
-registration, and nothing in it binds until a separate, dated commit makes it live.
-- No holdout row has been parsed. The zip has not been moved. Nothing has been run on the
-  holdout host.
-- The grader script does not exist yet. It is written and tested after this text goes
-  live.
+**Status: LIVE, 2026-10-09 (America/Chicago).**
+- The author accepted the draft at `d54f553`, and this text is committed alone.
+- At this commit no holdout row has been parsed, the zip has not been moved, and nothing
+  has been run on the holdout host.
+- The split script, the grader and the reader are written after this commit. Each refuses
+  to run unless this commit is an ancestor of HEAD.
+- Amendments are append-only and dated.
 
 **Parent registration:** `prereg/french-panel.md` (live at `de9da1b`), section k. The
 in-sample read is at `31622d6` (raw) and `fc92cdb` (read).
@@ -157,7 +158,7 @@ host.**
 **Not proposed:** grading on the laptop. It would put holdout rows on the agent machine,
 which the parent registration's seal rules out (section f).
 
-### Step 0's result, and the platform decision (2026-10-09; still DRAFT, NOT LIVE)
+### Step 0's result, and the platform decision (2026-10-09)
 
 Step 0 ran on 2026-10-09: the laptop reference, then the comparison on the compute box
 (c7a.48xlarge, Linux x86_64, the Linux LightGBM pin). Outputs are in
