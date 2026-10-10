@@ -1,6 +1,7 @@
 # Recency validation, round 2: box commands (QUEUED; not run)
 
-- **Plan:** `prereg/recency-weight-planted-2.md` (`46b589e`; amendment `86277fc`).
+- **Plan:** `prereg/recency-weight-planted-2.md` (`46b589e`; amendments `86277fc` and
+  `8a23368`: the Bonferroni-adjusted rule, and NA40 at n = 2,000).
 - **Runner:** `experiments/recency_planted_2.py`. **Reader:**
   `experiments/read_recency_planted_2.py`.
 - **Nothing here runs without the author's typed go and the box IP.**
@@ -8,7 +9,7 @@
 The runner refuses to start unless:
 - the platform is Linux x86_64;
 - HEAD equals `EXPECT`, and the tree is clean;
-- the plan and its amendment are ancestors of HEAD;
+- the plan and both its amendments are ancestors of HEAD;
 - the pool files on the box match their manifest. The pool is round 1's, built on the box on
   2026-10-09 and kept on its disk; it is not rebuilt.
 
@@ -54,7 +55,7 @@ cloud/run.sh rp2_run python -m experiments.recency_planted_2 --out runs/recency_
     --workers 180 --expect-head $EXPECT
 ```
 
-- 5,200 tasks. About 37 minutes (smoke-scaled).
+- 6,200 tasks (NA40 at 2,000). About 50 minutes, smoke-scaled; about 70 box-minutes with setup.
 - **If the session projects above 2 box-hours, stop and ask.**
 
 ## 5. Fetch, one rsync call each, every exit status reported; then stop the box
