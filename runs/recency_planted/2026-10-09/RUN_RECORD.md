@@ -45,3 +45,10 @@
      f8c10960530ade38804e84c665542d177f328cc6bf5eec01ed223d3f278652e7.
 
 Committed with the outputs before the read.
+
+## Note, 2026-10-09 (after the read)
+
+The reader's header printed "plan 07fa892; amendments e48113e, a2fc19f". It omitted
+amendment 3 (`5bf5b43`: NA40's scaled form kept, and the reader's seed 705999 registered).
+The reader already used both: the runner's NA40 form, and `default_rng(705999)`. The read's
+output (`read.txt`) is left unedited.
