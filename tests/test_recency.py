@@ -97,3 +97,49 @@ def test_price_class_on_a_synthetic_panel_flag_off_and_equal_weights(tmp_path):
     assert inf["S"] == pytest.approx(off["S"], rel=1e-10) and inf["p"] == off["p"]
     fin = Rc.price_class(panel, cache, bc, 5, 150, 0.01, panel.feature_names, h=300)
     assert fin["n_eff"] < panel.features.shape[0] and fin["centring"] == "unweighted"
+
+
+# -- round 2: W2 and R15 ------------------------------------------------------------------------
+
+def test_q_is_the_chains_fixed_point_and_reduces_to_pi_at_L1():
+    w = Rc.weights(500, 120.0)
+    for L in (1, 3, 8):
+        pi, q = Rc.w2_pi_q(w, L)
+        p = 1.0 / max(L, 1)
+        assert np.allclose(q, p * pi + (1 - p) * np.roll(q, 1), atol=1e-15) and q.sum() == pytest.approx(1.0)
+    pi, q = Rc.w2_pi_q(w, 1)
+    assert np.allclose(q, pi)
+
+
+def test_the_w2_marginal_is_q_at_early_and_late_positions():
+    T, L = 120, 4
+    w = Rc.weights(T, 30.0)
+    pi, q = Rc.w2_pi_q(w, L)
+    rng = np.random.default_rng(8)
+    R = 40000
+    J = np.stack([Rc.w2_indices(T, L, pi, q, rng) for _ in range(R)])
+    for t in (0, 1, 2, 5, 60, T - 1):
+        emp = np.bincount(J[:, t], minlength=T) / R
+        tv = 0.5 * np.abs(emp - q).sum()
+        assert tv < 0.04, (t, tv)                      # Monte Carlo total variation at R = 40,000
+    x = np.random.default_rng(1).standard_normal(T)
+    x0 = x - q @ x
+    assert abs(x0[J].mean()) < 4 * x0.std() / np.sqrt(R * T / L)
+    lens = np.diff(np.flatnonzero(np.diff(J[0]) % T != 1))
+    assert 2 < lens.mean() < 7                         # blocks of mean length about L
+
+
+def test_w2_with_equal_weights_is_the_current_null_bit_for_bit():
+    s, _ = _stream(5)
+    a, b = Rc.stream_test_w2(s, 3, 252.0, 200, 4, h=np.inf), Rc.stream_test(s, 3, 252.0, 200, 4)
+    assert a["S"] == b["S"] and a["p"] == b["p"] and np.array_equal(a["null_max"], b["null_max"])
+    assert a["confidence"] == b["confidence"]
+
+
+def test_w2_differs_from_the_uniform_draw_and_r15_uses_the_last_rows():
+    s, bc = _stream(6, n=4000)
+    a = Rc.stream_test_w2(s, 3, 252.0, 150, 4, h=1260)
+    b = Rc.stream_test(s, 3, 252.0, 150, 4, h=1260)
+    assert a["S"] == b["S"] and not np.allclose(a["null_max"], b["null_max"]) and a["null"] == "W2"
+    r = Rc.stream_test_r15(s, bc, 252.0, 150, 4)
+    assert r["window_rows"] == 3780 and r["S"] == pytest.approx(s[-3780:].mean() / s[-3780:].std(ddof=1) * np.sqrt(252))

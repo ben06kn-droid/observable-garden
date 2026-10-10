@@ -166,3 +166,92 @@ def performance_line(stream: np.ndarray, ppy: float, L: int, B: int, seed: int, 
         out[str(k)] = {"rows": int(len(y)), "S": sh(y), "ci90": [float(lo), float(hi)]}
     return {"label": "performance line, descriptive (unweighted; never gates)", "B": B, "seed": seed,
             "block_length": int(L), "lines": out}
+
+
+# -- round 2 (prereg/recency-weight-planted-2.md, 46b589e): W2, the weighted draw; R15 ------
+
+R15_ROWS = 3780
+
+
+def geometric_kernel(n: int, L: int) -> np.ndarray:
+    """g_k = p (1 - p)^k / (1 - (1 - p)^n), k = 0..n-1: the circular offset of a row within its
+    block, p = 1/L (all mass at 0 when L <= 1)."""
+    if L <= 1:
+        g = np.zeros(n)
+        g[0] = 1.0
+        return g
+    p = 1.0 / L
+    k = np.arange(n, dtype=float)
+    return p * np.power(1.0 - p, k) / (1.0 - (1.0 - p) ** n)
+
+
+def w2_pi_q(w: np.ndarray, L: int) -> tuple[np.ndarray, np.ndarray]:
+    """(pi, q): block starts ~ pi proportional to w^2, and the stationary marginal q of a
+    resampled row, pi circularly convolved with the geometric offset (the chain's fixed point:
+    q = p pi + (1 - p) shift(q))."""
+    pi = w * w / (w * w).sum()
+    g = geometric_kernel(len(w), L)
+    q = np.real(np.fft.ifft(np.fft.fft(pi) * np.fft.fft(g)))
+    q = np.clip(q, 0.0, None)
+    return pi, q / q.sum()
+
+
+def w2_indices(T: int, L: int, pi: np.ndarray, q: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """One W2 index draw: geometric blocks (mean L), forward and circular; the first block
+    starts ~ q, every later block ~ pi. (Equal weights never reach here: see stream_test_w2.)"""
+    cp, cq = np.cumsum(pi), np.cumsum(q)
+    if L <= 1:
+        idx = np.searchsorted(cp, rng.random(T) * cp[-1], side="right")
+        idx[0] = np.searchsorted(cq, rng.random() * cq[-1], side="right")
+        return np.minimum(idx, T - 1)
+    K = int(2 * T / L) + 32
+    out, pos = [], 0
+    while pos < T:
+        lens = rng.geometric(1.0 / L, size=K)
+        u = rng.random(K)
+        starts = np.searchsorted(cp, u * cp[-1], side="right")
+        if pos == 0:
+            starts[0] = np.searchsorted(cq, u[0] * cq[-1], side="right")
+        starts = np.minimum(starts, T - 1)
+        n_take = int(np.searchsorted(np.cumsum(lens), T - pos)) + 1
+        lens, starts = lens[:n_take], starts[:n_take]
+        off = np.arange(lens.sum()) - np.repeat(np.cumsum(lens) - lens, lens)
+        out.append((np.repeat(starts, lens) + off) % T)
+        pos += int(lens.sum())
+    return np.concatenate(out)[:T]
+
+
+def stream_test_w2(stream: np.ndarray, L: int, ppy: float, B: int, seed: int, h: float) -> dict:
+    """The weighted statistic against the W2 null: block starts ~ w^2 (the first ~ q), each
+    stream centred by its q-weighted mean so that E*[y_t] = 0 at every position. With equal
+    weights it IS the current test (`stream_test(h=None)`), call for call."""
+    from quixote.confidence import confidence
+    x = np.asarray(stream, float)
+    n = len(x)
+    w = weights(n, h)
+    if np.all(w == w[0]):
+        r = stream_test(x, L, ppy, B, seed)
+        r.update({"null": "W2 (equal weights: the current null)"})
+        return r
+    pi, q = w2_pi_q(w, L)
+    S = weighted_sharpe(x, w, ppy)
+    x0 = x - float(q @ x)
+    rng = np.random.default_rng(seed)
+    M_b = np.array([weighted_sharpe(x0[w2_indices(n, L, pi, q, rng)], w, ppy) for _ in range(B)])
+    p = (1 + int(np.sum(M_b >= S))) / (B + 1)
+    return {"S": S, "p": p, "null_max": M_b, "block_length": int(L), "h": float(h), "null": "W2",
+            "n_eff": float(w.sum() ** 2 / (w * w).sum()),
+            "confidence": confidence(S, M_b, ppy=float(ppy), tier="declared stream, recency-weighted, W2")}
+
+
+def stream_test_r15(stream: np.ndarray, base_columns: np.ndarray, ppy: float, B: int, seed: int,
+                    rows: int = R15_ROWS) -> dict:
+    """R15: the existing unweighted test, unchanged, on the last `rows` scored rows; its block
+    length by the class rule on the base columns of those rows."""
+    from estimator.bootstrap import select_block_length
+    x = np.asarray(stream, float)[-rows:]
+    bc = np.asarray(base_columns, float)[-rows:]
+    L = int(select_block_length(bc - bc.mean(axis=0)))
+    r = stream_test(x, L, ppy, B, seed)
+    r.update({"window_rows": int(len(x)), "null": "R15 (unweighted, last rows)"})
+    return r
