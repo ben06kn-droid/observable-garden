@@ -196,3 +196,13 @@ $18–20, under the 2-hour limit but near it. The smoke re-measures it. If the p
 1. The first block's start drawn from q, so that the centring is exact at every position.
 2. The rule's strictness: about a 25% refusal of a correctly sized W2 (section 6). Keep it,
    or amend before the run.
+
+## Amendment 1, 2026-10-09 (America/Chicago): the reader's seed 714999, checked
+
+Section 5 names 714999 for the paired intervals. Section 4's table does not list it among
+the checked blocks. The check:
+- `experiments.seed_block_check --ranges 714999-714999` reports one collision, and it is
+  this file's own mention of the seed;
+- with `--exclude prereg/recency-weight-planted-2.md` it reports **NO COLLISION**.
+
+Nothing else changes.
