@@ -1,8 +1,8 @@
 """The recency-weighted certificate on planted panels, ROUND 2 (`prereg/recency-weight-planted-2.md`,
-46b589e; amendment 86277fc). Box only for the run, on the author's typed go; the laptop runs
+46b589e; amendments 86277fc, 8a23368). Box only for the run, on the author's typed go; the laptop runs
 the smoke (cost only).
 
-Arms (seed blocks): N40 709000-709999, NV40 710000-710999, NA40 711000-711999,
+Arms (seed blocks): N40 709000-709999, NV40 710000-710999, NA40 711000-711999 and 715000-715999 (n = 2,000),
 NAREV40 712000-712999, E20 713000-713399, D20 713400-713799, C20 713800-714199; smoke and dry
 714900-714909.
 
@@ -37,9 +37,10 @@ from experiments import recency_planted as P1
 
 PLAN = "46b589e314ae04befd94fa60da01165d8217bdc1"
 PLAN_AMENDMENT = "86277fc827f1e222280abadadd0532ebbc0f9496"
+PLAN_AMENDMENT2 = "8a23368a6701cafbac3a5c37f2a717b4aeb74142"      # NA40 at n = 2,000; the adjusted rule
 H, B, PPY = P1.H, P1.B, P1.PPY
 YEARS = {"N40": 40, "NV40": 40, "NA40": 40, "NAREV40": 40, "E20": 20, "D20": 20, "C20": 20}
-SEEDS = {"N40": range(709000, 710000), "NV40": range(710000, 711000), "NA40": range(711000, 712000),
+SEEDS = {"N40": range(709000, 710000), "NV40": range(710000, 711000), "NA40": list(range(711000, 712000)) + list(range(715000, 716000)),
          "NAREV40": range(712000, 713000), "E20": range(713000, 713400), "D20": range(713400, 713800),
          "C20": range(713800, 714200)}
 SMOKE = range(714900, 714910)
@@ -165,7 +166,7 @@ def refusals(expect_head: str) -> list[str]:
         bad.append("HEAD is not --expect-head")
     if g("status", "--porcelain", "--untracked-files=no").stdout.strip():
         bad.append("uncommitted changes to tracked files")
-    for c in (PLAN, PLAN_AMENDMENT):
+    for c in (PLAN, PLAN_AMENDMENT, PLAN_AMENDMENT2):
         if g("merge-base", "--is-ancestor", c, "HEAD").returncode != 0:
             bad.append(f"the plan commit {c} is not an ancestor of HEAD")
     man = P1.POOL_DIR / "manifest.json"

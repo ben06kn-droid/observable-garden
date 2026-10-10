@@ -64,7 +64,7 @@ def test_one_task_per_kind_records_the_registered_fields(fake_pool):
 
 
 def test_task_lists():
-    assert len(P2.tasks()) == 5200 and {a for a, _ in P2.smoke_tasks()} == set(P2.SEEDS)
+    assert len(P2.tasks()) == 6200 and len(P2.SEEDS["NA40"]) == 2000 and {a for a, _ in P2.smoke_tasks()} == set(P2.SEEDS)
     assert all(714900 <= s <= 714909 for _, s in P2.smoke_tasks()) and P2.refusals("0" * 40)
 
 
