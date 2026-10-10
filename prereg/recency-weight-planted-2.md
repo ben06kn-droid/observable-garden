@@ -206,3 +206,63 @@ the checked blocks. The check:
 - with `--exclude prereg/recency-weight-planted-2.md` it reports **NO COLLISION**.
 
 Nothing else changes.
+
+## Amendment 2, 2026-10-09 (America/Chicago): the adoption rule adjusted for multiplicity; NA40 at n = 2,000
+
+**Reason, recorded.** The author's reviewer wrote the unadjusted rule (section 5) without
+computing its family-wise refusal rate. Section 6 then showed that the rule refuses a
+correctly sized W2 about 25% of the time. **The change is made before any round-2 panel is
+drawn.**
+
+**1. The adjusted rule.**
+- **For W2,** a rate fails iff its **one-sided** Wilson lower end, at per-check level
+  0.05 / 12 (z = 2.6383), exceeds the level. This applies across W2's 12 checks: the stream
+  on the four null arms, the class on N40 and NA40, each at two levels.
+- **For the fallback R15:** the same, at per-check level 0.05 / 8 (z = 2.4977), across its 8
+  checks.
+- **The rule's branches are otherwise unchanged:**
+  - W2 is adopted iff none of its checks fails;
+  - otherwise R15, iff none of its checks fails;
+  - otherwise stop, and the author decides.
+- **The unadjusted 95% Wilson ends are still printed beside each rate,** labelled
+  "unadjusted, not the rule".
+
+**2. NA40 runs 2,000 panels, not 1,000,** for the stream and the class.
+- The 1,000 added seeds are a fresh block, **715000–715999**. `experiments.seed_block_check`
+  on 2026-10-09: NO COLLISION.
+- NA40's seeds are therefore 711000–711999 and 715000–715999.
+- The other arms are unchanged. The task count rises from 5,200 to 6,200.
+
+**3. Section 6, restated for the adjusted rule.** Simulated, 40,000 runs; the two levels
+nested within an arm; NA40 at n = 2,000.
+
+| true size on every arm | P(the rule refuses W2) | P(R15 fails a check) |
+|---|---|---|
+| exactly nominal | **0.061** | 0.055 |
+| 1.10 × nominal | 0.35 | 0.36 |
+| 1.15 × nominal | 0.61 | 0.63 |
+
+**Per-check detectability under the adjusted end** (W2's z = 2.6383). Each entry is the
+probability that one check fails at a given true rate:
+
+| n | level | at the level | true rate → probability of failing |
+|---|---|---|---|
+| 2,000 (NA40) | stream 0.04 | 0.005 | 0.05 → 0.35; 0.06 → 0.94; 0.075 → 1.00 |
+| 2,000 (NA40) | stream 0.08 | 0.004 | 0.10 → 0.71; 0.12 → 1.00; 0.15 → 1.00 |
+| 2,000 (NA40) | class 0.01 | 0.008 | 0.0125 → 0.10; 0.015 → 0.38; 0.01875 → 0.84 |
+| 2,000 (NA40) | class 0.02 | 0.006 | 0.025 → 0.18; 0.03 → 0.67; 0.0375 → 0.99 |
+| 1,000 | stream 0.04 | 0.006 | 0.05 → 0.17; 0.06 → 0.67; 0.075 → 0.99 |
+| 1,000 | stream 0.08 | 0.006 | 0.10 → 0.39; 0.12 → 0.96; 0.15 → 1.00 |
+| 1,000 | class 0.01 | 0.007 | 0.0125 → 0.05; 0.015 → 0.18; 0.01875 → 0.51 |
+| 1,000 | class 0.02 | 0.008 | 0.025 → 0.10; 0.03 → 0.38; 0.0375 → 0.84 |
+
+- A correctly sized W2 is now refused about 6% of the time, close to the nominal 5%.
+- An inflation like round 1's NA40 under the uniform draw (0.075 at the 4% level) is caught
+  with certainty at n = 2,000.
+- An inflation of 1.25× the level is caught with probability 0.35 at n = 2,000 (stream, 4%),
+  and 0.17 at n = 1,000.
+- The class checks remain weak against small inflations.
+
+**4. Cost** (re-estimated from the round-2 smoke, scaled by round 1's measured box
+slowdowns): about 530,000 core-seconds. On 180 workers that is about 50 minutes of run, and
+about 70 box-minutes with setup. Under the 2-hour limit.
