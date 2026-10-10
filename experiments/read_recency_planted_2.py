@@ -1,10 +1,11 @@
 """Reader for the recency planted validation, ROUND 2 (`prereg/recency-weight-planted-2.md`,
-46b589e; amendment 86277fc). Committed and tested on made-up rows only before any panel is
+46b589e; amendments 86277fc and 8a23368: the Bonferroni-adjusted rule, NA40 at n = 2,000). Committed and tested on made-up rows only before any panel is
 drawn. Reads once, in this order:
 
   1. W2's checks: the stream on N40, NV40, NA40, NAREV40, and the class on N40 and NA40, at both
-     levels. A rate FAILS iff the lower end of its 95% Wilson interval exceeds the level.
-  2. R15's checks: the stream on the four null arms, at both levels.
+     levels. A rate FAILS iff its ONE-SIDED Wilson lower end at per-check level 0.05/12 exceeds
+     the level. The unadjusted 95% interval is printed beside, labelled "unadjusted, not the rule".
+  2. R15's checks: the stream on the four null arms, at both levels, at per-check level 0.05/8.
   3. THE REGISTERED RULE: W2 adopted iff none of its checks fails; otherwise R15, provided none
      of its checks fails; otherwise stop, and the author decides.
   4. Beside, descriptive: the round-1 fixed centring and the unweighted statistic on every null
@@ -23,14 +24,30 @@ from pathlib import Path
 
 import numpy as np
 
-from experiments.read_recency_planted import paired, rate_line
+from scipy.stats import norm
+
+from experiments.read_recency_planted import paired, wilson
 
 LEVELS = {"96%": {"stream": 0.04, "class": 0.01}, "90%": {"stream": 0.08, "class": 0.02}}
 NULLS = ("N40", "NV40", "NA40", "NAREV40")
 CLASS_ARMS = ("N40", "NA40")
 EDGES = ("E20", "D20", "C20")
-N_REGISTERED = {"N40": 1000, "NV40": 1000, "NA40": 1000, "NAREV40": 1000, "E20": 400, "D20": 400, "C20": 400}
+N_REGISTERED = {"N40": 1000, "NV40": 1000, "NA40": 2000, "NAREV40": 1000, "E20": 400, "D20": 400, "C20": 400}
 PAIRED_SEED = 714999
+Z_W2 = float(norm.ppf(1 - 0.05 / 12))          # 2.6383, one-sided, per check
+Z_R15 = float(norm.ppf(1 - 0.05 / 8))          # 2.4977
+
+
+def rate_line(label: str, flags: np.ndarray, level: float, z: float) -> tuple[str, dict]:
+    """The adjusted one-sided Wilson lower end decides; the unadjusted 95% interval is beside."""
+    k, n = int(flags.sum()), len(flags)
+    adj_lo = wilson(k, n, z)[0]
+    lo, hi = wilson(k, n)
+    fails = bool(adj_lo > level)
+    txt = (f"   {label:<36} {k:4d}/{n:<4d} = {k / max(n, 1):.3f}  adjusted lower end {adj_lo:.4f} -> "
+           f"{'FAILS' if fails else 'does not fail'} (level {level});  [{lo:.3f}, {hi:.3f}] unadjusted, not the rule")
+    return txt, {"k": k, "n": n, "rate": k / max(n, 1), "adjusted_lower": adj_lo, "unadjusted": [lo, hi],
+                 "fails": fails}
 
 
 def read(rows: list[dict]) -> tuple[str, dict]:
@@ -39,7 +56,7 @@ def read(rows: list[dict]) -> tuple[str, dict]:
         by.setdefault(r["arm"], []).append(r)
     for arm in by:
         by[arm].sort(key=lambda r: r["seed"])
-    L = ["RECENCY-WEIGHTED CERTIFICATE ON PLANTED PANELS, ROUND 2 (plan 46b589e; amendment 86277fc)", "=" * 92]
+    L = ["RECENCY-WEIGHTED CERTIFICATE ON PLANTED PANELS, ROUND 2 (plan 46b589e; amendments 86277fc, 8a23368)", "=" * 92]
     short = [a for a, n in N_REGISTERED.items() if len(by.get(a, [])) != n]
     if short:
         L.append(f"arms with other than the registered n: {short}: not read. STOP and ask.")
@@ -47,22 +64,22 @@ def read(rows: list[dict]) -> tuple[str, dict]:
     cert = lambda arm, tier, test, lvl: np.array([r[tier][test]["p"] < LEVELS[lvl][tier] for r in by[arm]])
     out = {}
 
-    def checks(test: str, tiers) -> bool:
+    def checks(test: str, tiers, z: float) -> bool:
         any_fail = False
         for tier, arms in tiers:
             for arm in arms:
                 for lvl in ("96%", "90%"):
-                    t, o = rate_line(f"{tier} {arm} {test}, {lvl} level", cert(arm, tier, test, lvl), LEVELS[lvl][tier])
+                    t, o = rate_line(f"{tier} {arm} {test}, {lvl} level", cert(arm, tier, test, lvl), LEVELS[lvl][tier], z)
                     L.append(t)
                     out[f"{test} {tier} {arm} {lvl}"] = o
                     any_fail |= bool(o["fails"])
         return any_fail
 
-    L.append("1. W2's CHECKS (a rate fails iff its lower 95% Wilson end exceeds the level)")
-    w2_fails = checks("W2", (("stream", NULLS), ("class", CLASS_ARMS)))
+    L.append(f"1. W2's CHECKS (a rate fails iff its one-sided Wilson lower end at 0.05/12, z = {Z_W2:.4f}, exceeds the level)")
+    w2_fails = checks("W2", (("stream", NULLS), ("class", CLASS_ARMS)), Z_W2)
     L.append("")
-    L.append("2. R15's CHECKS")
-    r15_fails = checks("R15", (("stream", NULLS),))
+    L.append(f"2. R15's CHECKS (one-sided at 0.05/8, z = {Z_R15:.4f})")
+    r15_fails = checks("R15", (("stream", NULLS),), Z_R15)
     L.append("")
     if not w2_fails:
         decision = "W2 is ADOPTED for weighted reads"
@@ -78,7 +95,7 @@ def read(rows: list[dict]) -> tuple[str, dict]:
     for arm in NULLS:
         for test in ("fixed", "unweighted"):
             for lvl in ("96%", "90%"):
-                t, o = rate_line(f"stream {arm} {test}, {lvl}", cert(arm, "stream", test, lvl), LEVELS[lvl]["stream"])
+                t, o = rate_line(f"stream {arm} {test}, {lvl}", cert(arm, "stream", test, lvl), LEVELS[lvl]["stream"], Z_W2)
                 L.append(t)
                 out[f"beside {test} {arm} {lvl}"] = o
         bl = np.array([r["block_length"] for r in by[arm]])
