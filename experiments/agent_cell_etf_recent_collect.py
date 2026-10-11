@@ -6,7 +6,7 @@ whose final event is `{"kind": "submit", "submission": {"arm", "kind", "support"
 "candidate_S_w", "candidate_S_unw", "L90_shown"}}`) and writes the submission list the host grader takes:
 
     submissions.json = {"sessions": n, "no_submit": [...], "submissions": [
-        {"session", "arm", "kind": "rule" | "sancho", "support": [[k, sign], ...] | "sancho",
+        {"session", "arm", "kind": "rule" | "baseline_model", "support": [[k, sign], ...] | "baseline_model",
          "predict": {"mean", "sd", "note"}}, ...]}
 
 and prints its SHA-256 (the grader pins it on its command line). A session is complete iff its
@@ -45,11 +45,11 @@ def submission_of(d: dict) -> dict | None:
         return None
     s = subs[-1].get("submission") or {}
     kind = s.get("kind")
-    if kind not in ("rule", "sancho"):
+    if kind not in ("rule", "baseline_model"):
         raise CollectRefused(f"a submit event with kind {kind!r}")
     if s.get("arm") not in ("A", "B"):
         raise CollectRefused(f"a submit event with arm {s.get('arm')!r}")
-    support = "sancho" if kind == "sancho" else [[int(k), float(sg)] for k, sg in (s.get("support") or [])]
+    support = "baseline_model" if kind == "baseline_model" else [[int(k), float(sg)] for k, sg in (s.get("support") or [])]
     if kind == "rule" and not support:
         raise CollectRefused("a rule submission with no support")
     p = s.get("predict") or {}

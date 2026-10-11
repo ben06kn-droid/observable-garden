@@ -6,8 +6,11 @@ Every interval for R1, R2 and R4 comes from the grader's one stationary bootstra
 days, applied jointly to every submission (the replicate matrices in grades.json); sessions are
 held fixed. R3 is in-sample: its arm-B-against-arm-A interval resamples sessions within arm
 (seed 723001). The gate's predictive distribution for the CRPS is F_b = S - M_b + SE_oos * Z_b
-with Z_b from default_rng(723002) and SE_oos = sqrt((1 + S^2 / (2 * 252)) / years_oos): the
-weighted version (S_w and the W2 maxima) primary, the unweighted beside (rules only).
+with Z_b from default_rng(723002) and SE_oos = sqrt((1 + S^2 / (2 * 252)) / years_oos).
+
+**The primary statistic is the UNWEIGHTED net Sharpe** (registration section 0): R1 against the
+unweighted L90, R2's errors and CRPS on the unweighted statistic and nulls. Every W2-weighted
+counterpart is printed beside, labelled "recency-weighted, descriptive".
 
     python -m experiments.read_agent_cell_etf_recent --priced runs/agent_cell_etf_recent/priced.json \\
         --grades runs/etf_recent_grade/<date>/grades.json --out runs/agent_cell_etf_recent/read
@@ -21,14 +24,15 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import norm
 
-R1_FLOOR = 0.90                  # registration section 8, R1: [AUTHOR] fixes it before the read
+R1_FLOOR = 0.90                  # registration section 8, R1 (the author, 2026-10-11)
+W2 = "recency-weighted, descriptive"
 B_SESSIONS = 10_000
 SEED_SESSIONS = 723001
 SEED_Z = 723002
 LIMITS = ["limits: one window (444 rows, one market period); one agent model; the ETFs were chosen in 2026 from "
           "survivors; costs are assumed (5 bps one-way, 50 bps a year borrow); 2025 was inside a window opened once "
           "for other strategies; the second grading is in 2028; the agent model may know these ETFs' history; a rule "
-          "search and a Sancho call are not one declared search."]
+          "search and a look at the model stream are not one declared search."]
 
 
 def unb64(s: str, shape) -> np.ndarray:
@@ -101,11 +105,11 @@ def read(priced: dict, grades: dict) -> tuple[str, dict]:
           f"{grades['block_length']}, seed {grades['seed']}",
           "=" * 100,
           f"sessions {priced['n_sessions']}: {n} submissions ({sum(s['kind'] == 'rule' for s in subs)} rules, "
-          f"{sum(s['kind'] == 'sancho' for s in subs)} Sancho), {len(priced['no_submit'])} no_submit; "
+          f"{sum(s['kind'] == 'baseline_model' for s in subs)} model stream), {len(priced['no_submit'])} no_submit; "
           f"arm A {len(arms['A'])}, arm B {len(arms['B'])}", *LIMITS, ""]
 
     # R1 -- lower bounds
-    L.append("R1 lower bounds: the share of submissions with realised >= weighted L90")
+    L.append("R1 lower bounds: the share of submissions with realised >= the unweighted L90 (primary)")
     dec["R1"] = {}
     for tag, grp in (("all", subs), ("arm A", arms["A"]), ("arm B", arms["B"])):
         if not grp:
@@ -122,11 +126,14 @@ def read(priced: dict, grades: dict) -> tuple[str, dict]:
                                               f"consistent with a 90% bound: the share is not below the floor {R1_FLOOR:.2f}"))
         dec["R1"][tag] = {"count": int(held.sum()), "n": len(grp), "share": float(held.mean()), "upper95": up95,
                           "too_high": bool(too_high)}
+        held_w = np.array([s["realized"] >= s["L90_w2"] for s in grp])
+        L.append(f"      beside ({W2}): at or above the W2 L90 {int(held_w.sum())} of {len(grp)} ({held_w.mean():.2f})")
+        dec["R1"][tag]["w2_beside"] = {"count": int(held_w.sum()), "label": W2}
 
     # R2 -- closeness
     L.append("")
     L.append("R2 closeness: error = realised - predictor; mean signed error and MAE, 90% joint-bootstrap intervals")
-    preds = {"raw weighted (S_w)": lambda s: s["S_w"], "raw unweighted (S_unw)": lambda s: s["S_unw"],
+    preds = {"raw unweighted (S)": lambda s: s["S"], f"raw weighted (S_w; {W2})": lambda s: s["S_w"],
              "agent's stated mean": lambda s: s["predict"]["mean"],
              "gate point estimate EB (rules)": lambda s: (s["EB"] or {}).get("value")}
     dec["R2"] = {}
@@ -158,21 +165,19 @@ def read(priced: dict, grades: dict) -> tuple[str, dict]:
         dec["R2"][f"{a} vs {b}"] = {"interval": [lo, hi], "verdict": v}
 
     for a in ("gate point estimate EB (rules)", "agent's stated mean"):
-        for b in ("raw weighted (S_w)", "raw unweighted (S_unw)"):
+        for b in ("raw unweighted (S)", f"raw weighted (S_w; {W2})"):
             if a in mae_b and b in mae_b:
                 cmp(a, b)
 
     # CRPS: the agent's Normal(mean, sd) against the gate's predictive distribution
-    z = np.random.default_rng(SEED_Z).standard_normal(len(nul["class_w2_max"]))
-    for version in ("weighted (primary)", "unweighted (beside)"):
+    z = np.random.default_rng(SEED_Z).standard_normal(len(nul["class_unw_max"]))
+    for version in ("unweighted (primary)", f"weighted ({W2})"):
         rows = []
         for s in subs:
-            if version.startswith("weighted"):
-                S, M = s["S_w"], (nul["class_w2_max"] if s["kind"] == "rule" else nul["sancho_w2"])
+            if version.startswith("unweighted"):
+                S, M = s["S"], (nul["class_unw_max"] if s["kind"] == "rule" else nul["model_unw"])
             else:
-                if s["kind"] != "rule":
-                    continue
-                S, M = s["S_unw"], nul["class_unw_max"]
+                S, M = s["S_w"], (nul["class_w2_max"] if s["kind"] == "rule" else nul["model_w2"])
             zz = z[:len(M)] if len(M) <= len(z) else np.random.default_rng(SEED_Z).standard_normal(len(M))
             gate = SampleCRPS(S - M + se_oos(S, years) * zz)
             mu, sd = s["predict"]["mean"], s["predict"]["sd"]

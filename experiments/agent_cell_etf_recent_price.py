@@ -1,33 +1,42 @@
-"""The agent cell on the ETF recent panel (`prereg/agent-cell-etf-recent.md`, section 6): PRICING,
-from committed session logs and the pinned precompute only. Nothing is refitted and no holdout
-value exists here.
+"""The agent cell on the ETF recent panel (`prereg/agent-cell-etf-recent.md`, sections 0 and 6):
+PRICING, from committed session logs and the pinned precompute only. Nothing is refitted and no
+holdout value exists here.
+
+**The primary statistic is the UNWEIGHTED net Sharpe** (section 0): the certificate, L90, EB, the
+replay tier and the selection-aware line. Every W2-weighted counterpart is printed beside,
+labelled "recency-weighted, descriptive". (The parent panel's scripted certificate stays W2; it
+is not priced here.)
 
 The precompute (`<run>/precompute/`, written by the BOX-ETF read) is checked file by file
 against its manifest's SHA-256 before anything is read:
-- `sancho_d1.npz`: Sancho's d = 1 scored stream, its turnover, S_w, S_unw, and its W2 null;
+- `sancho_d1.npz`: the model stream (d = 1) on the scored rows, its turnover, S_w, S_unw, its
+  W2 null `null_w2` and its unweighted null `null_unw` (seed 721000);
 - `class_scored.npy`: (N, T_scored) net streams of the 82,240 members, in
   `members_in_order(CLS, 40)` order;
-- `class_stats.npz`: every member's S_w and S_unw, the class's W2 null maxima, the unweighted
-  null maxima with each replicate's argmax m_b and S*_b(m_b), the members' SHA-256;
-- `base_columns.npy` (optional): the scored rows' base feature columns, which the replay tier
-  needs. Without it the replay tier is "not computed", with that reason.
+- `class_stats.npz`: every member's S_w and S_unw; the class's W2 and unweighted null maxima;
+  the un-demeaned unweighted replicate argmax m_b and S*_b(m_b) (EB); `joint_unw_max`, the
+  class's unweighted maxima joint with the model stream's demeaned replicate on the same draws
+  (seed 721002);
+- `base_columns.npy`: the scored rows' base feature columns, which the replay tier needs.
 
 Per submission (section 6's table):
-- raw in-sample net Sharpe, weighted (W2) and unweighted;
-- the W2 certificate: a rule on the **class tier**, p = (1 + #{class W2 maxima >= S_w}) / (B + 1),
-  96% iff p < 0.01 (90% iff p < 0.02, labelled); Sancho's stream on the **supplied-streams
-  tier**, p against its own W2 null, 96% iff p < 0.03 (90% iff p < 0.06, labelled);
-- the weighted L90 = S_w - the null's 0.90 quantile;
-- EB of `prereg/point-estimate.md` (rules only; unweighted; descriptive): S_unw - mean_b[S*_b(m_b)
-  - S_unw(m_b)], with m_b and S*_b(m_b) the class argmax and its Sharpe on the UN-DEMEANED unweighted
-  replicates (`null_unw_undemeaned_*`, seed 721002);
-- for Sancho's stream, beside and descriptive, "selection-aware (approximate, independent
-  draws)": p of S_w against max(class W2 maxima_b, Sancho's W2 null_b). The two nulls were drawn
-  with different seeds (721002 and 721000), so this is an approximation, not a joint null;
+- S (unweighted, primary) and S_w beside;
+- the certificate, unweighted: a rule on the **class tier**, p = (1 + #{null_unw_max >= S}) /
+  (B + 1), 96% iff p < 0.01 (90% iff p < 0.02, labelled); the model stream on the
+  **supplied-streams tier**, p against its own unweighted null, 96% iff p < 0.03 (90% iff
+  p < 0.06, labelled); `p_w2` beside on the W2 nulls;
+- `L90` = S - the unweighted null's 0.90 quantile (what arm B was shown, and what is graded);
+  `L90_w2` beside;
+- EB (rules only; unweighted; descriptive), defined in full in the registration's section 6:
+  S - mean_b[S*_b(m_b) - S(m_b)];
 - the replay tier (6.5's trigger replay through `experiments.agent_backend.certify_log`) on the
-  session's logged grammar search, where the class is tabulated (the precompute) and the base
-  columns are present; a session that called `sancho()` before a rule submission is flagged
-  "non-grammar look (Sancho) taken";
+  session's logged grammar search; a rule submitted after a `baseline_model()` call is flagged
+  "a non-grammar look (the model stream) was taken";
+- for a model-stream submission, the selection-aware line: p of S under the joint null of the
+  session's search and the model stream on SHARED day-index draws -- the replayed search's
+  trigger null (`quixote.certify.three_nulls`, its draws regenerated from its seed and block
+  length) against the model stream's demeaned replicate Sharpe; where no grammar search was
+  logged or a trigger was changed, the class envelope `joint_unw_max`, so labelled;
 - the session's search length: grammar moves, and candidates seen.
 
     python -m experiments.agent_cell_etf_recent_price --logs runs/agent_cell_etf_recent/sessions \\
@@ -44,7 +53,9 @@ from pathlib import Path
 
 import numpy as np
 
-ALPHA = {"rule": (0.01, 0.02), "sancho": (0.03, 0.06)}
+ALPHA = {"rule": (0.01, 0.02), "baseline_model": (0.03, 0.06)}
+W2_LABEL = "recency-weighted, descriptive"
+MODEL_LOOK_FLAG = "a non-grammar look (the model stream) was taken"
 GRAMMAR = {"pick_prior", "declare_triggers", "change_trigger", "init", "extend_best", "swap_worst", "flip",
            "refine", "pick", "stop", "restart"}       # experiments/agent_cell_etf_recent.py, GRAMMAR_TOOLS
 CERTIFY_B = 1000
@@ -126,13 +137,13 @@ def search_length(d: dict) -> dict:
     return {"moves": len(moves), "candidates_seen": cands}
 
 
-def sancho_look_before_submit(d: dict) -> bool:
-    """A `sancho()` call before the candidate was fixed (the `candidate` event)."""
+def model_look_before_submit(d: dict) -> bool:
+    """A `baseline_model()` call before the candidate was fixed (the `candidate` event)."""
     evs = d.get("events", [])
     at = next((i for i, e in enumerate(evs) if e.get("kind") == "candidate"),
               next((i for i, e in enumerate(evs) if e.get("kind") == "submit"), len(evs)))
-    return any(e.get("kind") == "sancho_call" or (e.get("kind") == "tool_result" and tool_name(e) == "sancho")
-               for e in evs[:at])
+    return any(e.get("kind") == "baseline_model_call"
+               or (e.get("kind") == "tool_result" and tool_name(e) == "baseline_model") for e in evs[:at])
 
 
 # -- one submission -----------------------------------------------------------------------
@@ -146,6 +157,8 @@ def price(sub: dict, pre: dict, idx: dict) -> dict:
     from environments.class_table import canonical
     st, sn = pre["stats"], pre["sancho"]
     kind = sub["kind"]
+    if kind not in ALPHA:
+        raise PricingRefused(f"session {sub['session']}: unknown submission kind {kind!r}")
     out = {"session": sub["session"], "arm": sub["arm"], "kind": kind, "support": sub["support"],
            "predict": sub["predict"]}
     if kind == "rule":
@@ -153,40 +166,111 @@ def price(sub: dict, pre: dict, idx: dict) -> dict:
         if key not in idx:
             raise PricingRefused(f"session {sub['session']}: support {key} is not a class member")
         j = idx[key]
-        S_w, S_u = float(st["S_w"][j]), float(st["S_unw"][j])
-        null = np.asarray(st["null_w2_max"], float)
+        S_w, S = float(st["S_w"][j]), float(st["S_unw"][j])
+        null, null_w2 = np.asarray(st["null_unw_max"], float), np.asarray(st["null_w2_max"], float)
         if "null_unw_undemeaned_argmax" not in st:
-            raise PricingRefused("the precompute holds no un-demeaned argmax (point-estimate.md's m_b)")
+            raise PricingRefused("the precompute holds no un-demeaned argmax (EB's m_b)")
         m_b = np.asarray(st["null_unw_undemeaned_argmax"], np.int64)
-        eb = S_u - float(np.mean(np.asarray(st["null_unw_undemeaned_S_at_argmax"], float)
-                                 - np.asarray(st["S_unw"], float)[m_b]))
-        out.update({"member_index": j, "tier": "class (W2)",
-                    "EB": {"value": eb, "label": "EB of prereg/point-estimate.md (m_b and S*_b(m_b) on the "
-                                                 "un-demeaned unweighted replicates, seed 721002); unweighted, descriptive"}})
+        eb = S - float(np.mean(np.asarray(st["null_unw_undemeaned_S_at_argmax"], float)
+                               - np.asarray(st["S_unw"], float)[m_b]))
+        out.update({"member_index": j, "tier": "class (unweighted)",
+                    "EB": {"value": eb, "label": "EB (registration section 6): m_b and S*_b(m_b) on the un-demeaned "
+                                                 "unweighted replicates, seed 721002; unweighted, descriptive"}})
     else:
-        S_w, S_u = float(sn["S_w"]), float(sn["S_unw"])
-        null = np.asarray(sn["null_w2"], float)
-        both = np.maximum(np.asarray(st["null_w2_max"], float), null)
-        out.update({"tier": "supplied streams (W2)", "EB": None,
-                    "selection_aware": {"p": tier_p(S_w, both),
-                                        "label": "selection-aware (approximate, independent draws): the class W2 "
-                                                 "maxima (seed 721002) and Sancho's W2 null (seed 721000) were not "
-                                                 "drawn on shared index sets; descriptive, not a certificate"},
-                    "turnover_mean": float(sn["turnover_mean"])})
-    p = tier_p(S_w, null)
+        S_w, S = float(sn["S_w"]), float(sn["S_unw"])
+        if "null_unw" not in sn:
+            raise PricingRefused("the precompute holds no unweighted null for the model stream")
+        null, null_w2 = np.asarray(sn["null_unw"], float), np.asarray(sn["null_w2"], float)
+        out.update({"tier": "supplied streams (unweighted)", "EB": None, "turnover_mean": float(sn["turnover_mean"])})
+    p, p_w2 = tier_p(S, null), tier_p(S_w, null_w2)
     a96, a90 = ALPHA[kind]
-    out.update({"S_w": S_w, "S_unw": S_u, "p": p,
+    out.update({"S": S, "S_w": S_w, "S_w_label": W2_LABEL, "p": p,
                 "certified": {"96%": bool(p < a96), "90%": bool(p < a90)},
                 "alphas": {"96%": a96, "90%": a90, "90% label": "90% level, labelled"},
-                "L90": S_w - float(np.quantile(null, 0.90))})
+                "L90": S - float(np.quantile(null, 0.90)),
+                "p_w2": p_w2, "certified_w2": {"96%": bool(p_w2 < a96), "90%": bool(p_w2 < a90)},
+                "L90_w2": S_w - float(np.quantile(null_w2, 0.90)), "w2_label": W2_LABEL})
     return out
+
+
+def model_replicates(stream: np.ndarray, draws, ppy: float = 252.0) -> np.ndarray:
+    """The model stream's demeaned replicate Sharpe on each draw: the class table scorer's own
+    convention (`environments.class_table.ClassTable.sharpe(..., demeaned=True)`): subtract the
+    full-sample mean, take the rows, mean / std(ddof 1) * sqrt(ppy)."""
+    x0 = np.asarray(stream, float) - float(np.mean(stream))
+    out = np.empty(len(draws))
+    for b, i in enumerate(draws):
+        y = x0[i]
+        sd = float(y.std(ddof=1))
+        out[b] = float(y.mean() / sd * np.sqrt(ppy)) if sd > 0 else 0.0
+    return out
+
+
+def replay_draws(T: int, L: int, seed, B: int) -> list:
+    """`quixote.certify.three_nulls`' day-index draws, regenerated: one generator seeded by
+    `seed`, one `stationary_bootstrap_indices(T, L, rng)` call per replicate, nothing else drawn
+    from it."""
+    from estimator.bootstrap import stationary_bootstrap_indices
+    rng = np.random.default_rng(seed)
+    return [stationary_bootstrap_indices(T, L, rng) for _ in range(B)]
+
+
+def selection_aware(d: dict, sub: dict, pre: dict, B: int = CERTIFY_B) -> dict:
+    """For a model-stream submission: the p of S under the joint null of the session's search and
+    the model stream, on shared draws. Falls back to the class envelope where the session's own
+    search cannot be replayed."""
+    sn, st = pre["sancho"], pre["stats"]
+    S = float(sn["S_unw"])
+    reason = None
+    log = None
+    if pre["base"] is None:
+        reason = "no base_columns.npy"
+    else:
+        try:
+            from experiments.price_runs import rebuild_session_log
+            log = rebuild_session_log(d)
+        except Exception as e:                                    # noqa: BLE001
+            reason = f"the log could not be rebuilt: {type(e).__name__}"
+        if reason is None and (log is None or not getattr(log, "records", None)):
+            reason = "no grammar move logged"
+        if reason is None and list(getattr(log, "trigger_changes", ()) or ()):
+            reason = "a trigger was changed (DEPENDS_ON_JUDGMENT)"
+    if reason is None:
+        try:
+            from environments.planted_panel import CLS
+            from quixote.certify import three_nulls
+            table = class_table(pre)
+            base = np.asarray(pre["base"], float)
+            seed = session_seed(d)
+            nulls, _ = three_nulls(log, CLS, base, float(np.sqrt(252.0)), B, None, seed, table=table)
+            draws = replay_draws(base.shape[0], int(nulls.block_length), seed, B)
+            joint = np.maximum(np.asarray(nulls.trigger, float), model_replicates(sn["stream"], draws))
+            return {"p": tier_p(S, joint), "basis": "the session's own search (replayed trigger null) and the model "
+                    "stream, on shared draws", "B": B, "block_length": int(nulls.block_length), "seed": seed,
+                    "label": "selection-aware, descriptive, not a certificate"}
+        except Exception as e:                                    # noqa: BLE001
+            reason = f"the replay raised: {type(e).__name__}: {e}"
+    joint = np.asarray(st["joint_unw_max"], float)
+    return {"p": tier_p(S, joint), "basis": "class envelope, not the session's own search", "reason": reason,
+            "B": int(joint.size), "seed": 721002, "label": "selection-aware, descriptive, not a certificate"}
+
+
+def class_table(pre: dict):
+    from environments.class_table import ClassTable
+    return ClassTable(streams=pre["scored"], members=pre["members"], index=index_of(pre["members"]),
+                      panel_hash="etf-recent-precompute", periods_per_year=252.0)
+
+
+def session_seed(d: dict) -> int:
+    st = events_of(d, "start")
+    return int(st[0].get("seed", 0)) if st else 0
 
 
 def replay(d: dict, sub: dict, pre: dict, B: int = CERTIFY_B) -> dict:
     """6.5's trigger replay on the session's logged grammar search, or the reason it is not
     computed. Never invented."""
     if sub["kind"] != "rule":
-        return {"status": "not applicable", "reason": "a Sancho submission is not a class search"}
+        return {"status": "not applicable", "reason": "a model-stream submission is not a class search"}
     if pre["base"] is None:
         return {"status": "not computed", "reason": "the precompute holds no base_columns.npy, which certify needs"}
     try:
@@ -196,15 +280,12 @@ def replay(d: dict, sub: dict, pre: dict, B: int = CERTIFY_B) -> dict:
         return {"status": "not computed", "reason": f"the log could not be rebuilt: {type(e).__name__}: {e}"}
     if log is None:
         return {"status": "not computed", "reason": "the log holds no grammar session_log"}
-    from environments.class_table import ClassTable
     from environments.planted_panel import CLS
     from experiments.agent_backend import certify_log
-    table = ClassTable(streams=pre["scored"], members=pre["members"], index=index_of(pre["members"]),
-                       panel_hash="etf-recent-precompute", periods_per_year=252.0)
+    table = class_table(pre)
     base = np.asarray(pre["base"], float)
     sandbox = types.SimpleNamespace(base_feature_columns=lambda: base, periods_per_year=252.0)
-    st = events_of(d, "start")
-    rec = types.SimpleNamespace(seed=int(st[0].get("seed", 0)) if st else 0, verdict=None,
+    rec = types.SimpleNamespace(seed=session_seed(d), verdict=None,
                                 certifying_null_computable=None, notes=[])
     rec.log = lambda kind, **kw: rec.notes.append({"kind": kind, **kw})
     certify_log(rec, log, sandbox, CLS, table=table, B=B)
@@ -231,20 +312,23 @@ def price_all(log_dir: Path, pre: dict, submissions: dict, B: int = CERTIFY_B) -
         last = last_submission(d)
         r["log_consistency"] = {
             "S_w_matches": last.get("candidate_S_w") is None or abs(float(last["candidate_S_w"]) - r["S_w"]) < 5e-4,
-            "S_unw_matches": last.get("candidate_S_unw") is None or abs(float(last["candidate_S_unw"]) - r["S_unw"]) < 5e-4,
+            "S_unw_matches": last.get("candidate_S_unw") is None or abs(float(last["candidate_S_unw"]) - r["S"]) < 5e-4,
             "L90_shown_matches": (last.get("L90_shown") is None) or abs(float(last["L90_shown"]) - r["L90"]) < 5e-4}
         if sub["arm"] == "A" and last.get("L90_shown") is not None:
             raise PricingRefused(f"session {sub['session']}: arm A was shown an L90")
         r["search"] = search_length(d)
-        r["flags"] = ["non-grammar look (Sancho) taken"] if sub["kind"] == "rule" and sancho_look_before_submit(d) else []
+        r["flags"] = [MODEL_LOOK_FLAG] if sub["kind"] == "rule" and model_look_before_submit(d) else []
         r["replay"] = replay(d, sub, pre, B)
+        if sub["kind"] == "baseline_model":
+            r["selection_aware"] = selection_aware(d, sub, pre, B)
         rows.append(r)
     st, sn = pre["stats"], pre["sancho"]
     return {"precompute_manifest_sha256": pre["manifest_sha256"], "n_sessions": submissions["sessions"],
             "no_submit": submissions["no_submit"], "priced": rows,
-            "nulls": {"class_w2_max": np.asarray(st["null_w2_max"], float).tolist(),
-                      "class_unw_max": np.asarray(st["null_unw_max"], float).tolist(),
-                      "sancho_w2": np.asarray(sn["null_w2"], float).tolist()}}
+            "nulls": {"class_unw_max": np.asarray(st["null_unw_max"], float).tolist(),
+                      "model_unw": np.asarray(sn["null_unw"], float).tolist(),
+                      "class_w2_max": np.asarray(st["null_w2_max"], float).tolist(),
+                      "model_w2": np.asarray(sn["null_w2"], float).tolist()}}
 
 
 def main(argv=None) -> int:

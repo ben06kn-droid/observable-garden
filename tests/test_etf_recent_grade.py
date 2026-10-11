@@ -1,6 +1,6 @@
 """The ETF recent host grader on SYNTHETIC data only: a synthetic in-sample read by the runner's
 own main (rows dropped before a stand-in cutoff, a scored window), then the grading of the
-three objects plus a rule and a Sancho submission on a synthetic holdout; a restarted book
+three objects plus a rule and a model-stream submission on a synthetic holdout; a restarted book
 refuses; the holdout parser refuses gaps and a boundary mismatch; the grader refuses until its
 registrations are set."""
 import base64
@@ -59,15 +59,18 @@ def world(tmp_path_factory):
     d_in, tk, P_in, V_in, n_drop = ER.load_from(paths, use_from=dates[DROP], last=dates[T_IN - 1])
     results = json.loads((out / "results.json").read_text())
     pins = json.loads((out / "pins.json").read_text())
-    # one rule submission and one Sancho submission, priced as pricing would price them
+    # one rule submission and one model-stream submission, priced as pricing would price them
     support = ((0, 1.0), (3, -1.0))
     panel_in, _ = ER.sancho_inputs(d_in, tk, P_in, V_in, 2)
     _, s = FG.member_book(panel_in, support)
     S_w = FG.wsharpe(s[ER.scored_index(panel_in)])
+    S_u = EG.sharpe(s[ER.scored_index(panel_in)], 252.0)
     submissions = {"sessions": 3, "no_submit": ["s3"], "submissions": [
         {"session": "s1", "arm": "A", "kind": "rule", "support": [[0, 1.0], [3, -1.0]], "predict": {"mean": 0.3, "sd": 0.5}},
-        {"session": "s2", "arm": "B", "kind": "sancho", "support": "sancho", "predict": {"mean": 0.6, "sd": 0.4}}]}
-    priced = {"priced": [{"session": "s1", "S_w": S_w, "L90": S_w - 1.2}, {"session": "s2", "S_w": 0.5, "L90": 0.1}]}
+        {"session": "s2", "arm": "B", "kind": "baseline_model", "support": "baseline_model",
+         "predict": {"mean": 0.6, "sd": 0.4}}]}
+    priced = {"priced": [{"session": "s1", "S": S_u, "S_w": S_w, "L90": S_u - 1.0, "L90_w2": S_w - 1.2},
+                         {"session": "s2", "S": 0.45, "S_w": 0.5, "L90": 0.05, "L90_w2": 0.1}]}
     w = dict(dates_in=d_in, tickers=tk, P_in=P_in, V_in=V_in, n_dropped=n_drop, cut=rec,
              dates_ho=dates[T_IN:], P_ho=P[T_IN:], V_ho=Vol[T_IN:], pins=pins, results=results,
              priced=priced, submissions=submissions)
@@ -84,10 +87,19 @@ def test_the_grading_end_to_end(world, capsys):
     for it in g["items"]:
         assert np.isfinite(it["realized"]) and len(it["ci90"]) == 2
         if it["type"] != "book":
-            assert it["held"] == (it["realized"] >= it["L90_weighted"])
+            assert it["held"] == (it["realized"] >= it["L90"])
+    # the objects keep the parent's W2 L90 (scripted certificate); submissions are held against the
+    # cell's UNWEIGHTED L90, with the W2 beside, labelled
+    for o in ("stream_d1", "stream_d0", "class_member"):
+        it = next(i for i in g["items"] if i["id"] == o)
+        assert it["L90"] == it["L90_weighted"] and "W2-weighted L90, as registered" in it["L90_statistic"]
+    s1 = next(i for i in g["items"] if i["id"] == "s1")
+    assert s1["L90"] == pytest.approx(world["priced"]["priced"][0]["L90"]) and "unweighted" in s1["L90_statistic"]
+    assert s1["held_w2"]["label"] == "recency-weighted, descriptive"
+    assert s1["held_w2"]["held"] == (s1["realized"] >= s1["L90_w2"])
     s2 = next(i for i in g["items"] if i["id"] == "s2")
     d1 = next(i for i in g["items"] if i["id"] == "stream_d1")
-    assert s2["realized"] == d1["realized"]                        # Sancho's submission is test 1's stream
+    assert s2["realized"] == d1["realized"]                        # the model-stream submission is test 1's stream
     shp = g["bootstrap"]["shape"]
     RS = np.frombuffer(base64.b64decode(g["bootstrap"]["sharpe_b64"]), np.float32).reshape(shp)
     assert shp == [60, len(ids)] and np.isfinite(RS).all()
@@ -118,10 +130,11 @@ def test_wrong_pins_or_prices_refuse(world):
     bad = dict(world, pins={**world["pins"], "d1": {**world["pins"]["d1"], "X_features_sha256": "0" * 64}})
     with pytest.raises(EG.GradingRefused, match="b1 pins"):
         EG.grade(**bad, workers=1, fit_fn=_fit_memo, B_=10)
-    pr = {"priced": [{**world["priced"]["priced"][0], "S_w": world["priced"]["priced"][0]["S_w"] + 0.01},
-                     world["priced"]["priced"][1]]}
-    with pytest.raises(EG.GradingRefused, match="b2 in-sample"):
-        EG.grade(**dict(world, priced=pr), workers=1, fit_fn=_fit_memo, B_=10)
+    for key in ("S_w", "S"):                                       # both the unweighted and the W2 Sharpe are checked
+        pr = {"priced": [{**world["priced"]["priced"][0], key: world["priced"]["priced"][0][key] + 0.01},
+                         world["priced"]["priced"][1]]}
+        with pytest.raises(EG.GradingRefused, match="b2 in-sample"):
+            EG.grade(**dict(world, priced=pr), workers=1, fit_fn=_fit_memo, B_=10)
 
 
 def _chart(days, adj):

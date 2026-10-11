@@ -1,6 +1,7 @@
 """The agent cell's reader and the panel's grading reader on MADE-UP priced and graded files only:
-both branches of R1, R2 (EB closer / not) and R3 (B lower / not distinguished), the joint
-bootstrap's use, CRPS, R4, read-once refusals, and the objects' branch sentences."""
+both branches of R1, R2 (EB closer / not) and R3 (B lower / not distinguished) on the UNWEIGHTED
+primary statistic with the W2 values beside, labelled; the joint bootstrap's use, CRPS (unweighted
+primary), R4, read-once refusals, and the objects' branch sentences."""
 import base64
 import json
 
@@ -24,13 +25,14 @@ def _world(realized, L90, eb, raw, stated_a, stated_b, seed=1):
     n = len(realized)
     arms = ["A" if i % 2 == 0 else "B" for i in range(n)]
     priced = {"n_sessions": n + 1, "no_submit": ["z"], "priced": [], "nulls": {
-        "class_w2_max": rng.normal(1.0, 0.2, 500).tolist(), "class_unw_max": rng.normal(0.8, 0.2, 500).tolist(),
-        "sancho_w2": rng.normal(0.4, 0.2, 500).tolist()}}
+        "class_unw_max": rng.normal(0.8, 0.2, 500).tolist(), "model_unw": rng.normal(0.3, 0.2, 500).tolist(),
+        "class_w2_max": rng.normal(1.0, 0.2, 500).tolist(), "model_w2": rng.normal(0.4, 0.2, 500).tolist()}}
     items = []
     for i in range(n):
         st = stated_a if arms[i] == "A" else stated_b
         priced["priced"].append({"session": f"s{i}", "arm": arms[i], "kind": "rule", "support": [[i % 40, 1.0]],
-                                 "S_w": raw[i], "S_unw": raw[i] - 0.1, "L90": L90[i], "EB": {"value": eb[i]},
+                                 "S": raw[i], "S_w": raw[i] + 0.1, "L90": L90[i], "L90_w2": L90[i] + 5.0,
+                                 "EB": {"value": eb[i]},
                                  "predict": {"mean": st[i // 2], "sd": 0.4, "note": ""},
                                  "search": {"moves": 5 + i, "candidates_seen": None}})
         items.append({"id": f"s{i}", "type": "submission", "arm": arms[i], "realized": realized[i],
@@ -53,10 +55,15 @@ def test_r1_r2_r3_both_branches():
                   stated_a=[1.5] * 10, stated_b=[0.5] * 10)
     text, dec = RA.read(p, g)
     assert dec["R1"]["all"]["too_high"] and "TOO HIGH" in text
-    v = dec["R2"]["gate point estimate EB (rules) vs raw weighted (S_w)"]["verdict"]
+    v = dec["R2"]["gate point estimate EB (rules) vs raw unweighted (S)"]["verdict"]
     assert "CLOSER" in v
+    assert "realised >= the unweighted L90 (primary)" in text
+    assert dec["R1"]["all"]["w2_beside"]["label"] == "recency-weighted, descriptive"
+    assert dec["R1"]["all"]["w2_beside"]["count"] == 0                   # the W2 L90s sit 5 above: none held
+    assert "raw weighted (S_w; recency-weighted, descriptive)" in dec["R2"]
     assert "LOWER" in dec["R3"]["B_minus_A_mean"]["verdict"]
-    assert "CRPS weighted (primary)" in dec["R2"] and "CRPS unweighted (beside)" in dec["R2"]
+    assert "CRPS unweighted (primary)" in dec["R2"] and "CRPS weighted (recency-weighted, descriptive)" in dec["R2"]
+    assert "sancho" not in text.lower()
     assert dec["R4"]["positive"] == 0 and "book_A" in dec["R4"]
     assert "limits:" in text and "1 no_submit" in text
     # the opposite branches
@@ -64,7 +71,7 @@ def test_r1_r2_r3_both_branches():
                   stated_a=[1.0] * 10, stated_b=[1.0] * 10)
     text, dec = RA.read(p, g)
     assert not dec["R1"]["all"]["too_high"] and "consistent with a 90% bound" in text
-    assert "NOT closer" in dec["R2"]["gate point estimate EB (rules) vs raw weighted (S_w)"]["verdict"]
+    assert "NOT closer" in dec["R2"]["gate point estimate EB (rules) vs raw unweighted (S)"]["verdict"]
     assert "not distinguished" in dec["R3"]["B_minus_A_mean"]["verdict"]
 
 

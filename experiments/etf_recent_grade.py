@@ -22,8 +22,8 @@ one pass/FAIL line and no value):
   b. reproduction of the in-sample read on the host: (1) the pins (both timings, from the cut
      alone, rows from 2010-01-04) equal pins.json; (2) each object's in-sample weighted net
      Sharpe on the scored window equals the read to 3 decimals, and the two streams' unweighted
-     ones; each rule submission's in-sample weighted net Sharpe equals priced.json's to 3
-     decimals;
+     ones; each rule submission's in-sample unweighted and weighted net Sharpes equal
+     priced.json's (`S`, `S_w`) to 3 decimals;
   c. no restart: features on the in-sample rows bit-identical between the spanning and
      in-sample-only builds; every object's and rule submission's positions bit-identical on the
      in-sample rows; the first holdout trade costed from the carried position (1e-13); no
@@ -34,8 +34,11 @@ submissions and of each arm): the realised UNWEIGHTED net Sharpe and the compoun
 over the holdout; one stationary bootstrap over holdout days applied jointly to every item
 (B 10,000; the class rule's block length on the holdout's demeaned base columns; seed 723000),
 its 90% intervals, and the replicate matrices (B x items, float32, base64) so the readers
-compute every joint interval without the holdout; held iff realised >= the in-sample weighted
-L90; the 2026-only realised Sharpe beside, descriptive. Written to grades.json. **No value is
+compute every joint interval without the holdout; held iff realised >= L90, where L90 is, for
+the three objects, the parent panel's scripted W2-weighted L90 (as registered), and for each
+submission the cell's UNWEIGHTED L90 from priced.json (`prereg/agent-cell-etf-recent.md` section
+0), with the W2 L90 beside, labelled "recency-weighted, descriptive"; the 2026-only realised
+Sharpe beside, descriptive. Written to grades.json. **No value is
 printed.**
 
     python -m experiments.etf_recent_grade --cut ~/etf_recent/insample.cut.json --raw ~/etf_recent/raw \\
@@ -73,6 +76,9 @@ LAG = {"stream_d1": 2, "stream_d0": 1, "class_member": 2}
 RESULT_KEY = {"stream_d1": "test1_stream_d1", "stream_d0": "test2_stream_d0", "class_member": "test3_class_d1"}
 OBJECTS = tuple(LAG)
 LABEL_WEAK = "weak: 1.76 years"
+OBJECT_L90_LABEL = ("the parent panel's scripted certificate: the W2-weighted L90, as registered "
+                    "(prereg/etf-recent-panel.md; this cell does not change it)")
+SUBMISSION_L90_LABEL = "unweighted L90 (the cell's primary statistic, prereg/agent-cell-etf-recent.md section 0)"
 
 
 class GradingRefused(RuntimeError):
@@ -248,6 +254,8 @@ def grade(dates_in, tickers, P_in, V_in, n_dropped, cut: dict, dates_ho, P_ho, V
             name = f"rule:{canonical(s['support'])}"
             host[f"{s['session']}_weighted"] = wsharpe(s_in[name][idx[2]], ppy)
             refs[f"{s['session']}_weighted"] = pr[s["session"]]["S_w"]
+            host[f"{s['session']}_unweighted"] = sharpe(s_in[name][idx[2]], ppy)
+            refs[f"{s['session']}_unweighted"] = pr[s["session"]]["S"]
     refuse_if_failed(FG.check_refs(host, refs), "b2 in-sample Sharpes (3 decimals)")
 
     # (c) no restart
@@ -286,11 +294,16 @@ def grade(dates_in, tickers, P_in, V_in, n_dropped, cut: dict, dates_ho, P_ho, V
     for o in OBJECTS:
         r = results[RESULT_KEY[o]]
         items.append({"id": o, "type": "object", "test": r["test"], "certified": r["weighted_W2"]["certified"],
-                      "L90_weighted": float(r["weighted_W2"]["L90"]), "x": ho[o]})
+                      "L90": float(r["weighted_W2"]["L90"]), "L90_weighted": float(r["weighted_W2"]["L90"]),
+                      "L90_statistic": OBJECT_L90_LABEL, "x": ho[o]})
     for s in submissions["submissions"]:
-        x = ho["stream_d1"] if s["kind"] == "sancho" else ho[f"rule:{canonical(s['support'])}"]
+        if s["kind"] not in ("rule", "baseline_model"):
+            raise GradingRefused(f"session {s['session']}: unknown submission kind {s['kind']!r}")
+        x = ho["stream_d1"] if s["kind"] == "baseline_model" else ho[f"rule:{canonical(s['support'])}"]
         items.append({"id": s["session"], "type": "submission", "arm": s["arm"], "kind": s["kind"],
-                      "L90_weighted": float(pr[s["session"]]["L90"]), "x": x})
+                      "L90": float(pr[s["session"]]["L90"]), "L90_statistic": SUBMISSION_L90_LABEL,
+                      "L90_w2": float(pr[s["session"]]["L90_w2"]), "L90_w2_label": "recency-weighted, descriptive",
+                      "x": x})
     subs_x = [it["x"] for it in items if it["type"] == "submission"]
     if subs_x:
         items.append({"id": "book_all", "type": "book", "x": np.mean(subs_x, axis=0)})
@@ -320,8 +333,10 @@ def grade(dates_in, tickers, P_in, V_in, n_dropped, cut: dict, dates_ho, P_ho, V
                "net_return_ci90": [float(v) for v in np.quantile(RR[:, j], [0.05, 0.95])],
                "only_2026": {"label": "2026-only, descriptive, never deciding", "rows": int(in26.sum()),
                              "realized": sharpe(x[in26], ppy) if in26.sum() >= 2 else None}}
-        if "L90_weighted" in rec:
-            rec["held"] = bool(S >= rec["L90_weighted"])
+        if "L90" in rec:
+            rec["held"] = bool(S >= rec["L90"])
+        if "L90_w2" in rec:
+            rec["held_w2"] = {"held": bool(S >= rec["L90_w2"]), "label": "recency-weighted, descriptive"}
         out_items.append(rec)
     return {"registrations": {"panel": PANEL, "grading": GRADING, "cell": CELL}, "label": LABEL_WEAK,
             "checks": {"b1": b1, "c": c}, "n_periods": n_ho, "first_holdout_date": str(ed[0]),
