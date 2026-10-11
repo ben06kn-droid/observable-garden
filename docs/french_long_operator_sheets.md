@@ -1,4 +1,4 @@
-# French long history: operator sheets (DRAFT; nothing runs before the registration is live)
+# French long history: operator sheets
 
 The registration is `prereg/french-long-history.md`. These sheets name every step, in order:
 - **[H]** steps run on the holdout host, by the author;
@@ -9,10 +9,14 @@ Each needs its own go. Commands are one line each. On the host, packages are ins
 `uv`, never `pip`.
 
 Placeholders, each filled in the go message for its step:
-- `LIVE`: the live commit;
-- `G1`, `G2`: the commits to check out for each session;
+- `LIVE`: the live commit (`756af89`);
+- `G1`, `G2`: the commits the host checks out (H1 ran at G1 = `b541ddf`);
+- `EXPECT`: the commit the box checks out for BOX-B1 (the tip when its go is given);
 - `HOST`, `BOX`: the IPs;
 - `D`: the date.
+
+The host and the box are stopped by the author, from the AWS console or with
+`aws ec2 stop-instances --instance-ids <id>`, **never with `shutdown -h`, and never terminated.**
 
 `W` is `lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl` throughout.
 
@@ -28,25 +32,35 @@ Placeholders, each filled in the go message for its step:
 8. [L] `shasum -a 256 runs/french_long_cuts/b1_insample.csv` (it must equal the record's `csv_sha256`)
 9. [L] Commit the cut record (the JSON: counts, entry dates, hashes; no value). The CSV stays
    gitignored.
-10. [author] Stop the host: `ssh HOST 'sudo shutdown -h now'`
+10. [author] Stop the host from the AWS console or with
+    `aws ec2 stop-instances --instance-ids i-0886a189b85d4d051`.
 
 ## BOX-B1. The B1 in-sample read (one box session; stop and ask at 2 box-hours)
 
-The box checks out G1 exactly. `main` moves on after H1, when the cut record is committed, so
-G1 is not its tip. Before pricing, the runner writes `pins.json` and refuses on a cut-hash
-mismatch.
+The box checks out EXPECT exactly: the tip after H1's record, the seed and consistency
+amendments and these corrections. EXPECT holds the committed cut record, and step 4a
+compares the box's copy with it. Before pricing, the runner writes `pins.json` and refuses
+on a cut-hash mismatch.
 
 1. [author] Start the compute box and send its IP. [L] Set `HostName` of `og-48` to it.
 2. [L] `ssh og-48 'mkdir -p ~/french_long' && scp runs/french_long_cuts/b1_insample.csv runs/french_long_cuts/b1_insample.cut.json og-48:french_long/`
-3. [BOX] `cd ~/observable-garden && git fetch origin && git checkout G1 && git rev-parse HEAD` (must equal G1; if the checkout is blocked by untracked files that match committed blobs, move them aside and record them)
+3. [BOX] `cd ~/observable-garden && git fetch origin && git checkout EXPECT && git rev-parse HEAD` (must equal EXPECT; if the checkout is blocked by untracked files that match committed blobs, move them aside and record them)
 4. [BOX] `git status --porcelain --untracked-files=no | wc -l` (must be 0)
+4a. [BOX] `cmp ~/french_long/b1_insample.cut.json runs/french_long_cuts/b1_insample.cut.json && echo record-identical`
+    (the box's copy against the committed record; **any difference: stop, nothing runs**)
+4b. [BOX] `nproc --all` (record it. The run uses 4 workers × `THREADS=32`; if 128 exceeds it,
+    **stop and ask. Do not change THREADS or `--workers`.**)
 5. [BOX] `echo "d23e922acd891e77212e4d0fbcee9ba973c96dee479491341d05ba595357ebb7  $HOME/$W" | sha256sum -c`
 6. [BOX] `OMP_NUM_THREADS=1 .venv/bin/pytest -q tests/test_french_long_panel.py tests/test_french_long_read.py tests/test_read_french_long.py tests/test_recency.py`
-7. [BOX] `THREADS=32 cloud/run.sh fl_b1 python -m experiments.french_long_read --read b1 --cuts ~/french_long/b1_insample.cut.json --out runs/french_long_b1/D --expect-head G1 --wheel ~/$W --workers 4`
+7. [BOX] `THREADS=32 cloud/run.sh fl_b1 python -m experiments.french_long_read --read b1 --cuts ~/french_long/b1_insample.cut.json --out runs/french_long_b1/D --expect-head EXPECT --wheel ~/$W --workers 4`
 8. [L] `rsync -av og-48:observable-garden/runs/french_long_b1/ runs/french_long_b1/; echo "exit=$?"`
 9. [L] `rsync -av og-48:observable-garden/logs/fl_b1.log runs/french_long_b1/D/; echo "exit=$?"`
-10. [L] `ssh og-48 'sudo shutdown -h now'`
-11. [L] Commit `results.json`, `pins.json` and the run record. Then read once:
+10. [author] Stop the box from the AWS console or with
+    `aws ec2 stop-instances --instance-ids i-0e0c1484de3c755ad`.
+11. [L] Commit `results.json`, `pins.json` and the run record. The run record also holds:
+    `nproc --all`; the note that the runner's docstring says `--workers 6` while the run uses 4;
+    and the check (not a rule) of the cut record's `entry_rule_ii` against `pins.json`'s
+    entry dates. Then read once:
     `.venv/bin/python -m experiments.read_french_long --dir runs/french_long_b1/D`. Commit the
     output unedited and push.
 
