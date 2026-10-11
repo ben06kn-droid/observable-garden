@@ -1,216 +1,237 @@
 # French 49 industries, the long history: DRAFT, NOT LIVE
 
-**Status: DRAFT, NOT LIVE (2026-10-09, America/Chicago).** It is committed for the author's
-reading, and nothing in it binds.
-- **No value before 2008-12-29 has been read.** The rows before 2008-12-29 in the registered
-  file (`prereg/french-panel.md`, section a) were counted from their date field only.
-- No box, host or agent has been used for it.
-- It uses the **recency-weighted certificate**
-  (`prereg/recency-weight-exploratory-2026-10-09.md`, amendment 1 at `190d75e`). That
-  statistic is still under validation (`prereg/recency-weight-planted.md`, not run).
-  **This draft cannot go live before that validation is read.**
+**Status: DRAFT, NOT LIVE.** First drafted 2026-10-09 (America/Chicago), at `18392d5`;
+revised 2026-10-11 with the author's answers (sent by the reviewer; the author confirms or
+overrides them on reading). Nothing in it binds.
+- **No value before 2008-12-29 has been read.** Rows before 2008-12-29 in the registered file
+  were counted from their date field only.
+- **Nothing has run on the box or the host for it.**
+- **Recorded:** the recency validation, round 2, read at `4fb8b73`: "W2 is ADOPTED for
+  weighted reads". The first draft's point 7 (that this draft could not go live before that
+  validation was read) is satisfied.
 
-Points needing the author are marked [AUTHOR].
+Points still needing the author are marked [AUTHOR] and listed at the end.
 
-## a. Data, and the missing-value counts
+## a. Data, start date, entry
 
-- **The same source file as `prereg/french-panel.md`:** the zip with SHA-256
-  `8f394fe34bea54d41b9aafed410425ee8f8e252ede3c71a7c1cd20bab83040de`, the value-weighted
-  daily block. Its rows run from 1926-07-01.
-- **The zip is on the holdout host only.** It was moved there and deleted from the laptop
-  for the French holdout grading (ZIP-DELETE, `a415bde`). So the counts below need a step
-  on the host.
-- **Item a, before any value is read: COUNTS ONLY.** `data/count_french_missing.py`
-  (`f58a97a`, tested on synthetic text) produces:
-  - the number of missing-value flags (−99.99 or −999) per industry per year, for the rows
-    before 2008-12-29;
-  - the first date on which all 49 industries are present;
-  - for each industry, the first date after which it has no gap.
-
-  It compares each cell with the two codes and nothing else. Rows from 2008-12-29 are
-  skipped by their date field before any value is parsed.
-- **[AUTHOR] Where the count runs.** Proposed: on the holdout host, by the author, on the
-  author's go. Only the JSON of counts comes back to the laptop. The commands:
-
-  ```
-  # [H] on the holdout host, at the repository
-  .venv-grading/bin/python -m data.count_french_missing --zip ~/french_holdout/49_Industry_Portfolios_daily_CSV.zip \
-      --out ~/french_missing_counts.json
-  # [L] on the laptop
-  scp HOST:~/french_missing_counts.json runs/french_long_counts/
-  ```
-
-  The alternative is a fresh fetch on the laptop. That would be a different, revised file,
-  and it would put the 1990–1995 and 2020+ rows on the laptop, which custody (section e)
-  forbids.
-- **The start date and the rule for late industries: proposed only after the counts.**
-  [AUTHOR] The two candidates to decide between:
-  - **(i)** start on the first date all 49 are present. The panel is balanced, but it
-    starts later.
-  - **(ii)** start 1926-07-01, with each industry entering on the first date after which
-    it has no gap. Its features are NaN, which maps to 0 as for a dead Binance contract,
-    until it has a full 253-row warm-up. It is never in a book before then.
-- The design numbers (section f) barely depend on this choice under the weights (section f).
+- **The same registered file as `prereg/french-panel.md`:** the zip with SHA-256
+  `8f394fe34bea54d41b9aafed410425ee8f8e252ede3c71a7c1cd20bab83040de`, the value-weighted daily
+  block. It is on the holdout host only.
+- **The start: 1926-07-01, with rule (ii)** (author's answer 1):
+  - each industry enters on the first date after which it has no missing value within the
+    read's window;
+  - from then on it feeds the market series and its own signals;
+  - **it is in no book until its 253-row warm-up is complete.** Until then its features are
+    0, its earned return is 0 and trading it costs nothing, so a weight a demeaned book
+    places on it earns and costs nothing (`environments/french_long_panel.py`, `805f72a`).
+  - **The market series** is the equal-weighted average of the industries that have entered.
+- **The missing-value count is no longer a step before going live** (author's answer 1). The
+  host cut computes and reports it with each cut: counts only, as JSON, with each industry's
+  entry date (section e).
 
 ## b. The two reads
 
 - **B1, first:**
-  - in-sample: the start date to 1989-12-31;
-  - graded on 1990-01-01 to 1995-12-31 (6 years).
+  - in-sample: 1926-07-01 to 1989-12-31, about 63.5 years and 16,000 rows;
+  - graded on 1990-01-01 to 1995-12-31.
 - **B2, second, and only after B1 is graded and its grading committed:**
-  - in-sample: the start date to 2019-12-31;
-  - graded on the existing holdout, 2020-01-01 to the last row of the registered zip.
+  - in-sample: 1926-07-01 to 2019-12-31, about 93.5 years and 23,560 rows;
+  - graded on the existing 2020+ holdout.
   - **Disclosed in B2:** the 2020+ window was opened once before, to grade ridge_stack and
-    class member 2937 (`a415bde`). Its realised returns for those two objects are known. B2's
-    grading is therefore not blind to that window's general behaviour.
-- The 2009–2019 rows were read for `prereg/french-panel.md`. B1 does not include them.
-  B2 does, and says so.
+    class member 2937 (`a415bde`).
+- The 2009–2019 rows were read for `prereg/french-panel.md`. B2 includes them and says so.
 
-## c. What each read tests
+## c. What each read tests, and the certificate
 
-**Each read, the same structure:**
-1. **Sancho** (version 2, as confirmed at `97d2519`: base view, M2, G3, L {1, 3, 10, 30})
-   as one supplied stream, at **d = 1**: the French panel's registered timing (signal at the
-   close of t, held from the close of t+1 to the close of t+2).
-2. **The class tier:** `SubsetClass`, max_size 3, signed, 82,240 members.
-3. **A second stream: Sancho at d = 0, labelled NOT IMPLEMENTABLE.** Signal at the close
-   of t, earning t to t+1, filled at that close. Industry portfolios cannot be traded at
-   their own closing price, so it can never be acted on. It shows how much of the result
-   depends on immediacy. It has its own share of the level, and is never reported without
-   its label.
+**The certificate is on the WEIGHTED statistic under W2** (author's answer 4), h = 1,260 rows:
+- block starts are drawn with probability ∝ w²;
+- the first start is drawn from q, the exact stationary marginal;
+- each stream is centred by its q-weighted mean;
+- weights attach to position.
 
-**The statistic:** the recency-weighted Sharpe, h = 1,260 rows, the fixed centring.
-Reported for each test:
-- p, at both levels;
-- L90 (weighted);
-- the performance line: the unweighted net Sharpe over the last 252 and 756 rows, with 90%
-  intervals; descriptive only.
+The definitions are `prereg/recency-weight-exploratory-2026-10-09.md`,
+`prereg/recency-weight-planted-2.md` and `estimator/recency.py`.
 
-**The split (proposed; [AUTHOR]):**
+**Three tests per read:**
 
 | test | 96% level | 90% level |
 |---|---|---|
-| Sancho stream, d = 1 | p < 0.03 | p < 0.06 |
-| Sancho stream, d = 0, NOT IMPLEMENTABLE | p < 0.01 | p < 0.02 |
-| class tier | p < 0.01 | p < 0.02 |
+| 1. Sancho (version 2, as confirmed at `97d2519`), one supplied stream, **d = 1** (the French timing) | p < 0.03 | p < 0.06 |
+| 2. Sancho, **d = 0, NOT IMPLEMENTABLE** | p < 0.01 | p < 0.02 |
+| 3. the class tier, 82,240 members, at d = 1 | p < 0.01 | p < 0.02 |
 | family-wise | ≤ 5% | ≤ 10% |
 
-**Why this split:**
-- The class keeps its French weight.
-- The d = 0 stream's share comes out of the stream's 0.04. Its certificate could not be
-  acted on, so it gets the smaller share.
-- The cost to the d = 1 stream, from 0.04 to 0.03: its weighted net floor at 80% power
-  rises from 0.67 to 0.71 at 64 years, and from 0.69 to 0.72 at 94 (section f).
+The split was confirmed by the author (answer 2).
+
+**Sancho on this panel:**
+- the base view (P and X; this panel has no volume or funding), h 5, market neutrality,
+  regime always;
+- M2 (rolling 756 and expanding), G3, L {1, 3, 10, 30};
+- positions zero on every row whose earned day is not eligible, applied after the model;
+  learn2 is untouched.
+
+**Printed for each test:**
+- the weighted net Sharpe, p, and both levels' verdicts;
+- the weighted L90, from the W2 null;
+- **beside it:** the UNWEIGHTED statistic, its p and its L90, labelled "unweighted,
+  descriptive, not the certificate". No level is spent on it.
+- **for the streams, the performance line:** the unweighted net Sharpe over the last 252
+  and 756 scored rows, with 90% intervals. Descriptive; it never gates.
+- **block length:** the registered rule (the class rule on the base columns over the whole
+  in-sample window), with the Politis–White median on the last n_eff rows recorded beside it.
+- **for the class,** the best member under the weights, and the unweighted best member
+  beside it.
+
+**The validation's limits, stated beside the certificate wording** (and printed by the reader):
+- W2's size is checked by simulation, on four null shapes (stationary, a volatility shift,
+  and dependence added to the recent or to the old rows), **not proved**;
+- **overshoots of about 10% are not reliably detected** (amendment `8a23368`'s tables: a
+  stream rate of 0.05 against the 4% level is caught with probability 0.35 at n = 2,000 and
+  0.17 at n = 1,000);
+- **the class checks are weak** against small inflations (0.38 at 1.5× the level, n = 2,000).
 
 ## d. Costs
 
 - **As the French panel:** 5 bps one-way per unit of turnover, and 50 bps a year borrow on
-  shorts. **An assumption.**
+  shorts. Charged only on eligible industries. **An assumption.**
 - **Limit, repeated:** industry portfolios are not tradable instruments. On pre-1990 data,
-  5 bps is a paper assumption. Actual costs were far higher for most of that history, and
-  are not modelled. No claim about implementable returns rests on these costs.
+  5 bps is a paper assumption. Actual costs were far higher for most of that history, and are
+  not modelled. No claim about implementable returns rests on them.
 
-## e. Custody
+## e. Custody (author's answer 3)
 
-**[AUTHOR] Proposed, for B1:**
-- **Before B1's in-sample read is committed, no row after 1989-12-31 reaches the laptop.**
-  - On the holdout host, a split script cuts the B1 in-sample CSV (the start date to
-    1989-12-31) from the registered zip. It refuses any row after 1989-12-31, and records
-    the CSV's SHA-256 and row count.
-  - Only that CSV is copied to the laptop.
-- **The B1 grading (1990–1995) runs on the holdout host,** by the author, after B1's
-  in-sample read is committed, with no-restart checks as in the French grading (`4f11f95`).
-- **For B2:** after B1's grading is committed, the host cuts the 1990-01-01 to 2008-12-26
-  rows, with the same refusal past 2019-12-31. The 2009–2019 rows are already on the
-  laptop. The 2020+ rows stay on the host, and B2 is graded there.
-- **The default the author named** (a fetch script that refuses any row after 1989-12-31
-  until B1's commit exists) is this, applied to the registered zip on the host rather than
-  to a new fetch. A new fetch would be a revised file with a different hash.
+- **Every cut is made on the holdout host,** by the author, from the registered zip.
+  - `data/french_long_split.py` (tested on synthetic text) refuses to run until this
+    registration is live, and refuses a zip with any other SHA-256.
+  - It never writes a row outside its window: rows past the window are skipped by their date
+    field before any value is parsed.
+  - It writes, with each cut, a record: the CSV's SHA-256, row count and first and last
+    dates, the missing-value counts per industry per year, the first date all 49 are
+    present, and each industry's entry date by rule (ii). No value is printed.
+- **The cuts:**
+  - `b1`: 1926-07-01 to 1989-12-31. Copied to the laptop and the box for B1.
+  - `b1-holdout`: 1990-01-01 to 1995-12-31. Stays on the host; B1 is graded there.
+  - `b2-extra`: 1990-01-01 to 2008-12-26. Cut and copied **only after B1's grading is
+    committed**.
+- **B2's graded window** is the existing 2020+ holdout CSV on the host, and B2 is graded there.
+- **Each grading** runs on the host, by the author, under a grading registration written after
+  its in-sample read is committed, with no-restart checks as in the French grading (`4f11f95`).
 
-## f. Design numbers by simulation
+## f. Design numbers by simulation, under W2
 
-**Source:** `experiments/french_long_design.py`, committed before its run at `f58a97a`;
-output `runs/french_long_design/2026-10-09` (`6549253`).
-- **Method:** the French 2009–2019 in-sample panel (read already) supplies only its
-  dependence. Gross streams, demeaned so that every null is exact, are row-resampled to each
-  candidate length.
-- **Replicates:** B = 2,000, seeds 708000–708999.
-- **Stream bars:** the mean over 5 panels (a pool base column as the stream), with iid
-  normal beside.
-- **Class bars:** the mean over 3 panels of the weighted class maximum's null.
+**Source:** `experiments/french_long_design_w2.py`, committed before its run at `1a0d712`;
+output `runs/french_long_design_w2/2026-10-11` (`a2720e9`).
+- **Method:** the already-read 2009–2019 French pool supplies only its dependence. Gross
+  streams, demeaned so that every null is exact, are row-resampled to B1's and B2's lengths.
+- **Replicates:** B 2,000; seeds 716000–716999.
+- **Stream bars:** the mean of 5 panels. **Class bars:** the mean of 3.
 - **Power:** net Sharpe at 80% power by Lo's iid formula, over the weighted effective years
-  (weighted) or the window's years (unweighted).
+  (14.4).
 - **Not computed:** no realised mean, Sharpe or p-value.
 
-**B1 is about 64 years if it starts 1926-07; B2 about 94.**
+| test, level (alpha) | B1, 16,000 rows: W2 bar → net 80% | B2, 23,560 rows: W2 bar → net 80% |
+|---|---|---|
+| stream d = 1, 96% (0.03) | 0.493 → **0.715** | 0.502 → **0.724** |
+| stream d = 1, 90% (0.06) | 0.405 → 0.626 | 0.416 → 0.638 |
+| stream d = 0 NOT IMPLEMENTABLE, 96% (0.01) | 0.611 → 0.833 | 0.626 → 0.848 |
+| stream d = 0 NOT IMPLEMENTABLE, 90% (0.02) | 0.540 → 0.761 | 0.551 → 0.772 |
+| class, 96% (0.01) | 1.179 → **1.402** | 1.188 → **1.410** |
+| class, 90% (0.02) | 1.130 → 1.352 | 1.134 → 1.356 |
 
-| length (weighted effective years) | test, alpha | weighted bar → net 80% | unweighted bar → net 80% |
+- **The floor does not move between B1 and B2.** The effective length is 14.4 years for
+  both.
+- **The unweighted statistic** (printed beside, never certifying) would need much less: about
+  0.34 at 64 years and 0.28 at 94, for the d = 1 stream at its 96% level (the superseded table
+  below). **That is the weights' stated cost.**
+
+**Superseded, kept beside: the first draft's table**, under the round-1 fixed centring
+(`f58a97a`, output `6549253`). Its weighted bars agree with W2's within about 0.01.
+
+| length | test, alpha | weighted (fixed centring) bar → net 80% | unweighted bar → net 80% |
 |---|---|---|---|
-| 64 y (14.4) | stream d = 1, 0.03 | 0.490 → **0.711** | 0.236 → 0.341 |
-| | stream d = 1, 0.06 (90%) | 0.401 → 0.623 | 0.197 → 0.303 |
+| 64 y | stream d = 1, 0.03 | 0.490 → 0.711 | 0.236 → 0.341 |
 | | stream d = 0, 0.01 | 0.604 → 0.826 | 0.293 → 0.398 |
-| | stream d = 0, 0.02 (90%) | 0.536 → 0.757 | 0.258 → 0.363 |
-| | class, 0.01 | 1.176 → **1.398** | — |
-| | class, 0.02 (90%) | 1.118 → 1.340 | — |
-| 94 y (14.4) | stream d = 1, 0.03 | 0.503 → **0.724** | 0.191 → 0.278 |
-| | stream d = 1, 0.06 (90%) | 0.423 → 0.645 | 0.159 → 0.246 |
+| | class, 0.01 | 1.176 → 1.398 | — |
+| 94 y | stream d = 1, 0.03 | 0.503 → 0.724 | 0.191 → 0.278 |
 | | stream d = 0, 0.01 | 0.615 → 0.837 | 0.236 → 0.322 |
-| | stream d = 0, 0.02 (90%) | 0.547 → 0.768 | 0.207 → 0.294 |
-| | class, 0.01 | 1.197 → **1.419** | — |
-| | class, 0.02 (90%) | 1.130 → 1.352 | — |
+| | class, 0.01 | 1.197 → 1.419 | — |
 
-The 20- and 40-year rows (for a later start) are in the output. Weighted, the d = 1
-stream's net floor is 0.75 at 20 years and 0.72 at 40.
+## g. Code, tests, smoke and runtime
 
-**What these numbers say:**
-- **The weighted floor stops falling after about 40 years.** The effective length saturates
-  at 14.4 years, so a 94-year history certifies no smaller an edge than a 40-year one.
-- **Against the unweighted statistic, the weights roughly double the floor on long
-  histories:** 0.72 against 0.34 at 64 years, and 0.72 against 0.28 at 94. **This is the
-  weights' stated cost**, measured here. It is much larger than at French's 10 years.
-  - [AUTHOR] Whether the weighted statistic is still wanted for these reads, given that.
-    Both statistics could be reported, with the certificate on one, registered in advance.
-- **The class floor is about 1.40 at 96%.** That is lower than French 2009–2019's 1.85
-  (unweighted, 10 years) and roughly flat across lengths.
-- **Bars from the pool's dependence and from iid returns agree** within about 0.03.
+**All code is written against synthetic data only:**
 
-**Sancho's runtime on the long panel** (an estimate, scaled from the measured Binance fits;
-not measured on this panel):
-- One fit (two memories), 49 industries:
-  - B1, about 64 years: rolling 756 about 2 min, expanding about 14 min, **about 16 min**;
-  - B2, about 94 years: about 3 and 29 min, **about 32 min**.
-- The expanding memory's cost grows with the square of the length. Each refit trains on
-  all rows so far.
-- **A read** is the repeat (two fits) at d = 1 and at d = 0, so four fits:
-  - laptop: about 1.1 h for B1 and 2.2 h for B2, one fit at a time. About 2 GB per fit, so
-    two at once at most on 8 GB;
-  - box: the four fits in parallel, each about 1.7× slower per core: about 27 min for B1
-    and 55 min for B2 of run. No gain beyond 4 workers.
-- **The class tier:** about 30 s per weighted null at these lengths (measured above, B 2,000),
-  plus building the fast kernel's tables for the long panel.
-  - [AUTHOR] At 94 years that table is 82,240 × 23,688 × 2 × 8 bytes = 31 GB. It does not fit
-    the laptop; it fits the box's disk. The planted runner's aggregation to pool rows does
-    not apply to a real panel, whose rows are not drawn from a pool. So the class tier on
-    B2 is a box job, or needs a streaming variant of the kernel.
+| file | what | tests |
+|---|---|---|
+| `environments/french_long_panel.py` | the long panel: rule (ii), eligibility, both timings, costs | `tests/test_french_long_panel.py`, 2 |
+| `data/french_long_split.py` | the host cuts with their counts (refuses until live) | `tests/test_french_long_split.py`, 3 |
+| `estimator/recency.py` | W2, and the class under W2 on a real panel | `tests/test_recency.py`, 12 |
+| `experiments/french_long_read.py` | the B1 and B2 runner (box only; refuses until live) | `tests/test_french_long_read.py`, 3, the whole read end to end on a synthetic panel |
+| `experiments/read_french_long.py` | the reader | `tests/test_read_french_long.py`, 2, made-up results |
 
-## g. Both branches, for each read and each test
+- **Seeds** (block 718000–718099; checked 2026-10-11: NO COLLISION):
+  - B1: 718000 (d = 1 stream), 718001 (d = 0 stream), 718002 (class), 718003 (the
+    performance line);
+  - B2: 718010–718013, in the same order.
+- **The smoke** (`experiments/french_long_smoke.py`, `d8b6f9b`; output `aee0f4a`): cost only, on
+  a synthetic panel of B1's length (16,000 rows, 49 industries, staggered entries; seeds
+  717000–717009), on the laptop, one thread:
+  - one Sancho fit at d = 1: **623 s** (108 rolling, 489 expanding);
+  - the W2 stream test at B 5,000: 7 s; the unweighted one: 74 s;
+  - the class, extrapolated linearly from 1,024 members to 82,240: the fast kernel's table
+    about 46 minutes, the W2 null about 12 minutes; the unweighted null about the same again.
 
-- **Certified, and the bound held on the graded window:** "certified in-sample under the
-  recency weights at the registered weight (96% level, or 90% level, so labelled); its
-  weighted lower bound held on [the graded window]."
+**Box time and cost, estimated from the smoke.** The box runs 1.7× slower per core than the
+laptop under load. The four Sancho fits run in parallel, and the class's matrix products on
+32 threads (speedup assumed 4×, not measured). [AUTHOR]: these estimates are uncertain.
+
+| session | Sancho (4 fits in parallel) | class (table and two nulls) | with setup | box-hours | cost |
+|---|---|---|---|---|---|
+| BOX-B1 | about 18 min | about 30 min | about 60–75 min | about 1.0–1.3 | about $11–15 |
+| BOX-B2 | about 34 min (expanding about 2.2× B1's) | about 45 min | about 95–110 min | about 1.6–1.9 | about $18–21 |
+
+- **BOX-B2 is close to the 2-hour limit.** It stops and asks if its projection passes 2 hours.
+- **Disk:** the class table is about 21 GB for B1 and about 31 GB for B2, on the box's disk.
+
+**The laptop runs nothing for these reads** except tests and the reader (author's answer 5).
+
+## h. Operator sheets
+
+`docs/french_long_operator_sheets.md`:
+- **(H1)** the host cut for B1;
+- **(BOX-B1)** the B1 in-sample run;
+- **(H2)** the B1 grading;
+- **(H3)** the host cut for B2;
+- **(BOX-B2)** the B2 run;
+- **(H4)** the B2 grading.
+
+Commands are one line each, and on the host `uv` is used, never `pip`.
+
+**For the author, in all:** 4 host starts, 12 host commands to paste, and 2 box sessions. Each
+needs its own go.
+
+## i. Both branches, for each read and each test
+
+- **Certified, and the weighted bound held on the graded window:** "certified in-sample under
+  the recency weights (W2) at the registered weight [96% level, or 90% level, so labelled];
+  its weighted lower bound held on [the graded window]."
 - **Certified, and the bound did not hold:** "certified in-sample …; its weighted lower bound
   did not hold on [the graded window] (realised … < bound …)."
-- **Refused:** "refused; consistent with the registered detection floor." The grading still
-  grades it, as on French.
+- **Refused:** "refused; consistent with the registered detection floor." It is still graded,
+  as on French.
 - **The d = 0 stream,** in every branch, carries "NOT IMPLEMENTABLE".
+- **The validation's limits** (section c) are printed beside every certificate.
 
-## [AUTHOR] points
+## Remaining [AUTHOR] points
 
-1. **Where the missing-value count runs** (proposed: the holdout host, by the author).
-2. **The start date and the rule for late industries,** after the counts.
-3. **The three-way split** of the 5% and of the 10%.
-4. **Custody:** the host-side split for B1, and the order for B2.
-5. **Whether the weighted statistic is still wanted for these reads,** given its cost on long
-   histories (section f), or both statistics with the certificate on one.
-6. **The class tier on B2:** the box, or a streaming kernel.
-7. **This draft cannot go live before the recency planted validation is read.**
+1. **Confirm or override** the six answers above, which were sent by the reviewer.
+2. **The pin of X and Sancho's inputs for the long panel.** The panel is built from host cuts
+   that exist only after going live (H1), on the box (Linux). So X cannot be pinned before
+   this registration goes live, as French's was. Proposed: the B1 runner records the
+   SHA-256 of X and of version 2's blocks in its results before pricing. An amendment after
+   H1 could pin them on the box before BOX-B1 instead (an extra short box session).
+3. **The box estimates are uncertain,** especially the class's threading. BOX-B2 may near 2
+   hours.
+4. **The graders** (H2, H4) are written after each in-sample read, under their own grading
+   registrations, as on French.
+5. **The registration is not live.** Going live sets `REGISTRATION` in
+   `data/french_long_split.py` and `experiments/french_long_read.py` by a following commit.
