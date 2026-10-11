@@ -22,11 +22,12 @@ BOX-ETF read): `manifest.json`, `sancho_d1.npz`, `class_scored.npy` and `class_s
   p-value or a verdict (registration section 5).
 
 **The new tools** (registration section 4):
-- `sancho()`: Sancho's stream's two Sharpes and its mean daily turnover, the same text each
+- `baseline_model()`: the model stream's two Sharpes and its mean daily turnover, the same text each
   call;
-- `submit_candidate(kind)`: fixes the candidate ("rule": the best support reached; "sancho").
-  **In arm B only,** it adds the gate's weighted L90, S_w − quantile(null, 0.90): the class's W2
-  maxima for a rule, the stream's own W2 null for Sancho;
+- `submit_candidate(kind)`: fixes the candidate ("rule": the best support reached; "baseline_model").
+  **In arm B only,** it adds the gate's UNWEIGHTED L90, S − quantile(null, 0.90): the class's
+  unweighted null maxima for a rule, the model stream's own unweighted null for the model stream
+  (registration section 0: the unweighted statistic is primary everywhere in the cell);
 - `predict(mean, sd, note)`: required before `confirm`; sd ≥ 0;
 - `confirm()`: ends the session and writes the `submit` event.
 
@@ -70,7 +71,7 @@ SMOKE_RUNS = 5
 PER_ARM = 40
 GRAMMAR_TOOLS = ("pick_prior", "declare_triggers", "change_trigger", "init", "extend_best",
                  "swap_worst", "flip", "refine", "pick", "stop", "restart")
-CELL_TOOLS = ("sancho", "submit_candidate", "predict", "confirm")
+CELL_TOOLS = ("baseline_model", "submit_candidate", "predict", "confirm")
 TOOLS = GRAMMAR_TOOLS + CELL_TOOLS
 # The cell's own refusal kinds (the grammar's are agent_backend.REFUSAL_KINDS).
 CELL_REFUSALS = ("candidate_fixed", "no_candidate", "bad_kind", "bad_sd", "predict_required",
@@ -130,11 +131,13 @@ class Precompute:
         last = self.manifest.get("last_earned")
         if (dates and max(dates) > LAST_IN_SAMPLE) or (last and dt.date.fromisoformat(last) > LAST_IN_SAMPLE):
             raise Refused("the precompute holds a date after 2024-12-31")
-        self.sancho = {"S_w": float(s["S_w"]), "S_unw": float(s["S_unw"]),
-                       "turnover": float(s["turnover_mean"]), "null_w2": np.asarray(s["null_w2"], float)}
+        self.model = {"S_w": float(s["S_w"]), "S_unw": float(s["S_unw"]),
+                      "turnover": float(s["turnover_mean"]), "null_w2": np.asarray(s["null_w2"], float),
+                      "null_unw": np.asarray(s["null_unw"], float)}
         self.S_w = np.asarray(c["S_w"], float)
         self.S_unw = np.asarray(c["S_unw"], float)
         self.class_null_w2 = np.asarray(c["null_w2_max"], float)
+        self.class_null_unw = np.asarray(c["null_unw_max"], float)
         self.streams = np.load(self.dir / "class_scored.npy", mmap_mode="r")
         self.members = members_in_order(CLS, K)
         if not (len(self.members) == len(self.S_w) == len(self.S_unw) == self.streams.shape[0]):
@@ -154,10 +157,12 @@ class Precompute:
             raise Refused("that rule is outside the declared class") from None
 
     def l90_rule(self, support) -> float:
-        return float(self.S_w[self.idx(support)] - np.quantile(self.class_null_w2, 0.90))
+        """The unweighted L90 (section 0): S − quantile(class unweighted null maxima, 0.90)."""
+        return float(self.S_unw[self.idx(support)] - np.quantile(self.class_null_unw, 0.90))
 
-    def l90_sancho(self) -> float:
-        return float(self.sancho["S_w"] - np.quantile(self.sancho["null_w2"], 0.90))
+    def l90_model(self) -> float:
+        """The model stream's unweighted L90: S − quantile(its unweighted null, 0.90)."""
+        return float(self.model["S_unw"] - np.quantile(self.model["null_unw"], 0.90))
 
 
 def _two(S_unw: float, S_w: float) -> str:
@@ -240,17 +245,17 @@ class CellSession:
 
     # -- the cell's own tools ----------------------------------------------------------------
 
-    def _sancho(self) -> str:
-        s = self.pre.sancho
+    def _baseline_model(self) -> str:
+        s = self.pre.model
         if self.rec is not None:
-            self.rec.log("sancho_call")
-        return f"Sancho stream: {_two(s['S_unw'], s['S_w'])}; mean daily turnover {s['turnover']:.3f}."
+            self.rec.log("baseline_model_call")
+        return f"Baseline model stream: {_two(s['S_unw'], s['S_w'])}; mean daily turnover {s['turnover']:.3f}."
 
     def _submit_candidate(self, kind: str = "") -> str:
         if self.candidate is not None:
             raise Refused("candidate_fixed: a candidate is already fixed")
-        if kind not in ("rule", "sancho"):
-            raise Refused('bad_kind: kind must be "rule" or "sancho"')
+        if kind not in ("rule", "baseline_model"):
+            raise Refused('bad_kind: kind must be "rule" or "baseline_model"')
         st = self.tools.session
         if kind == "rule":
             support, _ = st.submission()
@@ -261,9 +266,9 @@ class CellSession:
                     "S_w": float(self.pre.S_w[i]), "S_unw": float(self.pre.S_unw[i]),
                     "L90": self.pre.l90_rule(support)}
         else:
-            s = self.pre.sancho
-            cand = {"kind": "sancho", "support": None, "S_w": s["S_w"], "S_unw": s["S_unw"],
-                    "L90": self.pre.l90_sancho()}
+            s = self.pre.model
+            cand = {"kind": "baseline_model", "support": None, "S_w": s["S_w"], "S_unw": s["S_unw"],
+                    "L90": self.pre.l90_model()}
         if not self.tools.submitted:                 # closes the grammar session; its log is kept
             try:
                 self.tools.call("submit")
@@ -272,10 +277,10 @@ class CellSession:
         if self.rec is not None:
             self.rec.log("candidate", candidate_kind=cand["kind"], support=cand["support"])
         self.candidate = cand
-        head = "rule " + _support(cand["support"]) if kind == "rule" else "the pre-built stream"
+        head = "rule " + _support(cand["support"]) if kind == "rule" else "the baseline model stream"
         text = f"Candidate fixed: {head}. {_two(cand['S_unw'], cand['S_w'])}."
         if self.arm == "B":
-            text += f"\nGate's 90% lower bound (weighted) for this candidate: L90 = {cand['L90']:.3f}."
+            text += f"\nGate's 90% lower bound for this candidate: L90 = {cand['L90']:.3f}."
         return text
 
     def _predict(self, mean=None, sd=None, note: str = "") -> str:
@@ -335,7 +340,7 @@ def mcp_handlers(cell: CellSession, prompts: dict) -> list:
                "declare_triggers": {"triggers": list},
                "change_trigger": {"trigger": str, "param": float, "action": str, "reason": str},
                "pick_prior": {"features": list[int], "signs": list[int], "reason": str},
-               "sancho": {}, "submit_candidate": {"kind": str},
+               "baseline_model": {}, "submit_candidate": {"kind": str},
                "predict": {"mean": float, "sd": float, "note": str}, "confirm": {}}
     out = []
     for name in TOOLS:

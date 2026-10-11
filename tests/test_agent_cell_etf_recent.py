@@ -25,10 +25,13 @@ def _write_pre(d: Path, last=dt.date(2024, 12, 31), seed=7):
     S_unw = X.mean(1) / X.std(1, ddof=1) * np.sqrt(252)
     np.savez(d / "class_stats.npz", S_w=0.9 * S_unw, S_unw=S_unw, null_w2_max=rng.normal(1.5, 0.2, B),
              null_unw_max=rng.normal(1.4, 0.2, B), null_unw_argmax=rng.integers(0, N, B),
-             null_unw_S_at_argmax=rng.normal(1.4, 0.2, B), members_sha256="synthetic", seed=721002)
+             null_unw_S_at_argmax=rng.normal(1.4, 0.2, B), null_unw_undemeaned_argmax=rng.integers(0, N, B),
+             null_unw_undemeaned_S_at_argmax=rng.normal(1.6, 0.2, B), joint_unw_max=rng.normal(1.45, 0.2, B),
+             members_sha256="synthetic", seed=721002)
     ed = [str(last - dt.timedelta(days=T - 1 - i)) for i in range(T)]
     np.savez(d / "sancho_d1.npz", stream=rng.standard_normal(T) * 0.01, earned_dates=np.array(ed),
-             turnover_mean=0.123, S_w=0.8, S_unw=0.7, null_w2=rng.normal(0.4, 0.2, B), seed=721000)
+             turnover_mean=0.123, S_w=0.8, S_unw=0.7, null_w2=rng.normal(0.4, 0.2, B),
+             null_unw=rng.normal(0.3, 0.2, B), seed=721000)
     man = {"registration": "synthetic", "T_scored": T, "N": N, "B": B, "first_earned": ed[0], "last_earned": ed[-1],
            "sha256": {f: hashlib.sha256((d / f).read_bytes()).hexdigest() for f in E.FILES}}
     (d / "manifest.json").write_text(json.dumps(man))
@@ -48,7 +51,7 @@ def pre(pre_dir):
 SCRIPT = [("declare_triggers", {"triggers": [{"trigger": "failures_at_least", "param": 2, "action": "stop"}]}),
           ("init", {}), ("extend_best", {}), ("swap_worst", {}), ("refine", {}),
           ("pick", {"among": [1, 2, 3], "statistic": "sharpe"}), ("flip", {"feature": 99}),
-          ("sancho", {}), ("sancho", {})]
+          ("baseline_model", {}), ("baseline_model", {})]
 
 
 def _session(pre, arm, kind="rule"):
@@ -68,7 +71,7 @@ def _submission(rec):
 
 
 def test_tool_outputs_and_the_arm_b_line(pre):
-    for kind in ("rule", "sancho"):
+    for kind in ("rule", "baseline_model"):
         ca, ra = _session(pre, "A", kind)
         cb, rb = _session(pre, "B", kind)
         sa, sb = _submission(ra), _submission(rb)
@@ -77,17 +80,18 @@ def test_tool_outputs_and_the_arm_b_line(pre):
         assert sa["predict"] == {"mean": 0.4, "sd": 0.3, "note": "n"}
         la = [o for o in ca.outputs if o.startswith("Candidate fixed")][0]
         lb = [o for o in cb.outputs if o.startswith("Candidate fixed")][0]
-        assert "L90" not in la and "Gate's 90% lower bound (weighted) for this candidate: L90 = " in lb
+        assert "L90" not in la and "Gate's 90% lower bound for this candidate: L90 = " in lb
+        assert "weighted" not in lb.split("\n")[1]       # the unweighted L90 (section 0)
         assert lb.split("\n")[0] == la                    # B = A plus one line
         assert not any("L90" in o for o in cb.outputs if not o.startswith("Candidate fixed"))
-        if kind == "sancho":
+        if kind == "baseline_model":
             assert sa["support"] is None
-            assert cb.candidate["L90"] == pytest.approx(0.8 - np.quantile(pre.sancho["null_w2"], 0.9))
+            assert cb.candidate["L90"] == pytest.approx(0.7 - np.quantile(pre.model["null_unw"], 0.9))
         else:
             i = pre.idx(sa["support"])
-            assert cb.candidate["L90"] == pytest.approx(pre.S_w[i] - np.quantile(pre.class_null_w2, 0.9))
+            assert cb.candidate["L90"] == pytest.approx(pre.S_unw[i] - np.quantile(pre.class_null_unw, 0.9))
             assert sa["candidate_S_unw"] == pytest.approx(pre.S_unw[i])
-    s = [o for o in ca.outputs if o.startswith("Sancho stream:")]
+    s = [o for o in ca.outputs if o.startswith("Baseline model stream:")]
     assert len(s) == 2 and s[0] == s[1] and "0.700" in s[0] and "0.800" in s[0] and "0.123" in s[0]
     assert any("Sharpe (all years equal)" in o and "Sharpe (recent years weighted)" in o
                for o in ca.outputs if o.startswith("init kept"))
@@ -100,13 +104,13 @@ def test_the_flow_refusals(pre):
     assert cell.call("confirm").startswith("Refused: candidate_required")
     assert cell.call("submit_candidate", kind="rule").startswith("Refused: no_candidate")
     assert cell.call("submit_candidate", kind="other").startswith("Refused: bad_kind")
-    cell.call("submit_candidate", kind="sancho")
+    cell.call("submit_candidate", kind="baseline_model")
     assert cell.call("confirm").startswith("Refused: predict_required")
     assert cell.call("predict", mean=0.1, sd=-1).startswith("Refused: bad_sd")
     assert cell.call("submit_candidate", kind="rule").startswith("Refused: candidate_fixed")
     cell.call("predict", mean=0.1, sd=0.0)
     assert cell.call("confirm") == "confirmed; the session is over"
-    assert cell.call("sancho").startswith("Refused: after_confirm")
+    assert cell.call("baseline_model").startswith("Refused: after_confirm")
     assert cell.call("evaluate").startswith("Refused")
 
 
@@ -120,15 +124,24 @@ def test_prompts_byte_identical_and_complete():
 
 FORBIDDEN = [r"p-value", r"\bp =", r"\balpha\b", r"critical", r"\bnull\b", r"certif", r"verdict",
              r"\barms?\b", r"\bETFs?\b", r"\b(38|40)\s+(ETFs?|instruments|assets|funds)\b",
-             r"\d{4}-\d{2}-\d{2}", r"(?<![\d.])(19|20)\d{2}(?!\d)"]
+             r"\d{4}-\d{2}-\d{2}", r"(?<![\d.])(19|20)\d{2}(?!\d)",
+             r"sancho"]                                   # the codename (decision 11), any case
 
 
 def _all_text(pre):
     p = E.read_prompts()
     texts = [E.system_prompt("A", p)] + [p[f"tool:{t}"] for t in E.TOOLS]
     for arm in ("A", "B"):
-        for kind in ("rule", "sancho"):
+        for kind in ("rule", "baseline_model"):
             texts += _session(pre, arm, kind)[0].outputs
+        cell = E.CellSession(pre, arm, RunRecord(run_id="r", arm=arm, seed=2))      # refusal texts
+        texts += [cell.call("confirm"), cell.call("submit_candidate", kind="rule"),
+                  cell.call("submit_candidate", kind="other"), cell.call("predict", mean=0.1, sd=0.1)]
+        cell.call("submit_candidate", kind="baseline_model")
+        texts += [cell.call("predict", mean=0.1, sd=-1), cell.call("submit_candidate", kind="rule"), cell.call("init")]
+        cell.call("predict", mean=0.1, sd=0.1)
+        cell.call("confirm")
+        texts += [cell.call("baseline_model"), cell.call("evaluate")]
     return texts
 
 
@@ -168,7 +181,7 @@ def test_leaks_no_row_after_2024(tmp_path):
 def test_a_tampered_file_is_refused(tmp_path):
     d = _write_pre(tmp_path / "tamper" / "precompute")
     np.savez(d / "sancho_d1.npz", stream=np.zeros(T), earned_dates=np.array(["2024-01-02"]), turnover_mean=0.0,
-             S_w=9.0, S_unw=9.0, null_w2=np.zeros(B), seed=0)
+             S_w=9.0, S_unw=9.0, null_w2=np.zeros(B), null_unw=np.zeros(B), seed=0)
     with pytest.raises(E.Refused, match="manifest"):
         E.Precompute(d)
 
