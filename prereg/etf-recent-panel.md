@@ -489,3 +489,25 @@ output `runs/etf_recent_design_2010/2026-10-11`; laptop, 162 s. Outcome-free.
 
   Why was not investigated. More dependence, or more alike members, in the 2010+ pool would each
   explain it. The higher bars are part of the stated cost of amendment 2.
+
+## Amendment 3, 2026-10-11 (America/Chicago): the stream tests' block length on the scored rows
+
+Made before BOX-ETF, before any in-sample value of this panel has been read.
+
+1. **The block length of the stream tests (tests 1 and 2) is computed on the scored rows only,**
+   2015-01-02..2024-12-31.
+   - It is the class rule on the base feature columns of those rows.
+   - This replaces section d's "the class rule on the base columns over the whole in-sample
+     window".
+   - The Politis–White median on the last n_eff rows stays beside it, also within the scored rows.
+   - **The reason:** amendment 2 lets nothing outside the scored window enter a test or a
+     bootstrap. The runner at `f7bcb27` already computes it this way. This amendment records it.
+2. **Why the recomputed bars differ from the superseded choice-B column** (amendment 2, item 6,
+   against section h). Choice B had the same 2,516 scored rows and the same rule. **What changed
+   is the design pool:**
+   - section h used the 2006–2017 ETF recency pool (40 ETFs, 3,019 rows);
+   - amendment 2's numbers use a 2010–2022 pool of this panel's 38 ETFs (3,017 rows).
+
+   The rule did not change.
+
+Nothing else changes.
