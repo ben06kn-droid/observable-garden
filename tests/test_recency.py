@@ -143,3 +143,16 @@ def test_w2_differs_from_the_uniform_draw_and_r15_uses_the_last_rows():
     assert a["S"] == b["S"] and not np.allclose(a["null_max"], b["null_max"]) and a["null"] == "W2"
     r = Rc.stream_test_r15(s, bc, 252.0, 150, 4)
     assert r["window_rows"] == 3780 and r["S"] == pytest.approx(s[-3780:].mean() / s[-3780:].std(ddof=1) * np.sqrt(252))
+
+
+def test_the_class_w2_null_equals_the_direct_computation():
+    rng = np.random.default_rng(12)
+    T, N, L, Bn = 300, 12, 3, 40
+    X = 0.01 * rng.standard_normal((N, T))
+    obs, M = Rc.class_null_w2([X[:5], X[5:]], T, L, 252.0, Bn, 21, 100.0)
+    w = Rc.weights(T, 100.0)
+    pi, q = Rc.w2_pi_q(w, L)
+    r = np.random.default_rng(21)
+    idx = [Rc.w2_indices(T, L, pi, q, r) for _ in range(Bn)]
+    M2 = np.array([max(Rc.weighted_sharpe((x - q @ x)[I], w, 252.0) for x in X) for I in idx])
+    assert np.allclose(M, M2, rtol=1e-9) and np.allclose(obs, [Rc.weighted_sharpe(x, w, 252.0) for x in X])

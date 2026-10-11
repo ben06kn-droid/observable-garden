@@ -255,3 +255,25 @@ def stream_test_r15(stream: np.ndarray, base_columns: np.ndarray, ppy: float, B:
     r = stream_test(x, L, ppy, B, seed)
     r.update({"window_rows": int(len(x)), "null": "R15 (unweighted, last rows)"})
     return r
+
+
+def class_null_w2(X_chunks, T: int, L: int, ppy: float, B: int, seed: int, h: float):
+    """(observed weighted Sharpe of every member, replicate maxima) under W2 on a real panel:
+    the same W2 index sets for every member, each centred by its q-weighted mean."""
+    w = weights(T, h)
+    V1, V2 = w.sum(), (w * w).sum()
+    pi, q = w2_pi_q(w, L)
+    rng = np.random.default_rng(seed)
+    W = weighted_counts([w2_indices(T, L, pi, q, rng) for _ in range(B)], w)
+    ann, den = np.sqrt(ppy), V1 - V2 / V1
+    obs, M_b = [], np.full(B, -np.inf)
+    for X in X_chunks:
+        X = np.asarray(X, float)
+        m_obs = (X @ w) / V1
+        v_obs = ((X - m_obs[:, None]) ** 2 @ w) / den
+        obs.append(np.where(v_obs > 0, m_obs / np.sqrt(np.where(v_obs > 0, v_obs, 1.0)), 0.0) * ann)
+        X0 = X - (X @ q)[:, None]
+        mean = (X0 @ W) / V1
+        var = ((X0 * X0) @ W - V1 * mean * mean) / den
+        M_b = np.maximum(M_b, (np.where(var > 0, mean / np.sqrt(np.where(var > 0, var, 1.0)), 0.0) * ann).max(axis=0))
+    return np.concatenate(obs), M_b
