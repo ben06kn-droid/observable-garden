@@ -413,3 +413,39 @@ over the sessions of 2005-01-03 to 2014-12-31 that have a non-null volume.
     2005–2014 medians.
 
 Nothing else changes.
+
+## Amendment 2 (2026-10-11, America/Chicago): rows from 2010 only; every
+## test scored on 2015-2024
+
+Made before any in-sample value of this panel has been read by the runner.
+The cut (ad233e7) is unchanged.
+
+1. Rows used. No row dated before 2010-01-04 enters any feature, market
+   series, warm-up, training set, test or bootstrap. The cut files still hold
+   2005-2009; the runner drops those rows by date before any computation and
+   records how many it dropped.
+2. Section c is replaced. The 253-row warm-up starts at 2010-01-04. Sancho's
+   walk-forward starts at its usual first scored feature row, counted from
+   the first feature row (about early 2014); its rows before 2015-01-02 are
+   computed and not scored. The scored window for all three tests is earned
+   dates 2015-01-02 to 2024-12-31. Choice A is withdrawn. This is choice B
+   with the training start moved from 2005 to 2010.
+3. The class tier runs on the scored window only.
+4. Unchanged: the universe and its formation (section b), applied at the cut
+   before this amendment; the three tests and the split; the W2 certificate
+   at h = 1,260, with the 90% level always labelled; costs; custody; the
+   holdout, 2025-01-01 to the last fetched session (2026-10-09); the graded
+   quantity and rule; the second grading on 2028-01-03; amendment 1.
+5. Disclosed: the universe was formed on 2005-2014 volume and completeness.
+   That is the only use of pre-2010 rows, and it was made at the cut.
+6. Design numbers are recomputed, outcome-free, under these windows and
+   appended before the run. The earlier table is kept beside, labelled
+   superseded.
+7. When the holdout is graded. Not before the sessions of
+   prereg/agent-cell-etf-recent.md are complete and committed. One host
+   session then grades this panel's three objects and every agent submission.
+   Until then no 2025+ value is computed for any purpose.
+8. Reason and cost. The author's decision of 2026-10-11: no work from here
+   on uses data before 2010, and strategies are developed on 2015-2024. The
+   scored window is shorter and Sancho has less training data, so power is
+   lower. That cost is accepted.
