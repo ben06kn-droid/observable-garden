@@ -1,6 +1,10 @@
 # ETF recent panel: Sancho on liquid ETFs with a recent holdout, a registration
 
-**Status: DRAFT, NOT LIVE (2026-10-11, America/Chicago).** For the author's review.
+**Status: LIVE, 2026-10-11 (America/Chicago).**
+- The author confirmed points 1–11 (answers at `bc547b6`, with the no-data rule fixed at
+  `66559aa`). This status is set in a commit touching only this file.
+- The fetch script, the cut, the runner and the reader are written after this commit. Each
+  refuses to run unless it is an ancestor of HEAD.
 - **Nothing has been fetched.** Nothing has run on the holdout host or the box.
 - The only run was the laptop design script of section h, outcome-free, on the already-read
   pool: script `bf90274`, output `717e1a9`.
