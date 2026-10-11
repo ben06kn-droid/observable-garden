@@ -86,6 +86,10 @@ what it writes.
     - checks each CSV's SHA-256 and the combined SHA-256 against the record;
     - confirms the CSVs are gitignored;
     - commits **only the record**, with a run record.
+    - **The run record states (the author, 2026-10-11):** holdout fields are tokenised as text,
+      hashed and written, and never parsed to numbers on any machine but the host's grader.
+    - Both the fetch and the cut tokenise the raw responses whole. The cut converts to numbers
+      only rows dated before 2025-01-01, and counts later rows from their timestamps alone.
 
 **The B1 holdout cut and grading**
 
@@ -121,6 +125,13 @@ what it writes.
     - Then `ssh -o ConnectTimeout=10 og-holdout true` must time out.
     - The stop time goes in the run record.
 20. [L] Commit `grades.json`, the log, the holdout cut record and the run record before the read.
+    - **The run record states (the author, 2026-10-11):** no wheel file exists on the host, so
+      the grader's wheel check is dropped. Standing in for it:
+      - LightGBM 4.7.0 with `lib_lightgbm.so` SHA-256 `573d57e8…616a` (step 14 and the grader);
+      - the `learn2/` blobs equal to the confirmation's;
+      - Linux x86_64;
+      - HEAD equal to G, with a clean tracked tree;
+      - both registrations (`756af89`, `00417de`) ancestors of HEAD.
     Then read once:
     `.venv/bin/python -m experiments.read_french_long_grade --dir runs/french_long_b1_grade/D`.
     Commit its output unedited, and push.
