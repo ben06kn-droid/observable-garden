@@ -144,6 +144,45 @@ def test_the_read_end_to_end_on_a_synthetic_cut(synth, tmp_path, monkeypatch):
         assert t["first_earned"] == str(dates[SCORE0]) and t["last_earned"] == str(dates[-1])
         assert t["n_rows"] == T - SCORE0
     assert rec["rows_dropped_before_2010"] == DROP
+    # the agent cell's precompute: files, shapes, manifest hashes, values equal to results.json
+    pdir = out / "precompute"
+    man = json.loads((pdir / "manifest.json").read_text())
+    assert rec["precompute"]["manifest_sha256"] == hashlib.sha256((pdir / "manifest.json").read_bytes()).hexdigest()
+    for f, h in man["sha256"].items():
+        assert hashlib.sha256((pdir / f).read_bytes()).hexdigest() == h, f
+    assert man["registration"] == ER.REGISTRATION and man["git_head"] == "x"
+    n_sc = T - SCORE0
+    assert man["T_scored"] == n_sc and man["N"] == 128 and man["B"] == 120
+    assert man["first_earned"] == str(dates[SCORE0]) and man["last_earned"] == str(dates[-1])
+    sa = np.load(pdir / "sancho_d1.npz")
+    assert sa["stream"].shape == (n_sc,) and sa["null_w2"].shape == (120,) and int(sa["seed"]) == 721000
+    assert float(sa["S_w"]) == t1["weighted_W2"]["S"] and float(sa["S_unw"]) == t1["unweighted"]["S"]
+    assert str(sa["earned_dates"][0]) == str(dates[SCORE0]) and float(sa["turnover_mean"]) > 0
+    from estimator import recency as Rc
+    assert np.isclose(Rc.weighted_sharpe(sa["stream"], Rc.weights(n_sc, 1260), 252.0), t1["weighted_W2"]["S"])
+    cs = np.load(pdir / "class_stats.npz")
+    G = np.load(pdir / "class_scored.npy", mmap_mode="r")
+    assert G.shape == (128, n_sc) and cs["S_w"].shape == cs["S_unw"].shape == (128,)
+    assert cs["null_w2_max"].shape == cs["null_unw_max"].shape == cs["null_unw_argmax"].shape == (120,)
+    assert int(np.argmax(cs["S_w"])) == t3["weighted_W2"]["best_member"]["index"]
+    assert float(cs["S_w"].max()) == t3["weighted_W2"]["S"] and float(cs["S_unw"].max()) == t3["unweighted"]["S"]
+    j = t3["weighted_W2"]["best_member"]["index"]                      # row j is member j's scored stream
+    assert np.isclose(Rc.weighted_sharpe(np.asarray(G[j]), Rc.weights(n_sc, 1260), 252.0), cs["S_w"][j])
+    sd = np.asarray(G).std(axis=1, ddof=1)
+    S_unw = np.where(sd > 0, np.asarray(G).mean(axis=1) / np.where(sd > 0, sd, 1.0), 0.0) * np.sqrt(252.0)
+    assert np.allclose(S_unw, cs["S_unw"])
+    assert np.all(cs["null_unw_argmax"] >= 0) and np.array_equal(cs["null_unw_S_at_argmax"], cs["null_unw_max"])
+    p_unw = (1 + int(np.sum(cs["null_unw_max"] >= t3["unweighted"]["S"]))) / 121
+    assert p_unw == t3["unweighted"]["p"]
+    p_w = (1 + int(np.sum(cs["null_w2_max"] >= t3["weighted_W2"]["S"]))) / 121
+    assert p_w == t3["weighted_W2"]["p"]
+    assert cs["null_unw_undemeaned_argmax"].shape == cs["null_unw_undemeaned_S_at_argmax"].shape == (120,)
+    from environments.planted_panel import CLS
+    from environments.real_sandbox import RealSandbox
+    bcs = np.load(pdir / "base_columns.npy")
+    pan, _ = ER.sancho_inputs(*ER.load_from(ER.check_cut(cut)[2], use_from=dates[DROP], last=dates[-1])[:4], lag=2)
+    ref_bc = np.asarray(RealSandbox(pan, spec_class=CLS).base_feature_columns(), float)[ER.scored_index(pan)]
+    assert bcs.shape == (n_sc, ref_bc.shape[1]) and np.array_equal(bcs, ref_bc)
     for t in (t1, t2, t3):
         assert 0 < t["weighted_W2"]["p"] <= 1 and t["unweighted"]["label"] == FL.UNWEIGHTED_LABEL
     assert "cost_10bps_beside" in t1 and set(t1["performance_line"]["lines"]) == {"252", "756"}
@@ -176,3 +215,43 @@ def test_rows_before_the_cutoff_are_never_parsed_and_x_ignores_them(synth, tmp_p
     assert pa.meta["dates"][0] == dates[DROP + ER.WARM]
     with pytest.raises(ValueError):                              # the poison would fail any parse
         ER.load_from(ER.check_cut(pois)[2], use_from=dates[0], last=dates[-1])
+
+
+def test_price_class_argmax_equals_french_price_class(synth, tmp_path):
+    """The precompute's unweighted class pricing is `french_insample_read.price_class`, arithmetic
+    unchanged: the same S, p, L90 and best member, plus each replicate's argmax, which attains it."""
+    import environments.planted_fast as pf
+    from environments.class_table import members_in_order
+    from environments.planted_panel import CLS
+    from environments.real_sandbox import RealSandbox
+    from experiments import french_insample_read as FR
+    dates, tickers, P, Vol = synth
+    panel, _ = ER.etf_panel(dates, tickers, P, Vol, lag=2)
+    members = members_in_order(CLS, 40)[:96]
+    cache = pf.build(panel, members, name="argmax-test", cache_dir=tmp_path / "c")
+    bc = np.asarray(RealSandbox(panel, spec_class=CLS).base_feature_columns(), float)
+    ref = FR.price_class(panel, cache, bc, 721002, 80, 0.01, panel.feature_names)
+    store = np.zeros((cache.N, panel.features.shape[0]))
+    got = ER.price_class_argmax(panel, cache, bc, 721002, 80, 0.01, panel.feature_names, store=store)
+    for k in ("S", "p", "L90", "block_length", "certified"):
+        assert got[k] == ref[k], k
+    assert got["best_member"] == ref["best_member"]
+    M, arg = got["_null_max"], got["_argmax"]
+    assert np.all((arg >= 0) & (arg < cache.N))
+    F = pf.feature_returns(panel)
+    assert np.array_equal(store, pf.streams(cache, F, 0, cache.N))
+    assert np.allclose(got["_S_all"], pf._sharpe_rows(store, np.sqrt(252.0)))
+    # EB's un-demeaned replicate argmax, recomputed directly from the stored streams and the same C
+    from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
+    T = store.shape[1]
+    L = int(select_block_length(bc - bc.mean(axis=0)))
+    rng = np.random.default_rng(721002)
+    C = np.empty((T, 80))
+    for b in range(80):
+        C[:, b] = np.bincount(stationary_bootstrap_indices(T, L, rng), minlength=T)
+    for b in (0, 7, 41, 79):
+        m = (store @ C[:, b]) / T
+        v = ((store * store) @ C[:, b] - T * m * m) / (T - 1)
+        sb = np.where(v > 0, m / np.sqrt(np.where(v > 0, v, 1.0)), 0.0) * np.sqrt(252.0)
+        assert int(np.argmax(sb)) == int(got["_u_argmax"][b])
+        assert np.isclose(sb.max(), got["_u_max"][b])

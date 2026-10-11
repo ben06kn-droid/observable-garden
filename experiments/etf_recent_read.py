@@ -34,6 +34,20 @@ the embargo h + 1 + d: feature row 763 at d = 1, 762 at d = 0.
   - the block length (the class rule on the base columns), the W2 weights, the performance line
     and the 10 bps line all use the scored rows only.
 
+**The agent cell's precompute** (`prereg/agent-cell-etf-recent.md`, section 12), written to
+`<out>/precompute/` from the arrays the read already computes. It changes no registered statistic:
+- `sancho_d1.npz`: test 1's scored net stream, its earned dates, the mean daily turnover on the
+  continuous book, S_w and S_unw, and test 1's W2 null maxima (seed 721000);
+- `class_scored.npy`: every member's net stream on the scored rows, (N, T_scored), member order
+  `members_in_order(CLS, 40)`, written chunk by chunk as a memmap;
+- `class_stats.npz`: every member's S_w and S_unw; the class's W2 null maxima; the unweighted
+  null maxima with each replicate's argmax member and its value; and, for EB
+  (`prereg/point-estimate.md`), the argmax m_b and S*_b(m_b) on the UN-DEMEANED replicates (the
+  same index counts, seed 721002);
+- `base_columns.npy`: the scored rows' base feature columns, not demeaned;
+- `manifest.json`, written last: the SHA-256 of each file. Its own SHA-256 goes into
+  results.json.
+
 In this order:
   0. pins.json, before any fit or pricing call: the SHA-256 of each CSV and the combined one,
      of X (the 40 features) and of Sancho's inputs (P, X, V and the groups), both timings;
@@ -298,8 +312,9 @@ def scored_net(book, inp, first: int, idx: np.ndarray, cost_mult: float = 1.0) -
     return s[idx - first]
 
 
-def stream_block_scored(panel, inp, book, first, idx, seed: int, alphas, label: str) -> dict:
-    """`french_long_read.stream_block` on the scored rows only."""
+def stream_block_scored(panel, inp, book, first, idx, seed: int, alphas, label: str, extras: dict | None = None) -> dict:
+    """`french_long_read.stream_block` on the scored rows only. `extras`, if given, receives the
+    scored stream, its W2 null maxima and both Sharpes (the agent cell's precompute)."""
     from environments.planted_panel import CLS
     from environments.real_sandbox import RealSandbox
     from estimator import recency as Rc
@@ -315,6 +330,10 @@ def stream_block_scored(panel, inp, book, first, idx, seed: int, alphas, label: 
     wt = Rc.stream_test_w2(s, L, inp.ppy, FL.B, seed, h=FL.H)
     un = Rc.stream_test(s, L, inp.ppy, FL.B, seed)
     ed = panel.meta["earned_dates"]
+    if extras is not None:
+        extras.update({"stream": np.asarray(s, float), "null_w2": np.asarray(wt["null_max"], float),
+                       "S_w": float(wt["S"]), "S_unw": float(un["S"]), "seed": int(seed),
+                       "earned_dates": np.array([str(ed[i]) for i in idx])})
     return {"test": label, "alphas": {"96%": alphas[0], "90%": alphas[1]}, "n_rows": int(len(idx)),
             "first_earned": str(ed[idx[0]]), "last_earned": str(ed[idx[-1]]),
             "block_length": L, "block_length_last_neff": L_tail, "n_eff_rows": n_eff, "B": FL.B, "seed": seed,
@@ -322,6 +341,68 @@ def stream_block_scored(panel, inp, book, first, idx, seed: int, alphas, label: 
                             "certified": {"96%": bool(wt["p"] < alphas[0]), "90%": bool(wt["p"] < alphas[1])}},
             "unweighted": {"label": FL.UNWEIGHTED_LABEL, "S": un["S"], "p": un["p"], "L90": un["confidence"]["L"]["0.90"]},
             "performance_line": Rc.performance_line(s, inp.ppy, L, FL.B, SEED + 3)}             # 721003, the registered performance-line seed
+
+
+def price_class_argmax(panel, cache, bc: np.ndarray, seed: int, B: int, alpha: float, feature_names,
+                       store=None) -> dict:
+    """`french_insample_read.price_class`, arithmetic unchanged, also returning each replicate's
+    argmax member m_b and S*_b(m_b), and every member's observed unweighted Sharpe. `store`, if
+    given, is a writable (N, T) array that receives every member's stream, chunk by chunk."""
+    import environments.planted_fast as pf
+    from environments.class_table import CHUNK
+    from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
+    from quixote.confidence import confidence
+    T = panel.features.shape[0]
+    ann = float(np.sqrt(panel.periods_per_year))
+    L = int(select_block_length(bc - bc.mean(axis=0)))
+    rng = np.random.default_rng(seed)
+    C = np.empty((T, B))
+    for b in range(B):
+        C[:, b] = np.bincount(stationary_bootstrap_indices(T, L, rng), minlength=T)
+    F = pf.feature_returns(panel)
+    M_b = np.full(B, -np.inf)
+    arg_b = np.full(B, -1, dtype=np.int64)
+    U_b = np.full(B, -np.inf)                          # un-demeaned replicate maxima (EB's m_b)
+    uarg_b = np.full(B, -1, dtype=np.int64)
+    S_all = np.empty(cache.N)
+    best, best_j = -np.inf, -1
+    for s0 in range(0, cache.N, CHUNK):
+        X = pf.streams(cache, F, s0, min(s0 + CHUNK, cache.N))
+        if store is not None:
+            store[s0:s0 + len(X)] = X
+        obs = pf._sharpe_rows(X, ann)
+        S_all[s0:s0 + len(X)] = obs
+        j = int(np.argmax(obs))
+        if obs[j] > best:
+            best, best_j = float(obs[j]), s0 + j
+        X0 = X - X.mean(axis=1, keepdims=True)
+        mean = (X0 @ C) / T
+        var = ((X0 * X0) @ C - T * mean * mean) / (T - 1)
+        pos = var > 0
+        rep = np.where(pos, mean / np.sqrt(np.where(pos, var, 1.0)), 0.0) * ann
+        rmax = rep.max(axis=0)
+        up = rmax > M_b
+        arg_b[up] = s0 + rep.argmax(axis=0)[up]
+        M_b = np.maximum(M_b, rmax)
+        um = (X @ C) / T                               # the same index counts, on X (not demeaned)
+        uv = ((X * X) @ C - T * um * um) / (T - 1)
+        upos = uv > 0
+        urep = np.where(upos, um / np.sqrt(np.where(upos, uv, 1.0)), 0.0) * ann
+        umax = urep.max(axis=0)
+        uup = umax > U_b
+        uarg_b[uup] = s0 + urep.argmax(axis=0)[uup]
+        U_b = np.maximum(U_b, umax)
+    p = (1 + int(np.sum(M_b >= best))) / (B + 1)
+    conf = confidence(best, M_b, ppy=float(panel.periods_per_year), tier="class")
+    member = cache.members[best_j]
+    return {"test": "class maximum against the class null", "alpha": alpha,
+            "window_rows": [0, T - 1], "n_rows": T, "N": cache.N, "B": B, "seed": seed,
+            "block_length": L, "S": best, "p": p, "certified": bool(p < alpha),
+            "L90": conf["L"]["0.90"], "confidence": conf,
+            "best_member": {"index": best_j, "support": [[int(k), float(sg)] for k, sg in member],
+                            "features": [f"{'+' if sg > 0 else '-'}{feature_names[int(k)]}"
+                                         for k, sg in member]},
+            "_null_max": M_b, "_argmax": arg_b, "_S_all": S_all, "_u_max": U_b, "_u_argmax": uarg_b}
 
 
 class _Cols:
@@ -333,7 +414,8 @@ class _Cols:
         return np.asarray(self.a[sl])[:, self.idx]
 
 
-def class_block_scored(panel, members, idx, seed: int, alphas, cache_dir=None, cache_name=CACHE_NAME) -> dict:
+def class_block_scored(panel, members, idx, seed: int, alphas, cache_dir=None, cache_name=CACHE_NAME,
+                       extras: dict | None = None) -> dict:
     """`french_long_read.class_block` on the scored rows only: the fast kernel's cache is built on
     the full panel (so costs carry over), then every member's stream is sliced to the scored rows."""
     import types
@@ -343,7 +425,6 @@ def class_block_scored(panel, members, idx, seed: int, alphas, cache_dir=None, c
     from environments.real_sandbox import RealSandbox
     from estimator import recency as Rc
     from estimator.bootstrap import select_block_length
-    from experiments import french_insample_read as FR
     from experiments import french_long_read as FL
     from quixote.confidence import confidence
     T = len(idx)
@@ -362,7 +443,27 @@ def class_block_scored(panel, members, idx, seed: int, alphas, cache_dir=None, c
     S = float(obs[j])
     p = (1 + int(np.sum(M_b >= S))) / (FL.B + 1)
     conf = confidence(S, M_b, ppy=float(panel.periods_per_year), tier="class, recency-weighted, W2")
-    un = FR.price_class(sub, cache, bc, seed, FL.B, alphas[0], panel.feature_names)
+    store = None
+    if extras is not None and extras.get("precompute_dir") is not None:
+        store = np.lib.format.open_memmap(Path(extras["precompute_dir"]) / "class_scored.npy", mode="w+",
+                                          dtype=np.float64, shape=(cache.N, T))
+    un = price_class_argmax(sub, cache, bc, seed, FL.B, alphas[0], panel.feature_names, store=store)
+    if store is not None:
+        store.flush()
+        del store
+    if extras is not None:
+        extras.update({"S_w": np.asarray(obs, float), "S_unw": un.pop("_S_all"),
+                       "null_w2_max": np.asarray(M_b, float), "null_unw_max": un.pop("_null_max"),
+                       "null_unw_argmax": un.pop("_argmax"), "seed": int(seed),
+                       "null_unw_undemeaned_argmax": un.pop("_u_argmax"),
+                       "null_unw_undemeaned_S_at_argmax": un.pop("_u_max"),
+                       "base_columns": np.asarray(RealSandbox(panel, spec_class=CLS).base_feature_columns(), float)[idx],
+                       "members_sha256": hashlib.sha256(json.dumps(
+                           [[list(map(float, kv)) for kv in m] for m in full.members]).encode()).hexdigest()})
+        extras["null_unw_S_at_argmax"] = extras["null_unw_max"].copy()
+    else:
+        for k in ("_S_all", "_null_max", "_argmax", "_u_max", "_u_argmax"):
+            un.pop(k)
     member = cache.members[j]
     ed = panel.meta["earned_dates"]
     return {"test": "class maximum, d = 1", "alphas": {"96%": alphas[0], "90%": alphas[1]}, "n_rows": T, "N": cache.N,
@@ -386,7 +487,47 @@ def cost_beside(book, first, inp, ppy, idx=None) -> dict:
             "S": float(np.mean(s) / sd * np.sqrt(ppy)) if sd > 0 else 0.0}
 
 
-def run_read(dates, tickers, P, Vol, members, workers: int = 4, cache_dir=None, cache_name=CACHE_NAME) -> dict:
+def turnover_mean(book, first: int, idx: np.ndarray) -> float:
+    """Mean over the scored rows of sum_m |p_t - p_{t-1}|, on the continuous book from `first`."""
+    p = np.asarray(book, float)[first:]
+    prev = np.vstack([np.zeros((1, p.shape[1])), p[:-1]])
+    return float(np.abs(p - prev).sum(axis=1)[idx - first].mean())
+
+
+def write_precompute(pdir: Path, sancho: dict, cls: dict, git_head: str) -> str:
+    """The npz files, then the manifest LAST (class_scored.npy is already written). Returns the
+    manifest's SHA-256."""
+    pdir = Path(pdir)
+    np.savez(pdir / "sancho_d1.npz", stream=sancho["stream"], earned_dates=sancho["earned_dates"],
+             turnover_mean=sancho["turnover_mean"], S_w=sancho["S_w"], S_unw=sancho["S_unw"],
+             null_w2=sancho["null_w2"], seed=sancho["seed"])
+    np.savez(pdir / "class_stats.npz", S_w=cls["S_w"], S_unw=cls["S_unw"], null_w2_max=cls["null_w2_max"],
+             null_unw_max=cls["null_unw_max"], null_unw_argmax=cls["null_unw_argmax"],
+             null_unw_S_at_argmax=cls["null_unw_S_at_argmax"],
+             null_unw_undemeaned_argmax=cls["null_unw_undemeaned_argmax"],
+             null_unw_undemeaned_S_at_argmax=cls["null_unw_undemeaned_S_at_argmax"],
+             members_sha256=cls["members_sha256"], seed=cls["seed"])
+    np.save(pdir / "base_columns.npy", cls["base_columns"])      # scored rows, NOT demeaned
+    files = ("sancho_d1.npz", "class_scored.npy", "class_stats.npz", "base_columns.npy")
+    sha = {}
+    for f in files:
+        h = hashlib.sha256()
+        with open(pdir / f, "rb") as fh:
+            for blk in iter(lambda: fh.read(1 << 24), b""):
+                h.update(blk)
+        sha[f] = h.hexdigest()
+    ed = sancho["earned_dates"]
+    shape = np.load(pdir / "class_scored.npy", mmap_mode="r").shape
+    man = {"registration": REGISTRATION, "git_head": git_head, "scored_window": [str(SCORE_FROM), str(SCORE_TO)],
+           "T_scored": int(len(sancho["stream"])), "N": int(shape[0]), "B": int(len(cls["null_w2_max"])),
+           "member_order": "environments.class_table.members_in_order(environments.planted_panel.CLS, 40)",
+           "first_earned": str(ed[0]), "last_earned": str(ed[-1]), "sha256": sha}
+    (pdir / "manifest.json").write_text(json.dumps(man, indent=1))
+    return hashlib.sha256((pdir / "manifest.json").read_bytes()).hexdigest()
+
+
+def run_read(dates, tickers, P, Vol, members, workers: int = 4, cache_dir=None, cache_name=CACHE_NAME,
+             precompute_dir=None, git_head: str = "") -> dict:
     from experiments import french_long_read as FL
     t0 = time.time()
     with ProcessPoolExecutor(workers) as ex:
@@ -399,17 +540,25 @@ def run_read(dates, tickers, P, Vol, members, workers: int = 4, cache_dir=None, 
     if not all(same.values()):
         out["stopped"] = "two fits differ; nothing priced"
         return out
+    sancho_ex = {}
+    cls_ex = {"precompute_dir": precompute_dir} if precompute_dir is not None else None
     for lag, key, al, label, s in ((2, "test1_stream_d1", ALPHA["stream_d1"], "Sancho stream, d = 1", SEED),
                                    (1, "test2_stream_d0", ALPHA["stream_d0"], "Sancho stream, d = 0, NOT IMPLEMENTABLE", SEED + 1)):
         panel, inp = sancho_inputs(dates, tickers, P, Vol, lag)
         book, first, _ = by[lag][0]
         idx = scored_index(panel)                                 # no ETF dies in-sample (the cut)
-        out[key] = stream_block_scored(panel, inp, book, first, idx, s, al, label)
+        ex = sancho_ex if lag == 2 else None
+        out[key] = stream_block_scored(panel, inp, book, first, idx, s, al, label, extras=ex)
+        if ex is not None:
+            ex["turnover_mean"] = turnover_mean(book, first, idx)
         out[key]["first_scored_row"] = int(first)
         out[key]["cost_10bps_beside"] = cost_beside(book, first, inp, inp.ppy, idx)
     panel, _ = sancho_inputs(dates, tickers, P, Vol, 2)
     out["test3_class_d1"] = class_block_scored(panel, members, scored_index(panel), SEED + 2, ALPHA["class"],
-                                               cache_dir, cache_name)
+                                               cache_dir, cache_name, extras=cls_ex)
+    if precompute_dir is not None:
+        out["precompute"] = {"dir": str(precompute_dir),
+                             "manifest_sha256": write_precompute(precompute_dir, sancho_ex, cls_ex, git_head)}
     out["seconds"] = time.time() - t0
     return out
 
@@ -473,7 +622,10 @@ def main(argv=None) -> int:
                    "last_fetched_session": cut.get("last_fetched_session")},
            "rows": int(P.shape[0]), "first_date": str(dates[0]), "last_date": str(dates[-1]),
            "rows_dropped_before_2010": int(n_dropped), "scored_window": [str(SCORE_FROM), str(SCORE_TO)]}
-    rec.update(run_read(dates, tickers, P, Vol, members(), workers=a.workers, cache_dir=CACHE_DIR))
+    pdir = out / "precompute"
+    pdir.mkdir(exist_ok=True)
+    rec.update(run_read(dates, tickers, P, Vol, members(), workers=a.workers, cache_dir=CACHE_DIR,
+                        precompute_dir=pdir, git_head=a.expect_head))
     (out / "results.json").write_text(json.dumps(rec, indent=1, default=float))
     print(f"results written to {out / 'results.json'}; no outcome printed")
     return 0 if "stopped" not in rec else 1
