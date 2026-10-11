@@ -32,7 +32,9 @@ refused one too (parent, section j, item 4).
   computed on.
   - The unweighted best member is recorded in `results.json`, but the reader did not print it
     (section 9, item 1).
-  - **It is not graded.** [AUTHOR] confirms.
+  - **It is not graded** (the author, 2026-10-11).
+  - It is supplied by the parent's amendment 3 (`f1fc56b`) from the committed raw output:
+    +mom252_rank, +mom12_1_rank, +ma_spread_rank.
 - **Nothing else is graded.** There is no other member, no re-selection on holdout data, and no
   other predictor.
 
@@ -100,8 +102,8 @@ grading runs on the holdout host.
    - the box ran with 32 BLAS threads per process, and the host's thread count differs;
    - Sancho has discrete choices that a last-digit difference can flip.
 
-   This is the same tolerance the French grading set (its section 4, Option A), and
-   [AUTHOR] confirms it.
+   This is the same tolerance the French grading set (its section 4, Option A). The author
+   confirmed it on 2026-10-11.
    - **On a miss: nothing is graded, and the author is asked.** Any looser tolerance is fixed
      by a dated amendment before any holdout value is computed.
 3. The spanning panel's entry dates equal `pins.json`'s.
@@ -193,8 +195,8 @@ The compute box is not used for grading.
   spanning panel (about 18,600 rows; the expanding fit grows faster than n);
 - **estimate:** about 45–75 minutes, on 32 vCPU rather than the box's 192. The member and the
   bootstrap take minutes.
-- **The cap:** stop and ask at 2 host-hours.
-- `THREADS=32` as on the box ([AUTHOR]: the thread count can matter for check b.2).
+- **The cap:** stop and ask at **3.5 host-hours** (the author, 2026-10-11).
+- `THREADS=32`, as on the box (the author). The thread count can matter for check b.2.
 
 **The H2 sheet** (`docs/french_long_operator_sheets.md`) is revised when the grader exists:
 - the host checks out the grader commit G2;
@@ -202,8 +204,11 @@ The compute box is not used for grading.
   .venv-grading`, and its library hash is checked;
 - the `b1-holdout` cut is made, then the grade;
 - `grades.json`, the run record and the `b1-holdout` cut record are fetched (counts, dates, no
-  value; [AUTHOR]);
-- the host is stopped by the author from the console or with `aws ec2 stop-instances`;
+  value; the author confirmed);
+- once the author says the host work is done, the agent stops the host from the laptop with
+  `ssh og-holdout 'sudo shutdown -h now'`. That is the only command the agent ever runs on the
+  host (the author's rule, 2026-10-11; the instance's shutdown behaviour is "Stop"). The agent
+  then confirms ssh no longer answers and records the stop time;
 - raw outputs and the run record are committed before the read, then read once, committed
   unedited.
 
@@ -215,9 +220,10 @@ The compute box is not used for grading.
 
 1. **The reader omitted an item the parent registers.** Section c: "for the class, the best
    member under the weights, and the unweighted best member beside it." `read.txt` at
-   `ff04846` prints only the weighted one. The unweighted one is in `results.json` and has not
-   been printed. Proposed: record it by a dated amendment to the parent before this goes live
-   ([AUTHOR]).
+   `ff04846` prints only the weighted one. **Recorded by the parent's amendment 3 (`f1fc56b`)**,
+   from the committed raw output: +mom252_rank, +mom12_1_rank, +ma_spread_rank. That
+   amendment also records the p-value floors (item 2) and the section j standard-error
+   correction (section 6).
 2. **Some p-values are at their resolution floor.** p = 0.0002 is 1/(B + 1) at B = 5,000: test
    2's weighted p, and the unweighted p for tests 1 and 2. Each is "at most 0.0002".
 3. **What is already known about the holdout period.** 1990–1995 has not been read by this
@@ -226,19 +232,21 @@ The compute box is not used for grading.
    ranks, and so does member (3).
    - This does not touch the graded numbers, which are fixed by code at `ca4b686`.
    - It does mean the window is not unknown to the person who chose it.
-   - No citation is given here. One goes in only after the project's citation check
-     ([AUTHOR]).
+   - **Left uncited** (the author, 2026-10-11). A citation is added by amendment after the
+     author's check.
 4. **No agent is involved** in this grading.
 5. **The parent's box estimate for BOX-B2.** Sancho fits took about 34 minutes against the
    estimated 18. That bears on B2's 2.5-hour cap, not on this grading.
 
-## [AUTHOR] points
+## The author's answers (2026-10-11)
 
-1. Grade the weighted best member only, for (3) (section 1).
-2. The box-to-host tolerance, 3 decimals on the in-sample Sharpes, and "on a miss, ask"
-   (section 4b.2).
-3. `THREADS=32` on the host (section 8).
-4. Fetch the `b1-holdout` cut record (counts and dates, no value) with the grades (section 8).
-5. The amendment recording the reader's omission (section 9, item 1).
-6. A citation for item 3, or leave it uncited (section 9).
-7. The descriptive additions of section 5: keep, trim or drop.
+1. Grade the weighted best member only, for (3): **yes.**
+2. The box-to-host tolerance, 3 decimals, and "on a miss, ask": **yes.**
+3. `THREADS=32`: **yes.** The stop-and-ask cap is **3.5 host-hours**, not 2.
+4. Fetch the `b1-holdout` cut record with the grades: **yes.**
+5. The amendment to the parent: **yes.** It is one dated amendment, alone, at `f1fc56b`. It
+   records the unweighted best member (from the committed raw output), the p-value floors and
+   the section j formula correction.
+6. Item 3 of section 9: **left uncited.** A citation goes in by amendment after the author's
+   check.
+7. The descriptive additions of section 5: **all three kept,** labelled descriptive.
