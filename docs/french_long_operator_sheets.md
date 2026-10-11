@@ -85,6 +85,8 @@ session makes the ETF fetch and cut first, then the `b1-holdout` cut and the gra
 
 ## H3. The host cut for B2 (only after B1's grading is committed)
 
+**WITHDRAWN** (`prereg/french-long-history.md`, amendment 4, 2026-10-11): read B2 is withdrawn, so this step will not run.
+
 1. [author] Start the host and send its IP.
 2. [H] `cd ~/observable-garden && git fetch origin && git checkout G2 && git rev-parse HEAD`
 3. [H] `.venv-grading/bin/python -m data.french_long_split --cut b2-extra --zip ~/french_holdout/49_Industry_Portfolios_daily_CSV.zip --out ~/french_long/b2_extra.csv`
@@ -93,12 +95,16 @@ session makes the ETF fetch and cut first, then the `b1-holdout` cut and the gra
 
 ## BOX-B2. The B2 in-sample read (one box session; stop and ask at 2.5 box-hours)
 
+**WITHDRAWN** (`prereg/french-long-history.md`, amendment 4, 2026-10-11): read B2 is withdrawn, so this step will not run.
+
 As BOX-B1, with these two commands in place of steps 2 and 7:
 
 2. [L] `scp runs/french_long_cuts/b1_insample.csv runs/french_long_cuts/b1_insample.cut.json runs/french_long_cuts/b2_extra.csv runs/french_long_cuts/b2_extra.cut.json og-48:french_long/ && scp data/raw/french_insample/french49_vw_daily.csv og-48:observable-garden/data/raw/french_insample/`
 7. [BOX] `THREADS=32 cloud/run.sh fl_b2 python -m experiments.french_long_read --read b2 --cuts ~/french_long/b1_insample.cut.json ~/french_long/b2_extra.cut.json --insample data/raw/french_insample/french49_vw_daily.csv --out runs/french_long_b2/D --expect-head G2 --wheel ~/$W --workers 4`
 
 ## H4. The B2 grading (the author; on the host, on the existing 2020+ holdout CSV)
+
+**WITHDRAWN** (`prereg/french-long-history.md`, amendment 4, 2026-10-11): read B2 is withdrawn, so this step will not run.
 
 The grader for B2 is written after B2's in-sample read is committed.
 1. [author] Start the host and send its IP.

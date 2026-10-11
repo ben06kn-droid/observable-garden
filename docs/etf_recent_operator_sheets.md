@@ -147,11 +147,23 @@ the `b1-holdout` CSV, the zip, and the 2020+ French holdout.
 
 The box checks out EXPECT exactly. EXPECT holds the committed ETF cut record.
 
+**Under amendment 2 (`850d59d`; runner `f7bcb27`):**
+- the runner drops every row before 2010-01-04 by date, before any value is parsed (1,259
+  rows), and pins the count;
+- the warm-up starts at 2010-01-04;
+- every test is scored on earned dates 2015-01-02..2024-12-31 (2,516 rows).
+
+**No holdout grading follows this read.** The ETF holdout is graded once, on the host, only
+after the sessions of `prereg/agent-cell-etf-recent.md` are complete and committed (amendment 2,
+item 7). One host session then grades this panel's three objects and every agent submission.
+Until then, no 2025+ value is computed for any purpose.
+
 **Step 0: free the disk first.** At B1's end the box had 35 GB used of 48 GB.
 - B1's class cache is `data/planted_cache/fast_7c02af63f340181d/`, about 22 GB. Its key was
   seen during the run as `.fast_7c02af63f340181d.4577.tmp`.
 - The run record is `runs/french_long_b1/2026-10-11/RUN_RECORD.md`. X at d = 1 is (16,829, 49, 40).
-- The ETF read needs about 6.3 GB for its cache: 82,240 × 4,778 × 8 bytes × 2 arrays (g and k).
+- The ETF read needs about 4.6 GB for its cache: 82,240 members × 3,519 feature rows (from
+  2010) × 8 bytes × 2 arrays (g and k).
 
 0a. [BOX] `cd ~/observable-garden && df -h ~ | tail -1 && du -sh data/planted_cache/* data/class_tables/* 2>/dev/null`
     - → the usage, and the cache directories with their sizes.
@@ -199,9 +211,12 @@ The box checks out EXPECT exactly. EXPECT holds the committed ETF cut record.
 
 **The cap:** at 1 box-hour from the box's start, stop and ask, whatever the projection.
 
-**Estimate, from the smoke** (`runs/etf_recent_smoke/2026-10-11/`; laptop, synthetic 40 × 5,033):
-- **Sancho:** one fit took 88 s on the laptop (27 s rolling, 56 s expanding). On the box, fits
-  ran about 3.3× slower each in BOX-B1, so the four fits in parallel take about 5 minutes.
-- **The class:** the table about 5 minutes, the W2 null about 3 and the unweighted null about
-  the same again. The cache (g and k) is 6.29 GB.
-- **In all:** about 20–30 minutes, with setup.
+**Estimate, from the smoke** (`runs/etf_recent_smoke/2026-10-11/`; laptop, synthetic 40 × 5,033),
+scaled to amendment 2's 3,774 rows used:
+- **Sancho:** one smoke fit took 88 s on the laptop (27 s rolling, 56 s expanding). Rolling time
+  scales with rows and expanding time about with rows squared, so a fit here takes about 50 s on
+  the laptop and about 3 minutes on the box. The four fits run in parallel.
+- **The class:** the table takes about 4 minutes on the full 3,519-row panel. The W2 null on
+  2,516 scored rows takes about 1.5 minutes, and the unweighted null about the same. The cache is
+  about 4.6 GB.
+- **In all:** about 15–25 minutes, with setup.
