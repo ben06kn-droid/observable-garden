@@ -11,7 +11,8 @@ import pytest
 
 from experiments import etf_recent_read as ER
 
-M, T = 30, 1400
+M, T = 30, 1600
+DROP, SCORE0 = 100, 1250          # synthetic stand-ins for 2010-01-04 and 2015-01-02 (row indices)
 
 
 def _synthetic(seed=721150):
@@ -26,14 +27,16 @@ def _synthetic(seed=721150):
     return dates, tickers, P, Vol
 
 
-def _write_cut(root, dates, tickers, P, Vol, n_included=None):
+def _write_cut(root, dates, tickers, P, Vol, n_included=None, poison_before=None):
+    """`poison_before`: rows dated before it hold non-numeric text, so a parse of any of them fails."""
     d = root / "insample"
     d.mkdir(parents=True, exist_ok=True)
     sha = {}
     for j, t in enumerate(tickers):
         p = d / f"{t}.csv"
         p.write_text("date,adjclose,volume\n" + "".join(
-            f"{day.isoformat()},{float(P[i, j])!r},{float(Vol[i, j])!r}\n" for i, day in enumerate(dates)))
+            (f"{day.isoformat()},POISON,POISON\n" if poison_before and day < poison_before else
+             f"{day.isoformat()},{float(P[i, j])!r},{float(Vol[i, j])!r}\n") for i, day in enumerate(dates)))
         sha[t] = hashlib.sha256(p.read_bytes()).hexdigest()
     rec = {"registration": ER.REGISTRATION, "last_fetched_session": "2026-10-09", "included": list(tickers),
            "n_included": len(tickers) if n_included is None else n_included, "csv_sha256": sha,
@@ -108,9 +111,12 @@ def test_the_read_end_to_end_on_a_synthetic_cut(synth, tmp_path, monkeypatch):
     from environments.planted_panel import CLS
     from experiments import french_long_read as FL
     dates, tickers, P, Vol = synth
-    cut = _write_cut(tmp_path / "cut", dates, tickers, P, Vol)
+    cut = _write_cut(tmp_path / "cut", dates, tickers, P, Vol, poison_before=dates[DROP])
     monkeypatch.setattr(ER, "refusals", lambda head, wheel: [])
     monkeypatch.setattr(ER, "LAST_DATE", dates[-1])
+    monkeypatch.setattr(ER, "USE_FROM", dates[DROP])
+    monkeypatch.setattr(ER, "SCORE_FROM", dates[SCORE0])
+    monkeypatch.setattr(ER, "SCORE_TO", dates[-1])
     monkeypatch.setattr(ER, "members", lambda: members_in_order(CLS, 40)[:128])
     monkeypatch.setattr(ER, "CACHE_DIR", tmp_path / "cache")
     monkeypatch.setattr(FL, "B", 120)
@@ -120,6 +126,12 @@ def test_the_read_end_to_end_on_a_synthetic_cut(synth, tmp_path, monkeypatch):
     pins = json.loads((out / "pins.json").read_text())
     assert pins["combined_sha256"] == json.loads(cut.read_text())["combined_sha256"]
     assert pins["d0"]["X_shape"][0] == pins["d1"]["X_shape"][0] + 1 and len(pins["d1"]["v2_V_block_sha256"]) == 64
+    # amendment 2: the first row used and the count dropped are pinned; the poisoned pre-cutoff rows
+    # were never parsed, so none of them reached X or any fit
+    assert pins["first_row_used"] == str(dates[DROP]) and pins["rows_dropped_before"]["count"] == DROP
+    assert pins["rows"] == T - DROP and pins["d1"]["first_feature_date"] == str(dates[DROP + ER.WARM])
+    sc = pins["d1"]["scored_rows"]
+    assert sc["first_earned"] == str(dates[SCORE0]) and sc["last_earned"] == str(dates[-1])
     rec = json.loads((out / "results.json").read_text())
     assert rec["repeat_bit_identical"] == {"d1": True, "d0": True} and rec["cut"]["n_included"] == M
     t1, t2, t3 = rec["test1_stream_d1"], rec["test2_stream_d0"], rec["test3_class_d1"]
@@ -127,7 +139,11 @@ def test_the_read_end_to_end_on_a_synthetic_cut(synth, tmp_path, monkeypatch):
     assert t3["alphas"] == {"96%": 0.01, "90%": 0.02}
     assert (t1["seed"], t2["seed"], t3["seed"]) == (721000, 721001, 721002)
     assert t1["first_scored_row"] == 763 and t2["first_scored_row"] == 762
-    assert "NOT IMPLEMENTABLE" in t2["test"] and t2["n_rows"] == t1["n_rows"] + 2
+    assert "NOT IMPLEMENTABLE" in t2["test"]
+    for t in (t1, t2, rec["test3_class_d1"]):                       # every test on the scored window
+        assert t["first_earned"] == str(dates[SCORE0]) and t["last_earned"] == str(dates[-1])
+        assert t["n_rows"] == T - SCORE0
+    assert rec["rows_dropped_before_2010"] == DROP
     for t in (t1, t2, t3):
         assert 0 < t["weighted_W2"]["p"] <= 1 and t["unweighted"]["label"] == FL.UNWEIGHTED_LABEL
     assert "cost_10bps_beside" in t1 and set(t1["performance_line"]["lines"]) == {"252", "756"}
@@ -141,3 +157,22 @@ def test_the_registration_is_set_and_the_laptop_is_refused():
     bad = ER.refusals("0" * 40, None)
     assert any("Linux" in b for b in bad) and any("--expect-head" in b for b in bad)
     assert not any("not an ancestor" in b for b in bad)
+
+
+def test_rows_before_the_cutoff_are_never_parsed_and_x_ignores_them(synth, tmp_path, monkeypatch):
+    """Amendment 2: a file whose pre-cutoff rows are poisoned loads to the same arrays, and builds the
+    same X, as a clean file; the cutoff, not the data, decides what enters."""
+    dates, tickers, P, Vol = synth
+    monkeypatch.setattr(ER, "LAST_DATE", dates[-1])
+    clean = _write_cut(tmp_path / "clean", dates, tickers, P, Vol)
+    pois = _write_cut(tmp_path / "pois", dates, tickers, P, Vol, poison_before=dates[DROP])
+    a = ER.load_from(ER.check_cut(clean)[2], use_from=dates[DROP], last=dates[-1])
+    b = ER.load_from(ER.check_cut(pois)[2], use_from=dates[DROP], last=dates[-1])
+    assert a[0] == b[0] and a[0][0] == dates[DROP] and a[4] == b[4] == DROP
+    assert np.array_equal(a[2], b[2]) and np.array_equal(a[3], b[3])
+    pa, _ = ER.etf_panel(*a[:4], lag=2)
+    pb, _ = ER.etf_panel(*b[:4], lag=2)
+    assert np.array_equal(pa.features, pb.features, equal_nan=True)
+    assert pa.meta["dates"][0] == dates[DROP + ER.WARM]
+    with pytest.raises(ValueError):                              # the poison would fail any parse
+        ER.load_from(ER.check_cut(pois)[2], use_from=dates[0], last=dates[-1])

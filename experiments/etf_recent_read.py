@@ -22,6 +22,18 @@ column; V from volume and adjusted close); M2 (rolling 756 and expanding), G3, L
 the learner's first scored row 756 (`learn2.learner.FIRST`, the "carried" configuration) plus
 the embargo h + 1 + d: feature row 763 at d = 1, 762 at d = 0.
 
+**Amendment 2 (`850d59d`): rows from 2010 only; every test scored on 2015-2024.**
+- Rows dated before 2010-01-04 are dropped **by their date field, before any value is parsed,**
+  and before any computation. The count dropped is recorded in pins.json and results.json.
+- The 253-row warm-up starts at 2010-01-04. Sancho's walk-forward starts at its usual first
+  scored feature row (763 at d = 1, 762 at d = 0), counted from the first feature row.
+- Every test is scored on the rows whose earned date is 2015-01-02..2024-12-31:
+  - the streams are netted over the continuous book from Sancho's first row, then sliced, so
+    the first scored day is costed from the carried position;
+  - the class is computed on the full panel and sliced by column, so its costs carry over too;
+  - the block length (the class rule on the base columns), the W2 weights, the performance line
+    and the 10 bps line all use the scored rows only.
+
 In this order:
   0. pins.json, before any fit or pricing call: the SHA-256 of each CSV and the combined one,
      of X (the 40 features) and of Sancho's inputs (P, X, V and the groups), both timings;
@@ -57,8 +69,11 @@ from pathlib import Path
 import numpy as np
 
 REGISTRATION = "310225cd4932bc18e1c8e2e248cbbb133124a004"
-FIRST_DATE = dt.date(2005, 1, 3)
+FIRST_DATE = dt.date(2005, 1, 3)                  # the cut's first row (checked by date only)
 LAST_DATE = dt.date(2024, 12, 31)
+USE_FROM = dt.date(2010, 1, 4)                    # amendment 2: no row before this enters anything
+SCORE_FROM = dt.date(2015, 1, 2)                  # amendment 2: the scored window's first earned date
+SCORE_TO = dt.date(2024, 12, 31)
 MIN_ETFS = 30
 MARKET = "SPY"
 SEED = 721000                       # +0 d = 1, +1 d = 0, +2 class, +3 performance line
@@ -96,6 +111,48 @@ def check_cut(cut_path: Path) -> tuple[dict, list[str], dict]:
     if not bad and combined_sha(rec["csv_sha256"], inc) != rec.get("combined_sha256"):
         bad.append("the combined SHA-256 is not the cut record's")
     return rec, bad, paths
+
+
+def load_from(paths: dict, use_from: dt.date | None = None, last: dt.date | None = None):
+    """(dates, tickers, P, Vol, n_dropped). Rows dated before `use_from` are skipped by their date
+    field before any value is parsed (amendment 2); the files must still start at FIRST_DATE."""
+    use_from = use_from or USE_FROM
+    last = last or LAST_DATE
+    tickers = sorted(paths)
+    cols, dates0, dropped0, raw_first0 = [], None, None, None
+    for t in tickers:
+        ds, px, vo, dropped, raw_first = [], [], [], 0, None
+        with open(paths[t], newline="") as fh:
+            for row in csv.DictReader(fh):
+                day = dt.date.fromisoformat(row["date"])
+                raw_first = raw_first or day
+                if day > LAST_DATE:
+                    raise SystemExit(f"REFUSED: {t}.csv holds a row dated {day}, after 2024-12-31")
+                if day < use_from:
+                    dropped += 1
+                    continue                                   # never parsed
+                if not row["adjclose"].strip() or not row["volume"].strip():
+                    raise SystemExit(f"REFUSED: {t}.csv has a missing value on {day}")
+                ds.append(day)
+                px.append(float(row["adjclose"]))
+                vo.append(float(row["volume"]))
+        if dates0 is None:
+            dates0, dropped0, raw_first0 = ds, dropped, raw_first
+        elif ds != dates0 or dropped != dropped0 or raw_first != raw_first0:
+            raise SystemExit(f"REFUSED: {t}.csv's dates differ from {tickers[0]}.csv's")
+        cols.append((px, vo))
+    if raw_first0 != FIRST_DATE:
+        raise SystemExit(f"REFUSED: the files start {raw_first0}, not {FIRST_DATE}")
+    if not dates0 or dates0[0] != use_from or dates0[-1] != last:
+        raise SystemExit(f"REFUSED: the rows used run {dates0[0] if dates0 else None} .. "
+                         f"{dates0[-1] if dates0 else None}, not {use_from} .. {last}")
+    if any(b <= a for a, b in zip(dates0, dates0[1:])):
+        raise SystemExit("REFUSED: the dates are not strictly increasing")
+    P = np.ascontiguousarray(np.array([c[0] for c in cols], float).T)
+    Vol = np.ascontiguousarray(np.array([c[1] for c in cols], float).T)
+    if not np.all(np.isfinite(P)) or (P <= 0).any() or not np.all(np.isfinite(Vol)) or (Vol < 0).any():
+        raise SystemExit("REFUSED: a missing, non-finite or non-positive value")
+    return dates0, tickers, P, Vol, int(dropped0)
 
 
 def load(paths: dict, last: dt.date | None = None):
@@ -198,27 +255,132 @@ def _sha(a) -> str:
     return hashlib.sha256(np.ascontiguousarray(a, dtype=np.float64).tobytes()).hexdigest()
 
 
-def pin_record(dates, tickers, P, Vol, csv_sha: dict, combined: str) -> dict:
+def pin_record(dates, tickers, P, Vol, csv_sha: dict, combined: str, n_dropped: int = 0) -> dict:
     """Written before any fit or pricing call."""
     rec = {"csv_sha256": dict(csv_sha), "combined_sha256": combined, "tickers": list(tickers),
-           "rows": int(P.shape[0]), "first_date": str(dates[0]), "last_date": str(dates[-1])}
+           "rows": int(P.shape[0]), "first_date": str(dates[0]), "last_date": str(dates[-1]),
+           "first_row_used": str(dates[0]), "rows_dropped_before": {"date": str(USE_FROM), "count": int(n_dropped)},
+           "scored_window": [str(SCORE_FROM), str(SCORE_TO)]}
     for lag in (2, 1):
         panel, inp = sancho_inputs(dates, tickers, P, Vol, lag)
         rec[f"d{lag - 1}"] = {"X_features_sha256": _sha(panel.features), "X_shape": list(panel.features.shape),
                               "v2_P_sha256": _sha(inp.P), "v2_X_block_sha256": _sha(inp.blocks["X"]),
                               "v2_V_block_sha256": _sha(inp.blocks["V"]), "groups_sha256": _sha(inp.groups),
                               "first_feature_date": str(panel.meta["dates"][0]),
-                              "first_earned_date": str(panel.meta["earned_dates"][0])}
+                              "first_earned_date": str(panel.meta["earned_dates"][0]),
+                              "scored_rows": scored_rows_info(panel)}
     return rec
 
 
 # -- the read ------------------------------------------------------------------------------
 
-def cost_beside(book, first, inp, ppy) -> dict:
-    """The unweighted net Sharpe at 10 bps one-way (borrow unchanged). Descriptive only."""
+def scored_index(panel) -> np.ndarray:
+    """Feature rows whose earned date lies in SCORE_FROM..SCORE_TO (amendment 2)."""
+    ed = panel.meta["earned_dates"]
+    return np.array([i for i, d in enumerate(ed) if SCORE_FROM <= d <= SCORE_TO], dtype=np.int64)
+
+
+def scored_rows_info(panel) -> dict:
+    idx = scored_index(panel)
+    ed = panel.meta["earned_dates"]
+    return {"first_row": int(idx[0]), "last_row": int(idx[-1]), "n": int(len(idx)),
+            "first_earned": str(ed[idx[0]]), "last_earned": str(ed[idx[-1]])} if len(idx) else {"n": 0}
+
+
+def scored_net(book, inp, first: int, idx: np.ndarray, cost_mult: float = 1.0) -> np.ndarray:
+    """The net stream on the scored rows: netted over the continuous book from `first`, then
+    sliced, so the first scored day is costed from the carried position."""
     from learn2 import views as Vw
-    inp10 = dataclasses.replace(inp, cost_rate=np.asarray(inp.cost_rate, float) * 2.0)
-    s = Vw.net_stream(book, inp10, np.arange(first, inp.earned.shape[0]))
+    if len(idx) == 0 or first > idx[0]:
+        raise SystemExit(f"REFUSED: Sancho's first scored row {first} is after the scored window's first row")
+    i2 = inp if cost_mult == 1.0 else dataclasses.replace(inp, cost_rate=np.asarray(inp.cost_rate, float) * cost_mult)
+    s = Vw.net_stream(book, i2, np.arange(first, inp.earned.shape[0]))
+    return s[idx - first]
+
+
+def stream_block_scored(panel, inp, book, first, idx, seed: int, alphas, label: str) -> dict:
+    """`french_long_read.stream_block` on the scored rows only."""
+    from environments.planted_panel import CLS
+    from environments.real_sandbox import RealSandbox
+    from estimator import recency as Rc
+    from estimator.bootstrap import select_block_length
+    from experiments import french_long_read as FL
+    s = scored_net(book, inp, first, idx)
+    bc = np.asarray(RealSandbox(panel, spec_class=CLS).base_feature_columns(), float)[idx]
+    L = int(select_block_length(bc - bc.mean(axis=0)))
+    w = Rc.weights(len(idx), FL.H)
+    n_eff = int(round(w.sum() ** 2 / (w * w).sum()))
+    tail = bc[-n_eff:]
+    L_tail = int(select_block_length(tail - tail.mean(axis=0)))
+    wt = Rc.stream_test_w2(s, L, inp.ppy, FL.B, seed, h=FL.H)
+    un = Rc.stream_test(s, L, inp.ppy, FL.B, seed)
+    ed = panel.meta["earned_dates"]
+    return {"test": label, "alphas": {"96%": alphas[0], "90%": alphas[1]}, "n_rows": int(len(idx)),
+            "first_earned": str(ed[idx[0]]), "last_earned": str(ed[idx[-1]]),
+            "block_length": L, "block_length_last_neff": L_tail, "n_eff_rows": n_eff, "B": FL.B, "seed": seed,
+            "weighted_W2": {"S": wt["S"], "p": wt["p"], "L90": wt["confidence"]["L"]["0.90"], "confidence": wt["confidence"],
+                            "certified": {"96%": bool(wt["p"] < alphas[0]), "90%": bool(wt["p"] < alphas[1])}},
+            "unweighted": {"label": FL.UNWEIGHTED_LABEL, "S": un["S"], "p": un["p"], "L90": un["confidence"]["L"]["0.90"]},
+            "performance_line": Rc.performance_line(s, inp.ppy, L, FL.B, SEED + 3)}             # 721003, the registered performance-line seed
+
+
+class _Cols:
+    """A (N, T) array read by row ranges, returning only the scored columns."""
+    def __init__(self, a, idx):
+        self.a, self.idx = a, idx
+
+    def __getitem__(self, sl):
+        return np.asarray(self.a[sl])[:, self.idx]
+
+
+def class_block_scored(panel, members, idx, seed: int, alphas, cache_dir=None, cache_name=CACHE_NAME) -> dict:
+    """`french_long_read.class_block` on the scored rows only: the fast kernel's cache is built on
+    the full panel (so costs carry over), then every member's stream is sliced to the scored rows."""
+    import types
+    import environments.planted_fast as pf
+    from environments.class_table import CHUNK
+    from environments.planted_panel import CLS
+    from environments.real_sandbox import RealSandbox
+    from estimator import recency as Rc
+    from estimator.bootstrap import select_block_length
+    from experiments import french_insample_read as FR
+    from experiments import french_long_read as FL
+    from quixote.confidence import confidence
+    T = len(idx)
+    bc = np.asarray(RealSandbox(panel, spec_class=CLS).base_feature_columns(), float)[idx]
+    L = int(select_block_length(bc - bc.mean(axis=0)))
+    full = pf.build(panel, members, name=cache_name, cache_dir=cache_dir)
+    cache = types.SimpleNamespace(g=_Cols(full.g, idx), k=_Cols(full.k, idx), members=full.members, N=full.N)
+    sub = dataclasses.replace(panel, features=panel.features[idx], returns=panel.returns[idx],
+                              tradable=panel.tradable[idx], cost_rate=panel.cost_rate[idx],
+                              borrow_rate=panel.borrow_rate[idx], session_start=panel.session_start[idx],
+                              session_end=panel.session_end[idx])
+    F = pf.feature_returns(sub)
+    chunks = (pf.streams(cache, F, s0, min(s0 + CHUNK, cache.N)) for s0 in range(0, cache.N, CHUNK))
+    obs, M_b = Rc.class_null_w2(chunks, T, L, panel.periods_per_year, FL.B, seed, FL.H)
+    j = int(np.argmax(obs))
+    S = float(obs[j])
+    p = (1 + int(np.sum(M_b >= S))) / (FL.B + 1)
+    conf = confidence(S, M_b, ppy=float(panel.periods_per_year), tier="class, recency-weighted, W2")
+    un = FR.price_class(sub, cache, bc, seed, FL.B, alphas[0], panel.feature_names)
+    member = cache.members[j]
+    ed = panel.meta["earned_dates"]
+    return {"test": "class maximum, d = 1", "alphas": {"96%": alphas[0], "90%": alphas[1]}, "n_rows": T, "N": cache.N,
+            "first_earned": str(ed[idx[0]]), "last_earned": str(ed[idx[-1]]),
+            "block_length": L, "B": FL.B, "seed": seed,
+            "weighted_W2": {"S": S, "p": p, "L90": conf["L"]["0.90"], "confidence": conf,
+                            "certified": {"96%": bool(p < alphas[0]), "90%": bool(p < alphas[1])},
+                            "best_member": {"index": j, "support": [[int(k), float(sg)] for k, sg in member],
+                                            "features": [f"{'+' if sg > 0 else '-'}{panel.feature_names[int(k)]}"
+                                                         for k, sg in member]}},
+            "unweighted": {"label": FL.UNWEIGHTED_LABEL, "S": un["S"], "p": un["p"], "L90": un["L90"],
+                           "best_member": un["best_member"]["features"]}}
+
+
+def cost_beside(book, first, inp, ppy, idx=None) -> dict:
+    """The unweighted net Sharpe at 10 bps one-way (borrow unchanged), on the scored rows.
+    Descriptive only."""
+    s = scored_net(book, inp, first, idx, cost_mult=2.0)
     sd = float(np.std(s, ddof=1))
     return {"label": "10 bps one-way, unweighted, descriptive",
             "S": float(np.mean(s) / sd * np.sqrt(ppy)) if sd > 0 else 0.0}
@@ -241,12 +403,13 @@ def run_read(dates, tickers, P, Vol, members, workers: int = 4, cache_dir=None, 
                                    (1, "test2_stream_d0", ALPHA["stream_d0"], "Sancho stream, d = 0, NOT IMPLEMENTABLE", SEED + 1)):
         panel, inp = sancho_inputs(dates, tickers, P, Vol, lag)
         book, first, _ = by[lag][0]
-        eligible = np.ones_like(inp.earned, dtype=bool)          # no ETF dies in-sample (the cut)
-        out[key] = FL.stream_block(panel, inp, book, first, eligible, s, al, label)
+        idx = scored_index(panel)                                 # no ETF dies in-sample (the cut)
+        out[key] = stream_block_scored(panel, inp, book, first, idx, s, al, label)
         out[key]["first_scored_row"] = int(first)
-        out[key]["cost_10bps_beside"] = cost_beside(book, first, inp, inp.ppy)
+        out[key]["cost_10bps_beside"] = cost_beside(book, first, inp, inp.ppy, idx)
     panel, _ = sancho_inputs(dates, tickers, P, Vol, 2)
-    out["test3_class_d1"] = FL.class_block(panel, members, SEED + 2, ALPHA["class"], cache_dir, cache_name)
+    out["test3_class_d1"] = class_block_scored(panel, members, scored_index(panel), SEED + 2, ALPHA["class"],
+                                               cache_dir, cache_name)
     out["seconds"] = time.time() - t0
     return out
 
@@ -302,13 +465,14 @@ def main(argv=None) -> int:
     if (out / "results.json").exists():
         raise SystemExit("results exist; the read runs once")
     out.mkdir(parents=True, exist_ok=True)
-    dates, tickers, P, Vol = load(paths)
-    pins = pin_record(dates, tickers, P, Vol, cut["csv_sha256"], cut["combined_sha256"])
+    dates, tickers, P, Vol, n_dropped = load_from(paths)              # amendment 2: pre-2010 rows dropped by date
+    pins = pin_record(dates, tickers, P, Vol, cut["csv_sha256"], cut["combined_sha256"], n_dropped)
     (out / "pins.json").write_text(json.dumps(pins, indent=1))          # before any fit or pricing call
     rec = {"registration": REGISTRATION, "git_head": a.expect_head, "platform": f"{platform.system()} {platform.machine()}",
            "cut": {"combined_sha256": cut["combined_sha256"], "n_included": len(tickers), "included": tickers,
                    "last_fetched_session": cut.get("last_fetched_session")},
-           "rows": int(P.shape[0]), "first_date": str(dates[0]), "last_date": str(dates[-1])}
+           "rows": int(P.shape[0]), "first_date": str(dates[0]), "last_date": str(dates[-1]),
+           "rows_dropped_before_2010": int(n_dropped), "scored_window": [str(SCORE_FROM), str(SCORE_TO)]}
     rec.update(run_read(dates, tickers, P, Vol, members(), workers=a.workers, cache_dir=CACHE_DIR))
     (out / "results.json").write_text(json.dumps(rec, indent=1, default=float))
     print(f"results written to {out / 'results.json'}; no outcome printed")
