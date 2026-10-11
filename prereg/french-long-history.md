@@ -267,3 +267,28 @@ the W2-weighted statistic for both reads.
    registrations, as on French.
 5. **The registration is not live.** Going live sets `REGISTRATION` in
    `data/french_long_split.py` and `experiments/french_long_read.py` by a following commit.
+
+## Amendment 1, 2026-10-11 (America/Chicago): the seed block 718000–718099, re-checked
+
+Section g records the block as "checked 2026-10-11: NO COLLISION". That check is now recorded,
+with the registration's own mentions excluded, over prereg, code and runs. Run on the laptop at
+`209f6a4`.
+- **Prereg:** `python -m experiments.seed_block_check --exclude prereg/french-long-history.md
+  --ranges 718000-718099` scanned 52 files: every live and removed pre-registration,
+  `EXPERIMENTS.md` and `ROADMAP.md`. It found 295 explicit ranges and 8 master seeds at 5,000
+  draws each, the masters held in code included. Result: **NO COLLISION**. Without the
+  exclusion it reports only this file's own blocks (718000–718099, 718010–718013) and its own
+  integers.
+- **Code and runs:** the checker does not scan them. So every tracked file (1,684) was
+  searched for an integer from 718000 to 718099 that is not part of a longer number or a
+  decimal. Outside this file there are two hits, both this registration's own:
+  - `experiments/french_long_read.py:53`, `SEEDS = {"b1": 718000, "b2": 718010}`;
+  - `tests/test_read_french_long.py:10`, `"seed": 718000` in a made-up result for the
+    reader's test. It is a label; nothing is drawn from it.
+- **Ranges built in code:** none reaches the block. The nearest are 716000–716999
+  (`french_long_design_w2.py`), 717000–717009 (`french_long_smoke.py`) and 715000–715999
+  (`recency_planted_2.py`).
+
+**H1 ran at `b541ddf`,** before this amendment. This amendment does not touch
+`data/french_long_split.py`, its inputs (the registered zip) or the cut it wrote. Nothing else
+changes.
