@@ -449,3 +449,43 @@ The cut (ad233e7) is unchanged.
    on uses data before 2010, and strategies are developed on 2015-2024. The
    scored window is shorter and Sancho has less training data, so power is
    lower. That cost is accepted.
+
+### Amendment 2, item 6: the design numbers recomputed (2026-10-11)
+
+**The source:** `experiments/etf_recent_design_2010.py`, committed before its run at `c7ec66b`;
+output `runs/etf_recent_design_2010/2026-10-11`; laptop, 162 s. Outcome-free.
+- **The dependence comes from a 2010+ pool, with no row before 2010-01-04.**
+  - The pool is built from the already-read in-sample files of the 2026-09-22 fetch, each checked
+    against `data/etf_manifest.json`.
+  - It covers this panel's 38 ETFs, on rows 2010-01-04..2022-12-31: 3,017 feature rows,
+    2011-01-04..2022-12-30.
+  - Each of the 82,240 members' gross streams is demeaned over the pool.
+- Every test uses the 2,516 scored rows (2015-01-02..2024-12-31), weighted effective 8.6 years.
+- B 2,000. Streams use 5 panels and the class 3. **Seeds:** 722000–722999 (`seed_block_check`: NO
+  COLLISION).
+- **Holdout:** 444 rows (1.76 years), SE 0.753 at Sharpe 0. P(held) uses the iid normal
+  approximation, with L90 = S − g.
+
+| test, level (alpha) | W2 bar → net 80% | L90 gap g | P(held), true = bar / true = 0 |
+|---|---|---|---|
+| stream d = 1, 96% (0.03) | 0.606 → **0.893** | 0.410 | 0.71 / 0.40 |
+| stream d = 1, 90% (0.06), labelled | 0.493 → 0.779 | 0.410 | 0.71 / 0.46 |
+| stream d = 0 NOT IMPLEMENTABLE, 96% (0.01) | 0.732 → 1.019 | 0.410 | 0.71 / 0.33 |
+| stream d = 0 NOT IMPLEMENTABLE, 90% (0.02), labelled | 0.659 → 0.946 | 0.410 | 0.71 / 0.37 |
+| class, 96% (0.01) | 1.506 → **1.793** | 1.260 | 0.95 / 0.37 |
+| class, 90% (0.02), labelled | 1.443 → 1.730 | 1.260 | 0.95 / 0.40 |
+
+- **Superseded:**
+  - the table of section h (choices A and B, on the 2006–2017 pool, at `717e1a9`) is kept as
+    written;
+  - section g's P(held) table is superseded the same way.
+- **Against section h's choice B,** which had the same 2,516 scored rows but the 2006–2017
+  pool, every bar is higher:
+
+  | | choice B (section h) | the 2010+ pool |
+  |---|---|---|
+  | d = 1 stream, 96% | 0.574 | 0.606 |
+  | class, 96% | 1.412 | 1.506 |
+
+  Why was not investigated. More dependence, or more alike members, in the 2010+ pool would each
+  explain it. The higher bars are part of the stated cost of amendment 2.
