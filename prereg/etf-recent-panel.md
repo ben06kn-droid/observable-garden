@@ -379,3 +379,37 @@ differ, for example in 2020's volatility.
     - The grading at the fetch is labelled "weak: 1.76 years".
     - A second grading is fixed for 2028-01-03, from a new fetch, with the quantity and rule
       unchanged (section g).
+
+## Amendment 1, 2026-10-11 (America/Chicago): SPY as the declared market, and the liquidity median
+
+Made before HOST-1. Nothing has been fetched and nothing has run on the host or the box.
+
+**(a) SPY is the declared market series.**
+- SPY is the market for X, the groups and the features (`declared_market`; no fallback in
+  the code).
+- **If SPY fails inclusion (section b) or dies, nothing runs and the author is asked.** There is
+  no fallback series.
+- The runner refuses if SPY is not included (`experiments/etf_recent_read.py`, `d141b5d`).
+- The cut refuses any 2015–2024 gap, so SPY cannot die in-sample without a refusal. A death in
+  the holdout is handled under the grading registration, by this rule: nothing is graded, and
+  the author is asked.
+
+**(b) The liquidity median** (section b, item 2) is the **true median** of daily share volume
+over the sessions of 2005-01-03 to 2014-12-31 that have a non-null volume.
+- Null volumes are left out of the median. Their count is recorded per ticker
+  (`volume_nulls_2005_2014` in the cut record).
+- A session with a bar but a null volume is not a missing session for item 1.
+- **This differs from `data/fetch_etf.py`,** which took the upper-middle element of the sorted
+  volumes.
+  - With an odd count, the two are equal.
+  - With an even count, the true median is the mean of the two middle values, and the old one is
+    the larger of them.
+  - **So the verdicts differ only when the threshold lies between the true median and the upper
+    middle value.** For example, middle values of 497,000 and 501,000 give a true median of
+    499,000, which fails, where the old rule gives 501,000, which passes.
+  - That is a narrow band around the threshold, not only the value 500,000 exactly. The author's
+    brief said "only at exactly 500,000"; this states the condition exactly.
+  - The old 2005–2022 medians of these funds are all at least 815,700. That does not bound the
+    2005–2014 medians.
+
+Nothing else changes.
