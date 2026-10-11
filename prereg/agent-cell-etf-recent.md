@@ -1,6 +1,7 @@
 # Agent cell on the ETF recent panel: do the gate's numbers describe what happened out of sample?
 
-**Status: DRAFT, NOT LIVE (2026-10-11, America/Chicago).** For the author's review.
+**Status: DRAFT, NOT LIVE (2026-10-11, America/Chicago). Ready to go live once BOX-ETF pins the
+precompute's manifest hash** (the author's decisions of 2026-10-11 are written in below).
 - **Nothing has run for it.** No session, no smoke, no precompute.
 - The code is written after this draft is committed (Part 3 of the brief). The launcher refuses
   until this registration is live and the precompute manifest matches.
@@ -9,6 +10,28 @@
 
 **The parent panel:** `prereg/etf-recent-panel.md`, live at `310225c`, with amendment 1 (`80ec191`)
 and amendment 2 (`850d59d`; design numbers at `d56d39e`).
+
+## 0. The primary statistic of this cell: the UNWEIGHTED net Sharpe (the author, 2026-10-11)
+
+**Everywhere in this cell the primary statistic is the unweighted net Sharpe** over the scored
+window. That covers:
+- the search's ranking;
+- the replay tier;
+- the class and stream tiers;
+- L90;
+- EB;
+- CRPS;
+- R1 and R2.
+
+**The W2-weighted value is printed beside each one,** labelled "recency-weighted, descriptive".
+
+**The reason:** the replay tier and EB exist, and are validated, for the unweighted statistic
+only. A search must be priced on the statistic it ranked by.
+
+**The parent panel's scripted certificate stays W2-weighted, as registered**
+(`prereg/etf-recent-panel.md`, sections c–d, amendments 2–3). That covers its three tests, their
+L90s and its graded rule. This cell does not change it. Where this cell shows a parent quantity,
+it says which statistic it is.
 
 ## 1. The question
 
@@ -42,8 +65,10 @@ also in-sample reads of what the agent states (R3) and a money read (R4).
   (`experiments/agent_backend.py` asserts the model string).
 - **Where:** on **the seat**, the subscription logged in on the laptop. Never EC2. **The
   author launches every session;** the agent writes the launcher and prints the command.
-- **Budget:** at most 60 turns per session. A session that reaches 60 without submitting is
-  recorded `no_submit`, counted, and reported in every read's denominator.
+- **Budget:** at most 60 turns per session.
+- **`no_submit`:** a session that ends without `confirm`, at 60 turns or by stopping, is
+  `no_submit`. It is counted and reported in every read's denominator, and **never replaced**
+  (the author, 2026-10-11).
 
 ## 4. Moves, tools and arms
 
@@ -58,25 +83,26 @@ also in-sample reads of what the agent states (R3) and a money read (R4).
 - [AUTHOR] confirms the grammar, rather than 6.5's `evaluate`, so that the replay tier can
   apply (section 6).
 
-**The Sancho tool, new:** `sancho()`.
-- It returns Sancho's one stream for this panel: the panel's test-1 stream (d = 1, version 2 as
-  confirmed at `97d2519`).
+**The model-stream tool, new:** `baseline_model()`.
+- It returns the panel's one model stream: test 1's stream, Sancho at d = 1, version 2 as
+  confirmed at `97d2519`.
+- **The codename "Sancho" never appears in anything an agent sees.** The tool, its description,
+  its result and the submission kind all say "baseline model", and a leak test checks this.
 - It shows the stream's in-sample net Sharpe on the scored window and its mean daily turnover.
 - **No settings are exposed and no arguments are taken.** It reads only the precomputed files
   (section 9).
 - Each call is logged. Repeated calls return the same text.
 
-**What a Sharpe means in a tool result** ([AUTHOR]):
-- Proposed: both the unweighted net Sharpe and the W2-weighted net Sharpe over the scored
-  window, as two labelled numbers: "Sharpe (all years equal)" and "Sharpe (recent years
-  weighted)".
-- The certificate is on the weighted one. 6.5 showed only the unweighted.
+**What a Sharpe means in a tool result** (the author, 2026-10-11):
+- Both, labelled: "Sharpe (all years equal)", the unweighted net Sharpe, which is primary, and
+  "Sharpe (recent years weighted)", the W2-weighted one.
+- **The moves rank by the unweighted.**
 
-**The submission, one per session:** a rule (the best support reached) or Sancho's stream.
-1. `submit_candidate(kind)`, where kind is "rule" or "sancho", names the candidate.
+**The submission, one per session:** a rule (the best support reached) or the model stream.
+1. `submit_candidate(kind)`, where kind is "rule" or "baseline_model", names the candidate.
    - In **arm A** it returns the candidate's in-sample Sharpes.
-   - In **arm B** it returns the same, plus one line: **"Gate's 90% lower bound (weighted) for
-     this candidate: L90 = x."**
+   - In **arm B** it returns the same, plus one line: **"Gate's 90% lower bound for this
+     candidate: L90 = x."** This is the UNWEIGHTED L90 (section 0).
 2. `predict(mean, sd, note)` states the expected out-of-sample annualised net Sharpe and its
    standard deviation: the stated distribution is Normal(mean, sd). A zero sd is a point
    forecast.
@@ -94,22 +120,25 @@ also in-sample reads of what the agent states (R3) and a money read (R4).
 - The system prompts of A and B are **byte-identical**, as the 6.5 declared-class gate was to
   control.
 
-**L90 for arm B** is a lookup:
-- **for a rule:** S_w(rule) − q₀.₉₀(M_b), where M_b are the class's W2 null maxima on the scored
-  window;
-- **for Sancho's stream:** S_w − q₀.₉₀ of its own W2 null (supplied-streams tier).
+**L90 for arm B** is a lookup, unweighted:
+- **for a rule:** S(rule) − q₀.₉₀(M_b), where M_b are the class's unweighted null maxima on the
+  scored window (seed 721002);
+- **for the model stream:** S − q₀.₉₀ of its own unweighted null (supplied-streams tier, seed
+  721000).
 
   Both come from the precompute (section 9).
 
 **Conflict, stated:** `AGENT_PROMPTS_REAL.md` §5 (6.5) says "No arm tells the agent its own
 statistic's null distribution, a critical value, or a p-value." Arm B's L90 reveals S − L90, a
-null quantile. **This cell registers arm B as an explicit exception to that rule,** for this
-cell only. Arm A keeps the rule. No arm shows a p-value or a verdict.
+null quantile. **Arm B is registered as the intervention: an explicit exception to that rule,**
+for this cell only (the author, 2026-10-11). Arm A keeps the rule. No arm shows a p-value or a
+verdict.
 
 ## 5. What an agent never sees (leak tests, section 9)
 
 Nothing an agent can call reveals:
 - an ETF name or ticker, a calendar date, or the panel's size in ETFs;
+- the codename "Sancho", in any case;
 - the arm;
 - any scripted verdict, p-value or certificate: the panel's three tests or any session's;
 - any row after 2024-12-31, and any value computed from one.
@@ -117,56 +146,68 @@ Nothing an agent can call reveals:
 Feature names are never shown. These are tested on the tool layer's outputs, not only on the
 prompts.
 
-## 6. Pricing, from committed logs only
+## 6. Pricing, from committed logs only (unweighted primary; section 0)
 
 For each submission, the pricing script reads the committed session log and the pinned
 precompute. Nothing is refitted.
+- **Primary:** the unweighted statistic (S).
+- **Beside it:** the W2-weighted value, labelled "recency-weighted, descriptive".
 
-| quantity | a rule | Sancho's stream |
+| quantity | a rule | the model stream |
 |---|---|---|
-| raw in-sample net Sharpe, weighted (W2) and unweighted | yes | yes |
-| **the W2 certificate** at the panel's split | **class tier**: p = share of the class's W2 null maxima ≥ S_w; 96% iff p < 0.01 (90% iff p < 0.02, labelled) | **supplied-streams tier**: the stream's W2 null, the panel's test 1 (96% iff p < 0.03; 90% iff p < 0.06, labelled) |
-| the weighted L90 | S_w − q₀.₉₀(class W2 maxima) | S_w − q₀.₉₀(stream W2 null) |
-| the search-adjusted point estimate (below) | EB on the class | not defined (one stream) |
-| the replay tier (6.5's trigger-replay) | where 6.5's condition holds (below) | no |
+| raw in-sample net Sharpe | S (primary); S_w beside | S (primary); S_w beside |
+| **the certificate** | **class tier, unweighted:** p = (1 + #{M_b ≥ S}) / (B + 1) over the class's unweighted null maxima (B 5,000, seed 721002). 96% iff p < 0.01; 90% iff p < 0.02, labelled. The W2 p beside, descriptive. | **supplied-streams tier, unweighted:** the stream's unweighted null (seed 721000). 96% iff p < 0.03; 90% iff p < 0.06, labelled. The W2 p beside. |
+| L90 | S − q₀.₉₀(class unweighted maxima); the W2 L90 beside | S − q₀.₉₀(stream unweighted null); the W2 L90 beside |
+| EB | defined below | not defined (one stream) |
+| the replay tier | where 6.5's condition holds (below) | not applicable |
+| the selection-aware line | — | defined below |
 
-**The search-adjusted point estimate.** `prereg/point-estimate.md` was never live, and its text
-says "No point estimate is registered". Its definitions are therefore registered here, as
-descriptive, unweighted only:
-- **EB** = S − mean_b[S*_b(m_b) − S(m_b)], where m_b is the class argmax on replicate b of the
-  class's unweighted null (the panel's B = 5,000, seed 721002). The precompute stores m_b and
-  S*_b(m_b).
-- A W2 version is not defined there. [AUTHOR]: define one, or keep EB unweighted beside the
-  weighted L90.
-- **Display rule** (from point-estimate.md): never shown to an agent; in the reads, printed for
-  every submission, labelled.
+**EB, the search-adjusted point estimate, defined in full here** (unweighted only; descriptive).
+`prereg/point-estimate.md` was never live, so its definition is restated and registered here:
+- Take the class's unweighted null, B = 5,000, seed 721002. These are the same day-index draws as
+  the certificate.
+- On each replicate b, resample every member's net stream on the scored rows **without
+  demeaning**.
+- Let **m_b** be the member with the highest annualised net Sharpe on that replicate, and
+  **S\*_b(m_b)** that Sharpe.
+- Let S(m) be member m's observed unweighted Sharpe.
+- Then **EB = S − mean_b[ S\*_b(m_b) − S(m_b) ]**, for a rule with observed Sharpe S.
+- The precompute stores m_b and S\*_b(m_b) (`null_unw_undemeaned_argmax` and
+  `null_unw_undemeaned_S_at_argmax`).
+- **Display rule:** never shown to an agent. In the reads, it is printed for every rule
+  submission, labelled descriptive.
 
-**The replay tier.** 6.5's condition, quoted: "the replay arm runs iff the declared class is
-tabulated for this panel" (`prereg/agent-on-real-data.md`, lines 299–301).
-- The class is tabulated for this panel by the precompute, so the condition holds for every
-  rule submission.
-- A session whose log shows a trigger change gets `DEPENDS_ON_JUDGMENT` and no certifying p, as
-  registered. It does not fall through.
-- **A session that called `sancho()` and then submitted a rule:** the rule's replay covers its
-  logged grammar search only, and the Sancho call is outside it. Proposed: report the replay
-  verdict with a flag, "a non-grammar look (Sancho) was taken" ([AUTHOR]).
+**The replay tier** (unweighted, as validated). 6.5's condition, quoted: "the replay arm runs iff
+the declared class is tabulated for this panel" (`prereg/agent-on-real-data.md`, lines 299–301).
+- The class is tabulated by the precompute, so the condition holds for every rule submission.
+- A session whose log shows a trigger change gets `DEPENDS_ON_JUDGMENT` and no certifying p. It
+  does not fall through.
+- **A rule submitted after a call to `baseline_model()`** gets its replay verdict with the flag "a
+  non-grammar look (the model stream) was taken" (the author, 2026-10-11).
 
-**A Sancho submission chosen after a search** ([AUTHOR]).
-- The supplied-streams tier treats Sancho's stream as if declared alone, but the agent chose it
-  after seeing rule Sharpes.
-- Proposed beside it, labelled "selection-aware, descriptive": the stream's p against the joint
-  maximum of the class's W2 null maxima and the stream's W2 null, on shared index draws.
-- Not a certificate.
+**The selection-aware line, for a model-stream submission** (the author, 2026-10-11).
+- It is the p of the stream's S under **the joint null of the session's search and the model's
+  stream**, on shared day-index draws. It is printed beside the supplied-streams p.
+- **Where the session's replay is computable:**
+  - the joint replicate is max(the replayed search's trigger-null score, the model stream's
+    demeaned replicate Sharpe), on the same draws;
+  - the replay's draws are regenerated from its seed and block length (`quixote/certify.py`,
+    `three_nulls`: one generator, one `stationary_bootstrap_indices` call per replicate).
+- **Where it is not** (no grammar move logged, or `DEPENDS_ON_JUDGMENT`): the fallback is the
+  joint maximum of the declared class's unweighted null and the model stream's, on the class
+  null's draws (seed 721002, from the precompute). It is labelled "class envelope, not the
+  session's own search".
+- Descriptive. Not a certificate.
 
 ## 7. Holdout grading (on the host, once, after all sessions are committed)
 
 - **The grader takes the committed submission list.** That is a file of each session's
-  submission: a rule's support, or "sancho". It is pinned by SHA-256 and written by the
+  submission: a rule's support, or "baseline_model". It is pinned by SHA-256 and written by the
   collector from committed logs. Nothing else is taken.
 - **For each submission:** the realised unweighted net Sharpe and the net return over
   2025-01-02..2026-10-09, on one spanning panel (2010-01-04 to the last fetched session).
   - The positions are continuous across the boundary.
-  - Sancho's stream continues causally, as in the B1 grading.
+  - The model stream (Sancho) continues causally, as in the B1 grading.
 - **The same no-restart checks as the B1 grading** (`prereg/french-long-b1-grading.md`, sections
   3–4):
   - features and positions on in-sample rows bit-identical to an in-sample-only build;
@@ -183,9 +224,10 @@ tabulated for this panel" (`prereg/agent-on-real-data.md`, lines 299–301).
 ## 8. Reads, once, in this order
 
 Every read reports the count of submissions in it (80 minus `no_submit`), and splits rules from
-Sancho submissions where both occur.
+model-stream submissions where both occur.
 
-- **R1, lower bounds:** the share of submissions with realised ≥ weighted L90, with the count.
+- **R1, lower bounds:** the share of submissions with realised ≥ the unweighted L90 (section 6),
+  with the count. Beside it, labelled descriptive: the share at or above the W2 L90.
   For both arms, and for each arm separately.
 - **R2, closeness:**
   - the mean signed error and the mean absolute error of realised against:
@@ -194,10 +236,10 @@ Sancho submissions where both occur.
     - (iii) the gate's point estimate (EB, rules only);
   - the CRPS of the agent's stated Normal(mean, sd) against the gate's predictive distribution,
     as in `prereg/agent-on-real-data.md` (lines 208–215, 254–259).
-    - The gate's predictive distribution is F_b = S − M_b + SE_oos·Z_b, using the class maxima for
-      a rule and the stream null for Sancho. SE_oos = sqrt((1 + S²/(2·252)) / 1.76). That is the corrected form: 6.5 wrote (1 + S²/2), which overstates the error at nonzero Sharpe (`b45f111`).
-    - Proposed: the weighted version (S_w and the W2 maxima) as primary, since the bound graded is
-      the weighted L90, and the unweighted (6.5's `sr_deflated`) beside ([AUTHOR]).
+    - The gate's predictive distribution is F_b = S − M_b + SE_oos·Z_b, using the class's
+      unweighted maxima for a rule and the stream's unweighted null for the model stream. SE_oos = sqrt((1 + S²/(2·252)) / 1.76). That is the corrected form: 6.5 wrote (1 + S²/2), which overstates the error at nonzero Sharpe (`b45f111`).
+    - **Unweighted primary; the W2-weighted version beside,** "recency-weighted, descriptive"
+      (the author, 2026-10-11).
 - **R3, in-sample only** (no holdout value):
   - the stated mean and the stated sd against the session's search length (moves, and candidates
     seen), by arm;
@@ -207,11 +249,11 @@ Sancho submissions where both occur.
   - the holdout net Sharpe of the equal-weight book of all submissions, and of each arm's book.
 
 **Both branches, for R1, R2 and R3's B against A:**
-- **R1.** Either "the share at or above L90 is consistent with a 90% bound (it is not below
-  [the registered floor])", or "below it".
-  - [AUTHOR] fixes the floor before the read. Proposed: the bound is "too high" iff the share's
-    one-sided 95% upper end (joint bootstrap, section 9) is below 0.90.
-- **R2.** The gate's point estimate is closer than the raw backtest (smaller MAE), or not closer.
+- **R1.** **The bounds are "too high" iff the one-sided 95% upper end of the share** (the joint
+  day bootstrap, section 9) **is below 0.90** (the author, 2026-10-11). Otherwise: "the share at
+  or above L90 is consistent with a 90% bound".
+- **R2** (unweighted). The gate's point estimate is closer than the raw backtest (smaller MAE),
+  or not closer.
   The agent's stated mean is closer than the raw backtest, or not. Each is stated with its
   bootstrap interval, and "not distinguished" when the interval covers 0.
 - **R3 B against A.** Arm B's stated expectations are lower than A's (the interval excludes 0),
@@ -261,7 +303,7 @@ Sancho submissions where both occur.
 - **2025 was inside a window opened once** for other strategies (the 6.5 grading).
 - **The second grading is in 2028.**
 - **The agent model may know these ETFs' history,** even masked. 6.5's recall note applies.
-- **A rule search and a Sancho call** are not one declared search (section 6).
+- **A rule search and a look at the model stream** are not one declared search (section 6).
 
 ## 11. Seeds (checked 2026-10-11 with `seed_block_check`: NO COLLISION)
 
@@ -275,7 +317,8 @@ Sancho submissions where both occur.
 
 ## 12. Precompute, code and order (Part 3 of the brief)
 
-- **The precompute is produced by the BOX-ETF read itself and pinned** (proposed):
+- **The precompute is produced by the BOX-ETF read itself and pinned** (the author, 2026-10-11).
+  **It holds both the unweighted and the W2 nulls:**
   - the runner also writes Sancho's d = 1 scored stream and turnover;
   - the class's scored net streams (82,240 × 2,516, about 1.7 GB);
   - every member's weighted and unweighted in-sample Sharpe;
@@ -298,16 +341,22 @@ Sancho submissions where both occur.
   9. one host grading session;
   10. the reads.
 
-## [AUTHOR] points
+## The author's decisions (2026-10-11)
 
-1. The grammar search (6.5's grammar arms) rather than `evaluate`, so that the replay tier
-   applies (section 4).
-2. Tool results show both Sharpes, unweighted and W2-weighted, labelled (section 4).
-3. The arm-B exception to 6.5's §5 "no critical value" rule (section 4).
-4. EB unweighted only, or define a W2 point estimate (section 6).
-5. The replay flag for a Sancho look before a rule submission (section 6).
-6. The selection-aware line for a Sancho submission (section 6).
-7. R2's CRPS: weighted primary with the unweighted beside (section 8).
-8. R1's floor for "too high" (section 8).
-9. The precompute made by BOX-ETF, which means a runner change before the box (section 12).
-10. `no_submit` sessions: counted and reported, not replaced (section 3).
+0. **The primary statistic is unweighted, everywhere in this cell.** The W2 values are printed
+   beside, labelled "recency-weighted, descriptive". The parent's scripted certificate stays W2.
+1. The grammar search: **yes.**
+2. Tool results show both Sharpes, labelled. **The ranking is on the unweighted.**
+3. The arm-B exception: **yes, registered as the intervention.** Arm B shows the unweighted L90.
+4. EB: **unweighted only, defined in full here (section 6), descriptive.**
+5. The replay flag after a look at the model stream: **yes.**
+6. The selection-aware line: **yes.** It is the p under the joint null of the session's search
+   and the model's stream, beside the supplied-streams p (section 6).
+7. CRPS: **unweighted primary, weighted beside.**
+8. R1: **"too high" iff the share's one-sided 95% upper end (the joint day bootstrap) is below
+   0.90.**
+9. The precompute by BOX-ETF: **yes.** It holds both the unweighted and the W2 nulls.
+10. `no_submit`: **counted and reported, never replaced.** A session that ends without `confirm`
+    is `no_submit`.
+11. **The codename is renamed:** the tool is `baseline_model`, and no agent-facing string says
+    "Sancho". A leak test checks this.
