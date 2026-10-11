@@ -252,3 +252,31 @@ The compute box is not used for grading.
 6. Item 3 of section 9: **left uncited.** A citation goes in by amendment after the author's
    check.
 7. The descriptive additions of section 5: **all three kept,** labelled descriptive.
+
+## Amendment 1, 2026-10-11 (America/Chicago): the thread setting for the grading run
+
+**What happened (the author's check from the laptop, 22:26 UTC):**
+- the tmux session `b1g` was alive;
+- load average 109 on 32 vCPU;
+- four forkserver workers at about 800% CPU each, elapsed 5 h 30 min;
+- no check line after the b1 pin checks;
+- no fit had finished, and no grades file existed.
+
+**The cause:** 4 workers × 32 BLAS threads = 128 threads on 32 cores. The 32-thread setting was
+the reviewer's (section 8). It suited the compute box's 192 vCPU, not the holdout host's 32.
+
+1. **Section 8's `THREADS=32` becomes `THREADS=8`, with `--workers 4`:** 32 threads on 32 vCPU.
+   OMP, OpenBLAS and MKL threads are all set to 8.
+2. **The first launch is stopped by the author before any fit finished.**
+   - It wrote no grades.
+   - Nothing from it was seen beyond the start-up checks and the pin checks: check a (start-up,
+     cut hashes, holdout rows complete) and b1 (pins), all passing.
+   - Its log is kept as `logs/b1g_run1.log` and fetched with the outputs.
+   - The relaunch uses a fresh output directory and a fresh log.
+3. **Every check is unchanged.** That includes b.2, the in-sample Sharpes to 3 decimals, which
+   now also covers the thread change.
+4. **If b.2 misses, nothing is graded.** The registered fallback is then `--workers 1` with
+   `THREADS=32`. That needs the author's go, and the agent asks before it.
+5. **The stop-and-ask mark for the relaunch is 2 host-hours from its start.**
+
+The graded quantity, the rule, the objects, the seed and the checks are unchanged.
