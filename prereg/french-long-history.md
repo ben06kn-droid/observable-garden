@@ -292,3 +292,24 @@ with the registration's own mentions excluded, over prereg, code and runs. Run o
 **H1 ran at `b541ddf`,** before this amendment. This amendment does not touch
 `data/french_long_split.py`, its inputs (the registered zip) or the cut it wrote. Nothing else
 changes.
+
+## Amendment 2, 2026-10-11 (America/Chicago): status lines overtaken by `756af89` and `dab1ac0`
+
+Four statements were true when written and have since been overtaken. They stay as written,
+since amendments are append-only. Read them as follows:
+- **Lines 8–10** ("Not yet set: `REGISTRATION` …"): overtaken by `dab1ac0`. It sets
+  `REGISTRATION = "756af89c0b7c7663bac184364b722cdb16a73807"` in `data/french_long_split.py`
+  and `experiments/french_long_read.py`.
+- **Line 13** ("Nothing has run on the box or the host for it"): true when this file went
+  live at `756af89`. Since then:
+  - H1, the `b1` cut, ran on the holdout host at `b541ddf`; its record and run record are at
+    `209f6a4`;
+  - nothing has run on the box.
+- **Line 268** (point 5, "The registration is not live"): overtaken by `756af89`, which made
+  it live, and `dab1ac0`, which set `REGISTRATION`.
+- **The operator sheets' title**, "DRAFT; nothing runs before the registration is live", in
+  `docs/french_long_operator_sheets.md`: overtaken by the same two commits. The sheets are
+  corrected in a commit of their own.
+
+This amendment does not touch `data/french_long_split.py`, its inputs or the `b1` cut. No rule
+changes.
