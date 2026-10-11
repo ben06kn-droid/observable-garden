@@ -1,6 +1,8 @@
 # French long history, B1: holdout grading, a registration
 
-**Status: DRAFT, NOT LIVE (2026-10-11, America/Chicago).** For the author's review.
+**Status: LIVE, 2026-10-11 (America/Chicago).**
+- The author confirmed the draft's points 1–7 (answers at `b5b6abf`). This status is set in a
+  commit touching only this file.
 - **Nothing has run for it.** No `b1-holdout` cut has been made. No row dated 1990 or later has
   been parsed by this project.
 - The grader and its reader are written **after** this registration goes live. Each refuses to
@@ -8,7 +10,7 @@
 - Amendments are append-only and dated.
 
 **Parent registration:** `prereg/french-long-history.md`, live at `756af89`, with amendments 1
-(`1fcbfc2`) and 2 (`27e8a10`).
+(`1fcbfc2`), 2 (`27e8a10`) and 3 (`f1fc56b`).
 - Its section j, item 3, fixes the graded quantity and the rule. **This registration may add
   checks. It may not change that quantity or that rule.**
 - The B1 in-sample read: raw outputs at `314beda`, the reader's output at `ff04846`.
