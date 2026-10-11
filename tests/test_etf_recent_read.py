@@ -183,6 +183,22 @@ def test_the_read_end_to_end_on_a_synthetic_cut(synth, tmp_path, monkeypatch):
     pan, _ = ER.sancho_inputs(*ER.load_from(ER.check_cut(cut)[2], use_from=dates[DROP], last=dates[-1])[:4], lag=2)
     ref_bc = np.asarray(RealSandbox(pan, spec_class=CLS).base_feature_columns(), float)[ER.scored_index(pan)]
     assert bcs.shape == (n_sc, ref_bc.shape[1]) and np.array_equal(bcs, ref_bc)
+    # the unweighted stream null (test 1's, seed 721000) and the joint class+model null (seed 721002)
+    assert sa["null_unw"].shape == (120,)
+    assert (1 + int(np.sum(sa["null_unw"] >= t1["unweighted"]["S"]))) / 121 == t1["unweighted"]["p"]
+    jm = cs["joint_unw_max"]
+    assert jm.shape == (120,) and np.all(jm >= cs["null_unw_max"])
+    from estimator.bootstrap import stationary_bootstrap_indices
+    rng = np.random.default_rng(721002)
+    Cc = np.empty((n_sc, 120))
+    for bb in range(120):
+        Cc[:, bb] = np.bincount(stationary_bootstrap_indices(n_sc, t3["block_length"], rng), minlength=n_sc)
+    x0 = sa["stream"] - sa["stream"].mean()
+    for bb in (0, 5, 37, 119):
+        m = (x0 @ Cc[:, bb]) / n_sc
+        v = ((x0 * x0) @ Cc[:, bb] - n_sc * m * m) / (n_sc - 1)
+        mrep = (m / np.sqrt(v) if v > 0 else 0.0) * np.sqrt(252.0)
+        assert np.isclose(jm[bb], max(cs["null_unw_max"][bb], mrep), rtol=0, atol=1e-12)
     for t in (t1, t2, t3):
         assert 0 < t["weighted_W2"]["p"] <= 1 and t["unweighted"]["label"] == FL.UNWEIGHTED_LABEL
     assert "cost_10bps_beside" in t1 and set(t1["performance_line"]["lines"]) == {"252", "756"}

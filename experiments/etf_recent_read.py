@@ -332,6 +332,7 @@ def stream_block_scored(panel, inp, book, first, idx, seed: int, alphas, label: 
     ed = panel.meta["earned_dates"]
     if extras is not None:
         extras.update({"stream": np.asarray(s, float), "null_w2": np.asarray(wt["null_max"], float),
+                       "null_unw": np.asarray(un["null_max"], float),      # test 1's unweighted null, seed 721000
                        "S_w": float(wt["S"]), "S_unw": float(un["S"]), "seed": int(seed),
                        "earned_dates": np.array([str(ed[i]) for i in idx])})
     return {"test": label, "alphas": {"96%": alphas[0], "90%": alphas[1]}, "n_rows": int(len(idx)),
@@ -344,10 +345,12 @@ def stream_block_scored(panel, inp, book, first, idx, seed: int, alphas, label: 
 
 
 def price_class_argmax(panel, cache, bc: np.ndarray, seed: int, B: int, alpha: float, feature_names,
-                       store=None) -> dict:
+                       store=None, model_stream=None) -> dict:
     """`french_insample_read.price_class`, arithmetic unchanged, also returning each replicate's
     argmax member m_b and S*_b(m_b), and every member's observed unweighted Sharpe. `store`, if
-    given, is a writable (N, T) array that receives every member's stream, chunk by chunk."""
+    given, is a writable (N, T) array that receives every member's stream, chunk by chunk.
+    `model_stream`, if given (length T), is the model stream: its demeaned replicate Sharpe on the
+    same index counts C enters `_joint_max` = max(class replicate maximum, model replicate)."""
     import environments.planted_fast as pf
     from environments.class_table import CHUNK
     from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
@@ -392,6 +395,15 @@ def price_class_argmax(panel, cache, bc: np.ndarray, seed: int, B: int, alpha: f
         uup = umax > U_b
         uarg_b[uup] = s0 + urep.argmax(axis=0)[uup]
         U_b = np.maximum(U_b, umax)
+    joint = None
+    if model_stream is not None:
+        x0 = np.asarray(model_stream, float)[None, :]
+        x0 = x0 - x0.mean(axis=1, keepdims=True)
+        mm = (x0 @ C) / T
+        mv = ((x0 * x0) @ C - T * mm * mm) / (T - 1)
+        mpos = mv > 0
+        mrep = (np.where(mpos, mm / np.sqrt(np.where(mpos, mv, 1.0)), 0.0) * ann)[0]
+        joint = np.maximum(M_b, mrep)
     p = (1 + int(np.sum(M_b >= best))) / (B + 1)
     conf = confidence(best, M_b, ppy=float(panel.periods_per_year), tier="class")
     member = cache.members[best_j]
@@ -402,7 +414,8 @@ def price_class_argmax(panel, cache, bc: np.ndarray, seed: int, B: int, alpha: f
             "best_member": {"index": best_j, "support": [[int(k), float(sg)] for k, sg in member],
                             "features": [f"{'+' if sg > 0 else '-'}{feature_names[int(k)]}"
                                          for k, sg in member]},
-            "_null_max": M_b, "_argmax": arg_b, "_S_all": S_all, "_u_max": U_b, "_u_argmax": uarg_b}
+            "_null_max": M_b, "_argmax": arg_b, "_S_all": S_all, "_u_max": U_b, "_u_argmax": uarg_b,
+            "_joint_max": joint}
 
 
 class _Cols:
@@ -447,7 +460,8 @@ def class_block_scored(panel, members, idx, seed: int, alphas, cache_dir=None, c
     if extras is not None and extras.get("precompute_dir") is not None:
         store = np.lib.format.open_memmap(Path(extras["precompute_dir"]) / "class_scored.npy", mode="w+",
                                           dtype=np.float64, shape=(cache.N, T))
-    un = price_class_argmax(sub, cache, bc, seed, FL.B, alphas[0], panel.feature_names, store=store)
+    un = price_class_argmax(sub, cache, bc, seed, FL.B, alphas[0], panel.feature_names, store=store,
+                            model_stream=None if extras is None else extras.get("model_stream"))
     if store is not None:
         store.flush()
         del store
@@ -457,12 +471,13 @@ def class_block_scored(panel, members, idx, seed: int, alphas, cache_dir=None, c
                        "null_unw_argmax": un.pop("_argmax"), "seed": int(seed),
                        "null_unw_undemeaned_argmax": un.pop("_u_argmax"),
                        "null_unw_undemeaned_S_at_argmax": un.pop("_u_max"),
+                       "joint_unw_max": un.pop("_joint_max"),
                        "base_columns": np.asarray(RealSandbox(panel, spec_class=CLS).base_feature_columns(), float)[idx],
                        "members_sha256": hashlib.sha256(json.dumps(
                            [[list(map(float, kv)) for kv in m] for m in full.members]).encode()).hexdigest()})
         extras["null_unw_S_at_argmax"] = extras["null_unw_max"].copy()
     else:
-        for k in ("_S_all", "_null_max", "_argmax", "_u_max", "_u_argmax"):
+        for k in ("_S_all", "_null_max", "_argmax", "_u_max", "_u_argmax", "_joint_max"):
             un.pop(k)
     member = cache.members[j]
     ed = panel.meta["earned_dates"]
@@ -500,12 +515,13 @@ def write_precompute(pdir: Path, sancho: dict, cls: dict, git_head: str) -> str:
     pdir = Path(pdir)
     np.savez(pdir / "sancho_d1.npz", stream=sancho["stream"], earned_dates=sancho["earned_dates"],
              turnover_mean=sancho["turnover_mean"], S_w=sancho["S_w"], S_unw=sancho["S_unw"],
-             null_w2=sancho["null_w2"], seed=sancho["seed"])
+             null_w2=sancho["null_w2"], null_unw=sancho["null_unw"], seed=sancho["seed"])
     np.savez(pdir / "class_stats.npz", S_w=cls["S_w"], S_unw=cls["S_unw"], null_w2_max=cls["null_w2_max"],
              null_unw_max=cls["null_unw_max"], null_unw_argmax=cls["null_unw_argmax"],
              null_unw_S_at_argmax=cls["null_unw_S_at_argmax"],
              null_unw_undemeaned_argmax=cls["null_unw_undemeaned_argmax"],
              null_unw_undemeaned_S_at_argmax=cls["null_unw_undemeaned_S_at_argmax"],
+             joint_unw_max=cls["joint_unw_max"],
              members_sha256=cls["members_sha256"], seed=cls["seed"])
     np.save(pdir / "base_columns.npy", cls["base_columns"])      # scored rows, NOT demeaned
     files = ("sancho_d1.npz", "class_scored.npy", "class_stats.npz", "base_columns.npy")
@@ -553,6 +569,8 @@ def run_read(dates, tickers, P, Vol, members, workers: int = 4, cache_dir=None, 
             ex["turnover_mean"] = turnover_mean(book, first, idx)
         out[key]["first_scored_row"] = int(first)
         out[key]["cost_10bps_beside"] = cost_beside(book, first, inp, inp.ppy, idx)
+    if cls_ex is not None:
+        cls_ex["model_stream"] = sancho_ex["stream"]                 # for joint_unw_max, on the class null's C
     panel, _ = sancho_inputs(dates, tickers, P, Vol, 2)
     out["test3_class_d1"] = class_block_scored(panel, members, scored_index(panel), SEED + 2, ALPHA["class"],
                                                cache_dir, cache_name, extras=cls_ex)
