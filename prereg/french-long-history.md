@@ -343,3 +343,15 @@ changes no rule and no verdict.
      Sharpe.
    - For B2 (6.6 years) it is 0.39 at every Sharpe: "0.43 at SR 0.7" becomes **0.39**.
    - The graded quantity and the rule are unchanged.
+
+## Amendment 4, 2026-10-11 (America/Chicago): read B2 is withdrawn
+
+- **The author withdraws read B2,** before any B2 data was cut. The `b2-extra` cut
+  (1990-01-01..2008-12-26) has not been made, and no row of it has been parsed.
+- **So H3, BOX-B2 and H4 will not run.** Seeds 718010–718013 stay recorded and unused.
+- **Read B1 and its grading stand:** the in-sample read at `314beda` / `ff04846`, and its
+  grading under `prereg/french-long-b1-grading.md` (live at `00417de`), which is under way on
+  the holdout host.
+- **The reason:** the author's direction of 2026-10-11. No work from here on uses data before
+  2010, and strategies are developed on 2015–2024. Any rolling cuts of this history are
+  withdrawn too.
