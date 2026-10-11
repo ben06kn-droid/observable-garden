@@ -74,14 +74,14 @@ on a cut-hash mismatch.
 
 ## H2. The B1 grading (the author; on the host)
 
-The grader (`experiments/french_long_grade.py`) is written after B1's in-sample read is
-committed, under its own grading registration, as on French.
-1. [author] Start the host and send its IP.
-2. [H] `cd ~/observable-garden && git fetch origin && git checkout G2 && git rev-parse HEAD`
-3. [H] `.venv-grading/bin/python -m data.french_long_split --cut b1-holdout --zip ~/french_holdout/49_Industry_Portfolios_daily_CSV.zip --out ~/french_long/b1_holdout.csv`
-4. [H] `.venv-grading/bin/python -m experiments.french_long_grade --read b1 --insample ~/french_long/b1_insample.cut.json --holdout ~/french_long/b1_holdout.cut.json --out runs/french_long_b1_grade/D --expect-head G2`
-5. [L] `rsync -av HOST:observable-garden/runs/french_long_b1_grade/ runs/french_long_b1_grade/; echo "exit=$?"`
-6. [L] Commit, then read once. [L] Stop the host as in H1 step 10, once the author says the host work is done.
+**Superseded by `docs/etf_recent_operator_sheets.md`, HOST-1, steps 11–20.** That one host
+session makes the ETF fetch and cut first, then the `b1-holdout` cut and the grading.
+- **The grader:** `experiments/french_long_grade.py`, under `prereg/french-long-b1-grading.md`
+  (live at `00417de`).
+- **The command:** `--insample-cut` and `--holdout-cut`, with `OMP_NUM_THREADS=32`, in tmux.
+- **The cap:** 3.5 host-hours.
+- **The stop:** the agent runs `ssh og-holdout 'sudo shutdown -h now'` after the author says the
+  host work is done.
 
 ## H3. The host cut for B2 (only after B1's grading is committed)
 
