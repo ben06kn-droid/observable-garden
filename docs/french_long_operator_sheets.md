@@ -30,11 +30,15 @@ Placeholders, each filled in the go message for its step:
    gitignored.
 10. [author] Stop the host: `ssh HOST 'sudo shutdown -h now'`
 
-## BOX-B1. The B1 in-sample read (one box session)
+## BOX-B1. The B1 in-sample read (one box session; stop and ask at 2 box-hours)
+
+The box checks out G1 exactly. `main` moves on after H1, when the cut record is committed, so
+G1 is not its tip. Before pricing, the runner writes `pins.json` and refuses on a cut-hash
+mismatch.
 
 1. [author] Start the compute box and send its IP. [L] Set `HostName` of `og-48` to it.
 2. [L] `ssh og-48 'mkdir -p ~/french_long' && scp runs/french_long_cuts/b1_insample.csv runs/french_long_cuts/b1_insample.cut.json og-48:french_long/`
-3. [BOX] `cd ~/observable-garden && git pull --ff-only origin main && git rev-parse HEAD` (must equal G1; move aside and record any untracked files that match committed blobs)
+3. [BOX] `cd ~/observable-garden && git fetch origin && git checkout G1 && git rev-parse HEAD` (must equal G1; if the checkout is blocked by untracked files that match committed blobs, move them aside and record them)
 4. [BOX] `git status --porcelain --untracked-files=no | wc -l` (must be 0)
 5. [BOX] `echo "d23e922acd891e77212e4d0fbcee9ba973c96dee479491341d05ba595357ebb7  $HOME/$W" | sha256sum -c`
 6. [BOX] `OMP_NUM_THREADS=1 .venv/bin/pytest -q tests/test_french_long_panel.py tests/test_french_long_read.py tests/test_read_french_long.py tests/test_recency.py`
@@ -42,7 +46,7 @@ Placeholders, each filled in the go message for its step:
 8. [L] `rsync -av og-48:observable-garden/runs/french_long_b1/ runs/french_long_b1/; echo "exit=$?"`
 9. [L] `rsync -av og-48:observable-garden/logs/fl_b1.log runs/french_long_b1/D/; echo "exit=$?"`
 10. [L] `ssh og-48 'sudo shutdown -h now'`
-11. [L] Commit `results.json` and the run record. Then read once:
+11. [L] Commit `results.json`, `pins.json` and the run record. Then read once:
     `.venv/bin/python -m experiments.read_french_long --dir runs/french_long_b1/D`. Commit the
     output unedited and push.
 
@@ -65,7 +69,7 @@ committed, under its own grading registration, as on French.
 4. [L] `scp HOST:french_long/b2_extra.csv HOST:french_long/b2_extra.cut.json runs/french_long_cuts/`
 5. [L] Commit the cut record. [author] Stop the host.
 
-## BOX-B2. The B2 in-sample read (one box session)
+## BOX-B2. The B2 in-sample read (one box session; stop and ask at 2.5 box-hours)
 
 As BOX-B1, with these two commands in place of steps 2 and 7:
 

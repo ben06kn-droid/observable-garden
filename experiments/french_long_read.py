@@ -17,7 +17,9 @@ In this order:
   2. Sancho at d = 0, NOT IMPLEMENTABLE, the same: 96% iff p < 0.01, 90% iff p < 0.02;
   3. the class maximum (82,240 members, the fast kernel) at the registered timing d = 1, W2:
      96% iff p < 0.01, 90% iff p < 0.02.
-For each: the weighted L90 (W2 null); the UNWEIGHTED statistic, its p and L90 beside, labelled
+Before any fit or pricing call it writes `pins.json`: the SHA-256 of each cut CSV, of X (both
+timings) and of Sancho's inputs (section j). It refuses to price if a cut CSV's SHA-256 differs
+from its H1 record. For each test: the weighted L90 (W2 null); the UNWEIGHTED statistic, its p and L90 beside, labelled
 "unweighted, descriptive, not the certificate"; for the streams, the performance line (the
 unweighted net Sharpe over the last 252 and 756 scored rows, 90% intervals). Block length: the
 registered rule (the class rule on the base columns over the whole in-sample window), with
@@ -192,6 +194,23 @@ def run_read(dates, names, R, read: str, members, workers: int = 4, cache_dir=No
     return out
 
 
+def _sha(a) -> str:
+    return hashlib.sha256(np.ascontiguousarray(a, dtype=np.float64).tobytes()).hexdigest()
+
+
+def pin_record(dates, names, R, paths) -> dict:
+    """The SHA-256 of each cut CSV, of X (both timings) and of Sancho's inputs (version 2's X
+    block and the groups, both timings), written before any pricing call (section j)."""
+    rec = {"cut_csv_sha256": {Path(p).name: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in paths},
+           "rows": int(R.shape[0]), "first_date": str(dates[0]), "last_date": str(dates[-1])}
+    for lag in (2, 1):
+        panel, info, inp = sancho_inputs(dates, names, R, lag)
+        rec[f"d{lag - 1}"] = {"X_features_sha256": _sha(panel.features), "X_shape": list(panel.features.shape),
+                              "v2_X_block_sha256": _sha(inp.blocks["X"]), "groups_sha256": _sha(inp.groups),
+                              "entry_dates": dict(zip(names, info["entry_date"]))}
+    return rec
+
+
 # -- refusals and main ---------------------------------------------------------------------
 
 def refusals(expect_head: str, wheel: str | None) -> list[str]:
@@ -253,6 +272,8 @@ def main(argv=None) -> int:
         raise SystemExit("results exist; the read runs once")
     out.mkdir(parents=True, exist_ok=True)
     dates, names, R = load(a.read, paths)
+    pins = pin_record(dates, names, R, paths)
+    (out / "pins.json").write_text(json.dumps(pins, indent=1))          # before any fit or pricing call
     members = members_in_order(CLS, 40)
     rec = {"registration": REGISTRATION, "git_head": a.expect_head, "platform": f"{platform.system()} {platform.machine()}",
            "inputs": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}, "rows": int(R.shape[0]),

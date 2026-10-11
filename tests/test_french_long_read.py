@@ -55,3 +55,13 @@ def test_the_registration_is_set_and_the_laptop_is_refused():
     assert FL.REGISTRATION == "756af89c0b7c7663bac184364b722cdb16a73807"
     bad = FL.refusals("0" * 40, None)
     assert not any("not live" in b for b in bad) and any("Linux" in b for b in bad)
+
+
+def test_the_pin_record(synth, tmp_path):
+    dates, names, R = synth
+    p = tmp_path / "c.csv"
+    p.write_text("x")
+    rec = FL.pin_record(dates, names, R, [p])
+    assert set(rec) >= {"cut_csv_sha256", "d1", "d0"} and len(rec["d1"]["X_features_sha256"]) == 64
+    assert rec["d0"]["X_shape"][0] == rec["d1"]["X_shape"][0] + 1
+    assert rec == FL.pin_record(dates, names, R, [p])           # deterministic
