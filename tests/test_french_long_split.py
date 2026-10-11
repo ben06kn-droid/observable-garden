@@ -29,6 +29,8 @@ def test_the_holdout_and_b2_extra_windows_never_reach_2020():
     assert all(not d.startswith("2020") for d, _ in e["rows"])
 
 
-def test_refuses_until_live(tmp_path):
-    with pytest.raises(SystemExit, match="not live"):
+def test_the_registration_is_set_and_a_wrong_zip_is_refused(tmp_path):
+    assert S.REGISTRATION == "756af89c0b7c7663bac184364b722cdb16a73807"
+    (tmp_path / "x.zip").write_bytes(b"not the zip")
+    with pytest.raises(SystemExit, match="SHA-256"):
         S.main(["--cut", "b1", "--zip", str(tmp_path / "x.zip"), "--out", str(tmp_path / "o.csv")])

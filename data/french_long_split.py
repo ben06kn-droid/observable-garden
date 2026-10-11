@@ -28,7 +28,7 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-REGISTRATION = ""                    # set by the live commit
+REGISTRATION = "756af89c0b7c7663bac184364b722cdb16a73807"
 ZIP_SHA256 = "8f394fe34bea54d41b9aafed410425ee8f8e252ede3c71a7c1cd20bab83040de"
 CUTS = {"b1": (19260701, 19891231), "b1-holdout": (19900101, 19951231), "b2-extra": (19900101, 20081226)}
 CODES = ("-99.99", "-999", "-999.0", "-99.990")

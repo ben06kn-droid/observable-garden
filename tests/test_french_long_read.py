@@ -51,5 +51,7 @@ def test_the_loader_refuses_late_rows_and_disorder(tmp_path):
         FL.load("b1", [q, q])
 
 
-def test_the_runner_refuses_while_not_live():
-    assert any("not live" in b for b in FL.refusals("0" * 40, None))
+def test_the_registration_is_set_and_the_laptop_is_refused():
+    assert FL.REGISTRATION == "756af89c0b7c7663bac184364b722cdb16a73807"
+    bad = FL.refusals("0" * 40, None)
+    assert not any("not live" in b for b in bad) and any("Linux" in b for b in bad)

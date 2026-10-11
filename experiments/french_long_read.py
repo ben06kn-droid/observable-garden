@@ -45,7 +45,7 @@ from pathlib import Path
 
 import numpy as np
 
-REGISTRATION = ""                                    # set by the live commit
+REGISTRATION = "756af89c0b7c7663bac184364b722cdb16a73807"
 H = 1260
 B = 5000
 SEEDS = {"b1": 718000, "b2": 718010}                 # +0 d = 1, +1 d = 0, +2 class, +3 performance line
