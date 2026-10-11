@@ -221,16 +221,43 @@ needs its own go.
 - **The d = 0 stream,** in every branch, carries "NOT IMPLEMENTABLE".
 - **The validation's limits** (section c) are printed beside every certificate.
 
+## j. Added before going live (the author, 2026-10-11)
+
+The author confirmed the six answers as written at `653a400`, including the certificate on
+the W2-weighted statistic for both reads.
+
+1. **Pinning, as proposed.**
+   - The runner writes, to the run's directory and **before any pricing call**, the SHA-256
+     of each cut CSV, of X (both timings) and of Sancho's inputs (version 2's X block and the
+     groups, both timings).
+   - **It refuses to price if a cut CSV's SHA-256 differs from the one H1 recorded** in the
+     cut's record.
+2. **Box caps:** BOX-B1 stops and asks at 2 box-hours; BOX-B2 at 2.5 box-hours.
+3. **The graded quantity, fixed now for both reads.**
+   - **What is graded:** the UNWEIGHTED net Sharpe over the graded window, with its
+     stationary-bootstrap 90% interval, compared with the test's in-sample WEIGHTED L90.
+   - **"Held" iff the realised value ≥ the weighted L90.**
+   - **Why this quantity:** the weighted statistic estimates the recent Sharpe. The graded
+     window is short and wholly recent, so its plain Sharpe is the matching realised quantity.
+   - **How little a short window can distinguish.** The standard error of an annualised Sharpe
+     is about sqrt((1 + SR²/2) / years):
+     - over 6 years (B1, 1990–1995): **0.41** at SR 0 (0.46 at SR 0.7). The 90% interval is
+       about ±0.67;
+     - over 6.6 years (B2, 1,674 graded rows): 0.39 at SR 0 (0.43 at SR 0.7). The 90% interval
+       is about ±0.64.
+
+     So "held" and "did not hold" differ only for realised values well away from the bound. A
+     bound near the realised value is not distinguished from it.
+   - **The grader registrations may add checks. They may not change this quantity or this
+     rule.**
+4. **A refused test is still graded,** as on French.
+
 ## Remaining [AUTHOR] points
 
-1. **Confirm or override** the six answers above, which were sent by the reviewer.
-2. **The pin of X and Sancho's inputs for the long panel.** The panel is built from host cuts
-   that exist only after going live (H1), on the box (Linux). So X cannot be pinned before
-   this registration goes live, as French's was. Proposed: the B1 runner records the
-   SHA-256 of X and of version 2's blocks in its results before pricing. An amendment after
-   H1 could pin them on the box before BOX-B1 instead (an extra short box session).
-3. **The box estimates are uncertain,** especially the class's threading. BOX-B2 may near 2
-   hours.
+1. ~~Confirm or override the six answers~~: confirmed by the author (section j).
+2. ~~The pin of X~~: accepted as proposed (section j, item 1).
+3. **The box estimates are uncertain,** especially the class's threading. The caps are in
+   section j, item 2.
 4. **The graders** (H2, H4) are written after each in-sample read, under their own grading
    registrations, as on French.
 5. **The registration is not live.** Going live sets `REGISTRATION` in
