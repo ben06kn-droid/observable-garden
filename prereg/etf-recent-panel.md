@@ -1,0 +1,329 @@
+# ETF recent panel: Sancho on liquid ETFs with a recent holdout, a registration
+
+**Status: DRAFT, NOT LIVE (2026-10-11, America/Chicago).** For the author's review.
+- **Nothing has been fetched.** Nothing has run on the holdout host or the box.
+- The only run was the laptop design script of section h, outcome-free, on the already-read
+  pool: script `bf90274`, output `717e1a9`.
+- Amendments are append-only and dated. The [AUTHOR] points are listed at the end.
+
+## a. Disclosures: what was seen before, and what each does and does not weaken
+
+1. **2005–2022 on this list was read before** (`prereg/agent-on-real-data.md`).
+   - **What was read:** 4,531 sessions in-sample.
+     - The class tier: 82,240 members, p = 1.0000 on all 80 runs.
+     - 80 agent sessions (claude-sonnet-5, four arms of 20).
+     - Two extra looks: `ret1_z` at Sharpe −2.077, and a best-case short list at p = 0.0580.
+   - **It weakens:**
+     - This panel's in-sample (2005–2024) re-uses those 18 years. It is not independent of
+       what the author has seen.
+     - The decision to run this panel was made after those results. That is a forking path
+       at the level of panels. No test here corrects for it.
+   - **It does not weaken:**
+     - The registered tests' size, given the procedure. Sancho's code, the features, the
+       split and the levels are fixed before this fetch.
+     - **Sancho has never been run on real ETF returns:** no record in `runs/`, and
+       `prereg/ml-v2-confirmation.md` says "No holdout row is involved".
+2. **The sealed 2023–2025 holdout was opened once,** for the 6.5 grading
+   (`prereg/holdout-grading.md`). It was graded 2026-10-06 at `55a39f6`, live `3a5483e`, read
+   at `0426352`.
+   - **2023–2024 move into this in-sample.** That is a re-use of opened data as in-sample. It
+     weakens nothing about the in-sample test beyond item 1.
+   - **2025 sits in this holdout,** but it was inside an opened window. The 80 submissions'
+     realised returns over 2023–2025 were read. That told the author how ETF-feature
+     strategies did in 2025.
+     - **It weakens:** 2025 as an unseen period, for the author's choices (including the
+       choice to run this panel now).
+     - **It does not weaken:** the graded number's mechanics. Sancho never ran on 2025; its
+       code and settings are fixed before the fetch; the graded quantity is fixed here.
+   - **Only 2026 is untouched:** about 194 sessions to 2026-10-09 (0.77 years; SE about 1.14).
+     That is too short to grade alone. Proposed: a 2026-only realised value printed beside,
+     descriptive, never deciding ([AUTHOR]).
+3. **Sancho was confirmed on planted panels built on these ETF features** (`97d2519`,
+   `prereg/ml-v2-confirmation.md`).
+   - **The confirmation panels:**
+     - X is the real pinned ETF X (2005–2022).
+     - The X and V blocks come from the real ETF data.
+     - Returns were planted, not real.
+   - **It weakens:** generalisation. A certificate here is on the features Sancho's
+     configuration was chosen on. It says little about other universes.
+   - **It does not weaken:**
+     - the test's size, which comes from the bootstrap null on this panel's returns;
+     - Sancho's selection, which never saw real ETF returns.
+4. **The candidate list itself was named in 2026** (`prereg/etf-universe.md`), from
+   well-known ETFs that all traded through 2025.
+   - The new rule (section b) stops conditioning on survival. **It does not undo the list.** A
+     2005 investor would have had other candidates, some of which later closed.
+   - **It weakens:** any claim about a 2005-formed universe.
+   - **It does not weaken:** the test, given the list.
+5. **The holdout's length** (section g): about 1.76 years.
+   - The grading can tell little apart. P(held) is about 0.66–0.70 if the true Sharpe is at
+     the bar, and about 0.33–0.46 if it is 0, for a stream certified at the bar.
+   - This is stated before any number exists.
+
+## b. Universe: inclusion with no conditioning on survival
+
+**The candidates:** the 40 of `prereg/etf-universe.md`.
+- **Equity, US:** SPY QQQ DIA IWM MDY IWD IWF IWN IWO IJH IJR.
+- **US sectors:** XLB XLE XLF XLI XLK XLP XLU XLV XLY.
+- **International:** EFA EWJ EWG EWU EWC EWA EWH EEM EWZ EWT EWY.
+- **Bonds:** SHY IEF TLT LQD TIP AGG.
+- **Other:** GLD IYR VNQ.
+
+**The rule** (formation window 2005-01-03 to 2014-12-31):
+1. **A bar on every NYSE session from 2005-01-03 to 2014-12-31** (XNYS, exchange_calendars
+   4.13.2, as `data/fetch_etf.py`).
+   - No gap is allowed: a missing session fails. The old rule allowed a single missing
+     session; [AUTHOR].
+2. **Liquidity: median daily share volume over 2005-01-03 to 2014-12-31 of at least 500,000**
+   (proposed).
+   - It is the old threshold, on the formation window only.
+   - Nothing argues for a different number. Share volume is what the old rule used
+     (`etf-universe.md`), and Yahoo's volume is split-adjusted.
+3. **No ticker, merger or structure change from 2005-01-03 to 2014-12-31,** checked against
+   issuer records. Later changes go to the death rule (item 4). [AUTHOR]: the old rule 3's
+   check was recorded as "separately", and no committed record was found.
+4. **The death rule:** an ETF is dead from the session after its last bar if either:
+   - it has no bar on any later fetched session; or
+   - it has a silence of 10 or more consecutive sessions.
+
+   Then:
+   - its position is closed at its last bar's adjusted close;
+   - the exit is costed, and its position is zero after;
+   - there is no re-entry;
+   - it is never dropped retroactively.
+
+   This is adapted from `prereg/binance-panel.md` (lines 91–93 and 124–133: "dead from the bar
+   after its last bar with trades … Its position is closed at the last available bar's price.
+   The exit is costed, and the position stays zero after.").
+   - **A fetch that returns no data at all** for a candidate that passed items 1–3 (Yahoo can
+     drop delisted tickers) is **not a drop.** The ETF is dead from the session after its last
+     bar in the last record that holds it.
+   - For these 40, that record is the 2026-09-22 fetch on the host, through 2025-12-31.
+   - [AUTHOR]: whether that older fetch may supply a last bar.
+5. **Minimum panel: 30 ETFs** (proposed). With fewer, nothing runs and the author is asked.
+
+**How many of the 40 pass, from committed records only:**
+- **Item 1: all 40, per the records.** `data/etf_manifest.json` records, for every ticker,
+  first date 2005-01-03, 0 missing sessions and no consecutive gap over 2005-01-03 to
+  2025-12-31. That window covers 2005–2014.
+  - The first date is truncated by the request's start, 2005-01-01. Earlier inception is not
+    recorded and not needed.
+- **Item 2: not determinable from records for any of the 40.**
+  - Medians are recorded only over 2005-01-03 to 2022-12-31 (`fetch_etf.py:130-132`).
+  - The lowest there are TIP 815,700, IWO 1,005,800, EWU 1,031,200, SHY 1,075,600, IEF
+    1,098,200, IWN 1,305,500 and AGG 1,305,800.
+  - A 2005–2022 median above 500,000 does not bound the 2005–2014 median. Volumes in 2005–2008
+    were lower for several of these funds.
+  - **So between 0 and 40 could fail item 2. Records cannot say more.**
+  - The laptop's in-sample CSVs hold a volume column, so a 2005–2014 median could be computed
+    without a fetch. That would be a new look, and it is not taken ([AUTHOR]).
+- **Item 3:** no committed record.
+- **Item 4:** all 40 had bars through 2025-12-31 (the old fetch's 752 holdout rows each). No
+  death before 2026 is possible among them.
+
+## c. Windows
+
+- **The fetch:** 2005-01-03 to the last complete NYSE session before the fetch date.
+- **In-sample:** rows to 2024-12-31, 5,033 sessions, giving 4,778 feature rows (warm-up 253,
+  then the d = 1 lag).
+  - **Choice A (proposed):**
+    - Sancho's walk-forward starts as early as its warm-up and training allow: the first
+      scored feature row is 763 (756 plus the d = 1 embargo, as B1), about early 2009.
+    - Its whole scored stream to 2024-12-31 is tested: about 4,015 rows.
+    - The class runs on all 4,778 feature rows.
+  - **Choice B ([AUTHOR], stated beside):** score 2015-01-02 to 2024-12-31 only (2,516
+    sessions), for every test.
+    - Sancho still trains from the start.
+    - The rows of the formation window, 2005–2014, are never scored.
+- **Holdout:** 2025-01-01 to the last fetched session. At a fetch on 2026-10-12, that is
+  2025-01-02 to 2026-10-09: **444 rows, 1.76 years.** There is no fallback window.
+
+## d. Tests, the split and the certificate (as `prereg/french-long-history.md`)
+
+| test | 96% level | 90% level |
+|---|---|---|
+| 1. Sancho, one supplied stream, **d = 1** (the ETF timing) | p < 0.03 | p < 0.06 |
+| 2. Sancho, **d = 0, NOT IMPLEMENTABLE** | p < 0.01 | p < 0.02 |
+| 3. the class tier, 82,240 members (signed subsets of size ≤ 3 of K = 40), at d = 1 | p < 0.01 | p < 0.02 |
+| family-wise | ≤ 5% | ≤ 10% |
+
+- **Sancho:** version 2 as confirmed at `97d2519`.
+  - Version 2's base view as configured there: blocks P, X and V; h 5; market-neutral;
+    regime always.
+  - M2 (rolling 756 and expanding), G3, L {1, 3, 10, 30}.
+  - Positions are zero on any ETF after its death, applied after the model.
+- **Timing:**
+  - d = 1: the signal uses data through the close of t, and the position is held from the
+    close of t+1 to the close of t+2 (`prereg/etf-features.md`).
+  - d = 0 is held from the close of t to the close of t+1. NOT IMPLEMENTABLE.
+- **The certificate is on the WEIGHTED statistic under W2,** h = 1,260: block starts
+  ∝ w², the first start from q, q-centring.
+- **Printed for each test:**
+  - the weighted net Sharpe, p, both verdicts and the weighted L90;
+  - beside it, the UNWEIGHTED statistic, its p and L90, labelled "unweighted, descriptive,
+    not the certificate";
+  - for the streams, the performance line (last 252 and 756 scored rows, 90% intervals);
+  - the block length by the registered rule, with the Politis–White median on the last n_eff
+    rows beside;
+  - for the class, the weighted best member **and the unweighted best member beside** (the
+    B1 reader left the latter out; this reader must print it).
+- **The validation's limits are printed beside every certificate:**
+  - W2's size is checked by simulation, not proved;
+  - overshoots of about 10% are not reliably detected;
+  - the class checks are weak.
+
+## e. Costs (as the ETF registrations; an assumption)
+
+- 5 bps one-way per unit of turnover, with 10 bps reported beside.
+- Borrow at 50 bps a year on short notional, charged daily at 50/252 bps.
+- $1M gross notional and zero impact (`prereg/agent-on-real-data.md:145-152`,
+  `environments/real_panel.py`).
+- Prices are Yahoo adjusted closes.
+- **This is an assumption.** It is not a measured cost for any period.
+
+## f. Custody
+
+1. **One fetch, on the holdout host, by the author** (`i-0886a189b85d4d051`).
+   - **The source is that of the old fetch:** Yahoo's chart endpoint
+     `query1.finance.yahoo.com/v8/finance/chart`, by `curl`, with interval 1d, events div and
+     split, and adjusted close (`data/fetch_etf.py:76-82`). **Not yfinance.**
+   - A new script, `data/fetch_etf_recent.py`, adapted from `fetch_etf.py`, is written after
+     this goes live and refuses until it is live.
+   - **The host needs:** `curl`, already there, and in `.venv-grading` (uv, never pip)
+     exchange_calendars 4.13.2 and tzdata 2026.4, as pinned in `data/etf_manifest.json`.
+2. **Pinning:**
+   - the SHA-256 of each raw response, as received, recorded at the fetch;
+   - the fetch's UTC time and the last session it holds.
+3. **The cut, on the host:**
+   - the in-sample file runs to 2024-12-31;
+   - its record gives the SHA-256, row counts, entry and death dates, and the volume medians
+     of item b2. These are counts and medians of volume, not returns ([AUTHOR]).
+   - **Only that file and its record reach the laptop.**
+   - **Rows from 2025-01-01 stay on the host,** with the raw responses. Grading is on the
+     host.
+4. **The adjusted-price caveat:** a back-adjusted close is rewritten at each later dividend
+   and split. So this fetch's 2005–2022 prices differ from the 2026-09-22 fetch's, and a later
+   fetch can differ again.
+   - Daily returns are nearly unchanged under a proportional back-adjustment.
+   - **The pinned file is the object of record,** not "Yahoo's series".
+   - The new and the old in-sample files are not compared value by value, because that
+     comparison would be a look.
+
+## g. The graded quantity (as fixed for the French long history)
+
+- **Realised:** the UNWEIGHTED net Sharpe over the holdout, with its stationary-bootstrap 90%
+  interval.
+- **Held iff realised ≥ the test's in-sample WEIGHTED L90.** Refused tests are graded too.
+- One spanning panel, the no-restart checks and continuation are as in
+  `prereg/french-long-b1-grading.md`, section 3–4. A grading registration is written after
+  the in-sample read and may add checks. It may not change this quantity or this rule.
+- **Both branches,** with wording as in `prereg/french-long-history.md` section i:
+  - certified and held;
+  - certified and not held (realised < bound);
+  - refused, and graded either way.
+
+  The d = 0 stream carries NOT IMPLEMENTABLE in every branch.
+
+**What 444 rows can tell:** the SE of the realised Sharpe is **0.753** at Sharpe 0 (Lo's iid,
+ppy 252). P(held) is computed for an object certified exactly at the bar, under the iid
+normal approximation, with L90 = S − g:
+
+| test, level | choice A: P(held), true = bar / true = 0 | choice B: P(held), true = bar / true = 0 |
+|---|---|---|
+| stream d = 1, 96% | 0.66 / 0.42 | 0.70 / 0.40 |
+| stream d = 1, 90% | 0.66 / 0.46 | 0.70 / 0.46 |
+| stream d = 0, 96%, NOT IMPLEMENTABLE | 0.66 / 0.36 | 0.70 / 0.33 |
+| stream d = 0, 90%, NOT IMPLEMENTABLE | 0.66 / 0.40 | 0.70 / 0.37 |
+| class, 96% | 0.91 / 0.39 | 0.94 / 0.37 |
+| class, 90% | 0.91 / 0.42 | 0.94 / 0.41 |
+
+- **"Held" and "did not hold" are weak evidence either way.** For a certified stream, a true
+  Sharpe at the bar gives about 2 in 3, and a true Sharpe of 0 gives about 2 in 5.
+- **Direction of error:** objects certified above the bar have higher bounds, so P(held) at a
+  true 0 is lower for them. Selection makes in-sample values optimistic (type-M).
+
+## h. Design numbers by simulation (outcome-free)
+
+**The source:** `experiments/etf_recent_design_w2.py`, committed before its run at `bf90274`;
+output `runs/etf_recent_design_w2/2026-10-11` at `717e1a9`; laptop, 111 s.
+- **The dependence comes only from the already-read ETF recency pool:** 3,019 rows of
+  2006–2017, gross member streams demeaned, SHA-256s checked against its manifest.
+- Rows are resampled to each length.
+- **Replicates:** B 2,000. **Seeds:** 720000–720999 (`seed_block_check`: NO COLLISION).
+- Streams use 5 panels and the class 3.
+- **Power:** net Sharpe at 80% power by Lo's iid formula over the weighted effective years.
+- No realised mean, Sharpe or p-value is computed.
+
+| test, level (alpha) | choice A: W2 bar → net 80% | choice B: W2 bar → net 80% |
+|---|---|---|
+| stream d = 1, 96% (0.03) | 0.462 → **0.709** | 0.574 → **0.860** |
+| stream d = 1, 90% (0.06) | 0.380 → 0.627 | 0.465 → 0.751 |
+| stream d = 0 NOT IMPLEMENTABLE, 96% (0.01) | 0.577 → 0.825 | 0.718 → 1.005 |
+| stream d = 0 NOT IMPLEMENTABLE, 90% (0.02) | 0.506 → 0.754 | 0.642 → 0.929 |
+| class, 96% (0.01) | 1.205 → **1.444** | 1.412 → **1.699** |
+| class, 90% (0.02) | 1.153 → 1.392 | 1.342 → 1.629 |
+
+**Lengths:**
+- Choice A: the stream has 4,015 rows (weighted effective 11.6 years) and the class 4,778
+  (12.5 years).
+- Choice B: 2,516 rows each (8.6 years).
+- The L90 gap g:
+
+  | | stream | class |
+  |---|---|---|
+  | choice A | 0.312 | 0.998 |
+  | choice B | 0.386 | 1.169 |
+
+**Choice B costs about 0.15 of net Sharpe on the d = 1 stream and about 0.25 on the class.** In
+return, no scored row lies in the formation window.
+
+**Limit:** the pool's dependence is 2006–2017 only. The 2018–2024 rows of the real panel may
+differ, for example in 2020's volatility.
+
+## i. Seeds
+
+- **The read:** block 721000–721099.
+  - 721000: the d = 1 stream;
+  - 721001: the d = 0 stream;
+  - 721002: the class;
+  - 721003: the performance line.
+- **The grading:** 721010–721019.
+- **The smoke:** 721100–721199.
+- **Checked 2026-10-11:** `seed_block_check --ranges 721000-721099,721100-721199` gives NO
+  COLLISION. A scan of tracked files found only `range(720000, 721000)`'s exclusive end.
+
+## j. Cost and platform
+
+- **Sancho:** four fits (the bit-for-bit repeat at d = 1 and d = 0) on about 4,778 rows × 40
+  ETFs.
+  - From the ML v2 design (base view, about 73 s of fits per 4,276-row ETF panel) and B1's box
+    times scaled by rows and assets: **about 2–5 minutes per fit.**
+- **The class:** the table is 82,240 × 4,778 × 8 bytes = **about 3.1 GB**. The old 4,276-row
+  table was 2.81 GB.
+  - The W2 null and the unweighted null take minutes (about 0.6 minutes per W2 panel on the
+    pool).
+- **Where (proposed): the compute box,** Linux x86_64, about 0.5 box-hours.
+  - It is the grading host's platform, so the reproduction check at grading is box against
+    host, as B1.
+  - The laptop could run it, but the grading would then need cross-platform tolerances (the
+    French Option A).
+  - Stop and ask at 1 box-hour. [AUTHOR].
+- **The host:** the fetch (minutes), the cut, then the grading later.
+
+## [AUTHOR] points
+
+1. The liquidity threshold: 500,000 median share volume over 2005–2014 (section b, item 2).
+2. No missing session in 2005–2014 (the old rule allowed one).
+3. Item 3 checked through 2014 only. Where is the old rule 3's record?
+4. The death rule: a silence of 10 sessions; whether the 2026-09-22 fetch may supply a last bar
+   when Yahoo returns nothing.
+5. The minimum panel of 30.
+6. Choice A or B (sections c and h).
+7. A 2026-only realised value printed beside, descriptive (section a, item 2).
+8. Whether the host's cut record may carry the 2005–2014 volume medians (section f).
+9. The read on the box with a 1-box-hour cap, or on the laptop (section j).
+10. The new look that could settle section b, item 2, from the laptop's in-sample CSVs: not
+    taken unless you say so.
+11. Whether to go on at all, given section g. A 1.76-year holdout separates a true Sharpe at
+    the bar from 0 only weakly (about 0.66 against 0.42). One option is to wait for more 2026
+    rows; the grading then becomes stronger each quarter.
