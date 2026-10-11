@@ -31,9 +31,9 @@ Before your first move you may call `pick_prior` once, naming one rule you belie
 
 The statistic a `pick` names must be one of `sharpe`, `volatility`, `autocorr_1`, `autocorr_5`, or `corr_with_best`. Anything else is refused.
 
-There is one further candidate: a pre-built trading stream on the same instruments. `sancho` reports its two Sharpe ratios and its mean daily turnover. It takes no arguments, and you cannot change it.
+There is one further candidate: a baseline model's trading stream on the same instruments. `baseline_model` reports its two Sharpe ratios and its mean daily turnover. It takes no arguments, and you cannot change it.
 
-To finish, call `submit_candidate` with kind "rule" (the best rule your search reached) or "sancho" (the pre-built stream). The candidate is then fixed, and no further moves are taken. Then call `predict` with the mean and the standard deviation of the annualized net Sharpe ratio you expect for that candidate on data you have not seen, and a short note. Then call `confirm`. Submit exactly one candidate. Do not use any tool other than the ones listed for you.
+To finish, call `submit_candidate` with kind "rule" (the best rule your search reached) or "baseline_model" (the baseline model's stream). The candidate is then fixed, and no further moves are taken. Then call `predict` with the mean and the standard deviation of the annualized net Sharpe ratio you expect for that candidate on data you have not seen, and a short note. Then call `confirm`. Submit exactly one candidate. Do not use any tool other than the ones listed for you.
 ```
 
 ### tool:init
@@ -102,16 +102,16 @@ Change a declared stopping rule. Logged.
 Name one rule before your first move, with your reason.
 ```
 
-### tool:sancho
+### tool:baseline_model
 
 ```
-Report the pre-built trading stream's two in-sample Sharpe ratios and its mean daily turnover.
+Report the baseline model's trading stream's two in-sample Sharpe ratios and its mean daily turnover.
 ```
 
 ### tool:submit_candidate
 
 ```
-Fix your candidate: kind "rule" (the best rule your search reached) or "sancho" (the pre-built stream). No further moves are taken after this.
+Fix your candidate: kind "rule" (the best rule your search reached) or "baseline_model" (the baseline model's stream). No further moves are taken after this.
 ```
 
 ### tool:predict
