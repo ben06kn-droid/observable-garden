@@ -1,8 +1,13 @@
-# French 49 industries, the long history: DRAFT, NOT LIVE
+# French 49 industries, the long history: a registration
 
-**Status: DRAFT, NOT LIVE.** First drafted 2026-10-09 (America/Chicago), at `18392d5`;
-revised 2026-10-11 with the author's answers (sent by the reviewer; the author confirms or
-overrides them on reading). Nothing in it binds.
+**Status: LIVE, 2026-10-11 (America/Chicago).**
+- The author read the draft at `653a400` and confirmed its answers. The additions of section j
+  were made at `aaa0864`.
+- This status was then set in a commit touching only this file.
+- Amendments are append-only and dated.
+- **Not yet set:** `REGISTRATION` in `data/french_long_split.py` and
+  `experiments/french_long_read.py`. It is set to this commit by the following commit, and
+  both scripts refuse to run until it is.
 - **No value before 2008-12-29 has been read.** Rows before 2008-12-29 in the registered file
   were counted from their date field only.
 - **Nothing has run on the box or the host for it.**
@@ -10,7 +15,7 @@ overrides them on reading). Nothing in it binds.
   weighted reads". The first draft's point 7 (that this draft could not go live before that
   validation was read) is satisfied.
 
-Points still needing the author are marked [AUTHOR] and listed at the end.
+The points that remained for the author are listed at the end, with how each was settled.
 
 ## a. Data, start date, entry
 
