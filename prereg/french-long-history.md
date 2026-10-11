@@ -313,3 +313,33 @@ since amendments are append-only. Read them as follows:
 
 This amendment does not touch `data/french_long_split.py`, its inputs or the `b1` cut. No rule
 changes.
+
+## Amendment 3, 2026-10-11 (America/Chicago): three records about the B1 read
+
+The B1 read: raw outputs at `314beda`, the reader's output at `ff04846`. This amendment
+changes no rule and no verdict.
+
+1. **The unweighted best class member, which the reader left out.** Section c registers "for
+   the class, the best member under the weights, and the unweighted best member beside it".
+   `read.txt` printed only the weighted one. The unweighted one is supplied here from the
+   committed raw output (`results.json` at `314beda`,
+   `test3_class_d1.unweighted.best_member`). This is not a second read:
+   - **unweighted best member: +mom252_rank, +mom12_1_rank, +ma_spread_rank**;
+   - for comparison, the weighted best member printed by the reader: +mom252_rank,
+     +volmom252_rank, +ma50_rank (index 54952).
+   - Descriptive. It is not graded (`prereg/french-long-b1-grading.md`, section 1).
+2. **p-values at their resolution floor.** At B = 5,000 the smallest p is 1/5,001 = 0.0002.
+   Three printed values equal it, and each means "at most 0.0002":
+   - test 2's weighted p;
+   - the unweighted p of test 1;
+   - the unweighted p of test 2.
+3. **The standard-error formula in section j, item 3, is corrected.**
+   - It used sqrt((1 + SR²/2) / years) with SR annualised. With ppy 252 that overstates the
+     error at nonzero Sharpe. The French grading corrected the same formula on 2026-10-08
+     (`b45f111`).
+   - The correct form is sqrt((1 + SR²/(2·252)) / years). Over 6 years that is **0.41 at every
+     Sharpe from 0 to 1.3.**
+   - So "0.46 at SR 0.7" becomes **0.41**, and the 90% interval is about ±0.67 at every
+     Sharpe.
+   - For B2 (6.6 years) it is 0.39 at every Sharpe: "0.43 at SR 0.7" becomes **0.39**.
+   - The graded quantity and the rule are unchanged.
