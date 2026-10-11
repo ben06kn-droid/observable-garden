@@ -105,10 +105,9 @@
    - For these 40, that record is the 2026-09-22 fetch on the host, through 2025-12-31.
    - **That older fetch may supply a last bar, used only to close the position** (the author,
      2026-10-11). No other value is taken from it.
-   - A candidate with no data in this fetch cannot be checked against items 1–2. If the old
-     fetch shows it passing items 1–2 on 2005–2014 (counts and medians only, on the host), it
-     is included and dead from its last bar. Otherwise it is excluded, and the exclusion is
-     recorded.
+   - **A candidate with no data in this fetch cannot be checked against items 1–2,** and the
+     old fetch is not used to check it. The cut records it, **nothing runs, and the author is
+     asked.** Excluding it silently would condition on survival to the fetch date.
 5. **Minimum panel: 30 ETFs** (confirmed). **With fewer than 30, nothing runs and the author is
    asked.**
 
