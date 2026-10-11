@@ -200,12 +200,18 @@ Until then, no 2025+ value is computed for any purpose.
    - Any REFUSED: stop.
 8. [L] `rsync -av og-48:observable-garden/runs/etf_recent/ runs/etf_recent/; echo "exit=$?"`
    - → `exit=0`.
+   - **It also brings back** the agent cell's precompute, `runs/etf_recent/D/precompute/`
+     (`f5ac178`; about 1.8 GB, mostly `class_scored.npy`).
+   - [L] Every precompute file's SHA-256 must equal its manifest's.
 9. [L] `rsync -av og-48:observable-garden/logs/etf_r.log runs/etf_recent/D/; echo "exit=$?"`
    - → `exit=0`, and the SHA-256s are equal on both sides.
 10. [L] `ssh og-48 'sudo shutdown -h now'`
     - Then `ssh -o ConnectTimeout=10 og-48 true` must time out.
     - The stop time is recorded.
-11. [L] Commit `results.json`, `pins.json`, the log and the run record. Then read once:
+11. [L] Commit `results.json`, `pins.json`, the log and the run record. Also commit the precompute's
+    `manifest.json`, `sancho_d1.npz`, `class_stats.npz` and `base_columns.npy`.
+    `class_scored.npy` is gitignored: it stays on the laptop and is pinned by the manifest. Then read
+    once:
     `.venv/bin/python -m experiments.read_etf_recent --dir runs/etf_recent/D`.
     Commit the output unedited, and push.
 
@@ -219,4 +225,6 @@ scaled to amendment 2's 3,774 rows used:
 - **The class:** the table takes about 4 minutes on the full 3,519-row panel. The W2 null on
   2,516 scored rows takes about 1.5 minutes, and the unweighted null about the same. The cache is
   about 4.6 GB.
-- **In all:** about 15–25 minutes, with setup.
+- **The precompute** (the class's scored streams written in the same loop, and the un-demeaned
+  replicate argmax): about 5–10 more minutes, and about 2 GB more disk on the box.
+- **In all:** about 20–35 minutes, with setup.
