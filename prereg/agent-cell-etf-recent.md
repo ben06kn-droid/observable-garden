@@ -442,3 +442,41 @@ Made before any session (smoke or cell) has run.
    - **a `no_submit` (no `confirm`, or 60 turns) is never retried and never replaced;**
    - a non-transient error ends the session as `no_submit`, with the error;
    - the session list and its seeds are fixed.
+
+## Amendment 2, 2026-10-11 (America/Chicago): 120 sessions per arm (240), not 40
+
+Made after the smoke and before any cell session. The smoke is cost only and was never read
+(section 11).
+
+1. **120 sessions per arm, 240 in all,** replacing 40 per arm (sections 4 and 11). **The reason:**
+   power, decided by the author after the smoke and before any cell session.
+2. **The session list and seeds are fixed in advance.**
+   - Arm A takes the first 120 draws of `default_rng(20261011).integers(0, 2**31 - 1)` and arm B
+     the first 120 of master 20261012, interleaved A0, B0, A1, B1, … by index.
+   - The first 40 per arm are the same seeds as before (the draw is prefix-stable). All 240 are
+     distinct, and the arms share none.
+   - **Checked 2026-10-11:**
+     `seed_block_check --exclude prereg/agent-cell-etf-recent.md --masters 20261011,20261012`
+     gives **NO COLLISION**. That check covers each master's first 5,000 draws.
+3. **What it changes:**
+   - **R3 (in-sample)** and **the B-against-A comparison** gain directly with n, because sessions
+     are independent draws there.
+   - **The detectable difference** in mean stated expectation (or stated sd) between arms, at 80%
+     power and two-sided 5%, is about 2.8 × sqrt(2/n) standard deviations:
+
+     | sessions per arm | detectable difference |
+     |---|---|
+     | 40 (before) | about 0.63 SD |
+     | **120 (now)** | **about 0.36 SD** |
+
+   - The regressions on search length gain in the same proportion.
+4. **What it does not change much: R1, R2 and R4.** Every submission shares one 444-row holdout
+   window, so their noise is dominated by that window's common term.
+   - The SE of one realised Sharpe stays about 0.75.
+   - More submissions shrink only the part of the error that differs between submissions.
+   - R1's share, R2's mean errors and R4's books are therefore about as uncertain at 240 as at
+     80. The joint day bootstrap reports it either way.
+5. **Cost:** about $55–115 on the seat at 6.5's per-run figures (mean $0.27; 90th percentile
+   $0.47). Wall time is about 3 hours with 4 workers, plus any rate-limit waits.
+6. **Everything else is unchanged:** the arms, the prompts, the tools, the precompute, pricing,
+   grading, the reads, the seeds' construction, the smoke's status, and amendment 1.
