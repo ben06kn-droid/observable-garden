@@ -112,17 +112,21 @@ are the registered version 2.
 From the note's Section 7. Nothing here is stated more strongly than the note states it.
 
 - **The direction of the error** under adaptive search is a limit result. It is proved for large
-  samples and equal volatilities and correlations. With finite samples it is measured, not
-  proved.
+  samples and one common pair score, which requires equal volatilities and correlations. With
+  finite samples it is measured, not proved.
+- **Other scoring rules.** Outside weighted sums of features the asymmetry is measured, but no
+  size is established and nothing is proved.
+- **The process bootstrap** is covered in theory for rules that depend on the ranking of Sharpe
+  ratios. For correlation-based anchoring with equal correlations the argument is a sketch; with
+  unequal correlations it is open.
+- **The number of trials is held fixed** in the theory. The 1,500-trial grid and the
+  82,240-strategy class are supported by simulation, not by the theorem.
+- **Block correlation and unequal volatilities** have not been tested.
 - **Stopping-rule replay**, the null Quixote certifies with, had error rates at or below nominal
-  on the searchers tested. Exactness is not claimed, and nothing is proved.
-- **The 82,240-strategy class** is supported by simulation, not by the theorem. Block correlation
-  and unequal volatilities are untested.
-- **The evidence** is scripted searchers on synthetic returns, plus real ETF features with
-  synthetic, planted returns. **Whether a result that passes holds out of sample on real data is
-  untested** in the note.
-- **Whatever a searcher considers without evaluating is never logged,** so every logged count is
-  a floor.
+  on the searchers tested. Exactness is not claimed and nothing is proved.
+- **The evidence** in the note's Sections 3 to 6 is scripted searchers and synthetic returns.
+  **Whether a result that passes holds out of sample on real data is untested.**
+- **Whatever a searcher considers without evaluating is never logged,** at any level of record.
 
 ## The research record
 

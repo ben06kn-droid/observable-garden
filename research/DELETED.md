@@ -14,8 +14,17 @@ Matched but kept because cited: `runs/_smoke/` (planted-edge.md, twin-calibratio
 `runs/french_long_smoke/` (french-long-history.md), `runs/ml_smoke/` (ml-pipeline-exploratory),
 `figures/fixed_sequence_replay_cost.txt` (holdout-grading.md), `docs/french_long_operator_sheets.md`
 and `docs/french_step0_box_commands.md` (cited by registrations), and `runs/shakeout2_s0_*`
-(read by `runs/self_enforcement_exploratory.txt`). No note was found that only records a bug
-met in testing and its fix, so none was deleted under that heading.
+(read by `runs/self_enforcement_exploratory.txt`).
+
+Also kept: the dry runs and smokes that a run record names. A run record is part of the read it
+records, and `runs/ml_v2_pilot/2026-10-08/run_record.md` pins blobs in `runs/ml_confirm_dry/`.
+They are `runs/etf_recent_smoke/`, `runs/ml_confirm_dry/`, `runs/ml_confirm_smoke/`,
+`runs/ml_pilot_dry/`, `runs/ml_smoke_box/`, `runs/ml_v2_confirm_dry/`, `runs/ml_v2_pilot2_dry/`,
+`runs/ml_v2_pilot_dry/`, `runs/ml_v2_smoke/`, `runs/ml_v2_smoke_box/`, `runs/ml_v2_smoke_box2/`,
+`runs/ml_v2_smoke_box3/`, `runs/recency_planted_2_dry/` and `runs/recency_planted_dry/`.
+
+No note was found that only records a bug met in testing and its fix, so none was deleted under
+that heading.
 
 | path (now under research/) | files | bytes | reason |
 |---|---|---|---|
@@ -52,23 +61,9 @@ met in testing and its fix, so none was deleted under that heading.
 | `figures/us_curve_B125/` | 2 | 69,998 | smoke / cost-only output, cited by no registration |
 | `figures/us_curve_B250/` | 2 | 69,998 | smoke / cost-only output, cited by no registration |
 | `figures/us_curve_B500/` | 2 | 70,087 | smoke / cost-only output, cited by no registration |
-| `runs/etf_recent_smoke/` | 2 | 945 | smoke / cost-only output, cited by no registration |
-| `runs/ml_confirm_dry/` | 4 | 15,471 | dry run (pipeline check before a registered run), cited by no registration |
-| `runs/ml_confirm_smoke/` | 2 | 2,559 | smoke / cost-only output, cited by no registration |
-| `runs/ml_pilot_dry/` | 4 | 369,804 | dry run (pipeline check before a registered run), cited by no registration |
-| `runs/ml_smoke_box/` | 3 | 46,542 | smoke / cost-only output, cited by no registration |
-| `runs/ml_v2_confirm_dry/` | 3 | 19,368 | dry run (pipeline check before a registered run), cited by no registration |
-| `runs/ml_v2_pilot2_dry/` | 4 | 28,070 | dry run (pipeline check before a registered run), cited by no registration |
-| `runs/ml_v2_pilot_dry/` | 4 | 19,653 | dry run (pipeline check before a registered run), cited by no registration |
-| `runs/ml_v2_smoke/` | 2 | 130,141 | smoke / cost-only output, cited by no registration |
-| `runs/ml_v2_smoke_box/` | 3 | 157,659 | smoke / cost-only output, cited by no registration |
-| `runs/ml_v2_smoke_box2/` | 3 | 158,085 | smoke / cost-only output, cited by no registration |
-| `runs/ml_v2_smoke_box3/` | 2 | 128,263 | smoke / cost-only output, cited by no registration |
-| `runs/recency_planted_2_dry/` | 4 | 9,003 | dry run (pipeline check before a registered run), cited by no registration |
 | `runs/recency_planted_2_smoke/` | 2 | 3,286 | smoke / cost-only output, cited by no registration |
-| `runs/recency_planted_dry/` | 4 | 7,247 | dry run (pipeline check before a registered run), cited by no registration |
 | `runs/recency_planted_smoke/` | 2 | 2,896 | smoke / cost-only output, cited by no registration |
 | `runs/shakeout_s0_orientation/` | 4 | 36,580 | shakeout run, cited by no registration, EXPERIMENTS.md or NOTE_MAP.md |
 | `runs/shakeout_s0_reasoned/` | 4 | 53,167 | shakeout run, cited by no registration, EXPERIMENTS.md or NOTE_MAP.md |
 
-**In all: 104 files, 5,626,067 bytes.**
+**In all: 60 files, 4,533,257 bytes.**
