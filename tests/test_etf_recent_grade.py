@@ -179,8 +179,10 @@ def test_the_holdout_parser(tmp_path):
 
 def test_refuses_until_registrations_are_set(monkeypatch):
     assert EG.CELL == "00c7af167f8ddb9a4874cc29b438926112360fb9"      # the cell, live
+    assert EG.GRADING == "2fd0346cde8903ea431acc2186e7bd5264f2d16a"   # the grading, live
+    monkeypatch.setattr(EG, "GRADING", None)
     bad = EG.refusals("0" * 40)
-    assert any("GRADING" in b and "not live" in b for b in bad)          # the panel's grading: not yet
+    assert any("GRADING" in b and "not live" in b for b in bad)
     monkeypatch.setattr(EG, "CELL", None)
     assert any("CELL" in b and "not live" in b for b in EG.refusals("0" * 40))
     assert EG.PANEL == "310225cd4932bc18e1c8e2e248cbbb133124a004"
