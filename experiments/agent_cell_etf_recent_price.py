@@ -316,7 +316,9 @@ def price_all(log_dir: Path, pre: dict, submissions: dict, B: int = CERTIFY_B) -
         if p.name == "run_config.json":
             continue
         d = json.loads(p.read_text())
-        from experiments.agent_cell_etf_recent_collect import session_id
+        from experiments.agent_cell_etf_recent_collect import is_smoke, session_id
+        if is_smoke(p, d):
+            raise PricingRefused(f"{p.name} is a smoke session: smoke sessions are never priced")
         logs[session_id(p, d)] = d
     rows = []
     for sub in submissions["submissions"]:

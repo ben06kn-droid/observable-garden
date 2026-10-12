@@ -59,10 +59,19 @@ def submission_of(d: dict) -> dict | None:
             "predict": {"mean": float(p["mean"]), "sd": float(p["sd"]), "note": p.get("note")}}
 
 
+def is_smoke(path: Path, d: dict) -> bool:
+    """A smoke session (registration section 11: cost only, never collected, priced or read)."""
+    start = next(iter(events_of(d, "start")), {})
+    return (str(d.get("run_id") or Path(path).stem).startswith("smoke") or bool(start.get("smoke"))
+            or "smoke" in Path(path).parent.name)
+
+
 def collect(paths: list[Path]) -> dict:
     subs, no_submit, seen = [], [], set()
     for path in sorted(paths):
         d = json.loads(Path(path).read_text())
+        if is_smoke(Path(path), d):
+            raise CollectRefused(f"{Path(path).name} is a smoke session: smoke sessions are never collected")
         sid = session_id(Path(path), d)
         if sid in seen:
             raise CollectRefused(f"session {sid} appears twice")

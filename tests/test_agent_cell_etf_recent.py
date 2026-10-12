@@ -265,3 +265,119 @@ def test_a_session_end_to_end_and_no_submit(pre):
     rec2 = E.run_session(pre, "A", 12, 1, p, driver=idle)
     assert rec2.no_submit and not rec2.submitted and rec2.submitted_support is None
     assert "submit" not in [e["kind"] for e in rec2.events] and [e["kind"] for e in rec2.events][-1] == "end"
+
+
+# -- workers and retries (registration section 3: execution details) -------------------------------
+
+def deterministic_driver(cell, rec, prompt, prompts):
+    """Module-level, so a process pool can pickle it: the same moves in every session."""
+    for name, kw in SCRIPT:
+        cell.call(name, **kw)
+    cell.call("baseline_model")
+    cell.call("submit_candidate", kind="rule")
+    cell.call("predict", mean=0.1, sd=0.5)
+    cell.call("confirm")
+
+
+def _inputs(path):
+    """Everything a session was given and did, without wall-clock fields."""
+    d = json.loads(Path(path).read_text())
+    strip = lambda e: {k: v for k, v in e.items() if k not in ("t", "seconds", "wall", "elapsed")}
+    return d.get("run_id"), d.get("arm"), d.get("seed"), [strip(e) for e in d["events"]
+                                                          if e["kind"] not in ("session_log", "self_check")]
+
+
+def test_four_workers_and_one_give_the_same_sessions_and_inputs(pre_dir, tmp_path):
+    todo = E.schedule("both", 2)                                     # A0, B0, A1, B1
+    one, four = tmp_path / "cell_w1", tmp_path / "cell_w4"
+    one.mkdir(); four.mkdir()
+    r1 = E.run_all(pre_dir, todo, one, workers=1, driver=deterministic_driver)
+    r4 = E.run_all(pre_dir, todo, four, workers=4, driver=deterministic_driver)
+    assert r1 == r4 == [E.run_id_for(a, s, i) for a, i, s in todo]  # same list, same seeds, same order
+    for rid in r1:
+        assert _inputs(one / f"{rid}.json") == _inputs(four / f"{rid}.json"), rid
+
+
+_CALLS = {"n": 0}
+
+
+def flaky_driver(cell, rec, prompt, prompts):
+    """A rate limit on the first attempt, then a normal session."""
+    _CALLS["n"] += 1
+    if _CALLS["n"] == 1:
+        rec.error = "ProcessError: rate_limit_error (429) from the model service"
+        rec.log("run_error", error=rec.error)
+        return
+    deterministic_driver(cell, rec, prompt, prompts)
+
+
+def test_a_transient_error_is_retried_on_the_same_session_and_seed(pre, monkeypatch):
+    _CALLS["n"] = 0
+    rec = E.run_with_retry(pre, "A", 77, 3, E.read_prompts(), driver=flaky_driver, sleep=lambda s: None)
+    assert _CALLS["n"] == 2 and rec.seed == 77 and rec.run_id == E.run_id_for("A", 77, 3)
+    assert rec.submitted and not rec.no_submit
+    tried = [e for e in rec.events if e["kind"] == "retried_attempts"]
+    assert len(tried) == 1 and tried[0]["attempts"][0]["attempt"] == 1
+    assert "429" in tried[0]["attempts"][0]["error"]
+    assert rec.events[-1]["kind"] == "end"
+
+
+def test_a_no_submit_is_never_retried(pre):
+    calls = {"n": 0}
+
+    def idle(cell, rec, prompt, prompts):
+        calls["n"] += 1
+        cell.call("declare_triggers", triggers=[{"trigger": "failures_at_least", "param": 99, "action": "stop"}])
+
+    rec = E.run_with_retry(pre, "B", 78, 4, E.read_prompts(), driver=idle, sleep=lambda s: None)
+    assert calls["n"] == 1 and rec.no_submit and not any(e["kind"] == "retried_attempts" for e in rec.events)
+
+
+def test_retries_run_out_into_a_no_submit(pre):
+    def always(cell, rec, prompt, prompts):
+        rec.error = "overloaded_error (529)"
+
+    rec = E.run_with_retry(pre, "A", 79, 5, E.read_prompts(), driver=always, sleep=lambda s: None)
+    tried = [e for e in rec.events if e["kind"] == "retried_attempts"][0]["attempts"]
+    assert len(tried) == E.MAX_ATTEMPTS - 1 and rec.no_submit
+
+
+def test_smoke_logs_are_never_collected_or_priced(pre, tmp_path):
+    from experiments import agent_cell_etf_recent_collect as C
+    from experiments import agent_cell_etf_recent_price as PR
+    d = tmp_path / "cell_smoke"
+    d.mkdir()
+    rec = E.run_session(pre, "A", 5, 0, E.read_prompts(), driver=deterministic_driver, smoke=True)
+    (d / f"{rec.run_id}.json").write_text(json.dumps(rec.to_json(), default=str))
+    with pytest.raises(C.CollectRefused, match="smoke"):
+        C.collect(list(d.glob("*.json")))
+    with pytest.raises(PR.PricingRefused, match="smoke"):
+        PR.price_all(d, {"members": E.Precompute(pre.dir).members if hasattr(pre, "dir") else []},
+                     {"submissions": []})
+
+
+# -- the leak tests on the REAL, pinned precompute (run with OG_REAL_PRECOMPUTE=<dir>) -------------
+
+import os
+
+REAL = os.environ.get("OG_REAL_PRECOMPUTE")
+real_only = pytest.mark.skipif(not REAL, reason="set OG_REAL_PRECOMPUTE to the pinned precompute directory")
+
+
+@real_only
+def test_real_precompute_is_the_pinned_one_and_in_sample_only():
+    assert E._sha(Path(REAL) / "manifest.json") == E.PRECOMPUTE_MANIFEST_SHA256
+    pre = E.Precompute(Path(REAL))                      # refuses a tampered file or a row after 2024-12-31
+    sd = np.load(Path(REAL) / "sancho_d1.npz")
+    assert max(str(x) for x in sd["earned_dates"]) <= "2024-12-31"
+    assert len(pre.members) == 82240
+
+
+@real_only
+def test_real_leaks_no_names_dates_arms_verdicts():
+    test_leaks_no_names_dates_arms_verdicts(E.Precompute(Path(REAL)))
+
+
+@real_only
+def test_real_leaks_no_file_outside_the_precompute(monkeypatch):
+    test_leaks_no_file_outside_the_precompute(Path(REAL), monkeypatch)

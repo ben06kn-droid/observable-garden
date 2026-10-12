@@ -401,6 +401,66 @@ def run_session(pre: Precompute, arm: str, seed: int, index: int, prompts: dict,
     return rec
 
 
+# -- retries and workers (registration section 3: an execution detail) -------------------------
+
+# A model-service error, not the agent's behaviour: retried on the same session and seed, never
+# counted as a new session. A `no_submit` (max turns, or no confirm) carries no such error and is
+# never retried.
+TRANSIENT = re.compile(r"rate.?limit|\b429\b|\b529\b|\b50[23]\b|overloaded|timed? ?out|timeout|"
+                       r"connection|temporar|ECONNRESET|server.?error|api.?error", re.I)
+MAX_ATTEMPTS = 5
+BACKOFF_S = (60, 120, 240, 480)
+
+
+def is_transient(error) -> bool:
+    return bool(error) and bool(TRANSIENT.search(str(error)))
+
+
+def run_with_retry(pre, arm: str, seed: int, index: int, prompts: dict, *, credential="seat",
+                   driver=None, smoke=False, sleep=time.sleep):
+    """The session, retried on a transient model-service error with the same seed, at most
+    MAX_ATTEMPTS times. Each failed attempt's error and events are kept under `retried_attempts`
+    in the final record, just before its `end`. Anything else (a `no_submit`, or a non-transient
+    error) is final."""
+    tried = []
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        rec = run_session(pre, arm, seed, index, prompts, credential=credential, driver=driver, smoke=smoke)
+        if attempt < MAX_ATTEMPTS and is_transient(getattr(rec, "error", None)):
+            tried.append({"attempt": attempt, "error": str(rec.error), "events": rec.events})
+            sleep(BACKOFF_S[min(attempt - 1, len(BACKOFF_S) - 1)])
+            continue
+        break
+    if tried:
+        rec.events.insert(len(rec.events) - 1, {"t": time.time(), "kind": "retried_attempts", "attempts": tried})
+    return rec
+
+
+def _job(payload) -> str:
+    """One session in this process: its own precompute handle, its own records. Module-level so a
+    process pool can pickle it."""
+    pre_dir, arm, index, seed, credential, smoke, out, driver = payload
+    pre = Precompute(Path(pre_dir))
+    rec = run_with_retry(pre, arm, seed, index, read_prompts(), credential=credential, driver=driver, smoke=smoke)
+    (Path(out) / f"{rec.run_id}.json").write_text(json.dumps(rec.to_json(), indent=1, default=str))
+    return rec.run_id
+
+
+def run_all(pre_dir: Path, todo: list, out: Path, *, workers: int = 1, credential="seat", smoke=False,
+            driver=None) -> list[str]:
+    """Every scheduled session. The list and its seeds are fixed before this is called; workers only
+    change how many run at once."""
+    from concurrent.futures import ProcessPoolExecutor
+    jobs = [(str(pre_dir), a, i, s, credential, smoke, str(out), driver) for a, i, s in todo]
+    if workers <= 1:
+        done = [_job(j) for j in jobs]
+    else:
+        with ProcessPoolExecutor(workers) as ex:
+            done = list(ex.map(_job, jobs))
+    for rid in done:
+        print(f"  {rid} done", flush=True)
+    return done
+
+
 # -- planning, resumption, refusals -----------------------------------------------------------
 
 def run_id_for(arm: str, seed: int, index: int, smoke: bool = False) -> str:
@@ -474,6 +534,7 @@ def main(argv=None) -> int:
     ap.add_argument("--credential", choices=("seat", "api"), default="seat")
     ap.add_argument("--out", required=True)
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--workers", type=int, default=1, help="sessions at once (registration: 4 on the seat)")
     a = ap.parse_args(argv)
     out = Path(a.out)
     bad = refusals(Path(a.precompute), out, a.smoke)
@@ -485,15 +546,12 @@ def main(argv=None) -> int:
     p = plan(out, a.arm, a.runs, a.smoke)
     print(f"  {len(p['skipped'])} complete skipped; {len(p['redone'])} partial deleted and redone; "
           f"{len(p['todo'])} to run", flush=True)
-    for arm, i, seed in p["todo"]:
-        rec = run_session(pre, arm, seed, i, prompts, credential=a.credential, smoke=a.smoke)
-        (out / f"{rec.run_id}.json").write_text(json.dumps(rec.to_json(), indent=1, default=str))
-        print(f"  session {i} ({'smoke' if a.smoke else 'arm ' + arm}) done", flush=True)
+    run_all(Path(a.precompute), p["todo"], out, workers=a.workers, credential=a.credential, smoke=a.smoke)
     sched = schedule(a.arm, a.runs, a.smoke)
     (out / "run_config.json").write_text(json.dumps({
         "registration": REGISTRATION, "precompute_manifest_sha256": PRECOMPUTE_MANIFEST_SHA256,
         "prompts_sha256": _sha(PROMPTS), "model": MODEL, "max_turns": MAX_TURNS,
-        "credential": a.credential, "smoke": a.smoke,
+        "credential": a.credential, "smoke": a.smoke, "workers": a.workers,
         "masters": {"smoke": SMOKE_MASTER} if a.smoke else MASTERS,
         "schedule": [{"arm": x, "index": i, "seed": s, "run_id": run_id_for(x, s, i, a.smoke)} for x, i, s in sched],
         "resume": {"skipped_complete": p["skipped"], "deleted_partial": p["redone"]},
