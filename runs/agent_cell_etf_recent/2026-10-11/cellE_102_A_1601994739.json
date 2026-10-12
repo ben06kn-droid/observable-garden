@@ -1,0 +1,1838 @@
+{
+ "run_id": "cellE_102_A_1601994739",
+ "arm": "A",
+ "seed": 1601994739,
+ "events": [
+  {
+   "t": 1791770628.7871501,
+   "kind": "start",
+   "arm": "A",
+   "index": 102,
+   "seed": 1601994739,
+   "smoke": false,
+   "precompute_manifest_sha256": "78583e9b2fdadad7ef64bb6cd1b08b0a0ca9879a15ea84f165a20d2e705b0ae2"
+  },
+  {
+   "t": 1791770628.78721,
+   "kind": "system_prompt",
+   "sha": "963d8aee4df0a20b",
+   "chars": 3202
+  },
+  {
+   "t": 1791770632.364444,
+   "kind": "assistant_text",
+   "text": "I'll start by establishing my prior belief and stopping rules before making any moves, as required."
+  },
+  {
+   "t": 1791770634.59846,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__pick_prior",
+   "input": {
+    "features": [
+     0
+    ],
+    "signs": [
+     1
+    ],
+    "reason": "I have no feature-specific domain knowledge to privilege one feature over another independent of this data; I will instead rely on the data-driven init step rather than a strong prior. Naming feature 0 long is a placeholder convention, not a substantive belief \u2014 I will let init determine the true starting point and treat this prior as weak/uninformative."
+   }
+  },
+  {
+   "t": 1791770634.61167,
+   "kind": "tool_result",
+   "tool": "pick_prior",
+   "args": {
+    "features": [
+     0
+    ],
+    "signs": [
+     1
+    ],
+    "reason": "I have no feature-specific domain knowledge to privilege one feature over another independent of this data; I will instead rely on the data-driven init step rather than a strong prior. Naming feature 0 long is a placeholder convention, not a substantive belief \u2014 I will let init determine the true starting point and treat this prior as weak/uninformative."
+   },
+   "text": "prior pick recorded: [0+]",
+   "ok": true
+  },
+  {
+   "t": 1791770638.411343,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__declare_triggers",
+   "input": {
+    "triggers": [
+     {
+      "trigger": "best_so_far_above",
+      "param": 1,
+      "action": "stop",
+      "reason": "If the best candidate found reaches a Sharpe of 1.0 or higher (all-years-equal), that is a strong, economically meaningful signal and further search risks overfitting."
+     },
+     {
+      "trigger": "failures_at_least",
+      "param": 2,
+      "action": "stop",
+      "reason": "If 2 consecutive moves fail to improve the held candidate, this suggests we have reached a local plateau and further search is likely to just fit noise."
+     },
+     {
+      "trigger": "last_gain_at_most",
+      "param": 0.02,
+      "action": "restart",
+      "reason": "If the most recent move's gain in Sharpe is at most 0.02, the marginal benefit of continuing to extend/swap on this anchor is too small to justify continued search risk; better to restart from a fresh anchor or stop."
+     }
+    ]
+   }
+  },
+  {
+   "t": 1791770638.4191601,
+   "kind": "tool_result",
+   "tool": "declare_triggers",
+   "args": {
+    "triggers": [
+     {
+      "trigger": "best_so_far_above",
+      "param": 1,
+      "action": "stop",
+      "reason": "If the best candidate found reaches a Sharpe of 1.0 or higher (all-years-equal), that is a strong, economically meaningful signal and further search risks overfitting."
+     },
+     {
+      "trigger": "failures_at_least",
+      "param": 2,
+      "action": "stop",
+      "reason": "If 2 consecutive moves fail to improve the held candidate, this suggests we have reached a local plateau and further search is likely to just fit noise."
+     },
+     {
+      "trigger": "last_gain_at_most",
+      "param": 0.02,
+      "action": "restart",
+      "reason": "If the most recent move's gain in Sharpe is at most 0.02, the marginal benefit of continuing to extend/swap on this anchor is too small to justify continued search risk; better to restart from a fresh anchor or stop."
+     }
+    ]
+   },
+   "text": "declared: best_so_far > bar -> stop, failures >= 2 -> stop, last_gain > 0.02 -> restart",
+   "ok": true
+  },
+  {
+   "t": 1791770640.191606,
+   "kind": "assistant_text",
+   "text": "Now let's begin the search by anchoring on the best single feature, and also check the baseline model for comparison."
+  },
+  {
+   "t": 1791770640.398722,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__init",
+   "input": {}
+  },
+  {
+   "t": 1791770640.408968,
+   "kind": "tool_result",
+   "tool": "init",
+   "args": {},
+   "text": "init kept: [32+] sharpe 0.3849 (best 0.3849, 80 candidates) | shown: step=0.0000; best=-inf; failures=0.0000; last_gain=inf; budget_left=60.0000 | Sharpe (all years equal) 0.385; Sharpe (recent years weighted) 0.430",
+   "ok": true
+  },
+  {
+   "t": 1791770640.45325,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__baseline_model",
+   "input": {}
+  },
+  {
+   "t": 1791770640.459185,
+   "kind": "baseline_model_call"
+  },
+  {
+   "t": 1791770640.459258,
+   "kind": "tool_result",
+   "tool": "baseline_model",
+   "args": {},
+   "text": "Baseline model stream: Sharpe (all years equal) 0.183; Sharpe (recent years weighted) 0.246; mean daily turnover 0.042.",
+   "ok": true
+  },
+  {
+   "t": 1791770642.46988,
+   "kind": "assistant_text",
+   "text": "Good starting point: feature 32 (long) gives Sharpe 0.385, already beating the baseline model's 0.183. Let's extend."
+  },
+  {
+   "t": 1791770642.565732,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791770642.572856,
+   "kind": "tool_result",
+   "tool": "extend_best",
+   "args": {},
+   "text": "extend_best kept: [32+, 35-] sharpe 0.4831 (best 0.4831, 78 candidates) | shown: step=0.0000; best=0.3849; failures=0.0000; last_gain=inf; budget_left=60.0000 | Sharpe (all years equal) 0.483; Sharpe (recent years weighted) 0.546",
+   "ok": true
+  },
+  {
+   "t": 1791770644.168212,
+   "kind": "assistant_text",
+   "text": "Good gain (+0.098). Let's continue extending."
+  },
+  {
+   "t": 1791770644.217062,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791770644.230026,
+   "kind": "tool_result",
+   "tool": "extend_best",
+   "args": {},
+   "text": "extend_best kept: [32+, 35-, 33+] sharpe 0.4626 (best 0.4831, 76 candidates) | shown: step=1.0000; best=0.4831; failures=0.0000; last_gain=0.0982; budget_left=59.0000 | Sharpe (all years equal) 0.463; Sharpe (recent years weighted) 0.514",
+   "ok": true
+  },
+  {
+   "t": 1791770646.455668,
+   "kind": "assistant_text",
+   "text": "That extension actually decreased Sharpe (0.4831 \u2192 0.4626), a failure. We're at max 3 features (the rule cap), so let's try swap_worst to see if we can improve on this 3-feature set."
+  },
+  {
+   "t": 1791770646.4922082,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__swap_worst",
+   "input": {}
+  },
+  {
+   "t": 1791770646.494848,
+   "kind": "refusal",
+   "tool": "swap_worst",
+   "refusal_kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value -0.0205). It licenses a restart. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  },
+  {
+   "t": 1791770648.500332,
+   "kind": "assistant_text",
+   "text": "The `last_gain_at_most(0.02)` restart rule fired since the last gain was negative (-0.0205). Per my declared rules, I should take the restart move rather than override it."
+  },
+  {
+   "t": 1791770648.867131,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__restart",
+   "input": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   }
+  },
+  {
+   "t": 1791770648.877514,
+   "kind": "tool_result",
+   "tool": "restart",
+   "args": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   },
+   "text": "restarted on last_gain > 0.02: [33+] sharpe 0.3821 (best 0.4831) | shown: step=2.0000; best=0.4831; failures=1.0000; last_gain=-0.0205; budget_left=58.0000 | Sharpe (all years equal) 0.382; Sharpe (recent years weighted) 0.422",
+   "ok": true
+  },
+  {
+   "t": 1791770650.983449,
+   "kind": "assistant_text",
+   "text": "We restarted on feature 33 (0.382), which is worse than our best-so-far of [32+, 35-] at 0.4831. Let's extend this new anchor to see if it can find something better."
+  },
+  {
+   "t": 1791770651.065711,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791770651.0752032,
+   "kind": "tool_result",
+   "tool": "extend_best",
+   "args": {},
+   "text": "extend_best kept: [33+, 35-] sharpe 0.4906 (best 0.4906, 78 candidates) | shown: step=3.0000; best=0.4831; failures=0.0000; last_gain=inf; budget_left=57.0000 | Sharpe (all years equal) 0.491; Sharpe (recent years weighted) 0.554",
+   "ok": true
+  },
+  {
+   "t": 1791770652.890199,
+   "kind": "assistant_text",
+   "text": "New best: [33+, 35-] at 0.4906, slightly better than the previous [32+, 35-] at 0.4831. Let's extend again."
+  },
+  {
+   "t": 1791770652.925121,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791770652.9326751,
+   "kind": "refusal",
+   "tool": "extend_best",
+   "refusal_kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value 0.0075). It licenses a restart. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  },
+  {
+   "t": 1791770658.873564,
+   "kind": "assistant_text",
+   "text": "Interesting \u2014 the extend_best move was attempted but the gain was only 0.0075 (small), triggering my restart rule before the result was applied. The rule fired preemptively. I need to decide: restart again, or adjust my trigger since this rule seems to be firing too eagerly on marginal-but-positive gains, discarding potentially good incremental progress.\n\nGiven this is a small positive gain (not a failure), and I'm at a strong Sharpe (0.4906) already beating baseline by >2.5x, I think the sensible choice is to accept the restart rule as declared (it's doing its job of preventing me from chasing tiny marginal gains) and treat this as a signal to stop rather than keep restarting, since my best_so_far (0.4906) is solid. Let me check the best_so_far_above trigger status \u2014 it hasn't fired yet since bar is 1.0 and I'm at 0.49. Let me restart once more to see if there's a meaningfully better region, respecting the declared rule."
+  },
+  {
+   "t": 1791770659.310047,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__restart",
+   "input": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   }
+  },
+  {
+   "t": 1791770659.325257,
+   "kind": "tool_result",
+   "tool": "restart",
+   "args": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   },
+   "text": "restarted on last_gain > 0.02: [18+] sharpe 0.2899 (best 0.4906) | shown: step=4.0000; best=0.4906; failures=0.0000; last_gain=0.0075; budget_left=56.0000 | Sharpe (all years equal) 0.290; Sharpe (recent years weighted) 0.339",
+   "ok": true
+  },
+  {
+   "t": 1791770661.283433,
+   "kind": "assistant_text",
+   "text": "New anchor [18+] at 0.2899, well below our best of 0.4906. Let's extend to see if this path leads anywhere promising."
+  },
+  {
+   "t": 1791770661.342321,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791770661.351282,
+   "kind": "tool_result",
+   "tool": "extend_best",
+   "args": {},
+   "text": "extend_best kept: [18+, 35-] sharpe 0.4625 (best 0.4906, 78 candidates) | shown: step=5.0000; best=0.4906; failures=0.0000; last_gain=inf; budget_left=55.0000 | Sharpe (all years equal) 0.462; Sharpe (recent years weighted) 0.542",
+   "ok": true
+  },
+  {
+   "t": 1791770663.574867,
+   "kind": "assistant_text",
+   "text": "Still below our best of 0.4906 ([33+, 35-]). Let's try one more extension on this branch."
+  },
+  {
+   "t": 1791770663.664533,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791770663.6739578,
+   "kind": "refusal",
+   "tool": "extend_best",
+   "refusal_kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value -0.0281). It licenses a restart. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  },
+  {
+   "t": 1791770668.1483798,
+   "kind": "assistant_text",
+   "text": "This branch failed again. The pattern is clear: [33+, 35-] at 0.4906 remains our best candidate across multiple restart attempts. Rather than keep restarting indefinitely (which risks overfitting via repeated search / p-hacking), I'll use the `pick` move to formally compare my two leading candidates on sharpe, then stop.\n\nFirst let me restart once more per the rule, then decide to stop given we've now explored 3 distinct anchors (32, 33, 18) and consistently land near 0.46-0.49 with feature 35- as a common component, with [33+,35-] as the clear best."
+  },
+  {
+   "t": 1791770668.602684,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__restart",
+   "input": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   }
+  },
+  {
+   "t": 1791770668.613318,
+   "kind": "tool_result",
+   "tool": "restart",
+   "args": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   },
+   "text": "restarted on last_gain > 0.02: [16+] sharpe 0.2558 (best 0.4906) | shown: step=6.0000; best=0.4906; failures=1.0000; last_gain=-0.0281; budget_left=54.0000 | Sharpe (all years equal) 0.256; Sharpe (recent years weighted) 0.267",
+   "ok": true
+  },
+  {
+   "t": 1791770671.560871,
+   "kind": "assistant_text",
+   "text": "New anchor [16+] at 0.2558, the weakest start yet. Given failures=1 now, one more failure will trigger my `failures_at_least(2)` stop rule. Let's try one extension here."
+  },
+  {
+   "t": 1791770671.612021,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791770671.627779,
+   "kind": "tool_result",
+   "tool": "extend_best",
+   "args": {},
+   "text": "extend_best kept: [16+, 35-] sharpe 0.3904 (best 0.4906, 78 candidates) | shown: step=7.0000; best=0.4906; failures=0.0000; last_gain=inf; budget_left=53.0000 | Sharpe (all years equal) 0.390; Sharpe (recent years weighted) 0.418",
+   "ok": true
+  },
+  {
+   "t": 1791770673.930657,
+   "kind": "assistant_text",
+   "text": "Still below best. Feature 35- keeps appearing as a strong complementary feature across anchors, but none beat [33+, 35-] at 0.4906. Let's try one more extension on this path."
+  },
+  {
+   "t": 1791770673.985367,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791770673.9910882,
+   "kind": "refusal",
+   "tool": "extend_best",
+   "refusal_kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value -0.1002). It licenses a restart. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  },
+  {
+   "t": 1791770677.149472,
+   "kind": "assistant_text",
+   "text": "This is a clear failure again (failures now at 1, about to become 2 after this restart is processed \u2014 let's check). We've now seen 4 distinct anchors (32, 33, 18, 16), and [33+, 35-] at 0.4906 remains the best by a clear margin. Given diminishing returns and the risk of overfitting via continued search, I'll restart one more time and then seriously consider stopping."
+  },
+  {
+   "t": 1791770677.632185,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__restart",
+   "input": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   }
+  },
+  {
+   "t": 1791770677.6391602,
+   "kind": "tool_result",
+   "tool": "restart",
+   "args": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   },
+   "text": "restarted on last_gain > 0.02: [19+] sharpe 0.2280 (best 0.4906) | shown: step=8.0000; best=0.4906; failures=1.0000; last_gain=-0.1002; budget_left=52.0000 | Sharpe (all years equal) 0.228; Sharpe (recent years weighted) 0.268",
+   "ok": true
+  },
+  {
+   "t": 1791770680.977827,
+   "kind": "assistant_text",
+   "text": "failures is at 1 (seems to reset/track per-branch). Our best candidate [33+, 35-] at 0.4906 has now survived 5 different anchor attempts (32, 33, 18, 16, 19) without being beaten. This gives me good confidence that it's a robust local optimum rather than a lucky draw. Let me do one more extend on this branch, then move to stop."
+  },
+  {
+   "t": 1791770681.032316,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791770681.039802,
+   "kind": "tool_result",
+   "tool": "extend_best",
+   "args": {},
+   "text": "extend_best kept: [19+, 35-] sharpe 0.4019 (best 0.4906, 78 candidates) | shown: step=9.0000; best=0.4906; failures=0.0000; last_gain=inf; budget_left=51.0000 | Sharpe (all years equal) 0.402; Sharpe (recent years weighted) 0.501",
+   "ok": true
+  },
+  {
+   "t": 1791770685.863443,
+   "kind": "assistant_text",
+   "text": "Still below best. I've now explored 5 anchors thoroughly and [33+, 35-] at 0.4906 remains dominant. This is a good point to stop. The `best_so_far_above(1.0)` trigger hasn't fired, and continuing to restart repeatedly risks data-mining noise without meaningful improvement \u2014 the `last_gain_at_most` rule has been correctly flagging each of these as insufficient. I'll check if `failures_at_least(2)` could apply, but regardless, I think the principled choice now is to stop the search and lock in our best candidate rather than keep spinning.\n\nLet me try `refine` on the current best-tracked candidate first, since that's a legitimate low-risk move (re-fitting signs) that doesn't add complexity."
+  },
+  {
+   "t": 1791770686.599571,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__pick",
+   "input": {
+    "among": [
+     32,
+     33,
+     18,
+     16,
+     19
+    ],
+    "choice": 33,
+    "statistic": "sharpe"
+   }
+  },
+  {
+   "t": 1791770686.6103182,
+   "kind": "refusal",
+   "tool": "pick",
+   "refusal_kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value -0.0887). It licenses a restart. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  },
+  {
+   "t": 1791770689.6889338,
+   "kind": "assistant_text",
+   "text": "The declared rule is firing and blocking other moves until I address it. I need to either restart or change the trigger. Given I've now gathered enough evidence (5 anchors, consistent best of [33+,35-] at 0.4906), I'll change this trigger to stop instead of restart, since I'm satisfied with the search depth and want to conclude rather than keep restarting."
+  },
+  {
+   "t": 1791770692.642897,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__change_trigger",
+   "input": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02,
+    "action": "stop",
+    "reason": "Having explored 5 independent anchors (features 32, 33, 18, 16, 19) all extended with feature 35-, the candidate [33+, 35-] at Sharpe 0.4906 has consistently dominated every alternative by a clear margin, and no further restart has found anything close. Repeatedly restarting now would mainly add search/overfitting risk for little expected gain, so I am converting this trigger from restart to stop to conclude the search on the best candidate found."
+   }
+  },
+  {
+   "t": 1791770692.650802,
+   "kind": "tool_result",
+   "tool": "change_trigger",
+   "args": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02,
+    "action": "stop",
+    "reason": "Having explored 5 independent anchors (features 32, 33, 18, 16, 19) all extended with feature 35-, the candidate [33+, 35-] at Sharpe 0.4906 has consistently dominated every alternative by a clear margin, and no further restart has found anything close. Repeatedly restarting now would mainly add search/overfitting risk for little expected gain, so I am converting this trigger from restart to stop to conclude the search on the best candidate found."
+   },
+   "text": "changed to last_gain > 0.02. Recorded with its timestamp; from here the run is priced as not replayable and reported in the bracket.",
+   "ok": true
+  },
+  {
+   "t": 1791770695.324805,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__stop",
+   "input": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   }
+  },
+  {
+   "t": 1791770695.331975,
+   "kind": "tool_result",
+   "tool": "stop",
+   "args": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   },
+   "text": "stopped on last_gain > 0.02 (value -0.0887) | shown: step=10.0000; best=0.4906; failures=1.0000; last_gain=-0.0887; budget_left=50.0000",
+   "ok": true
+  },
+  {
+   "t": 1791770698.219452,
+   "kind": "assistant_text",
+   "text": "Search concluded. Our best candidate is [33+, 35-] with Sharpe (all years equal) 0.491 and Sharpe (recent years weighted) 0.554 \u2014 this clearly and robustly beat the baseline model (0.183 / 0.246) and survived testing against 5 independent anchor restarts without being displaced. Now let's submit this rule as our candidate."
+  },
+  {
+   "t": 1791770698.3818219,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__submit_candidate",
+   "input": {
+    "kind": "rule"
+   }
+  },
+  {
+   "t": 1791770698.3856761,
+   "kind": "candidate",
+   "candidate_kind": "rule",
+   "support": [
+    [
+     33,
+     1.0
+    ],
+    [
+     35,
+     -1.0
+    ]
+   ]
+  },
+  {
+   "t": 1791770698.385685,
+   "kind": "tool_result",
+   "tool": "submit_candidate",
+   "args": {
+    "kind": "rule"
+   },
+   "text": "Candidate fixed: rule [33+, 35-]. Sharpe (all years equal) 0.491; Sharpe (recent years weighted) 0.554.",
+   "ok": true
+  },
+  {
+   "t": 1791770704.9465652,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__predict",
+   "input": {
+    "mean": 0.3,
+    "sd": 0.35,
+    "note": "In-sample this 2-feature rule [33+, 35-] scored 0.491 (equal-weighted years) / 0.554 (recent-weighted), well above the baseline model's 0.183/0.246, and it was robust across 5 independent restart anchors (32, 33, 18, 16, 19) that all converged toward feature 35- as a complement but never beat this pair. Still, with only ~80 candidate single/pair features screened and a short, simple search, meaningful in-sample selection bias is likely despite the robustness checks and modest rule complexity (2 of 3 allowed features). I expect substantial out-of-sample shrinkage: a reasonable central estimate is roughly 60% of the in-sample equal-weighted Sharpe, i.e. around 0.30, with a wide standard deviation (~0.35) reflecting real uncertainty about regime shift, turnover/cost drag not fully captured in-sample, and the possibility the true effect is smaller or that recent-year weighting (0.554) was partly favorable-period luck."
+   }
+  },
+  {
+   "t": 1791770704.957669,
+   "kind": "tool_result",
+   "tool": "predict",
+   "args": {
+    "mean": 0.3,
+    "sd": 0.35,
+    "note": "In-sample this 2-feature rule [33+, 35-] scored 0.491 (equal-weighted years) / 0.554 (recent-weighted), well above the baseline model's 0.183/0.246, and it was robust across 5 independent restart anchors (32, 33, 18, 16, 19) that all converged toward feature 35- as a complement but never beat this pair. Still, with only ~80 candidate single/pair features screened and a short, simple search, meaningful in-sample selection bias is likely despite the robustness checks and modest rule complexity (2 of 3 allowed features). I expect substantial out-of-sample shrinkage: a reasonable central estimate is roughly 60% of the in-sample equal-weighted Sharpe, i.e. around 0.30, with a wide standard deviation (~0.35) reflecting real uncertainty about regime shift, turnover/cost drag not fully captured in-sample, and the possibility the true effect is smaller or that recent-year weighting (0.554) was partly favorable-period luck."
+   },
+   "text": "prediction 0.300 (sd 0.350) recorded",
+   "ok": true
+  },
+  {
+   "t": 1791770706.5611148,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__confirm",
+   "input": {}
+  },
+  {
+   "t": 1791770706.567797,
+   "kind": "submit",
+   "submission": {
+    "arm": "A",
+    "kind": "rule",
+    "support": [
+     [
+      33,
+      1.0
+     ],
+     [
+      35,
+      -1.0
+     ]
+    ],
+    "predict": {
+     "mean": 0.3,
+     "sd": 0.35,
+     "note": "In-sample this 2-feature rule [33+, 35-] scored 0.491 (equal-weighted years) / 0.554 (recent-weighted), well above the baseline model's 0.183/0.246, and it was robust across 5 independent restart anchors (32, 33, 18, 16, 19) that all converged toward feature 35- as a complement but never beat this pair. Still, with only ~80 candidate single/pair features screened and a short, simple search, meaningful in-sample selection bias is likely despite the robustness checks and modest rule complexity (2 of 3 allowed features). I expect substantial out-of-sample shrinkage: a reasonable central estimate is roughly 60% of the in-sample equal-weighted Sharpe, i.e. around 0.30, with a wide standard deviation (~0.35) reflecting real uncertainty about regime shift, turnover/cost drag not fully captured in-sample, and the possibility the true effect is smaller or that recent-year weighting (0.554) was partly favorable-period luck."
+    },
+    "candidate_S_w": 0.5544153381682998,
+    "candidate_S_unw": 0.4905914646222531,
+    "L90_shown": null
+   }
+  },
+  {
+   "t": 1791770706.5678022,
+   "kind": "tool_result",
+   "tool": "confirm",
+   "args": {},
+   "text": "confirmed; the session is over",
+   "ok": true
+  },
+  {
+   "t": 1791770715.64174,
+   "kind": "assistant_text",
+   "text": "## Summary\n\n**Search process:**\n1. Declared three stopping rules upfront (best_so_far_above 1.0 \u2192 stop; failures_at_least 2 \u2192 stop; last_gain_at_most 0.02 \u2192 restart), plus a weak/uninformative prior since I had no feature-specific domain knowledge.\n2. `init` anchored on feature 32 (Sharpe 0.385), already beating the baseline model (0.183).\n3. Extended to [32+, 35\u2212] \u2192 0.483, a strong gain.\n4. Further extension to add feature 33 *lowered* Sharpe, triggering my declared restart rule \u2014 honored it rather than overriding.\n5. Explored 5 independent anchors total (features 32, 33, 18, 16, 19), each extended with the best complementary feature. **Feature 35\u2212 recurred as the dominant complement in every single branch**, and the pair **[33+, 35\u2212]** consistently came out on top at **Sharpe 0.491 (equal-weighted) / 0.554 (recent-weighted)** \u2014 never displaced across the whole search.\n6. Once the evidence converged (5 anchors, consistent winner, diminishing returns from further restarts), I converted my `last_gain_at_most` trigger from restart\u2192stop (logged as a non-replayable change) and formally stopped the search.\n\n**Final candidate:** Rule **[33+, 35\u2212]** \u2014 long feature 33, short feature 35, equal-weighted.\n- In-sample Sharpe: 0.491 (all years equal), 0.554 (recent years weighted)\n- Clearly beat the baseline model (0.183 / 0.246)\n\n**Prediction for unseen data:** Mean Sharpe **0.30**, SD **0.35** \u2014 reflecting meaningful expected shrinkage from the in-sample figure (robustness checks were reassuring but the search was still short and simple, so some overfitting risk remains), with wide uncertainty bands to reflect genuine doubt about regime stability and cost drag.\n\nSession confirmed and closed."
+  },
+  {
+   "t": 1791770715.89246,
+   "kind": "self_check",
+   "replayable": true,
+   "check": "integrity",
+   "basis": "class table",
+   "realized_support": [
+    [
+     33,
+     1.0
+    ],
+    [
+     35,
+     -1.0
+    ]
+   ],
+   "replayed_support": [
+    [
+     33,
+     1.0
+    ],
+    [
+     35,
+     -1.0
+    ]
+   ],
+   "realized_score": 0.4905914646222531,
+   "replayed_score": 0.4905914646222531,
+   "reason": "Integrity check (fixed-sequence replay: the realized meta decisions with the logged content moves): PASS on the class table. The replay reproduces the realized support and score; they differ by 0.00e+00.",
+   "error": null
+  },
+  {
+   "t": 1791770715.892462,
+   "kind": "declared_budget",
+   "budget": 60
+  },
+  {
+   "t": 1791770715.892467,
+   "kind": "content_cap",
+   "cap": null
+  },
+  {
+   "t": 1791770715.892531,
+   "kind": "session_log",
+   "records": [
+    {
+     "step": 0,
+     "kind": "init",
+     "support": [
+      [
+       32,
+       1.0
+      ]
+     ],
+     "score": 0.3849480587346002,
+     "n_candidates": 80,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "init",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       0.0
+      ],
+      [
+       "best",
+       -Infinity
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       60.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 0,
+      "support": [],
+      "score": -Infinity,
+      "shown": [
+       [
+        "step",
+        0.0
+       ],
+       [
+        "best",
+        -Infinity
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        60.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 1,
+     "kind": "extend_best",
+     "support": [
+      [
+       32,
+       1.0
+      ],
+      [
+       35,
+       -1.0
+      ]
+     ],
+     "score": 0.48310591492454247,
+     "n_candidates": 78,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "extend_best",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       0.0
+      ],
+      [
+       "best",
+       0.3849480587346002
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       60.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 1,
+      "support": [
+       [
+        32,
+        1.0
+       ]
+      ],
+      "score": 0.3849480587346002,
+      "shown": [
+       [
+        "step",
+        0.0
+       ],
+       [
+        "best",
+        0.3849480587346002
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        60.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 2,
+     "kind": "extend_best",
+     "support": [
+      [
+       32,
+       1.0
+      ],
+      [
+       35,
+       -1.0
+      ],
+      [
+       33,
+       1.0
+      ]
+     ],
+     "score": 0.4626296567437126,
+     "n_candidates": 76,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "extend_best",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       1.0
+      ],
+      [
+       "best",
+       0.48310591492454247
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       0.09815785618994227
+      ],
+      [
+       "budget_left",
+       59.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 2,
+      "support": [
+       [
+        32,
+        1.0
+       ],
+       [
+        35,
+        -1.0
+       ]
+      ],
+      "score": 0.48310591492454247,
+      "shown": [
+       [
+        "step",
+        1.0
+       ],
+       [
+        "best",
+        0.48310591492454247
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        0.09815785618994227
+       ],
+       [
+        "budget_left",
+        59.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 3,
+     "kind": "restart",
+     "support": [
+      [
+       33,
+       1.0
+      ]
+     ],
+     "score": 0.382108437708134,
+     "n_candidates": 40,
+     "trigger": "last_gain > 0.02",
+     "trigger_value": -0.020476258180829876,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "restart",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       2.0
+      ],
+      [
+       "best",
+       0.48310591492454247
+      ],
+      [
+       "failures",
+       1.0
+      ],
+      [
+       "last_gain",
+       -0.020476258180829876
+      ],
+      [
+       "budget_left",
+       58.0
+      ]
+     ],
+     "trigger_stamped_at": 2675943.872555416,
+     "information": {
+      "step": 3,
+      "support": [
+       [
+        32,
+        1.0
+       ],
+       [
+        35,
+        -1.0
+       ],
+       [
+        33,
+        1.0
+       ]
+      ],
+      "score": 0.4626296567437126,
+      "shown": [
+       [
+        "step",
+        2.0
+       ],
+       [
+        "best",
+        0.48310591492454247
+       ],
+       [
+        "failures",
+        1.0
+       ],
+       [
+        "last_gain",
+        -0.020476258180829876
+       ],
+       [
+        "budget_left",
+        58.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 4,
+     "kind": "extend_best",
+     "support": [
+      [
+       33,
+       1.0
+      ],
+      [
+       35,
+       -1.0
+      ]
+     ],
+     "score": 0.4905914646222531,
+     "n_candidates": 78,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "extend_best",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       3.0
+      ],
+      [
+       "best",
+       0.48310591492454247
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       57.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 4,
+      "support": [
+       [
+        33,
+        1.0
+       ]
+      ],
+      "score": 0.382108437708134,
+      "shown": [
+       [
+        "step",
+        3.0
+       ],
+       [
+        "best",
+        0.48310591492454247
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        57.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 5,
+     "kind": "restart",
+     "support": [
+      [
+       18,
+       1.0
+      ]
+     ],
+     "score": 0.2899238111984403,
+     "n_candidates": 40,
+     "trigger": "last_gain > 0.02",
+     "trigger_value": 0.007485549697710647,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "restart",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       4.0
+      ],
+      [
+       "best",
+       0.4905914646222531
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       0.007485549697710647
+      ],
+      [
+       "budget_left",
+       56.0
+      ]
+     ],
+     "trigger_stamped_at": 2675954.319595666,
+     "information": {
+      "step": 5,
+      "support": [
+       [
+        33,
+        1.0
+       ],
+       [
+        35,
+        -1.0
+       ]
+      ],
+      "score": 0.4905914646222531,
+      "shown": [
+       [
+        "step",
+        4.0
+       ],
+       [
+        "best",
+        0.4905914646222531
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        0.007485549697710647
+       ],
+       [
+        "budget_left",
+        56.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 6,
+     "kind": "extend_best",
+     "support": [
+      [
+       18,
+       1.0
+      ],
+      [
+       35,
+       -1.0
+      ]
+     ],
+     "score": 0.4624633430707169,
+     "n_candidates": 78,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "extend_best",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       5.0
+      ],
+      [
+       "best",
+       0.4905914646222531
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       55.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 6,
+      "support": [
+       [
+        18,
+        1.0
+       ]
+      ],
+      "score": 0.2899238111984403,
+      "shown": [
+       [
+        "step",
+        5.0
+       ],
+       [
+        "best",
+        0.4905914646222531
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        55.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 7,
+     "kind": "restart",
+     "support": [
+      [
+       16,
+       1.0
+      ]
+     ],
+     "score": 0.25584994409520606,
+     "n_candidates": 40,
+     "trigger": "last_gain > 0.02",
+     "trigger_value": -0.02812812155153621,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "restart",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       6.0
+      ],
+      [
+       "best",
+       0.4905914646222531
+      ],
+      [
+       "failures",
+       1.0
+      ],
+      [
+       "last_gain",
+       -0.02812812155153621
+      ],
+      [
+       "budget_left",
+       54.0
+      ]
+     ],
+     "trigger_stamped_at": 2675963.60698175,
+     "information": {
+      "step": 7,
+      "support": [
+       [
+        18,
+        1.0
+       ],
+       [
+        35,
+        -1.0
+       ]
+      ],
+      "score": 0.4624633430707169,
+      "shown": [
+       [
+        "step",
+        6.0
+       ],
+       [
+        "best",
+        0.4905914646222531
+       ],
+       [
+        "failures",
+        1.0
+       ],
+       [
+        "last_gain",
+        -0.02812812155153621
+       ],
+       [
+        "budget_left",
+        54.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 8,
+     "kind": "extend_best",
+     "support": [
+      [
+       16,
+       1.0
+      ],
+      [
+       35,
+       -1.0
+      ]
+     ],
+     "score": 0.39038996069895837,
+     "n_candidates": 78,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "extend_best",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       7.0
+      ],
+      [
+       "best",
+       0.4905914646222531
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       53.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 8,
+      "support": [
+       [
+        16,
+        1.0
+       ]
+      ],
+      "score": 0.25584994409520606,
+      "shown": [
+       [
+        "step",
+        7.0
+       ],
+       [
+        "best",
+        0.4905914646222531
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        53.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 9,
+     "kind": "restart",
+     "support": [
+      [
+       19,
+       1.0
+      ]
+     ],
+     "score": 0.22804590097570904,
+     "n_candidates": 40,
+     "trigger": "last_gain > 0.02",
+     "trigger_value": -0.10020150392329474,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "restart",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       8.0
+      ],
+      [
+       "best",
+       0.4905914646222531
+      ],
+      [
+       "failures",
+       1.0
+      ],
+      [
+       "last_gain",
+       -0.10020150392329474
+      ],
+      [
+       "budget_left",
+       52.0
+      ]
+     ],
+     "trigger_stamped_at": 2675972.633491916,
+     "information": {
+      "step": 9,
+      "support": [
+       [
+        16,
+        1.0
+       ],
+       [
+        35,
+        -1.0
+       ]
+      ],
+      "score": 0.39038996069895837,
+      "shown": [
+       [
+        "step",
+        8.0
+       ],
+       [
+        "best",
+        0.4905914646222531
+       ],
+       [
+        "failures",
+        1.0
+       ],
+       [
+        "last_gain",
+        -0.10020150392329474
+       ],
+       [
+        "budget_left",
+        52.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 10,
+     "kind": "extend_best",
+     "support": [
+      [
+       19,
+       1.0
+      ],
+      [
+       35,
+       -1.0
+      ]
+     ],
+     "score": 0.4018751937060218,
+     "n_candidates": 78,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "extend_best",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       9.0
+      ],
+      [
+       "best",
+       0.4905914646222531
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       51.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 10,
+      "support": [
+       [
+        19,
+        1.0
+       ]
+      ],
+      "score": 0.22804590097570904,
+      "shown": [
+       [
+        "step",
+        9.0
+       ],
+       [
+        "best",
+        0.4905914646222531
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        51.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 11,
+     "kind": "stop",
+     "support": [
+      [
+       19,
+       1.0
+      ],
+      [
+       35,
+       -1.0
+      ]
+     ],
+     "score": 0.4018751937060218,
+     "n_candidates": 0,
+     "trigger": "last_gain > 0.02",
+     "trigger_value": -0.0887162709162313,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "stop",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       10.0
+      ],
+      [
+       "best",
+       0.4905914646222531
+      ],
+      [
+       "failures",
+       1.0
+      ],
+      [
+       "last_gain",
+       -0.0887162709162313
+      ],
+      [
+       "budget_left",
+       50.0
+      ]
+     ],
+     "trigger_stamped_at": 2675990.326383708,
+     "information": {
+      "step": 11,
+      "support": [
+       [
+        19,
+        1.0
+       ],
+       [
+        35,
+        -1.0
+       ]
+      ],
+      "score": 0.4018751937060218,
+      "shown": [
+       [
+        "step",
+        10.0
+       ],
+       [
+        "best",
+        0.4905914646222531
+       ],
+       [
+        "failures",
+        1.0
+       ],
+       [
+        "last_gain",
+        -0.0887162709162313
+       ],
+       [
+        "budget_left",
+        50.0
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "t": 1791770715.892569,
+   "kind": "trigger_changes",
+   "changes": [
+    {
+     "at_step": 11,
+     "trigger": {
+      "kind": "last_gain_at_most",
+      "param": 0.02,
+      "action": "stop"
+     },
+     "reason": "Having explored 5 independent anchors (features 32, 33, 18, 16, 19) all extended with feature 35-, the candidate [33+, 35-] at Sharpe 0.4906 has consistently dominated every alternative by a clear margin, and no further restart has found anything close. Repeatedly restarting now would mainly add search/overfitting risk for little expected gain, so I am converting this trigger from restart to stop to conclude the search on the best candidate found.",
+     "timestamp": 2675987.645395333
+    }
+   ]
+  },
+  {
+   "t": 1791770715.892572,
+   "kind": "end"
+  }
+ ],
+ "refusals": [
+  {
+   "tool": "swap_worst",
+   "kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value -0.0205). It licenses a restart. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  },
+  {
+   "tool": "extend_best",
+   "kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value 0.0075). It licenses a restart. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  },
+  {
+   "tool": "extend_best",
+   "kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value -0.0281). It licenses a restart. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  },
+  {
+   "tool": "extend_best",
+   "kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value -0.1002). It licenses a restart. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  },
+  {
+   "tool": "pick",
+   "kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value -0.0887). It licenses a restart. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  }
+ ],
+ "moves": {
+  "pick_prior": 1,
+  "declare_triggers": 1,
+  "init": 1,
+  "baseline_model": 1,
+  "extend_best": 6,
+  "restart": 4,
+  "change_trigger": 1,
+  "stop": 1,
+  "submit_candidate": 1,
+  "predict": 1,
+  "confirm": 1
+ },
+ "triggers_declared": {},
+ "triggers_fired": {},
+ "picks_accepted": 0,
+ "picks_contradicted": 0,
+ "turns": 44,
+ "n_tool_calls": 24,
+ "submitted": true,
+ "submitted_support": [
+  [
+   33,
+   1.0
+  ],
+  [
+   35,
+   -1.0
+  ]
+ ],
+ "submitted_sharpe": 0.4905914646222531,
+ "prior_pick": null,
+ "prediction": {
+  "mean": 0.3,
+  "sd": 0.35
+ },
+ "triggers_changed": true,
+ "triggers_predeclared": [
+  {
+   "kind": "best_so_far_above",
+   "param": 1.0,
+   "action": "stop"
+  },
+  {
+   "kind": "failures_at_least",
+   "param": 2.0,
+   "action": "stop"
+  },
+  {
+   "kind": "last_gain_at_most",
+   "param": 0.02,
+   "action": "restart"
+  }
+ ],
+ "certifying_null_computable": null,
+ "verdict": null,
+ "no_submit": false,
+ "credential": "seat",
+ "platform": null,
+ "endpoint": {
+  "base_url": "default",
+  "auth": [],
+  "models_reported": [
+   "claude-sonnet-5"
+  ],
+  "pinned_model": "claude-sonnet-5",
+  "served_is_pinned": true,
+  "status": "ok",
+  "agrees_with_prereg": true,
+  "note": "\u00a73 excludes a run whose usage log reports any other model string; this field records which endpoint the string came from, which the check alone did not."
+ },
+ "usd": 0.1651086,
+ "usage": {
+  "input_tokens": 46,
+  "cache_creation_input_tokens": 8759,
+  "cache_read_input_tokens": 404503,
+  "output_tokens": 4908,
+  "output_tokens_details": {
+   "thinking_tokens": 0
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 8759,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 664,
+    "cache_read_input_tokens": 21436,
+    "cache_creation_input_tokens": 91,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 91
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard"
+ },
+ "models_seen": [
+  "claude-sonnet-5"
+ ],
+ "error": null,
+ "engagement": 0.7916666666666666,
+ "unregistered_refusals": []
+}

@@ -1,0 +1,860 @@
+{
+ "run_id": "cellE_74_A_232558812",
+ "arm": "A",
+ "seed": 232558812,
+ "events": [
+  {
+   "t": 1791769451.492807,
+   "kind": "start",
+   "arm": "A",
+   "index": 74,
+   "seed": 232558812,
+   "smoke": false,
+   "precompute_manifest_sha256": "78583e9b2fdadad7ef64bb6cd1b08b0a0ca9879a15ea84f165a20d2e705b0ae2"
+  },
+  {
+   "t": 1791769451.49294,
+   "kind": "system_prompt",
+   "sha": "963d8aee4df0a20b",
+   "chars": 3202
+  },
+  {
+   "t": 1791769455.207581,
+   "kind": "assistant_text",
+   "text": "I'll approach this systematically. Let me start by declaring my stopping rules and checking the baseline model, since these don't depend on each other."
+  },
+  {
+   "t": 1791769458.471199,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__declare_triggers",
+   "input": {
+    "triggers": [
+     {
+      "trigger": "best_so_far_above",
+      "param": 1.2,
+      "action": "stop",
+      "reason": "If the best Sharpe found exceeds 1.2, that is already a strong, likely robust result for a 3-feature equal-weight rule net of costs; stop to avoid overfitting further."
+     },
+     {
+      "trigger": "failures_at_least",
+      "param": 2,
+      "action": "restart",
+      "reason": "If 2 consecutive moves fail to improve the held set, the local neighborhood is likely exhausted; restart from a fresh anchor rather than keep forcing marginal tweaks."
+     },
+     {
+      "trigger": "last_gain_at_most",
+      "param": 0.02,
+      "action": "stop",
+      "reason": "If the most recent move improved Sharpe by at most 0.02, further search is likely just fitting noise; stop and lock in the current candidate."
+     }
+    ]
+   }
+  },
+  {
+   "t": 1791769458.481259,
+   "kind": "tool_result",
+   "tool": "declare_triggers",
+   "args": {
+    "triggers": [
+     {
+      "trigger": "best_so_far_above",
+      "param": 1.2,
+      "action": "stop",
+      "reason": "If the best Sharpe found exceeds 1.2, that is already a strong, likely robust result for a 3-feature equal-weight rule net of costs; stop to avoid overfitting further."
+     },
+     {
+      "trigger": "failures_at_least",
+      "param": 2,
+      "action": "restart",
+      "reason": "If 2 consecutive moves fail to improve the held set, the local neighborhood is likely exhausted; restart from a fresh anchor rather than keep forcing marginal tweaks."
+     },
+     {
+      "trigger": "last_gain_at_most",
+      "param": 0.02,
+      "action": "stop",
+      "reason": "If the most recent move improved Sharpe by at most 0.02, further search is likely just fitting noise; stop and lock in the current candidate."
+     }
+    ]
+   },
+   "text": "declared: best_so_far > bar -> stop, failures >= 2 -> restart, last_gain > 0.02 -> stop",
+   "ok": true
+  },
+  {
+   "t": 1791769458.572951,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__baseline_model",
+   "input": {}
+  },
+  {
+   "t": 1791769458.5762858,
+   "kind": "baseline_model_call"
+  },
+  {
+   "t": 1791769458.576309,
+   "kind": "tool_result",
+   "tool": "baseline_model",
+   "args": {},
+   "text": "Baseline model stream: Sharpe (all years equal) 0.183; Sharpe (recent years weighted) 0.246; mean daily turnover 0.042.",
+   "ok": true
+  },
+  {
+   "t": 1791769460.518379,
+   "kind": "assistant_text",
+   "text": "The baseline is weak (Sharpe ~0.18-0.25). Now let me set a prior and initialize my search."
+  },
+  {
+   "t": 1791769462.219309,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__pick_prior",
+   "input": {
+    "features": [
+     0
+    ],
+    "signs": [
+     1
+    ],
+    "reason": "No feature-specific prior from first principles beyond generic momentum/reversal reasoning; I'll let init pick the empirically best single feature rather than hand-pick one, since I have no non-data-dependent basis for favoring a specific feature index."
+   }
+  },
+  {
+   "t": 1791769462.2298172,
+   "kind": "tool_result",
+   "tool": "pick_prior",
+   "args": {
+    "features": [
+     0
+    ],
+    "signs": [
+     1
+    ],
+    "reason": "No feature-specific prior from first principles beyond generic momentum/reversal reasoning; I'll let init pick the empirically best single feature rather than hand-pick one, since I have no non-data-dependent basis for favoring a specific feature index."
+   },
+   "text": "prior pick recorded: [0+]",
+   "ok": true
+  },
+  {
+   "t": 1791769462.308726,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__init",
+   "input": {}
+  },
+  {
+   "t": 1791769462.310522,
+   "kind": "tool_result",
+   "tool": "init",
+   "args": {},
+   "text": "init kept: [32+] sharpe 0.3849 (best 0.3849, 80 candidates) | shown: step=0.0000; best=-inf; failures=0.0000; last_gain=inf; budget_left=60.0000 | Sharpe (all years equal) 0.385; Sharpe (recent years weighted) 0.430",
+   "ok": true
+  },
+  {
+   "t": 1791769464.376176,
+   "kind": "assistant_text",
+   "text": "Good start: feature 32+ gives Sharpe 0.385 (all years), already beating baseline. Let's extend."
+  },
+  {
+   "t": 1791769464.473151,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791769464.4821608,
+   "kind": "tool_result",
+   "tool": "extend_best",
+   "args": {},
+   "text": "extend_best kept: [32+, 35-] sharpe 0.4831 (best 0.4831, 78 candidates) | shown: step=0.0000; best=0.3849; failures=0.0000; last_gain=inf; budget_left=60.0000 | Sharpe (all years equal) 0.483; Sharpe (recent years weighted) 0.546",
+   "ok": true
+  },
+  {
+   "t": 1791769466.033151,
+   "kind": "assistant_text",
+   "text": "Gain of ~0.098, good improvement. Continue extending."
+  },
+  {
+   "t": 1791769466.0866098,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__extend_best",
+   "input": {}
+  },
+  {
+   "t": 1791769466.094922,
+   "kind": "tool_result",
+   "tool": "extend_best",
+   "args": {},
+   "text": "extend_best kept: [32+, 35-, 33+] sharpe 0.4626 (best 0.4831, 76 candidates) | shown: step=1.0000; best=0.4831; failures=0.0000; last_gain=0.0982; budget_left=59.0000 | Sharpe (all years equal) 0.463; Sharpe (recent years weighted) 0.514",
+   "ok": true
+  },
+  {
+   "t": 1791769468.3826718,
+   "kind": "assistant_text",
+   "text": "That extension actually decreased Sharpe (0.4626 < 0.4831 best). We're at max 3 features already. Let me try refine (re-fit signs) since the third feature addition hurt."
+  },
+  {
+   "t": 1791769468.4154508,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__refine",
+   "input": {}
+  },
+  {
+   "t": 1791769468.4201128,
+   "kind": "refusal",
+   "tool": "refine",
+   "refusal_kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value -0.0205). It licenses a stop. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  },
+  {
+   "t": 1791769473.1637099,
+   "kind": "assistant_text",
+   "text": "My stopping rule has fired: the last move's gain was negative (-0.0205), which satisfies `last_gain > 0.02`... wait, actually the rule fired on the magnitude of a negative gain, licensing a stop. This is exactly the overfitting-guard scenario I declared. Let me respect it and try `swap_worst` instead isn't allowed since the rule is firing \u2014 I should either stop or restart. Since the 3-feature set actually underperformed the 2-feature set, let me check: the best-so-far is 0.4831 with [32+, 35-]. I should stop here, since the harness is holding at the current (worse) state. Let me stop and then pick between the 2-feature and 3-feature candidates."
+  },
+  {
+   "t": 1791769473.465326,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__stop",
+   "input": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   }
+  },
+  {
+   "t": 1791769473.472234,
+   "kind": "tool_result",
+   "tool": "stop",
+   "args": {
+    "trigger": "last_gain_at_most",
+    "param": 0.02
+   },
+   "text": "stopped on last_gain > 0.02 (value -0.0205) | shown: step=2.0000; best=0.4831; failures=1.0000; last_gain=-0.0205; budget_left=58.0000",
+   "ok": true
+  },
+  {
+   "t": 1791769477.61851,
+   "kind": "assistant_text",
+   "text": "The search has stopped. The best-so-far was 0.4831 with [32+, 35-], but the current held state is [32+, 35-, 33+] at 0.4626. Since `stop` ends the search, I need to determine what my \"best rule reached\" is for submission. Let me check \u2014 the harness tracks \"best\" separately from \"current held.\" The `submit_candidate` with kind \"rule\" should use the best rule my search reached, which is the two-feature combo at 0.4831. Since stop was called, no further moves are possible, so I'll submit the rule candidate now."
+  },
+  {
+   "t": 1791769477.8069298,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__submit_candidate",
+   "input": {
+    "kind": "rule"
+   }
+  },
+  {
+   "t": 1791769477.815923,
+   "kind": "candidate",
+   "candidate_kind": "rule",
+   "support": [
+    [
+     32,
+     1.0
+    ],
+    [
+     35,
+     -1.0
+    ]
+   ]
+  },
+  {
+   "t": 1791769477.8159518,
+   "kind": "tool_result",
+   "tool": "submit_candidate",
+   "args": {
+    "kind": "rule"
+   },
+   "text": "Candidate fixed: rule [32+, 35-]. Sharpe (all years equal) 0.483; Sharpe (recent years weighted) 0.546.",
+   "ok": true
+  },
+  {
+   "t": 1791769483.142213,
+   "kind": "assistant_text",
+   "text": "The harness correctly picked the best rule reached ([32+, 35-], Sharpe 0.483/0.546), not the degraded 3-feature extension. Now let me state my out-of-sample prediction.\n\nReasoning for the prediction: In-sample Sharpe (all years equal) is 0.483, with recent-years-weighted at 0.546 (suggesting the signal has been getting stronger or at least not decaying). This is a simple 2-feature equal-weight rule, which is relatively low-complexity (less overfitting risk than a 3-feature rule, especially since adding a 3rd feature degraded performance \u2014 a sign the extra feature was fitting noise). However, in-sample Sharpes for mined/selected rules typically overstate true out-of-sample performance due to selection effects (I only searched a modest few steps, so the degradation is mild but real). I'll haircut the in-sample Sharpe meaningfully and assign a moderate standard deviation reflecting real uncertainty."
+  },
+  {
+   "t": 1791769486.4428082,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__predict",
+   "input": {
+    "mean": 0.3,
+    "sd": 0.3,
+    "note": "In-sample Sharpe for [32+, 35-] is 0.483 (all-years) / 0.546 (recent-weighted), well above the baseline model's ~0.18-0.25. This is a low-complexity 2-feature rule reached after only one extend step from init, and a further 3rd-feature extension degraded performance -- a sign the search hadn't yet drifted into noise-fitting at this point, which is reassuring. Still, in-sample selection (init picks the best of 80 single features, extend picks the best addition) inflates the estimate; I haircut roughly 35-40% for selection bias and nonstationarity, landing near 0.3 annualized net Sharpe out-of-sample, with wide uncertainty given the short, simple search."
+   }
+  },
+  {
+   "t": 1791769486.450876,
+   "kind": "tool_result",
+   "tool": "predict",
+   "args": {
+    "mean": 0.3,
+    "sd": 0.3,
+    "note": "In-sample Sharpe for [32+, 35-] is 0.483 (all-years) / 0.546 (recent-weighted), well above the baseline model's ~0.18-0.25. This is a low-complexity 2-feature rule reached after only one extend step from init, and a further 3rd-feature extension degraded performance -- a sign the search hadn't yet drifted into noise-fitting at this point, which is reassuring. Still, in-sample selection (init picks the best of 80 single features, extend picks the best addition) inflates the estimate; I haircut roughly 35-40% for selection bias and nonstationarity, landing near 0.3 annualized net Sharpe out-of-sample, with wide uncertainty given the short, simple search."
+   },
+   "text": "prediction 0.300 (sd 0.300) recorded",
+   "ok": true
+  },
+  {
+   "t": 1791769487.990546,
+   "kind": "tool_use",
+   "tool": "mcp__garden_pilot__confirm",
+   "input": {}
+  },
+  {
+   "t": 1791769487.992383,
+   "kind": "submit",
+   "submission": {
+    "arm": "A",
+    "kind": "rule",
+    "support": [
+     [
+      32,
+      1.0
+     ],
+     [
+      35,
+      -1.0
+     ]
+    ],
+    "predict": {
+     "mean": 0.3,
+     "sd": 0.3,
+     "note": "In-sample Sharpe for [32+, 35-] is 0.483 (all-years) / 0.546 (recent-weighted), well above the baseline model's ~0.18-0.25. This is a low-complexity 2-feature rule reached after only one extend step from init, and a further 3rd-feature extension degraded performance -- a sign the search hadn't yet drifted into noise-fitting at this point, which is reassuring. Still, in-sample selection (init picks the best of 80 single features, extend picks the best addition) inflates the estimate; I haircut roughly 35-40% for selection bias and nonstationarity, landing near 0.3 annualized net Sharpe out-of-sample, with wide uncertainty given the short, simple search."
+    },
+    "candidate_S_w": 0.5462939443713591,
+    "candidate_S_unw": 0.48310591492454247,
+    "L90_shown": null
+   }
+  },
+  {
+   "t": 1791769487.992385,
+   "kind": "tool_result",
+   "tool": "confirm",
+   "args": {},
+   "text": "confirmed; the session is over",
+   "ok": true
+  },
+  {
+   "t": 1791769496.416297,
+   "kind": "assistant_text",
+   "text": "## Summary\n\n**Search process:**\n1. Declared three stopping rules upfront (stop if best Sharpe > 1.2; restart after 2 consecutive failures; stop if last gain \u2264 0.02) to guard against open-ended overfitting.\n2. Checked the baseline model: weak Sharpe (~0.18 all-years / ~0.25 recent-weighted, turnover 0.042).\n3. Set a prior (non-data-driven) on feature 0, but let `init` empirically select the best single feature instead since I had no principled reason to override it.\n4. `init` \u2192 feature [32+], Sharpe 0.385.\n5. `extend_best` \u2192 [32+, 35-], Sharpe 0.483 (gain +0.098).\n6. `extend_best` again \u2192 [32+, 35-, 33+], Sharpe dropped to 0.463 (a *loss* of 0.020), tripping my `last_gain_at_most(0.02)` stopping rule.\n7. Respected the rule and called `stop` rather than overriding it \u2014 the degraded 3rd feature was a clear noise-fitting signal.\n\n**Candidate submitted:** Rule `[32+, 35-]` \u2014 Sharpe (all years equal) 0.483, Sharpe (recent years weighted) 0.546. This comfortably beats the baseline model on both metrics with a simpler (2-feature) structure, and the fact that extending further hurt performance gave useful early evidence against pushing deeper into the search.\n\n**Prediction:** Mean annualized net Sharpe 0.30 out-of-sample, SD 0.30 \u2014 a substantial haircut (~35-40%) from the in-sample 0.483 to account for selection bias inherent in choosing from 80 candidate features plus a best-improving extension, and for likely nonstationarity, while still reflecting that this is a low-complexity rule found after minimal, disciplined search."
+  },
+  {
+   "t": 1791769496.675904,
+   "kind": "self_check",
+   "replayable": true,
+   "check": "integrity",
+   "basis": "class table",
+   "realized_support": [
+    [
+     32,
+     1.0
+    ],
+    [
+     35,
+     -1.0
+    ]
+   ],
+   "replayed_support": [
+    [
+     32,
+     1.0
+    ],
+    [
+     35,
+     -1.0
+    ]
+   ],
+   "realized_score": 0.48310591492454247,
+   "replayed_score": 0.48310591492454247,
+   "reason": "Integrity check (fixed-sequence replay: the realized meta decisions with the logged content moves): PASS on the class table. The replay reproduces the realized support and score; they differ by 0.00e+00.",
+   "error": null
+  },
+  {
+   "t": 1791769496.675906,
+   "kind": "declared_budget",
+   "budget": 60
+  },
+  {
+   "t": 1791769496.675908,
+   "kind": "content_cap",
+   "cap": null
+  },
+  {
+   "t": 1791769496.675935,
+   "kind": "session_log",
+   "records": [
+    {
+     "step": 0,
+     "kind": "init",
+     "support": [
+      [
+       32,
+       1.0
+      ]
+     ],
+     "score": 0.3849480587346002,
+     "n_candidates": 80,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "init",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       0.0
+      ],
+      [
+       "best",
+       -Infinity
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       60.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 0,
+      "support": [],
+      "score": -Infinity,
+      "shown": [
+       [
+        "step",
+        0.0
+       ],
+       [
+        "best",
+        -Infinity
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        60.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 1,
+     "kind": "extend_best",
+     "support": [
+      [
+       32,
+       1.0
+      ],
+      [
+       35,
+       -1.0
+      ]
+     ],
+     "score": 0.48310591492454247,
+     "n_candidates": 78,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "extend_best",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       0.0
+      ],
+      [
+       "best",
+       0.3849480587346002
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       Infinity
+      ],
+      [
+       "budget_left",
+       60.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 1,
+      "support": [
+       [
+        32,
+        1.0
+       ]
+      ],
+      "score": 0.3849480587346002,
+      "shown": [
+       [
+        "step",
+        0.0
+       ],
+       [
+        "best",
+        0.3849480587346002
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        Infinity
+       ],
+       [
+        "budget_left",
+        60.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 2,
+     "kind": "extend_best",
+     "support": [
+      [
+       32,
+       1.0
+      ],
+      [
+       35,
+       -1.0
+      ],
+      [
+       33,
+       1.0
+      ]
+     ],
+     "score": 0.4626296567437126,
+     "n_candidates": 76,
+     "trigger": null,
+     "trigger_value": null,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "extend_best",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       1.0
+      ],
+      [
+       "best",
+       0.48310591492454247
+      ],
+      [
+       "failures",
+       0.0
+      ],
+      [
+       "last_gain",
+       0.09815785618994227
+      ],
+      [
+       "budget_left",
+       59.0
+      ]
+     ],
+     "trigger_stamped_at": null,
+     "information": {
+      "step": 2,
+      "support": [
+       [
+        32,
+        1.0
+       ],
+       [
+        35,
+        -1.0
+       ]
+      ],
+      "score": 0.48310591492454247,
+      "shown": [
+       [
+        "step",
+        1.0
+       ],
+       [
+        "best",
+        0.48310591492454247
+       ],
+       [
+        "failures",
+        0.0
+       ],
+       [
+        "last_gain",
+        0.09815785618994227
+       ],
+       [
+        "budget_left",
+        59.0
+       ]
+      ]
+     }
+    },
+    {
+     "step": 3,
+     "kind": "stop",
+     "support": [
+      [
+       32,
+       1.0
+      ],
+      [
+       35,
+       -1.0
+      ],
+      [
+       33,
+       1.0
+      ]
+     ],
+     "score": 0.4626296567437126,
+     "n_candidates": 0,
+     "trigger": "last_gain > 0.02",
+     "trigger_value": -0.020476258180829876,
+     "replayable": true,
+     "contradicted": false,
+     "move": {
+      "kind": "stop",
+      "statistic": "sharpe",
+      "feature": null,
+      "note": "",
+      "among": [],
+      "else_statistic": null,
+      "choice": null
+     },
+     "shown": [
+      [
+       "step",
+       2.0
+      ],
+      [
+       "best",
+       0.48310591492454247
+      ],
+      [
+       "failures",
+       1.0
+      ],
+      [
+       "last_gain",
+       -0.020476258180829876
+      ],
+      [
+       "budget_left",
+       58.0
+      ]
+     ],
+     "trigger_stamped_at": 2674768.492687708,
+     "information": {
+      "step": 3,
+      "support": [
+       [
+        32,
+        1.0
+       ],
+       [
+        35,
+        -1.0
+       ],
+       [
+        33,
+        1.0
+       ]
+      ],
+      "score": 0.4626296567437126,
+      "shown": [
+       [
+        "step",
+        2.0
+       ],
+       [
+        "best",
+        0.48310591492454247
+       ],
+       [
+        "failures",
+        1.0
+       ],
+       [
+        "last_gain",
+        -0.020476258180829876
+       ],
+       [
+        "budget_left",
+        58.0
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "t": 1791769496.675939,
+   "kind": "trigger_changes",
+   "changes": []
+  },
+  {
+   "t": 1791769496.675945,
+   "kind": "end"
+  }
+ ],
+ "refusals": [
+  {
+   "tool": "refine",
+   "kind": "trigger_is_firing",
+   "message": "your declared rule last_gain > 0.02 has fired (value -0.0205). It licenses a stop. Take that move, or call change_trigger to search under a different rule -- which is logged and prices the rest of the run as unreplayable."
+  }
+ ],
+ "moves": {
+  "declare_triggers": 1,
+  "baseline_model": 1,
+  "pick_prior": 1,
+  "init": 1,
+  "extend_best": 2,
+  "stop": 1,
+  "submit_candidate": 1,
+  "predict": 1,
+  "confirm": 1
+ },
+ "triggers_declared": {},
+ "triggers_fired": {},
+ "picks_accepted": 0,
+ "picks_contradicted": 0,
+ "turns": 20,
+ "n_tool_calls": 11,
+ "submitted": true,
+ "submitted_support": [
+  [
+   32,
+   1.0
+  ],
+  [
+   35,
+   -1.0
+  ]
+ ],
+ "submitted_sharpe": 0.48310591492454247,
+ "prior_pick": null,
+ "prediction": {
+  "mean": 0.3,
+  "sd": 0.3
+ },
+ "triggers_changed": false,
+ "triggers_predeclared": [
+  {
+   "kind": "best_so_far_above",
+   "param": 1.2,
+   "action": "stop"
+  },
+  {
+   "kind": "failures_at_least",
+   "param": 2.0,
+   "action": "restart"
+  },
+  {
+   "kind": "last_gain_at_most",
+   "param": 0.02,
+   "action": "stop"
+  }
+ ],
+ "certifying_null_computable": null,
+ "verdict": null,
+ "no_submit": false,
+ "credential": "seat",
+ "platform": null,
+ "endpoint": {
+  "base_url": "default",
+  "auth": [],
+  "models_reported": [
+   "claude-sonnet-5"
+  ],
+  "pinned_model": "claude-sonnet-5",
+  "served_is_pinned": true,
+  "status": "ok",
+  "agrees_with_prereg": true,
+  "note": "\u00a73 excludes a run whose usage log reports any other model string; this field records which endpoint the string came from, which the check alone did not."
+ },
+ "usd": 0.0782944,
+ "usage": {
+  "input_tokens": 20,
+  "cache_creation_input_tokens": 4810,
+  "cache_read_input_tokens": 154922,
+  "output_tokens": 2803,
+  "output_tokens_details": {
+   "thinking_tokens": 0
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 4810,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 623,
+    "cache_read_input_tokens": 17487,
+    "cache_creation_input_tokens": 91,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 91
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard"
+ },
+ "models_seen": [
+  "claude-sonnet-5"
+ ],
+ "error": null,
+ "engagement": 0.9090909090909091,
+ "unregistered_refusals": []
+}
