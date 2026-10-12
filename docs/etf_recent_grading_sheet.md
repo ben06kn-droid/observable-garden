@@ -17,7 +17,8 @@ read-only log `tail` the author explicitly allows for this session. Packages are
 **Placeholders, filled in the go message:**
 - `G`: the commit to check out, the tip after the grading registration's constant commit;
 - `LIVE`: the grading registration's live commit;
-- `PRICED_SHA`: the SHA-256 of the committed `priced.json`;
+- `PRICED_SHA`: the SHA-256 of the committed `priced.json`, which is
+  `388cc6f2636fcbab6a007335e76b6cc2b3dd5f529c82edf0f1c410f5aedf37c7` (`0d6f55d`);
 - `D`: the date;
 - `HOST`: the IP.
 
@@ -42,7 +43,7 @@ read-only log `tail` the author explicitly allows for this session. Packages are
 7. [H] `.venv-grading/bin/python -c "import sys, numpy, scipy, lightgbm, exchange_calendars, hashlib, pathlib; p = pathlib.Path(lightgbm.__file__).parent / 'lib' / 'lib_lightgbm.so'; print(sys.version.split()[0], numpy.__version__, scipy.__version__, lightgbm.__version__, exchange_calendars.__version__, hashlib.sha256(p.read_bytes()).hexdigest()[:8])"`
    - → `3.14.2 2.5.3 1.18.1 4.7.0 4.13.2 573d57e8`.
    - **Anything else: stop, nothing runs.**
-8. [H] `mkdir -p logs && date -u && tmux new -d -s etfg 'OMP_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8 MKL_NUM_THREADS=8 .venv-grading/bin/python -m experiments.etf_recent_grade --cut ~/etf_recent/insample.cut.json --raw ~/etf_recent/raw --read-dir runs/etf_recent/2026-10-11 --submissions runs/agent_cell_etf_recent_priced/2026-10-11/submissions.json --submissions-sha 45cedcab7dff8d426ca8c649808c5df67bb9bef6f2b11e7085f561b1bce4066c --priced runs/agent_cell_etf_recent_priced/2026-10-11/priced.json --priced-sha PRICED_SHA --out runs/etf_recent_grade/D --expect-head G --workers 4 > logs/etfg.log 2>&1; echo "[exit $?]" >> logs/etfg.log'`
+8. [H] `mkdir -p logs && date -u && tmux new -d -s etfg 'OMP_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8 MKL_NUM_THREADS=8 .venv-grading/bin/python -m experiments.etf_recent_grade --cut ~/etf_recent/insample.cut.json --raw ~/etf_recent/raw --read-dir runs/etf_recent/2026-10-11 --submissions runs/agent_cell_etf_recent_priced/2026-10-11/submissions.json --submissions-sha 45cedcab7dff8d426ca8c649808c5df67bb9bef6f2b11e7085f561b1bce4066c --priced runs/agent_cell_etf_recent_priced/2026-10-11/priced.json --priced-sha 388cc6f2636fcbab6a007335e76b6cc2b3dd5f529c82edf0f1c410f5aedf37c7 --out runs/etf_recent_grade/D --expect-head G --workers 4 > logs/etfg.log 2>&1; echo "[exit $?]" >> logs/etfg.log'`
    - → the UTC start time (for the run record), then nothing: the session starts.
    - Workers × threads = 4 × 8 = 32 on 32 vCPU, as the registration's section 8 fixes.
    - **Do not change it.**
