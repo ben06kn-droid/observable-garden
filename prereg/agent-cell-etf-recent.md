@@ -420,3 +420,25 @@ model-stream submissions where both occur.
     is `no_submit`.
 11. **The codename is renamed:** the tool is `baseline_model`, and no agent-facing string says
     "Sancho". A leak test checks this.
+
+## Amendment 1, 2026-10-11 (America/Chicago): retries that run out stop the launcher
+
+Made before any session (smoke or cell) has run.
+
+1. **This replaces section 3's** "If the retries run out, the session is recorded `no_submit` with
+   the error, and it is not replaced."
+2. **The new rule:** if a session's retries on a transient model-service error run out
+   (5 attempts), **that session is not written.** The launcher stops, and prints the resume
+   command.
+   - On resume the session runs again with **the same index and the same seed**. That is the
+     launcher's existing resume rule: complete files skipped, partial or missing ones run.
+   - Every attempt's error is kept in the session's final log under `retried_attempts`. That
+     includes the attempts before a stop, which are carried in a sidecar file
+     `<run_id>.attempts.json` and merged into the final log.
+3. **The reason:** on the seat a usage-limit window can last hours, and 5 attempts with backoff
+   cover about 15 minutes. Under the old rule every in-flight session would have become a
+   permanent `no_submit` for a service failure, not for the agent's behaviour.
+4. **Unchanged:**
+   - **a `no_submit` (no `confirm`, or 60 turns) is never retried and never replaced;**
+   - a non-transient error ends the session as `no_submit`, with the error;
+   - the session list and its seeds are fixed.
