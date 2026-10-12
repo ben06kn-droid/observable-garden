@@ -309,7 +309,8 @@ def replay(d: dict, sub: dict, pre: dict, B: int = CERTIFY_B) -> dict:
     return {"status": "computed", "verdict": rec.verdict}
 
 
-def price_all(log_dir: Path, pre: dict, submissions: dict, B: int = CERTIFY_B) -> dict:
+def price_all(log_dir: Path, pre: dict, submissions: dict, B: int = CERTIFY_B, workers: int = 1,
+              pre_dir=None) -> dict:
     idx = index_of(pre["members"])
     logs = {}
     for p in sorted(Path(log_dir).glob("*.json")):
@@ -320,25 +321,20 @@ def price_all(log_dir: Path, pre: dict, submissions: dict, B: int = CERTIFY_B) -
         if is_smoke(p, d):
             raise PricingRefused(f"{p.name} is a smoke session: smoke sessions are never priced")
         logs[session_id(p, d)] = d
-    rows = []
+    pairs = []
     for sub in submissions["submissions"]:
         d = logs.get(sub["session"])
         if d is None:
             raise PricingRefused(f"session {sub['session']} has no committed log")
-        r = price(sub, pre, idx)
-        last = last_submission(d)
-        r["log_consistency"] = {
-            "S_w_matches": last.get("candidate_S_w") is None or abs(float(last["candidate_S_w"]) - r["S_w"]) < 5e-4,
-            "S_unw_matches": last.get("candidate_S_unw") is None or abs(float(last["candidate_S_unw"]) - r["S"]) < 5e-4,
-            "L90_shown_matches": (last.get("L90_shown") is None) or abs(float(last["L90_shown"]) - r["L90"]) < 5e-4}
-        if sub["arm"] == "A" and last.get("L90_shown") is not None:
-            raise PricingRefused(f"session {sub['session']}: arm A was shown an L90")
-        r["search"] = search_length(d)
-        r["flags"] = [MODEL_LOOK_FLAG] if sub["kind"] == "rule" and model_look_before_submit(d) else []
-        r["replay"] = replay(d, sub, pre, B)
-        if sub["kind"] == "baseline_model":
-            r["selection_aware"] = selection_aware(d, sub, pre, B)
-        rows.append(r)
+        pairs.append((sub, d))
+    if workers <= 1:
+        rows = [_row(sub, d, pre, idx, B) for sub, d in pairs]
+    else:
+        # sessions are independent (each replay draws from its own session seed and reads only the
+        # pinned precompute), so the pool changes wall time only; rows stay in submission order
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(workers, initializer=_init_worker, initargs=(str(pre_dir), B)) as ex:
+            rows = list(ex.map(_row_job, pairs, chunksize=1))
     st, sn = pre["stats"], pre["sancho"]
     return {"precompute_manifest_sha256": pre["manifest_sha256"], "n_sessions": submissions["sessions"],
             "no_submit": submissions["no_submit"], "priced": rows,
@@ -348,12 +344,44 @@ def price_all(log_dir: Path, pre: dict, submissions: dict, B: int = CERTIFY_B) -
                       "model_w2": np.asarray(sn["null_w2"], float).tolist()}}
 
 
+_W: dict = {}
+
+
+def _init_worker(pre_dir: str, B: int) -> None:
+    pre = load_precompute(Path(pre_dir))
+    _W.update(pre=pre, idx=index_of(pre["members"]), B=B)
+
+
+def _row_job(pair):
+    sub, d = pair
+    return _row(sub, d, _W["pre"], _W["idx"], _W["B"])
+
+
+def _row(sub: dict, d: dict, pre: dict, idx, B: int) -> dict:
+    """One submission, from its committed log and the pinned precompute."""
+    r = price(sub, pre, idx)
+    last = last_submission(d)
+    r["log_consistency"] = {
+        "S_w_matches": last.get("candidate_S_w") is None or abs(float(last["candidate_S_w"]) - r["S_w"]) < 5e-4,
+        "S_unw_matches": last.get("candidate_S_unw") is None or abs(float(last["candidate_S_unw"]) - r["S"]) < 5e-4,
+        "L90_shown_matches": (last.get("L90_shown") is None) or abs(float(last["L90_shown"]) - r["L90"]) < 5e-4}
+    if sub["arm"] == "A" and last.get("L90_shown") is not None:
+        raise PricingRefused(f"session {sub['session']}: arm A was shown an L90")
+    r["search"] = search_length(d)
+    r["flags"] = [MODEL_LOOK_FLAG] if sub["kind"] == "rule" and model_look_before_submit(d) else []
+    r["replay"] = replay(d, sub, pre, B)
+    if sub["kind"] == "baseline_model":
+        r["selection_aware"] = selection_aware(d, sub, pre, B)
+    return r
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--logs", required=True)
     ap.add_argument("--precompute", required=True)
     ap.add_argument("--submissions", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--workers", type=int, default=1, help="sessions priced at once (wall time only)")
     a = ap.parse_args(argv)
     bad = registration_refusals(Path(a.precompute))
     if bad:
@@ -365,7 +393,7 @@ def main(argv=None) -> int:
         sub_path = Path(a.submissions)
         submissions = json.loads(sub_path.read_text())
         pre = load_precompute(Path(a.precompute))
-        rec = price_all(Path(a.logs), pre, submissions)
+        rec = price_all(Path(a.logs), pre, submissions, workers=a.workers, pre_dir=Path(a.precompute))
     except PricingRefused as e:
         raise SystemExit(f"REFUSED: {e}")
     rec["submissions_sha256"] = sha_file(sub_path)

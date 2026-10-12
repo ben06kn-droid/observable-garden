@@ -246,3 +246,30 @@ def test_collect_and_price_240_sessions(tmp_path, pre_dir, members):
     assert sum(s["arm"] == "A" for s in rec["submissions"]) == 120
     priced = PR.price_all(logs, pre, rec)
     assert len(priced["priced"]) == 240
+
+
+def _det_driver(cell, rec, prompt, prompts):
+    """Module-level for pickling: a short logged grammar search, then a rule submission."""
+    for name, kw in (("init", {}), ("extend_best", {}), ("extend_best", {}), ("swap_worst", {})):
+        cell.call(name, **kw)
+    cell.call("submit_candidate", kind="rule")
+    cell.call("predict", mean=0.5, sd=0.4, note="")
+    cell.call("confirm")
+
+
+def test_pricing_with_workers_is_byte_identical_to_one_worker(tmp_path, members):
+    """Parallel pricing changes wall time only: 1 worker and 3 workers give the same priced
+    record, replay tier included, byte for byte."""
+    from experiments import agent_cell_etf_recent as H
+    d = _grammar_precompute(tmp_path, members)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    for i, (arm, seed) in enumerate((("A", 11), ("B", 12), ("A", 13), ("B", 14))):
+        rec = H.run_session(H.Precompute(d), arm, seed=seed, index=i, prompts={"system": "x"}, driver=_det_driver)
+        (logs / f"{rec.run_id}.json").write_text(json.dumps(rec.to_json(), default=str))
+    subs = C.collect(sorted(logs.glob("*.json")))
+    pre = PR.load_precompute(d, members)
+    one = PR.price_all(logs, pre, subs, B=40)
+    three = PR.price_all(logs, pre, subs, B=40, workers=3, pre_dir=d)
+    assert [r["replay"]["status"] for r in one["priced"]] == ["computed"] * 4
+    assert json.dumps(one, sort_keys=True, default=str) == json.dumps(three, sort_keys=True, default=str)
