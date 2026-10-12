@@ -58,8 +58,8 @@ from pathlib import Path
 
 import numpy as np
 
-REGISTRATION: str | None = None              # set when prereg/agent-cell-etf-recent.md goes live
-PRECOMPUTE_MANIFEST_SHA256: str | None = None  # set after BOX-ETF, from the committed manifest
+REGISTRATION: str | None = "00c7af167f8ddb9a4874cc29b438926112360fb9"  # prereg/agent-cell-etf-recent.md, live
+PRECOMPUTE_MANIFEST_SHA256: str | None = "78583e9b2fdadad7ef64bb6cd1b08b0a0ca9879a15ea84f165a20d2e705b0ae2"  # BOX-ETF, 05642cf
 PROMPTS = Path(__file__).resolve().parent.parent / "prereg" / "agent-cell-etf-recent-prompts.md"
 FILES = ("sancho_d1.npz", "class_scored.npy", "class_stats.npz")
 LAST_IN_SAMPLE = dt.date(2024, 12, 31)

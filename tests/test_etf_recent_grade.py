@@ -177,8 +177,10 @@ def test_the_holdout_parser(tmp_path):
         EG.make_holdout(raw, ["SPY"], last, cutd)
 
 
-def test_refuses_until_registrations_are_set():
+def test_refuses_until_registrations_are_set(monkeypatch):
+    assert EG.CELL == "00c7af167f8ddb9a4874cc29b438926112360fb9"      # the cell, live
     bad = EG.refusals("0" * 40)
-    assert any("GRADING" in b and "not live" in b for b in bad)
-    assert any("CELL" in b and "not live" in b for b in bad)
+    assert any("GRADING" in b and "not live" in b for b in bad)          # the panel's grading: not yet
+    monkeypatch.setattr(EG, "CELL", None)
+    assert any("CELL" in b and "not live" in b for b in EG.refusals("0" * 40))
     assert EG.PANEL == "310225cd4932bc18e1c8e2e248cbbb133124a004"

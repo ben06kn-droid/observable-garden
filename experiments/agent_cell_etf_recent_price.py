@@ -53,6 +53,21 @@ from pathlib import Path
 
 import numpy as np
 
+REGISTRATION = "00c7af167f8ddb9a4874cc29b438926112360fb9"  # prereg/agent-cell-etf-recent.md, live
+
+
+def registration_refusals(precompute: Path) -> list[str]:
+    """Pricing runs only under the live registration, on the pinned precompute."""
+    import subprocess
+    from experiments.agent_cell_etf_recent import PRECOMPUTE_MANIFEST_SHA256
+    bad = []
+    if subprocess.run(["git", "merge-base", "--is-ancestor", REGISTRATION, "HEAD"], capture_output=True).returncode:
+        bad.append(f"the registration {REGISTRATION} is not an ancestor of HEAD")
+    man = Path(precompute) / "manifest.json"
+    if not man.exists() or hashlib.sha256(man.read_bytes()).hexdigest() != PRECOMPUTE_MANIFEST_SHA256:
+        bad.append("the precompute manifest is missing or not its pinned SHA-256")
+    return bad
+
 ALPHA = {"rule": (0.01, 0.02), "baseline_model": (0.03, 0.06)}
 W2_LABEL = "recency-weighted, descriptive"
 MODEL_LOOK_FLAG = "a non-grammar look (the model stream) was taken"
@@ -338,6 +353,9 @@ def main(argv=None) -> int:
     ap.add_argument("--submissions", required=True)
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
+    bad = registration_refusals(Path(a.precompute))
+    if bad:
+        raise SystemExit("REFUSED:\n  " + "\n  ".join(bad))
     out = Path(a.out)
     if out.exists():
         raise SystemExit(f"REFUSED: {out} exists; pricing is written once")

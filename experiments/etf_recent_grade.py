@@ -67,7 +67,7 @@ from experiments import french_long_grade as FG
 
 PANEL = "310225cd4932bc18e1c8e2e248cbbb133124a004"
 GRADING = None                      # the panel's grading registration: set when it goes live
-CELL = None                         # prereg/agent-cell-etf-recent.md: set when it goes live
+CELL = "00c7af167f8ddb9a4874cc29b438926112360fb9"  # prereg/agent-cell-etf-recent.md, live
 HOLDOUT_START = dt.date(2025, 1, 2)
 Y2026 = dt.date(2026, 1, 1)
 B = 10_000

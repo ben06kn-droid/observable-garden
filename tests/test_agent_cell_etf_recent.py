@@ -191,6 +191,11 @@ def test_launcher_refusals(pre_dir, monkeypatch, tmp_path):
         def __init__(self, rc=0, out=""):
             self.returncode, self.stdout = rc, out
     monkeypatch.setattr(E, "_git", lambda *a: R(0, ""))
+    # the live constants (set at go-live) and the pinned manifest
+    assert E.REGISTRATION == "00c7af167f8ddb9a4874cc29b438926112360fb9"
+    assert E.PRECOMPUTE_MANIFEST_SHA256 == "78583e9b2fdadad7ef64bb6cd1b08b0a0ca9879a15ea84f165a20d2e705b0ae2"
+    monkeypatch.setattr(E, "REGISTRATION", None)
+    monkeypatch.setattr(E, "PRECOMPUTE_MANIFEST_SHA256", None)
     bad = E.refusals(pre_dir, tmp_path / "cell", smoke=False)
     assert any("not live" in b for b in bad) and any("not pinned" in b for b in bad)
     man_sha = E._sha(Path(pre_dir) / "manifest.json")
