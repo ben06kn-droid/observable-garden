@@ -1,7 +1,12 @@
 # Agent cell on the ETF recent panel: do the gate's numbers describe what happened out of sample?
 
-**Status: DRAFT, NOT LIVE (2026-10-11, America/Chicago). Ready to go live once BOX-ETF pins the
-precompute's manifest hash** (the author's decisions of 2026-10-11 are written in below).
+**Status: LIVE, 2026-10-11 (America/Chicago).**
+- The author's decisions are written in (`cc55845`), and the pre-live records are at `27ef558` and
+  `a6f4b5c`. The precompute manifest is pinned at `78583e9b…0ae2`.
+- This status is set in a commit touching only this file. The registration constants in the
+  launcher, the pricing and the grader are set in the following commit.
+- Its prompts file, `prereg/agent-cell-etf-recent-prompts.md`, goes live with it, as
+  committed.
 - **Nothing has run for it.** No session, no smoke, no precompute.
 - The code is written after this draft is committed (Part 3 of the brief). The launcher refuses
   until this registration is live and the precompute manifest matches.
