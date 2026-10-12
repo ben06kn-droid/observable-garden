@@ -481,16 +481,24 @@ def run_all(pre_dir: Path, todo: list, out: Path, *, workers: int = 1, credentia
             driver=None) -> list[str]:
     """Every scheduled session. The list and its seeds are fixed before this is called; workers only
     change how many run at once."""
-    from concurrent.futures import ProcessPoolExecutor
+    from concurrent.futures import ProcessPoolExecutor, as_completed
     jobs = [(str(pre_dir), a, i, s, credential, smoke, str(out), driver) for a, i, s in todo]
+    n = len(jobs)
     if workers <= 1:
-        done = [_job(j) for j in jobs]
-    else:
-        with ProcessPoolExecutor(workers) as ex:
-            done = list(ex.map(_job, jobs))
-    for rid in done:
-        print(f"  {rid} done", flush=True)
-    return done
+        done = []
+        for k, j in enumerate(jobs, 1):
+            done.append(_job(j))
+            print(f"  {done[-1]} done ({k}/{n})", flush=True)
+        return done
+    # each session is reported the moment it finishes (2026-10-11: the first version printed only
+    # after all sessions had finished); the returned list stays in schedule order
+    with ProcessPoolExecutor(workers) as ex:
+        futs = {ex.submit(_job, j): k for k, j in enumerate(jobs)}
+        out_ids = [None] * n
+        for m, f in enumerate(as_completed(futs), 1):
+            out_ids[futs[f]] = f.result()
+            print(f"  {out_ids[futs[f]]} done ({m}/{n})", flush=True)
+    return out_ids
 
 
 # -- planning, resumption, refusals -----------------------------------------------------------
