@@ -58,6 +58,10 @@ it says which statistic it is.
   - On this panel the class's unweighted null maxima are large relative to every member's
     in-sample Sharpe, and the model stream's own null is too. **So every L90 a submission can
     get is negative** (the class maximum's is −0.558, and a lower-ranked member's is lower still).
+    - **Checked on the pinned precompute:**
+      - the class's unweighted null has a 0.90 quantile of 1.116, against a highest member
+        Sharpe of 0.558, so the highest rule L90 is −0.558 (W2: −0.530);
+      - the model stream's L90 is −0.179 (W2: −0.123).
   - **R1 (realised ≥ L90) is therefore expected to hold** for most submissions, and it is weakly
     informative: a negative bound holds whenever the realised Sharpe is not very negative.
   - **R2 (closeness) and R3 (stated expectations, in-sample) carry the cell.**
