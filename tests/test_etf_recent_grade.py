@@ -159,12 +159,16 @@ def test_the_holdout_parser(tmp_path):
         b = adj[days.index(dt.date(2024, 12, 31))]
         (cutd / f"{t}.csv").write_text(f"date,adjclose,volume\n2024-12-30,99.0,5\n2024-12-31,{b},5\n")
     (raw / "fetch.json").write_text(json.dumps(fetch))
-    d, P, V = EG.make_holdout(raw, ["SPY", "E00"], last, cutd)
-    assert d == sessions(dt.date(2025, 1, 2), last) and P.shape == (len(d), 2)
+    want = sessions(dt.date(2025, 1, 2), last)
+    d, P, V = EG.make_holdout(raw, ["SPY", "E00"], want, cutd)
+    assert d == want and P.shape == (len(d), 2)
+    # a session list that omits a fetched holdout date: an extra fetched date refuses
+    with pytest.raises(EG.GradingRefused, match="not in the session list"):
+        EG.make_holdout(raw, ["SPY", "E00"], [x for x in want if x != dt.date(2025, 1, 7)], cutd)
     # a boundary close that differs from the cut's, as text
     (cutd / "E00.csv").write_text("date,adjclose,volume\n2024-12-31,1.0,5\n")
     with pytest.raises(EG.GradingRefused, match="2024-12-31"):
-        EG.make_holdout(raw, ["SPY", "E00"], last, cutd)
+        EG.make_holdout(raw, ["SPY", "E00"], want, cutd)
     # a missing holdout session
     short = [x for x in days if x != dt.date(2025, 1, 6)]
     body = _chart(short, [100.0 + i for i in range(len(short))])
@@ -174,7 +178,7 @@ def test_the_holdout_parser(tmp_path):
     b = 100.0 + short.index(dt.date(2024, 12, 31))
     (cutd / "SPY.csv").write_text(f"date,adjclose,volume\n2024-12-31,{b},5\n")
     with pytest.raises(EG.GradingRefused, match="missing or null"):
-        EG.make_holdout(raw, ["SPY"], last, cutd)
+        EG.make_holdout(raw, ["SPY"], want, cutd)
 
 
 def test_refuses_until_registrations_are_set(monkeypatch):
@@ -219,3 +223,68 @@ def test_the_grading_takes_240_submissions(world):
     for it in g["items"]:
         if it["type"] == "submission":
             assert it["held"] == (it["realized"] >= it["L90"])
+
+
+
+# -- the holdout session list (decision 3: the grader never imports exchange_calendars) ----------
+
+def _cut_record(last, n, tickers=("SPY", "E00")):
+    return {"last_fetched_session": last.isoformat(),
+            "per_ticker": {t: {"included": True, "holdout_rows": n} for t in tickers}}
+
+
+def test_the_session_script_and_its_checks(tmp_path):
+    from data import etf_recent_sessions as S
+    from data.etf_recent_cut import sessions
+    last = dt.date(2025, 1, 10)
+    n = len(sessions(dt.date(2025, 1, 2), last))
+    cutp = tmp_path / "insample.cut.json"
+    cutp.write_text(json.dumps(_cut_record(last, n)))
+    out = tmp_path / "holdout_sessions.json"
+    assert S.main(["--cut", str(cutp), "--out", str(out)]) == 0
+    sha = hashlib.sha256(out.read_bytes()).hexdigest()
+    days, h = EG.load_sessions(out, sha, json.loads(cutp.read_text()))
+    assert h == sha and days == sessions(dt.date(2025, 1, 2), last) and days[0] == dt.date(2025, 1, 2)
+    with pytest.raises(SystemExit, match="written once"):
+        S.main(["--cut", str(cutp), "--out", str(out)])
+    with pytest.raises(EG.GradingRefused, match="pinned SHA-256"):
+        EG.load_sessions(out, "0" * 64, json.loads(cutp.read_text()))
+    with pytest.raises(EG.GradingRefused, match="does not match the cut record"):
+        EG.load_sessions(out, sha, _cut_record(last, n + 1))                  # the date-counted rows differ
+    with pytest.raises(EG.GradingRefused, match="does not match the cut record"):
+        EG.load_sessions(out, sha, _cut_record(dt.date(2025, 1, 9), n))       # another last session
+
+
+def test_the_grader_holdout_path_never_imports_exchange_calendars(tmp_path, monkeypatch):
+    """With exchange_calendars made unimportable, the session list loads and the holdout is built."""
+    import builtins
+    import sys
+    from data.etf_recent_cut import sessions
+    last = dt.date(2025, 1, 10)
+    days = sessions(dt.date(2024, 12, 30), last)                       # the test itself may use it
+    want = sessions(dt.date(2025, 1, 2), last)
+    raw, cutd = tmp_path / "raw", tmp_path / "insample"
+    raw.mkdir()
+    cutd.mkdir()
+    fetch = {"tickers": {}}
+    for t in ("SPY", "E00"):
+        adj = [100.0 + i for i in range(len(days))]
+        body = _chart(days, adj)
+        (raw / f"{t}.json").write_bytes(body)
+        fetch["tickers"][t] = {"sha256": hashlib.sha256(body).hexdigest()}
+        (cutd / f"{t}.csv").write_text(f"date,adjclose,volume\n2024-12-31,{adj[days.index(dt.date(2024, 12, 31))]},5\n")
+    (raw / "fetch.json").write_text(json.dumps(fetch))
+    lst = tmp_path / "holdout_sessions.json"
+    lst.write_text(json.dumps({"sessions": [d.isoformat() for d in want], "n": len(want)}))
+    sha = hashlib.sha256(lst.read_bytes()).hexdigest()
+    monkeypatch.delitem(sys.modules, "exchange_calendars", raising=False)
+    real_import = builtins.__import__
+
+    def guard(name, *a, **k):
+        if name == "exchange_calendars" or name.startswith("exchange_calendars."):
+            raise ImportError("exchange_calendars is not available to the grader")
+        return real_import(name, *a, **k)
+    monkeypatch.setattr(builtins, "__import__", guard)
+    got, _ = EG.load_sessions(lst, sha, _cut_record(last, len(want)))
+    d, P, V = EG.make_holdout(raw, ["SPY", "E00"], got, cutd)
+    assert d == want and P.shape == (len(want), 2)

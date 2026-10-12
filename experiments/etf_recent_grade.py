@@ -16,8 +16,9 @@ In this order, refusing on any failure before any holdout value is computed (eac
 one pass/FAIL line and no value):
   a. start-up: the registrations; HEAD; clean tracked tree; Linux x86_64; LightGBM's library;
      the learn2 blobs; the cut's hashes; every holdout session present for every ETF with no
-     missing value (a gap or a death refuses: the death rule's handling is the grading
-     registration's to fix); the 2024-12-31 adjusted close in the raw response equals the cut
+     missing value, checked against the pinned holdout session list written on the host by
+     `data.etf_recent_sessions` in `~/venv-fetch` (this module never imports exchange_calendars;
+     a gap or a death refuses: the grading registration's section 4); the 2024-12-31 adjusted close in the raw response equals the cut
      CSV's, as text; priced.json names this precompute manifest and this submissions file;
   b. reproduction of the in-sample read on the host: (1) the pins (both timings, from the cut
      alone, rows from 2010-01-04) equal pins.json; (2) each object's in-sample weighted net
@@ -42,6 +43,7 @@ Sharpe beside, descriptive. Written to grades.json. **No value is
 printed.**
 
     python -m experiments.etf_recent_grade --cut ~/etf_recent/insample.cut.json --raw ~/etf_recent/raw \\
+        --sessions ~/etf_recent/holdout_sessions.json --sessions-sha <sha> \\
         --read-dir runs/etf_recent/<D> --submissions runs/agent_cell_etf_recent/submissions.json \\
         --submissions-sha <sha> --priced runs/agent_cell_etf_recent/priced.json --priced-sha <sha> \\
         --out runs/etf_recent_grade/<date> --expect-head <G> --workers 4
@@ -103,15 +105,35 @@ def sha_file(p: Path) -> str:
 
 # -- the holdout, parsed on the host only ---------------------------------------------------
 
-def make_holdout(raw_dir: Path, tickers: list[str], last: dt.date, cut_dir: Path):
-    """(dates, P, Vol) for 2025-01-02 .. `last`, from the raw responses (each checked against
-    fetch.json). Refuses a missing session or value for any ETF, and a 2024-12-31 adjusted close
-    that differs, as text, from the cut CSV's."""
+def load_sessions(path: Path, sha: str, cut: dict) -> tuple[list[dt.date], str]:
+    """The holdout session list written on the host by `data.etf_recent_sessions` (in
+    `~/venv-fetch`): pinned by SHA-256, from the first session on or after 2025-01-01 to the cut
+    record's last fetched session, with the cut record's date-counted holdout rows. The grader never
+    imports exchange_calendars (the grading registration, decision 3)."""
+    path = Path(path).expanduser()
+    if not path.exists() or sha_file(path) != sha:
+        raise GradingRefused("the holdout session list is missing or not its pinned SHA-256")
+    rec = json.loads(path.read_text())
+    days = [dt.date.fromisoformat(s) for s in rec["sessions"]]
+    last = dt.date.fromisoformat(cut["last_fetched_session"])
+    counts = {e.get("holdout_rows") for t, e in cut["per_ticker"].items() if e.get("included")}
+    if (not days or days[0] != HOLDOUT_START or days[-1] != last or rec.get("n") != len(days)
+            or any(b <= a for a, b in zip(days, days[1:])) or counts != {len(days)}):
+        raise GradingRefused("the holdout session list does not match the cut record "
+                             "(first session, last fetched session, or the date-counted holdout rows)")
+    return days, sha
+
+
+def make_holdout(raw_dir: Path, tickers: list[str], want: list[dt.date], cut_dir: Path):
+    """(dates, P, Vol) on the session list `want`, from the raw responses (each checked against
+    fetch.json). Refuses, for any ETF, a holdout date missing from the fetched rows or a fetched
+    holdout date not in the list, a null value, and a 2024-12-31 adjusted close that differs, as
+    text, from the cut CSV's."""
     import csv
-    from data.etf_recent_cut import NY, parse, sessions
+    from data.etf_recent_cut import NY, parse
     raw_dir = Path(raw_dir)
     fetch = json.loads((raw_dir / "fetch.json").read_text())
-    want = sessions(HOLDOUT_START, last)
+    last = want[-1]
     boundary = dt.date(2024, 12, 31)
     P, V = [], []
     for t in tickers:
@@ -135,6 +157,9 @@ def make_holdout(raw_dir: Path, tickers: list[str], last: dt.date, cut_dir: Path
                 pass
         if last_row is None or last_row["date"] != boundary.isoformat() or b_adj is None or str(b_adj) != last_row["adjclose"]:
             raise GradingRefused(f"{t}: the raw 2024-12-31 adjusted close is not the cut CSV's (text)")
+        extra = sorted(set(rows) - set(want))
+        if extra:
+            raise GradingRefused(f"{t}: {len(extra)} fetched holdout dates not in the session list, from {extra[0]}")
         miss = [d for d in want if d not in rows or rows[d][0] is None or rows[d][1] is None]
         if miss:
             raise GradingRefused(f"{t}: {len(miss)} holdout sessions missing or null from {miss[0]} (a gap or a death: "
@@ -370,6 +395,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cut", required=True)
     ap.add_argument("--raw", required=True)
+    ap.add_argument("--sessions", required=True, help="the holdout session list (data.etf_recent_sessions)")
+    ap.add_argument("--sessions-sha", required=True)
     ap.add_argument("--read-dir", required=True)
     ap.add_argument("--submissions", required=True)
     ap.add_argument("--submissions-sha", required=True)
@@ -403,8 +430,9 @@ def main(argv=None) -> int:
             raise GradingRefused("priced.json was not made from this read's precompute")
         say("a submissions and pricing pinned", True)
         dates_in, tickers, P_in, V_in, n_dropped = ER.load_from(paths)
-        last = dt.date.fromisoformat(cut["last_fetched_session"])
-        dates_ho, P_ho, V_ho = make_holdout(Path(a.raw).expanduser(), tickers, last,
+        want, sessions_sha = load_sessions(Path(a.sessions), a.sessions_sha, cut)
+        say("a holdout session list pinned and matching the cut record", True)
+        dates_ho, P_ho, V_ho = make_holdout(Path(a.raw).expanduser(), tickers, want,
                                             Path(a.cut).expanduser().parent / "insample")
         say("a holdout sessions complete, none missing; boundary close matches", True)
         pins = json.loads((rd / "pins.json").read_text())
@@ -414,6 +442,7 @@ def main(argv=None) -> int:
     except GradingRefused as e:
         raise SystemExit(f"REFUSED: {e}")
     g.update({"git_head": a.expect_head, "submissions_sha256": a.submissions_sha, "priced_sha256": a.priced_sha,
+              "holdout_sessions_sha256": a.sessions_sha,
               "cut_combined_sha256": cut["combined_sha256"], "versions": versions()})
     out.mkdir(parents=True, exist_ok=True)
     (out / "grades.json").write_text(json.dumps(g, indent=1, default=float))
