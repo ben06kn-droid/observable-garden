@@ -110,3 +110,17 @@ def test_the_objects_reader_branches(tmp_path):
     assert "weak: 1.76 years" in text and "2026 only (194 rows; descriptive, never deciding)" in text
     with pytest.raises(SystemExit, match="read once"):
         RG.read(tmp_path)
+
+
+def test_the_reader_handles_240_submissions():
+    """Amendment 2: 120 per arm. R1-R4 run on 240 made-up submissions, and R3 compares 120 against 120."""
+    n = 240
+    rng = np.random.default_rng(5)
+    p, g = _world(realized=rng.normal(0, 0.7, n).tolist(), L90=(-0.6 + rng.normal(0, 0.05, n)).tolist(),
+                  eb=rng.normal(0.1, 0.1, n).tolist(), raw=rng.normal(0.4, 0.1, n).tolist(),
+                  stated_a=rng.normal(0.3, 0.2, 120).tolist(), stated_b=rng.normal(0.25, 0.2, 120).tolist())
+    text, dec = RA.read(p, g)
+    assert "R1" in dec and "R2" in dec and "R3" in dec and "R4" in dec
+    assert dec["R1"]["all"]["n"] == 240 and 0 <= dec["R1"]["all"]["count"] <= 240
+    assert set(dec["R3"]) >= {"A_mean", "B_mean", "B_minus_A_mean", "B_minus_A_sd"}
+    assert "verdict" in dec["R3"]["B_minus_A_mean"]

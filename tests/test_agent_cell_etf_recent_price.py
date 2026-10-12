@@ -228,3 +228,21 @@ def test_the_replay_tier_is_computed_on_a_logged_grammar_session(tmp_path, membe
     v = r["replay"]["verdict"]
     assert v["n_moves"] >= 1 and v["B"] == 50 and "status" in v
     assert r["search"]["moves"] == 4 and r["flags"] == []
+
+
+def test_collect_and_price_240_sessions(tmp_path, pre_dir, members):
+    """Amendment 2: 120 per arm. The collector and pricing take 240 committed logs."""
+    logs = tmp_path / "logs240"
+    logs.mkdir()
+    pre = PR.load_precompute(pre_dir, members)
+    for i in range(240):
+        arm = "A" if i % 2 == 0 else "B"
+        if i % 3 == 0:
+            _log(logs / f"s{i}.json", f"s{i}", arm, "baseline_model", None)
+        else:
+            _log(logs / f"s{i}.json", f"s{i}", arm, "rule", [[int(k), float(s)] for k, s in members[i % 50]])
+    rec = C.collect(sorted(logs.glob("*.json")))
+    assert rec["sessions"] == 240 and len(rec["submissions"]) == 240
+    assert sum(s["arm"] == "A" for s in rec["submissions"]) == 120
+    priced = PR.price_all(logs, pre, rec)
+    assert len(priced["priced"]) == 240

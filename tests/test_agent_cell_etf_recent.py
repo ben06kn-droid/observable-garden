@@ -205,6 +205,9 @@ def test_launcher_refusals(pre_dir, monkeypatch, tmp_path):
     assert any("smoke" in b for b in E.refusals(pre_dir, tmp_path / "cell", smoke=True))
     assert any("smoke" in b for b in E.refusals(pre_dir, tmp_path / "cell_smoke", smoke=False))
     assert E.refusals(pre_dir, tmp_path / "cell_smoke", smoke=True) == []
+    # the folder's OWN name decides: a parent named *_smoke is not enough (the operator-note fix)
+    assert any("smoke" in b for b in E.refusals(pre_dir, tmp_path / "agent_cell_etf_recent_smoke" / "2026-10-11", smoke=True))
+    assert E.refusals(pre_dir, tmp_path / "agent_cell_etf_recent_smoke" / "2026-10-11-smoke", smoke=True) == []
     monkeypatch.setattr(E, "PRECOMPUTE_MANIFEST_SHA256", "0" * 64)
     assert any("pinned SHA-256" in b for b in E.refusals(pre_dir, tmp_path / "cell", smoke=False))
     monkeypatch.setattr(E, "PRECOMPUTE_MANIFEST_SHA256", man_sha)
@@ -216,11 +219,16 @@ def test_launcher_refusals(pre_dir, monkeypatch, tmp_path):
 
 
 def test_seeds_and_schedule():
-    s = E.schedule("both", 40)
-    assert len(s) == 80 and [x[0] for x in s[:4]] == ["A", "B", "A", "B"]
-    a = [int(v) for v in np.random.default_rng(20261011).integers(0, 2**31 - 1, size=40)]
-    b = [int(v) for v in np.random.default_rng(20261012).integers(0, 2**31 - 1, size=40)]
+    assert E.PER_ARM == 120                                           # amendment 2
+    s = E.schedule("both", 120)
+    assert len(s) == 240 and [x[0] for x in s[:4]] == ["A", "B", "A", "B"]
+    a = [int(v) for v in np.random.default_rng(20261011).integers(0, 2**31 - 1, size=120)]
+    b = [int(v) for v in np.random.default_rng(20261012).integers(0, 2**31 - 1, size=120)]
     assert [x[2] for x in s if x[0] == "A"] == a and [x[2] for x in s if x[0] == "B"] == b
+    assert len(set(a) | set(b)) == 240                                 # distinct, and the arms share none
+    a40 = [int(v) for v in np.random.default_rng(20261011).integers(0, 2**31 - 1, size=40)]
+    assert a[:40] == a40                                              # prefix-stable: the first 40 unchanged
+    assert E.schedule("both", 999) == s                               # never more than 120 per arm
     assert E.schedule("A", 3) == [("A", i, a[i]) for i in range(3)]
     sm = E.schedule("both", 5, smoke=True)
     m = [int(v) for v in np.random.default_rng(723100).integers(0, 2**31 - 1, size=5)]

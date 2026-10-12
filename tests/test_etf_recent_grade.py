@@ -184,3 +184,36 @@ def test_refuses_until_registrations_are_set(monkeypatch):
     monkeypatch.setattr(EG, "CELL", None)
     assert any("CELL" in b and "not live" in b for b in EG.refusals("0" * 40))
     assert EG.PANEL == "310225cd4932bc18e1c8e2e248cbbb133124a004"
+
+
+def test_the_grading_takes_240_submissions(world):
+    """Amendment 2: 120 per arm. The grader prices and bootstraps 240 submissions plus the objects
+    and the three books, held against each submission's own priced unweighted L90."""
+    sups = [((0, 1.0), (3, -1.0)), ((1, 1.0),), ((2, -1.0), (5, 1.0)), ((7, 1.0), (9, 1.0), (11, -1.0))]
+    panel_in, _ = ER.sancho_inputs(world["dates_in"], world["tickers"], world["P_in"], world["V_in"], 2)
+    idx = ER.scored_index(panel_in)
+    S = {}
+    for sup in sups:
+        _, s = FG.member_book(panel_in, sup)
+        S[sup] = (EG.sharpe(s[idx], 252.0), FG.wsharpe(s[idx]))
+    subs, priced = [], []
+    for i in range(240):
+        arm = "A" if i % 2 == 0 else "B"
+        if i % 5 == 0:
+            subs.append({"session": f"s{i}", "arm": arm, "kind": "baseline_model", "support": "baseline_model",
+                         "predict": {"mean": 0.2, "sd": 0.5}})
+            priced.append({"session": f"s{i}", "S": 0.45, "S_w": 0.5, "L90": -0.2, "L90_w2": -0.1})
+        else:
+            sup = sups[i % 4]
+            su, sw = S[sup]
+            subs.append({"session": f"s{i}", "arm": arm, "kind": "rule", "support": [list(x) for x in sup],
+                         "predict": {"mean": 0.2, "sd": 0.5}})
+            priced.append({"session": f"s{i}", "S": su, "S_w": sw, "L90": su - 1.0, "L90_w2": sw - 1.2})
+    w = dict(world, submissions={"sessions": 240, "no_submit": [], "submissions": subs}, priced={"priced": priced})
+    g = EG.grade(**w, workers=1, fit_fn=_fit_memo, B_=40)
+    kinds = [i["type"] for i in g["items"]]
+    assert kinds.count("submission") == 240 and kinds.count("object") == 3 and kinds.count("book") == 3
+    assert g["bootstrap"]["shape"] == [40, 246]
+    for it in g["items"]:
+        if it["type"] == "submission":
+            assert it["held"] == (it["realized"] >= it["L90"])

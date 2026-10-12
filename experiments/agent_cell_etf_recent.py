@@ -37,13 +37,25 @@ BOX-ETF read): `manifest.json`, `sancho_d1.npz`, `class_scored.npy` and `class_s
 - the manifest's SHA-256 equals `PRECOMPUTE_MANIFEST_SHA256`;
 - every precompute file's SHA-256 equals the manifest's.
 
-Both constants are None until set: the registration when this cell goes live, and the manifest
-after BOX-ETF. **The author launches every session, on the seat.**
+Both constants are set (the registration is live at 00c7af1; the manifest is BOX-ETF's).
+**The author launches every session, on the seat.**
+
+**The output folder's own name (its last path component) decides smoke or cell.**
+- A smoke's folder name must contain "smoke", for example
+  `runs/agent_cell_etf_recent_smoke/2026-10-11-smoke`. A parent folder named `*_smoke` is not
+  enough.
+- A cell run's folder name must not contain it. The launcher refuses either mismatch.
+
+The cell, 120 sessions per arm (amendment 2):
 
     python -m experiments.agent_cell_etf_recent --precompute runs/etf_recent/<D>/precompute \\
-        --arm both --runs 40 --credential seat --out runs/agent_cell_etf_recent/<D>
+        --arm both --runs 120 --credential seat --workers 4 --out runs/agent_cell_etf_recent/<D>
+
+The smoke:
+
     python -m experiments.agent_cell_etf_recent --precompute runs/etf_recent/<D>/precompute \\
-        --arm both --runs 5 --credential seat --out runs/agent_cell_etf_recent_smoke/<D> --smoke
+        --arm both --runs 5 --credential seat --workers 4 \\
+        --out runs/agent_cell_etf_recent_smoke/<D>-smoke --smoke
 """
 from __future__ import annotations
 
@@ -68,7 +80,7 @@ ARMS = ("A", "B")
 MASTERS = {"A": 20261011, "B": 20261012}      # registration section 11
 SMOKE_MASTER = 723100
 SMOKE_RUNS = 5
-PER_ARM = 40
+PER_ARM = 120                                  # amendment 2 (was 40)
 GRAMMAR_TOOLS = ("pick_prior", "declare_triggers", "change_trigger", "init", "extend_best",
                  "swap_worst", "flip", "refine", "pick", "stop", "restart")
 CELL_TOOLS = ("baseline_model", "submit_candidate", "predict", "confirm")
@@ -540,7 +552,8 @@ def refusals(precompute: Path, out: Path, smoke: bool) -> list[str]:
         if wrong:
             bad.append(f"precompute files not their manifest SHA-256: {wrong}")
     if smoke != ("smoke" in Path(out).name):
-        bad.append("a smoke writes only to a directory named *smoke*, and a cell run never does")
+        bad.append("the output folder's own name must contain 'smoke' for a smoke (e.g. "
+                   "runs/agent_cell_etf_recent_smoke/<D>-smoke) and must not for a cell run")
     return bad
 
 
