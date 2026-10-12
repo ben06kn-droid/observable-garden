@@ -1,0 +1,218 @@
+"""The code state a run was produced under.
+
+Every run records it in config.json, and run_arms.sh refuses to continue a batch
+across a code change unless --allow-code-change is passed.
+
+The comparison cannot be on HEAD itself. run_arms.sh commits after every run, so
+HEAD moves constantly while the code does not: a guard on HEAD would fire on the
+second run of every batch and never mean anything. The fingerprint therefore
+covers only what determines how a run behaves, and excludes runs/, which is
+where the batch's own commits land.
+
+"What determines how a run behaves" is a list of files, not a directory: see
+CODE_PATHS. Analysis and figure code sits outside it, so reading a batch's early
+results with the analyzer cannot stop that batch producing the rest.
+
+The pre-registration contributes the md5 of its sections 1-5 rather than the
+file, because section 6 is the amendment log: it records decisions but changes
+no prompt, tool, or pinned value, so appending an amendment must not invalidate
+a batch that is mid-flight. Sections 1-5 are exactly the part a run reads.
+
+**Coverage discontinuity, 2026-09-24.** Two inputs were added: the path
+`experiments/real_prompts.py` and the design sections of
+`prereg/AGENT_PROMPTS_REAL.md`. Both determine what a real-data run does -- the
+second IS that run's prompt -- and neither was covered before, so a run stored
+before this date pins a narrower set of inputs than one stored after it.
+
+At HEAD `40a07ef`, with nothing else changed, the fingerprint moved
+
+    a270169ae0a687e8  ->  the value this module now returns
+
+and the change is entirely the widening. It was made **before the first
+model-backed real-data run** (`prereg/agent-pilot.md`), not after, because a
+fingerprint's only purpose is to say which code a stored run executed.
+
+    python -m experiments.code_state --field fingerprint
+"""
+from __future__ import annotations
+
+import hashlib
+import subprocess
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+# The paths a run actually reads, and nothing else.
+#
+# This was once the whole of experiments/, which put the analysis scripts inside
+# the guard alongside the harness. Editing analyze_agent.py while batch 4 was
+# running moved the fingerprint and stopped all four workers, for a file no run
+# imports. The entries below are the import closure of e_agent (environments,
+# estimator, garden, searchers, and three files here) plus the two the runner
+# invokes itself: worker_rows and run_arms.sh.
+#
+# Deliberately outside: analyze_agent.py and the other analysis and figure
+# scripts, make_schedule.py, and the generated schedule_*.txt. A schedule does
+# decide which seed and arm a row runs, but it is named on the command line
+# rather than read by the harness, and folding every batch's schedule in would
+# mean that adding the next batch's file stops the batch already running.
+#
+# Still excluded: runs/ and figures/ (outputs), note/ and the top-level .md
+# files (prose). prereg/ is handled separately, by section, just below.
+# Paths are from the repository root (git runs there, `GIT_ROOT`). Since the 2026-10 cleanup the
+# engine lives under quixote/engine/ and this record under research/; the same files are covered,
+# but every fingerprint taken after the move differs from one taken before it, by the path names.
+CODE_PATHS = (
+    "quixote/engine/environments", "quixote/engine/estimator", "quixote/engine/garden",
+    "quixote/engine/searchers",
+    "research/experiments/__init__.py",
+    "research/experiments/e_agent.py",
+    "research/experiments/code_state.py",
+    "research/experiments/worker_rows.py",
+    "research/experiments/run_arms.sh",
+    # Added 2026-09-24, before the first real-data run: this is the code a
+    # real-data run's PROMPT is built by, which is as much a determinant of a
+    # run's behaviour as the harness that executes it. See "Coverage
+    # discontinuity" in this module's docstring.
+    "research/experiments/real_prompts.py",
+    "pyproject.toml",
+)
+
+PREREG_FILE = ROOT / "prereg" / "AGENT_PROMPTS.md"
+AMENDMENTS_HEADING = "## 6. Amendments"
+
+# The real-data arms' pre-registration, added at the same date and for the same
+# reason. Its amendment log is section 7 rather than 6; the heading travels with
+# the file so appending an amendment cannot invalidate a run mid-flight, exactly
+# as for the file above.
+REAL_PREREG_FILE = ROOT / "prereg" / "AGENT_PROMPTS_REAL.md"
+REAL_AMENDMENTS_HEADING = "## 7. Amendments"
+
+
+GIT_ROOT = ROOT.parent          # the repository root; CODE_PATHS are relative to it
+
+
+def _git(*args: str) -> str:
+    p = subprocess.run(("git", *args), cwd=GIT_ROOT, capture_output=True, text=True)
+    return p.stdout if p.returncode == 0 else ""
+
+
+def head_sha() -> str:
+    return _git("rev-parse", "HEAD").strip() or "unknown"
+
+
+def prereg_design_md5() -> str:
+    """md5 of sections 1-5 of AGENT_PROMPTS.md -- the design a run executes.
+
+    Section 6 is deliberately excluded. An amendment is a record of a decision;
+    it alters no prompt, tool, or pinned value, and stopping four live workers
+    to write one down would make the log costly to keep honest."""
+    try:
+        text = PREREG_FILE.read_text()
+    except OSError:
+        return "missing"
+    design = text.split(AMENDMENTS_HEADING)[0]
+    return hashlib.md5(design.encode()).hexdigest()
+
+
+def real_prereg_design_md5() -> str:
+    """The same, for `prereg/AGENT_PROMPTS_REAL.md`.
+
+    Kept as a second function rather than folded into the one above, so the
+    `prereg_design_md5` field stored in every existing run's config.json keeps
+    meaning exactly what it meant when it was written: the design md5 of the
+    simulated-panel prompts. The fingerprint carries both.
+    """
+    try:
+        text = REAL_PREREG_FILE.read_text()
+    except OSError:
+        return "missing"
+    return hashlib.md5(text.split(REAL_AMENDMENTS_HEADING)[0].encode()).hexdigest()
+
+
+def dirty_paths() -> list[str]:
+    """Tracked modifications plus untracked files, over the code paths and the
+    pre-registration. The prereg is watched here even though only its design
+    sections feed the fingerprint: an uncommitted edit to it is worth seeing."""
+    out = _git("status", "--porcelain", "--", *CODE_PATHS, "research/prereg")
+    # NOT `out.strip()`: porcelain's status field is two columns, so an unstaged
+    # modification begins with a SPACE (" M path"). Stripping the whole output
+    # ate that space on the first line only, and `line[3:]` then cut the first
+    # character off that path -- "xperiments/code_state.py". A mangled path in a
+    # stored run's provenance is worse than none, so the strip is per line and
+    # on the right only.
+    return sorted(line[3:].strip() for line in out.splitlines() if line.strip())
+
+
+def code_fingerprint(paths=None) -> str:
+    """sha256 over: the committed tree of each code path, the diff against it,
+    the bytes of every untracked file under it, and the prereg design md5.
+
+    `paths` defaults to CODE_PATHS. It is a parameter so that a caller needing a
+    wider set -- `quixote/fingerprint.py` does -- can have one **without
+    widening CODE_PATHS itself**, which would move every published fingerprint
+    for a reason unrelated to the runs they pin.
+    """
+    paths = CODE_PATHS if paths is None else tuple(paths)
+    h = hashlib.sha256()
+    for p in paths:
+        h.update(f"{p}:{_git('rev-parse', f'HEAD:{p}').strip()}\n".encode())
+    h.update(_git("diff", "HEAD", "--", *CODE_PATHS).encode())
+    for rel in _git("ls-files", "--others", "--exclude-standard", "--",
+                    *paths).split("\n"):
+        rel = rel.strip()
+        # Compiled bytecode is not source. It is normally filtered by
+        # --exclude-standard via .gitignore, but resting a mid-batch guard on an
+        # ignore rule is fragile: in a tree without one, the first import writes
+        # experiments/__pycache__/*.pyc and the fingerprint moves at an unchanged
+        # HEAD, stopping every worker for a change that never happened.
+        if not rel or "__pycache__" in rel or rel.endswith(".pyc"):
+            continue
+        f = GIT_ROOT / rel
+        if f.is_file():
+            h.update(f"{rel}:".encode())
+            h.update(hashlib.sha256(f.read_bytes()).hexdigest().encode())
+            h.update(b"\n")
+    h.update(f"prereg-design:{prereg_design_md5()}\n".encode())
+    h.update(f"real-prereg-design:{real_prereg_design_md5()}\n".encode())
+    return h.hexdigest()[:16]
+
+
+def code_state() -> dict:
+    d = dirty_paths()
+    return {"head": head_sha(), "fingerprint": code_fingerprint(),
+            "prereg_design_md5": prereg_design_md5(),
+            "real_prereg_design_md5": real_prereg_design_md5(),
+            "dirty": bool(d), "dirty_paths": d}
+
+
+def main(argv=None) -> int:
+    import argparse
+    import json
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--field", choices=("fingerprint", "head", "prereg_design_md5",
+                                       "real_prereg_design_md5", "json"),
+                    default="json")
+    a = ap.parse_args(argv)
+    s = code_state()
+    print(json.dumps(s) if a.field == "json" else s[a.field])
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
+def platform_info() -> dict:
+    """Where a run executed: machine architecture, OS, Python and numpy.
+
+    Recorded on every run record from 2026-10-02, after an x86 and an arm64 build of
+    the ETF panel were found to break rank ties differently (`prereg/planted-edge.md`):
+    two runs on different platforms can be running different panels, and the record
+    has to say which platform it was."""
+    import platform
+
+    import numpy as np
+    return {"machine": platform.machine(), "system": platform.system(),
+            "python": platform.python_version(), "numpy": np.__version__,
+            "node": platform.node()}

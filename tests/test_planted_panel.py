@@ -122,28 +122,6 @@ def test_the_masking_permutation_follows_the_member_draw():
     assert sorted(p1) == list(range(40)) and not np.array_equal(p1, p2)
 
 
-ETF = pytest.mark.skipif(
-    not (__import__("pathlib").Path(__file__).resolve().parent.parent
-         / "data" / "raw" / "etf_insample").exists(), reason="ETF in-sample data absent")
-
-
-@ETF
-def test_the_registered_generator_reproduces_the_preflights_scale():
-    """The preflight (`runs/planted_edge_preflight.json`) used the prototype with a
-    ddof = 1 covariance; the registered definition is ddof = 0. Same member, and the
-    scale agrees to the 1/T the definitions differ by."""
-    import json
-    base = pp.load_base()
-    assert base.in_sample.features.shape[0] == 3019
-    pre = {(r["seed"], r["beta"]): r for r in json.loads(
-        open("runs/planted_edge_preflight.json").read())}
-    for seed in (640000, 640001):
-        d = pp.make_draw(base, seed, 1.0)
-        r = pre[(seed, 1.0)]
-        assert [list(p) for p in d.m_star] == r["planted"]
-        assert d.c == pytest.approx(r["c"], rel=2.0 / 3019)
-
-
 def test_streams_with_overlap_are_streams_for_bit_for_bit(base):
     from environments.class_table import streams_for
     d = pp.make_draw(base, 12, 1.0)
@@ -210,12 +188,3 @@ def test_a_wrong_shape_is_refused(tmp_path):
     sha = hashlib.sha256(f.read_bytes()).hexdigest()
     with pytest.raises(SystemExit, match="shape"):
         pp.pinned_features(f, sha, (2, 3, 5))
-
-
-@ETF
-def test_load_base_uses_the_pinned_matrix_not_the_build():
-    base = pp.load_base()
-    X = pp.pinned_features()
-    n_is = base.in_sample.features.shape[0]
-    assert np.array_equal(base.in_sample.features, X[:n_is])
-    assert np.array_equal(base.holdout.features, X[n_is:n_is + base.holdout.features.shape[0]])

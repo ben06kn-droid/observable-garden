@@ -1,0 +1,185 @@
+"""experiments/code_state.py — what the mid-batch guard watches.
+
+The fingerprint decides whether run_arms.sh lets a batch continue, so the cost
+of getting CODE_PATHS wrong is asymmetric and wrong in both directions: too
+narrow and a real change to the harness passes unnoticed, too wide and ordinary
+work halts four live workers. It was too wide once -- the whole of experiments/
+-- and editing analyze_agent.py during batch 4 stopped it for a file no run
+imports.
+
+The end-to-end probes run against a throwaway repo rather than this one:
+code_state resolves ROOT from its own location, so probing in place would move
+the real tree's fingerprint, which is precisely the thing that must not happen
+while a batch is running.
+"""
+import subprocess
+import sys
+from pathlib import Path
+
+from experiments.code_state import CODE_PATHS
+
+REPO = Path(__file__).resolve().parents[2]      # the repository root; CODE_PATHS are relative to it
+
+
+def covered(rel: str) -> bool:
+    """Whether CODE_PATHS contains this file, matching by prefix as git does."""
+    return any(rel == p or rel.startswith(p.rstrip("/") + "/") for p in CODE_PATHS)
+
+
+# -- what must be inside, and what must not ----------------------------------
+
+def test_the_harness_and_runner_are_watched():
+    for rel in ("research/experiments/e_agent.py", "research/experiments/run_arms.sh",
+                "research/experiments/worker_rows.py", "research/experiments/code_state.py",
+                "quixote/engine/environments/dgp.py", "quixote/engine/environments/sandbox.py",
+                "quixote/engine/garden/watch.py", "quixote/engine/garden/spec_class.py",
+                "quixote/engine/searchers/llm_agent.py", "quixote/engine/estimator/bootstrap.py",
+                "pyproject.toml"):
+        assert covered(rel), f"{rel} must be inside the fingerprint"
+
+
+def test_analysis_and_figure_code_is_not_watched():
+    """The defect this file exists for. None of these is imported by a run."""
+    for rel in ("research/experiments/analyze_agent.py", "research/experiments/make_schedule.py",
+                "research/experiments/plot_headline_figures.py", "research/experiments/chain.sh",
+                "research/experiments/schedule_80_s3.txt"):
+        assert not covered(rel), f"{rel} must be outside the fingerprint"
+
+
+def test_every_watched_path_exists():
+    """A typo in CODE_PATHS is silent: git prints nothing for a path it cannot
+    resolve, so the entry contributes an empty hash rather than an error."""
+    for p in CODE_PATHS:
+        assert (REPO / p).exists(), f"CODE_PATHS names a missing path: {p}"
+
+
+# -- the property itself, against a throwaway repo ---------------------------
+
+def _sandbox(tmp_path: Path) -> Path:
+    root = tmp_path / "repo"                       # the layout since the 2026-10 cleanup
+    ex = root / "research" / "experiments"
+    ex.mkdir(parents=True)
+    for d in ("environments", "estimator", "garden", "searchers"):
+        (root / "quixote" / "engine" / d).mkdir(parents=True)
+        (root / "quixote" / "engine" / d / "__init__.py").write_text("")
+    (ex / "code_state.py").write_bytes((REPO / "research" / "experiments" / "code_state.py").read_bytes())
+    for name in ("__init__.py", "e_agent.py", "worker_rows.py"):
+        (ex / name).write_text("# stub\n")
+    (ex / "run_arms.sh").write_text("# stub\n")
+    (ex / "analyze_agent.py").write_text("# stub\n")
+    (root / "pyproject.toml").write_text("[project]\nname = 'x'\n")
+    (root / "research" / "prereg").mkdir()
+    (root / "research" / "prereg" / "AGENT_PROMPTS.md").write_text("# design\n## 6. Amendments\nx\n")
+    (root / ".gitignore").write_text("__pycache__/\n*.pyc\n")
+    run = lambda *a: subprocess.run(a, cwd=root, capture_output=True, text=True)  # noqa: E731
+    run("git", "init", "-q")
+    run("git", "config", "user.email", "t@example.com")
+    run("git", "config", "user.name", "t")
+    run("git", "add", "-A")
+    run("git", "commit", "-qm", "harness")
+    return root
+
+
+def _fingerprint(root: Path) -> str:
+    p = subprocess.run([sys.executable, "research/experiments/code_state.py",
+                        "--field", "fingerprint"],
+                       cwd=root, capture_output=True, text=True)
+    assert p.returncode == 0, p.stderr
+    return p.stdout.strip()
+
+
+def test_editing_an_analysis_script_leaves_the_fingerprint_alone(tmp_path):
+    root = _sandbox(tmp_path)
+    before = _fingerprint(root)
+    (root / "research" / "experiments" / "analyze_agent.py").write_text("# stub\n# edited\n")
+    assert _fingerprint(root) == before
+
+
+def test_editing_the_harness_still_moves_the_fingerprint(tmp_path):
+    """Narrowing must not disarm the guard for a change that does matter."""
+    root = _sandbox(tmp_path)
+    before = _fingerprint(root)
+    (root / "research" / "experiments" / "e_agent.py").write_text("# stub\n# edited\n")
+    assert _fingerprint(root) != before
+
+
+def test_an_untracked_analysis_script_leaves_the_fingerprint_alone(tmp_path):
+    """Untracked files under a watched path count, so a new figure script in
+    experiments/ must not count either."""
+    root = _sandbox(tmp_path)
+    before = _fingerprint(root)
+    (root / "research" / "experiments" / "plot_new_thing.py").write_text("# new\n")
+    assert _fingerprint(root) == before
+
+
+def test_an_untracked_harness_module_still_moves_it(tmp_path):
+    root = _sandbox(tmp_path)
+    before = _fingerprint(root)
+    (root / "quixote" / "engine" / "garden" / "new_engine.py").write_text("# new\n")
+    assert _fingerprint(root) != before
+
+
+def test_the_fingerprint_covers_the_real_data_prompts_and_their_reader():
+    """Added 2026-09-24, before the first model-backed real-data run: the file a
+    real-data run's prompt is BUILT by, and the pre-registration that prompt is
+    read from, both determine what the run does."""
+    from experiments import code_state as cs
+    assert "research/experiments/real_prompts.py" in cs.CODE_PATHS
+    assert cs.REAL_PREREG_FILE.name == "AGENT_PROMPTS_REAL.md"
+    assert cs.real_prereg_design_md5() not in ("missing", cs.prereg_design_md5())
+    assert "real_prereg_design_md5" in cs.code_state()
+
+
+def test_appending_an_amendment_to_either_prereg_moves_no_fingerprint(tmp_path):
+    """Both files' amendment logs are excluded, for the reason the module gives:
+    an amendment records a decision and changes no prompt, tool or pinned value,
+    so writing one down must not invalidate a batch mid-flight."""
+    from experiments import code_state as cs
+    for path, heading in ((cs.PREREG_FILE, cs.AMENDMENTS_HEADING),
+                          (cs.REAL_PREREG_FILE, cs.REAL_AMENDMENTS_HEADING)):
+        text = path.read_text()
+        assert heading in text, path.name
+        design, _, _ = text.partition(heading)
+        assert heading not in design
+        # A REPEAT of the heading is the case `partition` cannot see, and it is
+        # the dangerous one: the fingerprint is taken over `split(heading)[0]`, so
+        # everything after a second heading silently leaves the design hash.
+        # `prereg/agent-cell.md` carried exactly that until 2026-09-29.
+        assert text.count(heading) == 1, (
+            f"{path.name} repeats {heading!r} {text.count(heading)} times; "
+            "content after the second one is excluded from the design hash")
+
+
+def test_no_prereg_file_repeats_its_amendments_heading():
+    """The same guarantee for every pre-registration, not only the two whose
+    design hash is computed. A duplicated `## Amendments` splits the amendment log
+    in two, and a reader who stops at the first one reads a stale 'None yet' --
+    which is what `prereg/agent-cell.md` said above its four amendments."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent / "prereg"
+    offenders = {}
+    for path in sorted(root.glob("*.md")):
+        text = path.read_text()
+        for heading in ("## Amendments", "## 6. Amendments", "## 7. Amendments"):
+            n = sum(1 for line in text.splitlines() if line.strip() == heading)
+            if n > 1:
+                offenders[f"{path.name}:{heading}"] = n
+    assert not offenders, f"repeated amendment headings: {offenders}"
+
+
+def test_dirty_paths_does_not_eat_the_first_paths_first_character():
+    """Regression: porcelain's status field is two columns, so an unstaged
+    modification starts with a space. Stripping the whole output removed it and
+    line[3:] then cut into the path itself."""
+    from experiments import code_state as cs
+    lines = [" M experiments/code_state.py", "?? prereg/new.md", " D garden/x.py"]
+    got = sorted(line[3:].strip() for line in "\n".join(lines).splitlines() if line.strip())
+    assert got == ["experiments/code_state.py", "garden/x.py", "prereg/new.md"]
+    # A path can be dirty because it was DELETED, in which case it is correctly
+    # reported and correctly absent - which is how closing a pre-registration
+    # shows up, since a completed one leaves prereg/ by the standing rule. So the
+    # check is that git knows the path, not that it still exists.
+    known = cs._git("status", "--porcelain")
+    for p in cs.dirty_paths():
+        assert (cs.GIT_ROOT / p).exists() or p in known, p
