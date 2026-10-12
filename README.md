@@ -1,166 +1,136 @@
-# observable-garden
+# The Observable Garden: Quixote and Sancho
 
-This repository asks whether the best result of a search over trading strategies can
-be told apart from the best of many tries on pure noise when the search is adaptive.
-It shows that a null built only from the strategies a search logged errs in a direction
-set by what the search builds on. It also shows that a record letting the search be
-re-run under the null repairs it. On synthetic panels the test (called the gate in this
-repository) keeps its error rate and certifies planted edges; on real data no strategy
-has yet earned a certificate.
+**Quixote** is a gate between a search for trading rules and the decision to believe what it
+found. It judges the winner's backtest against what the best of the same search would look like
+on pure noise.
+- It works whoever searches: a script, a person or an LLM agent.
+- For an agent, it runs the search itself: the agent names each move, the harness carries it out
+  and logs it, and the log can be re-run under the null.
 
-**The note:** `docs/note.md`, *Fixed and adaptive candidate sets under the DSR*.
-`docs/NOTE_MAP.md` maps each of its claims to the experiment, registration, commits and
-script behind it. Its limit values are computed two ways, by Monte Carlo in
-`experiments/limit_model.py` and by quadrature in `experiments/size_integral.py`, and
-the two agree to 0.001.
+**Sancho** is a fixed model to compare against.
 
-**Where things are:**
-- `estimator/`, `garden/`, `quixote/`: the gate: its estimators, the `garden` audit
-  command, and the harness that replays an agent's logged search.
-- `environments/`, `searchers/`, `learn/`, `learn2/`: the panels (real and planted), the scripted searchers, and the machine-learning predictors.
-- `experiments/`: one script per experiment, with its reader.
-- `prereg/` and `EXPERIMENTS.md`: the pre-registrations, and the ledger of every
-  experiment with its commits.
-- `runs/`, `figures/`, `docs/`: raw outputs, result files, and the note with its map.
+The method and its evidence are in the note, [`paper/note.md`](paper/note.md), *Fixed and
+adaptive candidate sets under the DSR*.
 
-**Run it:**
-- **The test suite:** `pip install -e ".[dev]"`, then `pytest -q`, from the repository
-  root. That is about 1,340 tests, and about 12 minutes on a laptop.
-  - Three files skip without the agent SDK, which the dependencies do not install.
-  - The machine-learning tests also need LightGBM 4.7.0, which is pinned and installed
-    from its wheel.
-- **One small experiment, end to end:** `python -m experiments.size_integral`. It
-  computes the winner-anchored limit error rate by quadrature at THEORY.md's eight
-  (ω, K) cells, and prints them beside the table. It takes under one second.
-
-**Every backtest is the best of many tries. Nobody writes down the tries.
-An agent does.**
-
-A good backtest may only be the luckiest of a thousand attempts, and the
-correction for that has always needed a number no human researcher keeps: how
-hard they searched. This repo is a gate that reads the search's own log and
-returns a verdict.
+## Install
 
 ```
-pip install -e .
-garden audit --example null_grid     # FAIL          the best of nothing
-garden audit --example real_edge     # PASS          survives the search that found it
-garden audit --example overwide      # INADMISSIBLE  too broad to prove anything
+pip install -e .                  # Python 3.10 or later
+pip install -e ".[sancho]"        # adds LightGBM 4.7.0, pinned: Sancho's registered results used it exactly
+pip install -e ".[agent]"         # adds the Anthropic SDK, only for the LLM agent example
 ```
 
-Every verdict prints its bar, its power and a reason per check, so you can
-argue with it. It refuses rather than flatter: **UNDECIDABLE** when the log
-can't license a correction, **DEGENERATE** when the statistic breaks.
-
-## What it has measured
-
-- A search over 1,000 noise-heavy trials reports Sharpe **2.03**. The truth
-  is **0.21**. Reading only the transcript, the gate calls the decay to
-  within **0.017**.
-- Let a search chase its own winners and the textbook correction fails: over
-  **a third** of pure-noise searches clear a nominal 5% bar.
-- Two repairs hold everywhere tested. With a searcher that reaches its
-  declared class, the gate rejects **9.60 / 5.50 / 0.95%** at nominal
-  10 / 5 / 1.
-- Declare the tightest class your search can reach. Over-declaring took one
-  searcher from nominal to **1.35%**, which is power thrown away.
-- A PASS is not a promise. Reverse the true signal and its advantage erodes
-  from **+0.46** to **+0.08**. It never inverts.
-- Real-data holdout (ETF panel, 80 agent submissions): none was certified
-  in-sample. On the sealed 2023-2025 holdout their median net Sharpe was
-  **+0.71** [-0.28, +1.74], not distinguishable from zero; the gate's lower
-  bounds held; the agents' stated confidence did not rank their strategies.
-  (`EXPERIMENTS.md`, 6.5 holdout grading.)
-- Machine-learning arm (planted panels, registered confirmation): held its
-  false-positive rate (14 of 400 null panels certified at zero cost) and
-  certified a planted non-linear edge at net Sharpe 1.5 in **59%** of panels
-  against **14%** for the rule-class tier, a difference of **+0.45** [+0.40,
-  +0.50]. The edges were planted by construction; part of the gain is the
-  lower bar a single declared strategy faces. (`EXPERIMENTS.md`, ridge_stack
-  confirmation.)
-- French 49-industry panel, 2010-2019, in-sample: neither registered test
-  certified. The learned strategy's net Sharpe was **0.55** (p = 0.074 against
-  a threshold of 0.04); the best of 82,240 rules reached **0.68** (p = 0.96
-  against 0.01). Both are consistent with the detection floor registered in
-  advance. (`EXPERIMENTS.md`, French 49-industry, in-sample read.)
-- French holdout, 2020-01 to 2026-08 (1,674 days): the learned strategy's
-  net Sharpe was **+0.017** [-0.741, +0.791], below its in-sample 90% lower
-  bound of +0.065; the best rule's was **-0.001** [-0.754, +0.776], above its
-  bound of -0.518. Both were refused in-sample, so this cannot test whether a
-  pass holds. (`EXPERIMENTS.md`, French holdout grading.)
-- Machine-learning version 2 (planted panels, registered confirmation): it
-  held its false-positive rate (13 of 400 null panels certified at zero cost)
-  and replaced version 1. At five times the registered cost its certification
-  rate was **+0.091** [+0.072, +0.111] higher than version 1's; at the
-  registered cost it was no worse beyond the 0.03 margin (+0.013 [-0.013,
-  +0.038]). Intervals are 97.5%. (`EXPERIMENTS.md`, ML version 2,
-  confirmation.)
-
-**Not yet shown:** no certificate has been earned on real data, so whether a
-pass holds out of sample is untested there.
-
-## Next: a gate for agents that think
-
-*Where it stands: the agent arm and a real-data holdout have been run; their
-results are recorded in `EXPERIMENTS.md`.*
-
-An agent doesn't search a fixed menu. It decides what to try next. The second
-gate prices the decisions, not just the trials:
-
-- **Replays what can be replayed.** Moves are typed and harness-executed, so
-  each resample re-runs the agent's rules and lets them choose differently.
-- **Charges for what can't.** A decision with no stated rule is priced at the
-  best of its alternatives. Ambiguity costs power, never validity.
-- **Reports its own doubt.** When the verdict turns on a judgment call, it
-  says so and names the call.
-- **Twins.** The same agent, re-run on placebo copies of the data where the
-  null is true. The real run's rank among them is the p-value, whatever the
-  log missed.
-
-Design, rules and gates: `ROADMAP.md`, Phase 7.
-
-## Prior work
-
-The engine is White's Reality Check (2000). It is twenty-six years old and
-it is the right tool. This project asks what a logged search lets you do with
-it. `SCOPE.md` has every number and caveat, `THEORY.md` the proofs, and
-`EXPERIMENTS.md` the commit each pre-registration was fixed at.
-
-Gençay (2026) and Kinlay (2026a) published the observation that an agent's trial
-count is observable by construction before this project's first record; this
-project reached it independently. Neither addresses whether the logged candidate
-set suffices when the search is adaptive, which is the subject here.
-
-Kinlay (2026b) is concurrent, independent work reaching two of the same
-conclusions: that data-snooping tests calibrated on a family fixed in advance are
-inflated when pointed at the search's own trace, and that a Deflated Sharpe fed an
-effective trial count passes too often. This project's records are earlier —
-`3446f10`, 2026-09-14 for the effective-N double-counting result, and `309332d`
-with `34934a1`, 2026-09-15 for the family-versus-trace distinction — and its
-account of the effective-N error derives it from `Var[SR_n]`, which that work does
-not contain.
-
-The full search, with read-levels for every reference, is
-`docs/RELATED_WORK_2026.md` (2026-09-30).
-
-## Setup
+## One minute: run the gate on an example
 
 ```
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-pytest -q
+quixote example
 ```
 
-## Layout
+This audits a bundled log, a scripted searcher's moves on a small synthetic panel in
+`examples/`, and prints the verdict:
 
 ```
-garden/         the gate: transcript format, audit, preflight, explain, CLI
-quixote/        Don Quixote, the agent-facing gate: move grammar, session log
-environments/   simulated data, the sandbox contract, price worlds
-searchers/      scripted, meta-adaptive, dose-response and diagnostic searchers
-estimator/      naive, recursive, trigger-replay and procedure-level bootstraps
-experiments/    one module per experiment, named in EXPERIMENTS.md; parallel runner
-prereg/         every experiment's rules, fixed before it ran
-cloud/          EC2 setup and detached-run scripts
-tests/, figures/, runs/
+verdict: FAIL  (the submitted rule does not clear the bar its own search sets: a search like this one finds a Sharpe this high by luck too often to tell)
+submitted: -mom60_z +rev5_rank  in-sample Sharpe 0.572 after 2 moves
+replay tier (the verdict): p 0.9721 at alpha 0.05, B 500
+class tier (beside it): p 0.9800; the class's bar 1.888 (critical Sharpe over all 128 members)
+```
+
+To audit a log yourself: `quixote audit examples/logs/scripted_session.json --panel
+examples/data/tiny_panel.npz --class examples/class.json`.
+
+## Your own agent, in five steps
+
+`examples/README.md` documents each step in full.
+
+1. **Your data as a panel.** Write an `.npz` with `returns` (T × M), `features` (T × M × K),
+   `feature_names` and `periods_per_year`, and optionally costs, delay and row labels.
+   `examples/make_tiny_panel.py` builds one.
+2. **Declare the class before you search.** A JSON file names the features, the maximum number
+   in a rule, and whether signs are free, or points to a file of supplied return streams. The
+   harness hashes it before the first evaluation and writes the hash into the log.
+3. **Write the agent.** It implements one method, `next_move(view) -> {"tool": ...}`. It names a
+   move; the harness runs it.
+   - `examples/scripted_searcher.py` is a scripted agent.
+   - `examples/llm_agent.py` is an LLM adapter. It reads its API key from the environment.
+4. **Run it:**
+   `quixote run --agent mymodule:MyAgent --panel my.npz --class my_class.json --out log.json`.
+   It prints the class's size and its bar on your panel.
+5. **Audit the log:** `quixote audit log.json --panel my.npz --class my_class.json`. The audit
+   refuses a log whose class or panel hash does not match the files it is given.
+
+**Hold data back.** Before you search:
+- `quixote split my.npz --holdout-from <row or date> --out split/` writes the holdout and its
+  hash;
+- `quixote grade log.json --insample split/insample.npz --holdout split/holdout.npz --class
+  my_class.json --out split/` grades the submitted rule once. It refuses a second run on the same
+  holdout.
+
+**Why the class is fixed.** A class changed after results are seen is a search over classes, and
+the gate would be pricing the wrong search. So the hash is taken before the first evaluation, and
+the audit refuses a mismatch.
+
+**Sancho's levers** are in `sancho/config.json`, documented in `sancho/CONFIG.md`. The defaults
+are the registered version 2.
+- `quixote sancho --panel my.npz [--config my.json] --out dir/` writes the config's hash into the
+  output.
+- **Sancho needs history before it scores anything.** Its first scored row is 756 (after the
+  embargo, 763), so it needs a panel of a few years. On the 600-row example panel it refuses, by
+  design.
+- A non-default config says, once, that the registered results apply to the default only, and
+  that every configuration tried on the same data is another strategy and must be declared as
+  such.
+
+## What a verdict means
+
+| status | meaning |
+|---|---|
+| **PASS** | p is below α: the submitted rule beats what the search would find on noise. |
+| **FAIL** | p is at or above α, and the test had the power to tell: the result is what this search finds by luck. |
+| **INADMISSIBLE** | p is at or above α, and the search was too wide to certify anything: the test's power against the reference Sharpe (1.0 by default) is below the power floor (0.20). |
+| **UNDECIDABLE** | the record alone cannot license a correction, for example returns logged without the search that chose them. |
+| **DEGENERATE** | the test statistic broke on this menu. Do not read its p. |
+
+- **The lower bound** (`L_0.90`) is the Sharpe the selected rule is 90% confident of exceeding,
+  after the search is paid for.
+- **The detection floor** is the smallest Sharpe the gate can certify for a class and a sample
+  length. Look at it before you search:
+
+  ```
+  quixote power --years 10 --size 82240
+  ```
+  ```
+  smallest Sharpe the gate can certify (the bar): 1.533
+  true Sharpe needed for 80% power:                1.800
+  ```
+
+  Those are for independent members, the worst case. Correlated members act like fewer, and
+  `quixote run` prints the bar measured on your panel.
+
+## What has been validated, and what has not
+
+From the note's Section 7. Nothing here is stated more strongly than the note states it.
+
+- **The direction of the error** under adaptive search is a limit result. It is proved for large
+  samples and equal volatilities and correlations. With finite samples it is measured, not
+  proved.
+- **Stopping-rule replay**, the null Quixote certifies with, had error rates at or below nominal
+  on the searchers tested. Exactness is not claimed, and nothing is proved.
+- **The 82,240-strategy class** is supported by simulation, not by the theorem. Block correlation
+  and unequal volatilities are untested.
+- **The evidence** is scripted searchers on synthetic returns, plus real ETF features with
+  synthetic, planted returns. **Whether a result that passes holds out of sample on real data is
+  untested** in the note.
+- **Whatever a searcher considers without evaluating is never logged,** so every logged count is
+  a floor.
+
+## The research record
+
+Pre-registrations, runs, reads and the code behind the note are in [`research/`](research/README.md).
+
+## Tests
+
+```
+pytest tests -m "not slow"        # the quick target, under two minutes (CI runs it)
+pytest tests research/tests       # everything; much of research/tests needs machine-local data
 ```

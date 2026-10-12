@@ -25,6 +25,7 @@ import argparse
 import glob
 import re
 import subprocess
+from pathlib import Path
 
 import numpy as np
 
@@ -32,10 +33,17 @@ CODE_MASTERS = {20260916, 20260924, 20260925, 20260929, 20260930, 20261001}
 DRAWS = 5000
 
 
+RESEARCH = Path(__file__).resolve().parent.parent     # research/: prereg/, EXPERIMENTS.md, ROADMAP.md
+
+
 def corpus(exclude: set[str]) -> dict[str, str]:
-    texts = {p: open(p).read() for p in glob.glob("prereg/*.md") if p not in exclude}
-    log = subprocess.run(["git", "log", "--all", "--diff-filter=D", "--format=%h",
-                          "--name-only", "--", "prereg/"],
+    """Paths are research-relative (prereg/x.md), as they were before the 2026-10 cleanup, so the
+    --exclude argument and the reported names are unchanged; it runs from any working directory."""
+    texts = {str(p.relative_to(RESEARCH)): p.read_text() for p in sorted(RESEARCH.glob("prereg/*.md"))
+             if str(p.relative_to(RESEARCH)) not in exclude}
+    # removed pre-registrations: under prereg/ before the cleanup, research/prereg/ after it
+    log = subprocess.run(["git", "-C", str(RESEARCH), "log", "--all", "--diff-filter=D", "--format=%h",
+                          "--name-only", "--", ":/prereg/", ":/research/prereg/"],
                          capture_output=True, text=True, check=True).stdout
     for chunk in log.split("\n\n"):
         parts = [x for x in chunk.split("\n") if x]
@@ -43,9 +51,9 @@ def corpus(exclude: set[str]) -> dict[str, str]:
             continue
         for f in parts[1:]:
             texts[f"{f}@{parts[0]}"] = subprocess.run(
-                ["git", "show", f"{parts[0]}^:{f}"], capture_output=True, text=True).stdout
+                ["git", "-C", str(RESEARCH), "show", f"{parts[0]}^:{f}"], capture_output=True, text=True).stdout
     for p in ("EXPERIMENTS.md", "ROADMAP.md"):
-        texts[p] = open(p).read()
+        texts[p] = (RESEARCH / p).read_text()
     return texts
 
 

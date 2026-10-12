@@ -1,5 +1,9 @@
 # Experiments
 
+*Since the 2026-10 cleanup this file lives in `research/`, and paths here are relative to it.
+The engine moved to `quixote/engine/` and `learn2/` became `sancho/`; `git show <commit>:<path>`
+takes pre-cleanup paths, and the tag `pre-cleanup-2026-10-12` has them all.*
+
 Every experiment, in the order it ran. Names replaced the old `e<n>` / `E<n>`
 numbering, which carried no information and collided across two conventions:
 lowercase `e4` and uppercase `E19` meant different things, `E19` and `E19c` were
@@ -15,7 +19,7 @@ finished**, and `1fb464f` is the last commit holding them: `estimator_build_spec
 (the original build specification), `GARDEN_WATCH_PLAN.md` (the `watch` build
 plan, which also served as the pre-registration for `watch-validation`) and
 `note/OUTLINE.md` (drafting decisions for the note, sent 2026-09-16). Docstrings
-across `estimator/`, `searchers/` and `experiments/` still cite the build spec by
+across `../quixote/engine/estimator/`, `../quixote/engine/searchers/` and `experiments/` still cite the build spec by
 section as "spec §4.2" and similar; those citations resolve at that commit.
 
 **Two modules deliberately keep their old filenames.** `experiments/e_agent.py`
