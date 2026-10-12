@@ -33,6 +33,40 @@ only. A search must be priced on the statistic it ranked by.
 L90s and its graded rule. This cell does not change it. Where this cell shows a parent quantity,
 it says which statistic it is.
 
+## 0a. Before going live: the parent's scripted read, and what follows for the reads (2026-10-11)
+
+- **The parent panel's scripted in-sample read is done:** raw outputs at `05642cf`, read at
+  `3552158`. **All three objects were refused at both levels:**
+
+  | object | W2 net Sharpe | p | weighted L90 |
+  |---|---|---|---|
+  | Sancho d = 1 | 0.246 | 0.1970 | −0.123 |
+  | Sancho d = 0, NOT IMPLEMENTABLE | 0.243 | 0.2092 | −0.139 |
+  | the class maximum | 0.659 | 0.9654 | −0.530 |
+
+  Unweighted, beside:
+
+  | object | net Sharpe | p | L90 |
+  |---|---|---|---|
+  | Sancho d = 1 | 0.183 | 0.2603 | −0.179 |
+  | Sancho d = 0, NOT IMPLEMENTABLE | 0.180 | 0.2561 | −0.186 |
+  | the class maximum | 0.558 | 0.9900 | −0.558 |
+
+- **Agents are told none of this.** No tool, prompt or result mentions the parent's read, its
+  verdicts or its L90s. Arm B sees only the L90 of its own candidate (section 4).
+- **What follows for the reads:**
+  - On this panel the class's unweighted null maxima are large relative to every member's
+    in-sample Sharpe, and the model stream's own null is too. **So every L90 a submission can
+    get is negative** (the class maximum's is −0.558, and a lower-ranked member's is lower still).
+  - **R1 (realised ≥ L90) is therefore expected to hold** for most submissions, and it is weakly
+    informative: a negative bound holds whenever the realised Sharpe is not very negative.
+  - **R2 (closeness) and R3 (stated expectations, in-sample) carry the cell.**
+- **No rule changes.**
+
+**The precompute is pinned:** `runs/etf_recent/2026-10-11/precompute/manifest.json`, SHA-256
+**`78583e9b2fdadad7ef64bb6cd1b08b0a0ca9879a15ea84f165a20d2e705b0ae2`** (BOX-ETF, `05642cf`). Every
+file the tools read is checked against it, and the launcher refuses on any mismatch.
+
 ## 1. The question
 
 On recent real data, how well do the gate's search-adjusted numbers describe what happened out
@@ -66,6 +100,19 @@ also in-sample reads of what the agent states (R3) and a money read (R4).
 - **Where:** on **the seat**, the subscription logged in on the laptop. Never EC2. **The
   author launches every session;** the agent writes the launcher and prints the command.
 - **Budget:** at most 60 turns per session.
+- **Execution: 4 sessions at a time on the seat** (`--workers 4`). **Parallelism is an execution
+  detail:**
+  - each session has its own registered seed, its own log and no shared state;
+  - each worker process loads the pinned precompute read-only;
+  - the session list and the order of seeds are fixed in advance (section 11), whatever the
+    number of workers.
+  - **A rate-limit or transient error** (the model service's error, not the agent's behaviour)
+    is retried on the same session and the same seed. It is not counted as a new session.
+    - At most 5 attempts, with backoff.
+    - Each failed attempt's events are kept in that session's log under `retried_attempts`.
+    - If the retries run out, the session is recorded `no_submit` with the error, and it is not
+      replaced.
+  - **A `no_submit` is never retried and never replaced.**
 - **`no_submit`:** a session that ends without `confirm`, at 60 turns or by stopping, is
   `no_submit`. It is counted and reported in every read's denominator, and **never replaced**
   (the author, 2026-10-11).
@@ -314,6 +361,10 @@ model-stream submissions where both occur.
 - **Joint holdout bootstrap:** 723000. **R3's session bootstrap:** 723001. Block 723000–723099.
 - **The smoke** (five sessions, cost only): block 723100–723199. Master 723100 for its session
   seeds.
+  - **Smoke sessions** run on those dedicated seeds only, write only to a directory named
+    `*smoke*`, and use the same launcher.
+  - **They are cost only:** never priced, never collected into the submission list, never graded,
+    never read. The collector and the pricing script refuse any smoke log.
 
 ## 12. Precompute, code and order (Part 3 of the brief)
 
