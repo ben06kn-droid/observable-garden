@@ -44,6 +44,13 @@ refused, and all three are graded** (the parent's section g).
 - Each submission's bound is **its own UNWEIGHTED L90**, as the cell's section 0 fixes. Its W2 L90
   is beside, labelled "recency-weighted, descriptive".
 
+**A fact from the committed logs** (the collection at `162e657`'s parent and `priced.json`'s
+integrity fields, `0d6f55d`; not a read):
+- 240 submissions, **all rules**. None submitted the model stream.
+- **Every session called the model stream (`baseline_model()`) before submitting.** So the cell's
+  registered flag, "a non-grammar look (the model stream) was taken", is on every replay verdict
+  (the cell's section 6).
+
 **Also computed, descriptive, never deciding:**
 - the equal-weight books of all submissions and of each arm (for the cell's R4);
 - the 2026-only realised Sharpe of every item.
@@ -87,12 +94,13 @@ refused, and all three are graded** (the parent's section g).
 - the 2026-09-22 fetch may supply a last bar, used only to close a position;
 - if SPY dies, nothing runs, and the author is asked.
 
-**What the records show:** the cut record counts 444 holdout dates for every one of the 38 ETFs,
-so **no death and no gap is expected in the window.**
+**What the records show:** the fetch's cut record (`ad233e7`) counts 444 holdout dates, from the
+dates alone, for every one of the 38 ETFs. **It shows no gap and no death in the window.**
 
-**The grader refuses on any missing or null holdout value.** If that happens, nothing is graded.
-The death rule's implementation is then added, and tested, by a dated amendment and its code
-commit, before any holdout value is computed.
+**The grader refuses on any missing or null holdout value,** and on any fetched holdout date not
+in the session list (section 8). If that happens, nothing is graded. **The death rule's
+implementation is added only then** (the author, 2026-10-11): by a dated amendment and its tested
+code commit, before any holdout value is computed.
 
 ## 5. Checks before any holdout value (the grader refuses on any failure)
 
@@ -148,15 +156,19 @@ compounded net return beside.
 (the three objects, the 240 submissions and the three books), with sessions held fixed.
 - B = 10,000.
 - The block length is the class rule on the holdout's demeaned base feature columns.
-- **The seed is 723000,** as the cell's section 9 registered it (`seed_block_check`: NO
+- **The seed is 723000,** as the cell's live section 9 fixes it (`seed_block_check`: NO
   COLLISION).
+  - The reviewer's request for a fresh block was wrong and is withdrawn (the author, 2026-10-11).
+  - **The panel's reserved 721010–721019** ("the grading", its section i) **are recorded as
+    reserved and unused.**
 - `grades.json` carries the replicate matrices (B × items, float32), so the cell's readers can
   compute every joint interval without the holdout.
 
-**Nothing is read here.**
-- The objects' reader (`experiments/read_etf_recent_grade.py`) prints the three objects' branches
-  once, after the grades are committed.
-- The cell's R1–R4 are read once, in order, by the cell's reader, under the cell's registration.
+**Nothing is read here.** After `grades.json`, the grading log and the run record are committed,
+**the reads run in one sitting, each once, each committed unedited** (the author, 2026-10-11):
+1. **first,** the panel's three objects (`experiments/read_etf_recent_grade.py`);
+2. **then,** the cell's R1–R4, in order (`experiments/read_agent_cell_etf_recent.py`), under the
+   cell's registration.
 
 ## 7. What 444 rows can tell (detectability, restated)
 
@@ -199,12 +211,17 @@ the host's 32 vCPU. No oversubscription. This is fixed here.
 - **The joint bootstrap,** 10,000 × 246 items × 444 rows: a few minutes.
 - **The cap:** stop and ask at **2 host-hours** from the grader's start.
 
-**The host environment.** The grader lists the holdout sessions with `exchange_calendars`, which
-is not in `.venv-grading`.
-- It is installed there with `uv … --no-deps` at the fetch's pins: `exchange_calendars` 4.13.2
-  and tzdata 2026.4, plus its pure-Python dependencies.
-- Then numpy 2.5.3, scipy 1.18.1, LightGBM 4.7.0 and Python 3.14.2 are checked unchanged before
-  the grader runs (the operator sheet).
+**The host environment: no package is installed into `.venv-grading`** (the author, 2026-10-11).
+- **The holdout session list** (XNYS, from the first session on or after 2025-01-01 to the cut
+  record's last fetched session) is written on the host by `data.etf_recent_sessions`, run with
+  `~/venv-fetch`. That environment has exchange_calendars 4.13.2 and tzdata 2026.4, the fetch's
+  pins. It writes a small JSON and prints its SHA-256.
+- **The grader never imports exchange_calendars.** It reads that file, pinned by SHA-256 on its
+  command line, and checks it:
+  - against the cut record: the first session is 2025-01-02, the last is the last fetched
+    session, and the count equals the date-counted holdout rows, 444;
+  - against every ETF's fetched holdout dates: none missing, none extra.
+- **The file's hash is recorded in `grades.json`.**
 
 ## 9. Custody
 
@@ -225,19 +242,22 @@ is not in `.venv-grading`.
   depend on any priced value beyond restating that the bounds are negative. That was known from
   the precompute before any session.
 
-## [AUTHOR] points
+## The author's decisions (2026-10-11)
 
-1. **Seeds.** Your brief asked for a fresh, checked block. But the cell's live registration
-   (section 9) already fixes 723000 for the joint holdout bootstrap, and the grader uses it. A
-   fresh block would need an amendment to the cell.
-   - Proposed: keep 723000.
-   - Record that the panel's reserved 721010–721019 ("the grading", its section i) are unused.
-2. The thread setting: 4 × 8 (section 8).
-3. The 2-host-hour cap.
-4. Installing `exchange_calendars` into `.venv-grading` with `--no-deps`, and checking the pinned
-   versions unchanged (section 8). Or keep it out of `.venv-grading` by having the cut-side session
-   list written by `~/venv-fetch` first. That would need a small grader change.
-5. The death rule (section 4): refuse and amend if it is ever needed, rather than implement it
-   now. The records show no gap.
-6. Whether the objects' reader runs right after the grades are committed, before the cell's
-   R1–R4, or together with them.
+1. **Seed 723000 stays,** as the cell's live registration fixes it. The reviewer's request for a
+   fresh block was wrong. 721010–721019 are recorded as reserved and unused.
+2. **Threads 4 × 8. The cap is 2 host-hours.**
+3. **No package is installed into `.venv-grading`.**
+   - The holdout session list is written on the host by `~/venv-fetch` to a small JSON, which is
+     hashed.
+   - The grader reads it, checks it against the fetched rows' dates and the cut record, and
+     records the hash.
+   - The grader does not import exchange_calendars.
+4. **The death rule:** refuse, and amend only if a gap appears. The fetch's record shows none in
+   the window.
+5. **The reads after grading, in one sitting, each committed unedited:** the panel's three objects
+   first, then the cell's R1–R4, in order.
+6. **Recorded as a fact from the committed logs, not a read:**
+   - 240 submissions, all rules, none the model's stream;
+   - every session called the model's stream before submitting, so the registered flag is on
+     every replay verdict.
