@@ -6,7 +6,7 @@ French step 0 is `experiments/french_step0.py` (`2c0f25b`) under the French grad
 
 ## Setup
 
-- **Box:** c7a.48xlarge (og-48, 3.18.223.195). It came up at about 04:28 UTC.
+- **Box:** c7a.48xlarge (<compute-box>, <ip>). It came up at about 04:28 UTC.
 - **French step 0's laptop reference** was made before the session (in-sample only):
   `runs/french_step0/2026-10-09/reference.json` and `ref_positions.npy`.
 - **Copied to the box:** the French in-sample CSV, the pinned French X and the reference.

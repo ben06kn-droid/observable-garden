@@ -31,7 +31,7 @@ Its section 6 fixes the pricing.
 - **A test shows 1 and 3 workers give a byte-identical priced record, replay tier included.** It
   changes wall time only.
 
-**The box run** (`og-48`, `i-0e0c1484de3c755ad`, IP 18.218.8.60):
+**The box run** (`<compute-box>`, `<compute-box>`, IP <ip>):
 - **Booted** 02:50:20 UTC (21:50:20 CDT). The 1-box-hour stop-and-ask mark was 22:50 CDT.
 - **The checkout of `162e657`** was blocked by BOX-ETF's own outputs, left untracked on the box:
   - `pins.json` `76b49b4e…`;
@@ -52,7 +52,7 @@ Its section 6 fixes the pricing.
 - **The fetch:** both `rsync`s exited 0. SHA-256s are identical on the box and the laptop:
   - `priced.json` `388cc6f2636fcbab6a007335e76b6cc2b3dd5f529c82edf0f1c410f5aedf37c7`;
   - `price.log` `1623c72037f025da298ad472702b3f3fd0ebbc3e2d02a4e56c9cf2a08de7133a`.
-- **The stop:** `ssh og-48 'sudo shutdown -h now'` at **22:07:18 CDT**. By 22:08:13 CDT ssh timed
+- **The stop:** `ssh <compute-box> 'sudo shutdown -h now'` at **22:07:18 CDT**. By 22:08:13 CDT ssh timed
   out. The box was up about 17 minutes.
 
 ## Integrity fields of priced.json (no priced value read)

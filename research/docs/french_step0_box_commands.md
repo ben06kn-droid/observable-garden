@@ -23,10 +23,10 @@ This is a stated departure, as the ETF in-sample copy was: only the in-sample CS
 pinned X are copied. No holdout row exists in either.
 
 ```
-scp data/raw/french_insample/french49_vw_daily.csv og-48:observable-garden/data/raw/french_insample/
-scp data/pinned/french49_X.npy og-48:observable-garden/data/pinned/
-scp -r runs/french_step0/<date> og-48:observable-garden/runs/french_step0/
-ssh og-48 'cd ~/observable-garden && \
+scp data/raw/french_insample/french49_vw_daily.csv <compute-box>:observable-garden/data/raw/french_insample/
+scp data/pinned/french49_X.npy <compute-box>:observable-garden/data/pinned/
+scp -r runs/french_step0/<date> <compute-box>:observable-garden/runs/french_step0/
+ssh <compute-box> 'cd ~/observable-garden && \
   echo "1547da6fe357bab194a22ce04ff80effc45ed61c6955325b179213be0b87c04e  data/raw/french_insample/french49_vw_daily.csv" | sha256sum -c && \
   echo "07488718c8c48b6d872c580f1dc3a3c0e87fb8a4c6403131b0beddd55ea3d3fc  data/pinned/french49_X.npy" | sha256sum -c'
 ```
@@ -34,9 +34,9 @@ ssh og-48 'cd ~/observable-garden && \
 ## 3. Box: the comparison (Linux LightGBM pin)
 
 ```
-ssh og-48 'cd ~/observable-garden && OMP_NUM_THREADS=1 .venv/bin/python -m experiments.french_step0 compare \
+ssh <compute-box> 'cd ~/observable-garden && OMP_NUM_THREADS=1 .venv/bin/python -m experiments.french_step0 compare \
     --out runs/french_step0/<date> --reference runs/french_step0/<date>/reference.json'
-rsync -avz og-48:observable-garden/runs/french_step0/ runs/french_step0/
+rsync -avz <compute-box>:observable-garden/runs/french_step0/ runs/french_step0/
 ```
 
 It prints PASS or FAIL against the draft's Option A tolerances, and the refit and

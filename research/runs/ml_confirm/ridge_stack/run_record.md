@@ -6,7 +6,7 @@ read.
 
 ## The run
 
-- **Box:** c7a.48xlarge (ssh alias og-48, 18.225.7.169), 192 vCPU.
+- **Box:** c7a.48xlarge (ssh alias <compute-box>, <ip>), 192 vCPU.
 - **Code:** HEAD `9f3ba9edbad088a053a3ef09390bf9ee9ba94efd`, equal to EXPECT, checked on the
   box after the pull. The tree was clean and the registration is an ancestor of HEAD.
 - **Environment:** Python 3.14.7, numpy 2.5.3.

@@ -58,7 +58,7 @@ N_SEARCHERS = 6
 BINS = (0.5, 1.0, 1.5, 2.0)
 AGENT_N = 20
 REPLICATION_LAUNCH = (
-    "ssh og-48 'cd ~/observable-garden && git pull --ff-only && cloud/run.sh curve_rep "
+    "ssh <compute-box> 'cd ~/observable-garden && git pull --ff-only && cloud/run.sh curve_rep "
     "bash -c \"echo commit \\$(git rev-parse HEAD); exec python -m experiments.planted_edge "
     "--replication --draws 2000 --workers 191\" && tmux new-session -d -s "
     "selfstop_after_curve_rep \"while tmux has-session -t '=curve_rep' 2>/dev/null; do "

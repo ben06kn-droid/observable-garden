@@ -235,7 +235,7 @@ everything". That is reported with the result.
     tier 17 s at B = 1,000, and replay verdict 86 s on the laptop. They are scaled by
     the ETF panel's longer T (4,276 against 3,019 days). The class table is built once
     per worker and reused.
-- **Grading:** minutes on the holdout host (c7a.8xlarge `i-0886a189b85d4d051`): one
+- **Grading:** minutes on the holdout host (c7a.8xlarge `<holdout-host>`): one
   feature build and 80 gradings.
 - No seat cost.
 
@@ -350,13 +350,13 @@ reported as "not shown", never as "holds well".
 host. No step decrypts anything: grading reads only the primary copy, in place. The
 second copy exists (the deviation of 2026-10-06 was withdrawn at `06c5b71`) and is not
 used.
-1. **Start the holdout host** `i-0886a189b85d4d051` in the EC2 console. Note its address
+1. **Start the holdout host** `<holdout-host>` in the EC2 console. Note its address
    `<HOST_IP>`.
 2. **Log in:** `ssh -i <KEY> ubuntu@<HOST_IP>`.
 3. **First, before anything else: check the primary copy's content hash.**
 
    ```
-   cd /home/ubuntu/etf/data/raw/etf/holdout
+   cd <home>/etf/data/raw/etf/holdout
    ls -1 | wc -l                                  # must print 40
    ls -1 | sort | sha256sum                       # compare: 385a11f0f29371de85f552350b4277498a48e39bbeff27440fa92b9cbf46e28d
    sha256sum $(ls -1 | sort) | sha256sum          # MUST print 8d92a7b2f527dd619a3944fb248bccc769e26ad99b38d1336fef34dffab031c8
@@ -368,11 +368,11 @@ used.
    deviation. (The registration gives only the content command. The file-list command
    is a cross-check only.)
 4. **Find the repository and a working Python environment, without touching the
-   holdout directory.** `find` stops three levels below `/home/ubuntu`, and the holdout
+   holdout directory.** `find` stops three levels below `<home>`, and the holdout
    directory is five levels down, so it is never entered.
 
    ```
-   find /home/ubuntu -maxdepth 3 -name .git -type d 2>/dev/null       # candidate repositories
+   find <home> -maxdepth 3 -name .git -type d 2>/dev/null       # candidate repositories
    git -C <CANDIDATE> remote get-url origin                           # must be ...ben06kn-droid/observable-garden(.git)
    ```
 
@@ -402,7 +402,7 @@ used.
    repository to G:
 
    ```
-   ls /home/ubuntu/etf/data/raw/etf/insample/*.csv | wc -l           # must print 40
+   ls <home>/etf/data/raw/etf/insample/*.csv | wc -l           # must print 40
    cd <HOST_REPO>
    git fetch origin
    git checkout --detach 55a39f694bda0fdaca6a5f834be96f621eb6c11b
@@ -417,8 +417,8 @@ used.
 
    ```
    $PY -m experiments.grade_real --preflight \
-       --insample /home/ubuntu/etf/data/raw/etf/insample \
-       --holdout /home/ubuntu/etf/data/raw/etf/holdout \
+       --insample <home>/etf/data/raw/etf/insample \
+       --holdout <home>/etf/data/raw/etf/holdout \
        --submissions runs/holdout_grading/submissions.json \
        --submissions-sha256 0199f654250bb81dfb12fb6fa2f27891a34f33a2fdd0a1d3cef6f1531ccc9539 \
        --sealed-commit c4272ab7eb86491b9b6b58171b06514fd6f50b4f \
@@ -442,8 +442,8 @@ used.
 
    ```
    $PY -m experiments.grade_real \
-       --insample /home/ubuntu/etf/data/raw/etf/insample \
-       --holdout /home/ubuntu/etf/data/raw/etf/holdout \
+       --insample <home>/etf/data/raw/etf/insample \
+       --holdout <home>/etf/data/raw/etf/holdout \
        --submissions runs/holdout_grading/submissions.json \
        --submissions-sha256 0199f654250bb81dfb12fb6fa2f27891a34f33a2fdd0a1d3cef6f1531ccc9539 \
        --sealed-commit c4272ab7eb86491b9b6b58171b06514fd6f50b4f \
@@ -591,15 +591,15 @@ reader labels R-d in the same words.
 ## Operator record, 2026-10-06 (America/Chicago), about 23:17–23:22
 
 Reported by the author, who carried out the operator steps by hand.
-- **Host:** `i-0886a189b85d4d051` (c7a.8xlarge), address 3.141.165.136.
+- **Host:** `<holdout-host>` (c7a.8xlarge), address <ip>.
 - **Step 3:** 40 files. **Content hash
   `8d92a7b2f527dd619a3944fb248bccc769e26ad99b38d1336fef34dffab031c8`. Match.**
-- **Step 4:** `<HOST_REPO>` = `/home/ubuntu/observable-garden`.
+- **Step 4:** `<HOST_REPO>` = `<repo>`.
   - Its `.venv` had python 3.14.7 (numpy 2.5.3, pandas 3.0.5, scipy 1.18.1), not the
     pinned 3.14.2.
   - So the pinned environment was created as registered: `.venv-grading`, python
     3.14.2, the same library pins.
-  - `<PY>` = `/home/ubuntu/observable-garden/.venv-grading/bin/python`.
+  - `<PY>` = `<repo>/.venv-grading/bin/python`.
 - **Step 5:** the checkout of G first aborted (the deviation below). Then HEAD =
   `55a39f694bda0fdaca6a5f834be96f621eb6c11b`, the tracked tree was clean, and the
   manifest was present.

@@ -5,11 +5,11 @@
   this run only." EXPECT = d36d1e773043be5a3932c27d145b5969f58a8019.
 - **EXPECT was checked before anything started on the box:** it is the tip of main, locally
   and on origin, with a clean tree.
-- **Box IP 77.113.76.110.** The agent queried it as not looking like an AWS address. The
+- **Box IP <ip>.** The agent queried it as not looking like an AWS address. The
   author confirmed it was the box's public IP. Checked on connect: the repository was at
   round 1's EXPECT (5bf5b43), and the pool manifest carried round 1's box hashes (G
   541a1842...). Linux x86_64, 192 vCPU.
-- **Box:** og-48, up since 2026-10-11 01:07:27 UTC; stopped with `sudo shutdown -h now` at
+- **Box:** <compute-box>, up since 2026-10-11 01:07:27 UTC; stopped with `sudo shutdown -h now` at
   02:36:31 UTC (stop, not terminate). About 89 box minutes.
 
 ## Steps

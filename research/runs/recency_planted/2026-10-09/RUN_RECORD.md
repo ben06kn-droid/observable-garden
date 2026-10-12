@@ -11,7 +11,7 @@
   - The amendment commit was created and pushed by a tool call the session reported as
     rejected. It was found already committed and pushed, checked to appear once, and not
     repeated.
-- **Box:** og-48 (c7a.48xlarge, 192 vCPU, 369 GB), IP 18.223.134.213. Up since 23:24:54 UTC;
+- **Box:** <compute-box> (c7a.48xlarge, 192 vCPU, 369 GB), IP <ip>. Up since 23:24:54 UTC;
   stopped with `sudo shutdown -h now` at 00:33:53 UTC (stop, not terminate). About 69 box
   minutes.
 

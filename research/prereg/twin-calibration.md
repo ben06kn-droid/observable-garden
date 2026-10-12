@@ -409,7 +409,7 @@ The score-rank cell's live patch names the code commit that includes this.
 **`ce4bc21e64b47d09714308560fa25f39540714dcfba6fb89ab3ee2d34e69df2a`** (the SHA-256 of
 `sha256sum *.csv`'s output, one `hash  filename` line per file in name order),
 identical on both machines — was copied by `rsync` from the laptop to an EC2
-c7a.48xlarge (x86_64, instance `i-0e0c1484de3c755ad`) on 2026-10-02, together with
+c7a.48xlarge (x86_64, instance `<compute-box>`) on 2026-10-02, together with
 `data/pinned/etf_features_X.npy`, whose SHA-256 the box computed as
 `4b4610704db0042c514c8ee4f230b239942d4b15be87d07188be3f0e7600b7ba`, the registered value.
 
@@ -460,7 +460,7 @@ with no rebuild; returns and costs come from the 40 in-sample CSVs, combined SHA
 | levels | **0** (unplanted; every member's population Sharpe negative) and **1.0** (the planted member's population net Sharpe) |
 | K | **19 per construction**; α = 0.05 the only attainable level |
 | code | `experiments/planted_twins.py --cell score` and `environments/planted_panel.py` at **`a3ac38b`** (the score cell's code is unchanged since `c5e3860`; the box smoke ran at `a3ac38b`) |
-| platform | **x86_64, EC2 c7a.48xlarge** (instance `i-0e0c1484de3c755ad`), Ubuntu 26.04, Python 3.14.7, numpy 2.5.3; every record carries its platform, and the launch writes the checked-out commit hash to the log |
+| platform | **x86_64, EC2 c7a.48xlarge** (instance `<compute-box>`), Ubuntu 26.04, Python 3.14.7, numpy 2.5.3; every record carries its platform, and the launch writes the checked-out commit hash to the log |
 | workers | **191**, under `cloud/run.sh` (one BLAS thread per process) |
 
 **Measured cost on this box** (smoke on 985000–985190, 191 panels, 191 workers;
@@ -599,7 +599,7 @@ pooled power at α = 0.05 of 0.4391, against 0.2035 at 1.0 and 0.0484 at 0.5). T
 choice was made by the stage-1 read alone, before this cell has any data. The cell's
 levels are therefore **0 and 1.5**.
 
-**On the box.** The cell runs on the c7a.48xlarge (`i-0e0c1484de3c755ad`, x86_64,
+**On the box.** The cell runs on the c7a.48xlarge (`<compute-box>`, x86_64,
 shutdown behaviour Stop) at **191 workers**. At about 1.5 GB per worker (39 streams of
 a chunk, plus 39 count matrices) that is about 290 GB of 369. The box smoke records the
 real peak.

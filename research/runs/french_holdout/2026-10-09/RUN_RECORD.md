@@ -5,13 +5,13 @@
 - Checklist: `docs/french_holdout_checklist.md` at 1057820637cdc5bf33fca719ff96f201df8c9f21
 - Author's go: given 2026-10-09 in session (both runs back to back; host steps [H] run by
   the author in their own terminal, laptop steps [L] by the agent).
-- Holdout host: i-0886a189b85d4d051 (c7a.8xlarge), IP 18.216.184.59 (ssh alias og-holdout).
+- Holdout host: <holdout-host> (c7a.8xlarge), IP <ip> (ssh alias <holdout-host>).
 
 ## Steps
 
 1. [L] G is on origin/main (checked 2026-10-09 06:01:49 UTC). LIVE and G recorded above.
 2. [author] Host started; IP sent.
-3. [L] Zip copied to og-holdout:~/french_holdout/ at 06:01:51 UTC (laptop SHA-256 before
+3. [L] Zip copied to <holdout-host>:~/french_holdout/ at 06:01:51 UTC (laptop SHA-256 before
    the copy: 8f394fe34bea54d41b9aafed410425ee8f8e252ede3c71a7c1cd20bab83040de). The laptop
    copy is kept until ZIP-DELETE.
 4. [H] The author ran the zip's sha256sum check on the host and saw OK. The output was
@@ -48,5 +48,5 @@
 11. [L] Only grades.json fetched at 06:19:10 UTC (SHA-256 8d3dd68d3ac96e5e4fde906769bf897644cb7fcbcb110ad9d4e5d56fe92c0246). Committed with this record before the read.
 12. [L] Read once (`read.txt`), committed unedited at fa1e13c0494d3fc7b476d7dfc75208532927d0a5 and pushed.
 13. The author stopped the holdout host (stop, not terminate). At 06:21:50 UTC ssh to
-    18.216.184.59 timed out. The holdout CSV and the zip stay on the stopped host's disk
+    <ip> timed out. The holdout CSV and the zip stay on the stopped host's disk
     (~/french_holdout/); no copy exists elsewhere.

@@ -5,7 +5,7 @@
     python data/fetch_etf.py export     # 2005-2022 for the agent's machine; 2023-2025 stays
 
 Registered in `prereg/agent-on-real-data.md` and `prereg/etf-universe.md`. **This
-runs on the holdout host, the c7a.8xlarge `i-0886a189b85d4d051`, and nowhere
+runs on the holdout host, the c7a.8xlarge `<holdout-host>`, and nowhere
 else.** The
 agent harness never runs there, and the agent's machine never fetches.
 
@@ -50,7 +50,7 @@ IN_SAMPLE_END = dt.date(2022, 12, 31)
 FIRST_SESSION = dt.date(2005, 1, 3)
 MIN_MEDIAN_SHARE_VOLUME = 500_000
 MIN_PANEL = 30
-HOST = "c7a.8xlarge i-0886a189b85d4d051"
+HOST = "c7a.8xlarge <holdout-host>"
 NY = ZoneInfo("America/New_York")
 
 

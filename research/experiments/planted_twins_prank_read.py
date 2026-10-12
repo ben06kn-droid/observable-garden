@@ -35,7 +35,7 @@ P_REJECT = 1 / 20
 K_FIRES = 64
 CONSTRUCTIONS = ("joint_time_permutation", "block_permutation")
 REPLICATION_LAUNCH = (
-    "ssh og-48 'cd ~/observable-garden && git pull --ff-only && cloud/run.sh prank_rep "
+    "ssh <compute-box> 'cd ~/observable-garden && git pull --ff-only && cloud/run.sh prank_rep "
     "bash -c \"echo commit \\$(git rev-parse HEAD); exec python -m experiments.planted_twins "
     "--cell prank --planted 1.5 --replication --draws 1000 --workers 191\" && tmux "
     "new-session -d -s selfstop_after_prank_rep \"while tmux has-session -t "

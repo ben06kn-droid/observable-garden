@@ -5,7 +5,7 @@
   and the registration as an ancestor.
 - Author's go: given 2026-10-09 in session, option (a): the agent runs the box commands
   over ssh, for this session only.
-- Box: og-48 (c7a.48xlarge, 192 vCPU), IP 3.144.69.189. Up since 05:45:26 UTC (`uptime -s`).
+- Box: <compute-box> (c7a.48xlarge, 192 vCPU), IP <ip>. Up since 05:45:26 UTC (`uptime -s`).
   Stopped with `sudo shutdown -h now` at 06:35:20 UTC (stop, not terminate). About 50 box
   minutes.
 
@@ -52,7 +52,7 @@ box session, one rsync call per file.
 
 ## Logs fetched, 2026-10-09 23:28 UTC (the recency planted box session)
 
-The box was restarted at 18.223.134.213. The three logs were fetched one rsync call each:
+The box was restarted at <ip>. The three logs were fetched one rsync call each:
 - **rsync exit status:** v2c_smoke 0, v2c_run 0, v2c_dry 0.
 - **SHA-256:**
   - `logs/v2c_smoke.log` 0fb3e4413c74725e273c32631dfd27cc899deb199cfce429d3b0c19a8f62540c (29,645 bytes);

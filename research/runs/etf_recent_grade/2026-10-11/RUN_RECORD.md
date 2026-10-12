@@ -4,7 +4,7 @@
 is set at `3df6bbe`, and the session-list change is at `31b3b2c`.
 **Its parents:** the panel (`310225c`) and the cell (`00c7af1`). `grades.json` records all three.
 **The sheet:** `docs/etf_recent_grading_sheet.md` (HOST-2), G = `31b3b2c`.
-**The host:** `og-holdout` (`i-0886a189b85d4d051`), IP 18.226.60.15, up at about 22:47 CDT (the
+**The host:** `<holdout-host>` (`<holdout-host>`), IP <ip>, up at about 22:47 CDT (the
 author's message).
 **Every host command was run by the author, in his own terminal.** The agent ran only the
 shutdown. It had no permission to `tail` for this session and did not.
@@ -71,7 +71,7 @@ shutdown. It had no permission to `tail` for this session and did not.
     bytes;
   - `etfg.log` `1884d34c6218663a062bfcf3bd3ea61029d8702e00ae693a34dc71246c2b7259`.
 - **The stop:** the author said "host work done". The agent ran
-  `ssh og-holdout 'sudo shutdown -h now'` at **22:57:23 CDT**. By 22:58:18 CDT ssh timed out.
+  `ssh <holdout-host> 'sudo shutdown -h now'` at **22:57:23 CDT**. By 22:58:18 CDT ssh timed out.
 - **Stayed on the host:** the raw fetch, every 2025+ row, `holdout_sessions.json`, the cut CSVs,
   the zip and the 2020+ French holdout.
 

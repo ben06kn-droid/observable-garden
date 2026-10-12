@@ -2,7 +2,7 @@
 
 **The registration:** `prereg/french-long-history.md`, live at `756af89`.
 **The script:** `data/french_long_split.py` (blob `ddaad1cd…`, last changed at `dab1ac0`).
-**Run by the author** on the holdout host (`i-0886a189b85d4d051`, IP 3.138.193.165), in his own
+**Run by the author** on the holdout host (`<holdout-host>`, IP <ip>), in his own
 terminal. No agent session ran on the host.
 
 ## Deviation: a first pass on the old commit
@@ -24,7 +24,7 @@ terminal. No agent session ran on the host.
 - `git status --porcelain --untracked-files=no | wc -l`: `0`. This was run after the cut, not
   captured right after the checkout. The cut writes only under `~/french_long`, outside the
   repository.
-- The zip check (`sha256sum -c`): `/home/ubuntu/french_holdout/49_Industry_Portfolios_daily_CSV.zip: OK`.
+- The zip check (`sha256sum -c`): `<home>/french_holdout/49_Industry_Portfolios_daily_CSV.zip: OK`.
 - The cut: `b1: 17084 rows 19260701 .. 19891229; SHA-256 c380c3eaa578734a4de8c019220b5babce9c2e6adc3f7a6175a68999d4910693; record b1_insample.cut.json; no value printed`.
 
 **The cut line appeared twice in the author's terminal. Not explained.**

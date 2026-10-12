@@ -4,12 +4,12 @@
 (`1fcbfc2`) and 2 (`27e8a10`).
 **The sheet:** `docs/french_long_operator_sheets.md`, BOX-B1, as written at EXPECT.
 **The go:** the author's, for this run only. EXPECT = `ca4b68616124f37f8df60f2279d2edcb1afb6df4`.
-**The box:** `og-48` (`i-0e0c1484de3c755ad`), IP 3.139.101.168. Started by the author at 07:58
+**The box:** `<compute-box>` (`<compute-box>`), IP <ip>. Started by the author at 07:58
 CDT (12:58 UTC). The stop-and-ask time was 09:58 CDT.
 
 ## Steps
 
-1. `og-48`'s HostName was set to 3.139.101.168, and ssh connected. `origin/main` was already at
+1. `<compute-box>`'s HostName was set to <ip>, and ssh connected. `origin/main` was already at
    EXPECT, so there was nothing to push.
 2. Both cut files were copied to `~/french_long/`. `sha256sum` of the CSV on the box gave
    `c380c3eaa578734a4de8c019220b5babce9c2e6adc3f7a6175a68999d4910693`.
@@ -60,7 +60,7 @@ CDT (12:58 UTC). The stop-and-ask time was 09:58 CDT.
       there were no credentials.
     - **The box was stopped by the author**, with his own credentials. He reported it
       "stopped" at 10:42 CDT (15:42 UTC); he did not give the exact stop time. At 10:42 CDT
-      ssh to 3.139.101.168 timed out.
+      ssh to <ip> timed out.
     - It was not stopped with `shutdown -h`.
     - **Box time:** from 07:58 CDT to the stop, at most about 2.7 box-hours. The run took 0.9
       of them (08:03 to 08:58 CDT). The box sat idle from 08:58 CDT, after the fetch, until the

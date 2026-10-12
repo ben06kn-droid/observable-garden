@@ -5,7 +5,7 @@
 **The sheet:** `docs/etf_recent_operator_sheets.md`, BOX-ETF, as written at EXPECT.
 **The go:** the author's, for this run only:
 - EXPECT = `47e63cacec9f1c818e50bf3beafc4441b1090443`;
-- IP 18.218.179.102;
+- IP <ip>;
 - D = 2026-10-11;
 - box started at 6:18, taken as 18:18 CDT. `uptime -s` gives 23:17:57 UTC, which is 18:17:57
   CDT. **The 1-box-hour cap was 19:18 CDT.**
@@ -14,7 +14,7 @@
 
 ## Steps
 
-- **1.** `og-48`'s HostName set to 18.218.179.102. It is the same instance (`ip-172-31-43-36`).
+- **1.** `<compute-box>`'s HostName set to <ip>. It is the same instance (`<compute-box>`).
 - **0a.** 48 GB disk, 35 GB used, 13 GB free. In `data/planted_cache/`:
   - `fast_7c02af63f340181d`, 21 GB;
   - `fast_64b2439bdc05fe7f`, 3.7 GB;
@@ -66,7 +66,7 @@
   `class_scored.npy` at 1,655,326,848 bytes, `class_stats.npz`, `base_columns.npy`). The
   manifest's own SHA-256 equals `results.json`'s `precompute` entry.
   After the run the box was still at EXPECT, with 0 tracked changes.
-- **10.** `ssh og-48 'sudo shutdown -h now'` at **18:34:01 CDT** (exit 0). By 18:34:56 CDT ssh
+- **10.** `ssh <compute-box> 'sudo shutdown -h now'` at **18:34:01 CDT** (exit 0). By 18:34:56 CDT ssh
   timed out. The box was up about 16 minutes, well inside the cap.
 
 ## Process fields from results.json and pins.json (no statistic read)

@@ -303,7 +303,7 @@ The rest of this file's draft stays a draft. This commit is pre-registration onl
 | grid | s = −1.00, −0.95, …, 3.00 (81 points); H = 5 |
 | code, by file | `experiments/confidence_cell.py` `a64ca42`; `experiments/confidence_cell_read.py` `ec6d8ae`; `quixote/confidence.py` `93393f7`; `environments/planted_panel.py` `c5e3860`; `experiments/planted_edge.py` `87b70e2` (only `StreamCache`, `_searchers`, `_sharpe`, `_sharpe_rows` and `peak_rss_mb` are imported); `environments/class_table.py` `6e7f538`; `estimator/bootstrap.py` `063416a`; `searchers/meta_adaptive.py` `761e64d`; `experiments/_resume.py` `d8fb254` |
 | launch | `cloud/run.sh` `8e923c5` (exact-match tmux targets); `cloud/wait_fetch_stop.sh` `6f55a07` (results fetched before the stop) |
-| platform | x86_64, EC2 c7a.48xlarge (`i-0e0c1484de3c755ad`), shutdown behaviour **Stop**. Every record carries its platform, and the launch writes the commit hash to the log. |
+| platform | x86_64, EC2 c7a.48xlarge (`<compute-box>`), shutdown behaviour **Stop**. Every record carries its platform, and the launch writes the commit hash to the log. |
 | workers | **191** |
 
 **Box smoke, the sizing measurement:**

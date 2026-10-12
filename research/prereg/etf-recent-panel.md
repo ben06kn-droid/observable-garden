@@ -195,7 +195,7 @@
 
 ## f. Custody
 
-1. **One fetch, on the holdout host, by the author** (`i-0886a189b85d4d051`).
+1. **One fetch, on the holdout host, by the author** (`<holdout-host>`).
    - **The source is that of the old fetch:** Yahoo's chart endpoint
      `query1.finance.yahoo.com/v8/finance/chart`, by `curl`, with interval 1d, events div and
      split, and adjusted close (`data/fetch_etf.py:76-82`). **Not yfinance.**

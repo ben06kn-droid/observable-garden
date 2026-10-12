@@ -25,7 +25,7 @@ D=$(date -u +%F)
   - Both are marked "(added)".
 
 1. **[L] Push G,** and record LIVE and G in the run record (`runs/french_holdout/$D/RUN_RECORD.md`).
-2. **[author] Start the holdout host,** `i-0886a189b85d4d051`, and send its IP. On the
+2. **[author] Start the holdout host,** `<holdout-host>`, and send its IP. On the
    laptop, set `HOST` to that address (ssh user `ubuntu`, the project key).
 3. **[L] Copy the zip to the host:**
 

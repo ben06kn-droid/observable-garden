@@ -89,7 +89,7 @@ computed, and the grader refuses if any fails.
 
 ## 4. Platform: the proposal
 
-**The problem.** The holdout host (`i-0886a189b85d4d051`) is Linux x86_64. The French X
+**The problem.** The holdout host (`<holdout-host>`) is Linux x86_64. The French X
 pin and the in-sample read are Darwin arm64, with the macOS LightGBM pin. The registration
 expects a Linux rebuild not to match the pin bit for bit. ridge_stack also has discrete
 steps: the penalty argmax over 192 grid points, the leave-one-year-out choice, and the
@@ -178,7 +178,7 @@ scored rows.
 
 **Decision:**
 - **Option A is adopted.** The grading platform is the Linux holdout host: the 6.5 holdout
-  host, `i-0886a189b85d4d051` (c7a.8xlarge). **The compute box is not used for grading.**
+  host, `<holdout-host>` (c7a.8xlarge). **The compute box is not used for grading.**
 - **Options A2 and B are not needed,** and are kept above as the record of what was
   considered.
 
@@ -248,7 +248,7 @@ lower bound.
 **Nothing runs without the author's go.**
 
 1. **[L] Push G,** and record LIVE and G in the run record.
-2. **[author] Start the holdout host,** `i-0886a189b85d4d051`, and send its IP. On the
+2. **[author] Start the holdout host,** `<holdout-host>`, and send its IP. On the
    laptop, set `HOST` to that address (ssh user `ubuntu`, the project key).
 3. **[L] Copy the zip to the host:**
 

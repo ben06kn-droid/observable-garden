@@ -230,7 +230,7 @@ the host's 32 vCPU. No oversubscription. This is fixed here.
 - The holdout rows are parsed only by the grader, on the host.
 - **Only `grades.json`, the grading log and the run record leave the host.** No holdout row,
   position or price does.
-- The host is stopped by the agent with `ssh og-holdout 'sudo shutdown -h now'`, only after the
+- The host is stopped by the agent with `ssh <holdout-host> 'sudo shutdown -h now'`, only after the
   author says the host work is done (the author's rule, 2026-10-11).
 
 ## 10. Disclosures

@@ -16,7 +16,7 @@ Placeholders, each filled in the go message for its step:
 - `D`: the date.
 
 **Stopping (the author's rule, 2026-10-11; it replaces that morning's "console only" wording).**
-- The agent stops the holdout host (`og-holdout`) and the compute box (`og-48`) itself, from the
+- The agent stops the holdout host (`<holdout-host>`) and the compute box (`<compute-box>`) itself, from the
   laptop, with exactly this command and nothing else: `ssh <alias> 'sudo shutdown -h now'`.
 - **On the holdout host, that is the only command the agent ever runs.** Every other host step
   is run by the author, in his own terminal.
@@ -30,7 +30,7 @@ Placeholders, each filled in the go message for its step:
 
 ## H1. The host cut for B1 (the author; about 10 minutes)
 
-1. [author] Start the holdout host (`i-0886a189b85d4d051`) and send its IP.
+1. [author] Start the holdout host (`<holdout-host>`) and send its IP.
 2. [H] `cd ~/observable-garden && git fetch origin && git checkout G1 && git rev-parse HEAD`
 3. [H] `git merge-base --is-ancestor LIVE HEAD && echo ancestor-ok`
 4. [H] `echo "8f394fe34bea54d41b9aafed410425ee8f8e252ede3c71a7c1cd20bab83040de  $HOME/french_holdout/49_Industry_Portfolios_daily_CSV.zip" | sha256sum -c`
@@ -40,7 +40,7 @@ Placeholders, each filled in the go message for its step:
 8. [L] `shasum -a 256 runs/french_long_cuts/b1_insample.csv` (it must equal the record's `csv_sha256`)
 9. [L] Commit the cut record (the JSON: counts, entry dates, hashes; no value). The CSV stays
    gitignored.
-10. [L] Once the author says the host work is done: `ssh og-holdout 'sudo shutdown -h now'`. Then
+10. [L] Once the author says the host work is done: `ssh <holdout-host> 'sudo shutdown -h now'`. Then
     confirm ssh no longer answers, and record the stop time.
 
 ## BOX-B1. The B1 in-sample read (one box session; stop and ask at 2 box-hours)
@@ -50,8 +50,8 @@ amendments and these corrections. EXPECT holds the committed cut record, and ste
 compares the box's copy with it. Before pricing, the runner writes `pins.json` and refuses
 on a cut-hash mismatch.
 
-1. [author] Start the compute box and send its IP. [L] Set `HostName` of `og-48` to it.
-2. [L] `ssh og-48 'mkdir -p ~/french_long' && scp runs/french_long_cuts/b1_insample.csv runs/french_long_cuts/b1_insample.cut.json og-48:french_long/`
+1. [author] Start the compute box and send its IP. [L] Set `HostName` of `<compute-box>` to it.
+2. [L] `ssh <compute-box> 'mkdir -p ~/french_long' && scp runs/french_long_cuts/b1_insample.csv runs/french_long_cuts/b1_insample.cut.json <compute-box>:french_long/`
 3. [BOX] `cd ~/observable-garden && git fetch origin && git checkout EXPECT && git rev-parse HEAD` (must equal EXPECT; if the checkout is blocked by untracked files that match committed blobs, move them aside and record them)
 4. [BOX] `git status --porcelain --untracked-files=no | wc -l` (must be 0)
 4a. [BOX] `cmp ~/french_long/b1_insample.cut.json runs/french_long_cuts/b1_insample.cut.json && echo record-identical`
@@ -61,9 +61,9 @@ on a cut-hash mismatch.
 5. [BOX] `echo "d23e922acd891e77212e4d0fbcee9ba973c96dee479491341d05ba595357ebb7  $HOME/$W" | sha256sum -c`
 6. [BOX] `OMP_NUM_THREADS=1 .venv/bin/pytest -q tests/test_french_long_panel.py tests/test_french_long_read.py tests/test_read_french_long.py tests/test_recency.py`
 7. [BOX] `THREADS=32 cloud/run.sh fl_b1 python -m experiments.french_long_read --read b1 --cuts ~/french_long/b1_insample.cut.json --out runs/french_long_b1/D --expect-head EXPECT --wheel ~/$W --workers 4`
-8. [L] `rsync -av og-48:observable-garden/runs/french_long_b1/ runs/french_long_b1/; echo "exit=$?"`
-9. [L] `rsync -av og-48:observable-garden/logs/fl_b1.log runs/french_long_b1/D/; echo "exit=$?"`
-10. [L] After steps 8–9 exit 0 and the hashes match: `ssh og-48 'sudo shutdown -h now'`. Then
+8. [L] `rsync -av <compute-box>:observable-garden/runs/french_long_b1/ runs/french_long_b1/; echo "exit=$?"`
+9. [L] `rsync -av <compute-box>:observable-garden/logs/fl_b1.log runs/french_long_b1/D/; echo "exit=$?"`
+10. [L] After steps 8–9 exit 0 and the hashes match: `ssh <compute-box> 'sudo shutdown -h now'`. Then
     confirm ssh no longer answers, and record the stop time.
 11. [L] Commit `results.json`, `pins.json` and the run record. The run record also holds:
     `nproc --all`; the note that the runner's docstring says `--workers 6` while the run uses 4;
@@ -80,7 +80,7 @@ session makes the ETF fetch and cut first, then the `b1-holdout` cut and the gra
   (live at `00417de`).
 - **The command:** `--insample-cut` and `--holdout-cut`, with `OMP_NUM_THREADS=32`, in tmux.
 - **The cap:** 3.5 host-hours.
-- **The stop:** the agent runs `ssh og-holdout 'sudo shutdown -h now'` after the author says the
+- **The stop:** the agent runs `ssh <holdout-host> 'sudo shutdown -h now'` after the author says the
   host work is done.
 
 ## H3. The host cut for B2 (only after B1's grading is committed)
@@ -99,7 +99,7 @@ session makes the ETF fetch and cut first, then the `b1-holdout` cut and the gra
 
 As BOX-B1, with these two commands in place of steps 2 and 7:
 
-2. [L] `scp runs/french_long_cuts/b1_insample.csv runs/french_long_cuts/b1_insample.cut.json runs/french_long_cuts/b2_extra.csv runs/french_long_cuts/b2_extra.cut.json og-48:french_long/ && scp data/raw/french_insample/french49_vw_daily.csv og-48:observable-garden/data/raw/french_insample/`
+2. [L] `scp runs/french_long_cuts/b1_insample.csv runs/french_long_cuts/b1_insample.cut.json runs/french_long_cuts/b2_extra.csv runs/french_long_cuts/b2_extra.cut.json <compute-box>:french_long/ && scp data/raw/french_insample/french49_vw_daily.csv <compute-box>:observable-garden/data/raw/french_insample/`
 7. [BOX] `THREADS=32 cloud/run.sh fl_b2 python -m experiments.french_long_read --read b2 --cuts ~/french_long/b1_insample.cut.json ~/french_long/b2_extra.cut.json --insample data/raw/french_insample/french49_vw_daily.csv --out runs/french_long_b2/D --expect-head G2 --wheel ~/$W --workers 4`
 
 ## H4. The B2 grading (the author; on the host, on the existing 2020+ holdout CSV)

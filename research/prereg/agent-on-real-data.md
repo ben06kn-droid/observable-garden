@@ -27,9 +27,9 @@ that is the right sign, because the short pays the dividend.
 
 **One fetch, on the holdout host, for the whole span.** The full 2005-01-01 to
 2025-12-31 adjusted series is fetched **once**, on the holdout host, and hashed
-there. **The holdout host is the EC2 c7a.8xlarge `i-0886a189b85d4d051`** (ssh
+there. **The holdout host is the EC2 c7a.8xlarge `<holdout-host>`** (ssh
 alias `og-32`), which is never the agent's machine. (Changed on 2026-09-22,
-before the fetch, from the c7a.48xlarge `i-0e0c1484de3c755ad` named when this was
+before the fetch, from the c7a.48xlarge `<compute-box>` named when this was
 first drafted. The session moved to this box; no data had been fetched on
 either.) **The agent harness never
 runs on this host.** From that single fetch:
@@ -54,8 +54,8 @@ derived file. Raw series stay out of git.
 
 ### The holdout's two copies, and how it is opened
 
-**Primary copy: the holdout host's volume**, `/home/ubuntu/etf/data/raw/etf/holdout`
-on the c7a.8xlarge `i-0886a189b85d4d051`. 40 CSVs, one per panel ticker,
+**Primary copy: the holdout host's volume**, `<home>/etf/data/raw/etf/holdout`
+on the c7a.8xlarge `<holdout-host>`. 40 CSVs, one per panel ticker,
 2023-01-01 to 2025-12-31, `date,adjclose,volume`. Its content hashes, which any
 restored copy must reproduce:
 
@@ -112,7 +112,7 @@ date, where it has to be.
   in-sample rows from the holdout host's single fetch.
 - The in-sample loader refuses any date on or after 2023-01-01. This is a hard
   check, not a filter.
-- Submissions are graded only on the holdout host, `i-0886a189b85d4d051`, after
+- Submissions are graded only on the holdout host, `<holdout-host>`, after
   every submission is committed.
 
 **Ancestor-commit guard, as for 7.4.** Feature building refuses unless the
@@ -599,8 +599,8 @@ archive).
   registered `4fcaf8cbad3e003c4a82b98eaca005b41333e3e455ffea9490858f3a86093494`
   (398,896 bytes). Only the encrypted file was hashed.
 - **It cannot be opened**, so it is no longer a usable source.
-- **The primary copy on the holdout host** (`/home/ubuntu/etf/data/raw/etf/holdout` on
-  `i-0886a189b85d4d051`) **is the sole usable source.** Its registered content hash,
+- **The primary copy on the holdout host** (`<home>/etf/data/raw/etf/holdout` on
+  `<holdout-host>`) **is the sole usable source.** Its registered content hash,
   `8d92a7b2f527dd619a3944fb248bccc769e26ad99b38d1336fef34dffab031c8`, is checked on the
   host as the first operator step of the grading (`prereg/holdout-grading.md`). If it
   does not match, there is no second copy to fall back on, and nothing is graded.

@@ -4,7 +4,7 @@
 (`80ec191`).
 **The sheet:** `docs/etf_recent_operator_sheets.md`, HOST-1, at G =
 `04eecfc97d82d2ab2b5f8042d416a686e0c2090d`.
-**The host:** `og-holdout` (`i-0886a189b85d4d051`), IP 13.58.172.90. The author reported it up at
+**The host:** `<holdout-host>` (`<holdout-host>`), IP <ip>. The author reported it up at
 about 11:46 CDT.
 **Run by the author,** in his own terminal. The agent ran nothing on the host.
 
@@ -21,7 +21,7 @@ about 11:46 CDT.
 
 ## Step 9, the copy to the laptop (the author)
 
-`scp -r og-holdout:etf_recent/insample og-holdout:etf_recent/insample.cut.json
+`scp -r <holdout-host>:etf_recent/insample <holdout-host>:etf_recent/insample.cut.json
 runs/etf_recent_cuts/` copied 38 CSVs and the record.
 
 ## Step 10, the check (the agent, on the laptop)

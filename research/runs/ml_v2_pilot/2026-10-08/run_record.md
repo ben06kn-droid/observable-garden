@@ -5,7 +5,7 @@ These raw outputs are committed before any read.
 
 ## The run
 
-- **Box:** c7a.48xlarge (og-48, 3.18.104.157), 192 vCPU, 369 GB. It came up at about
+- **Box:** c7a.48xlarge (<compute-box>, <ip>), 192 vCPU, 369 GB. It came up at about
   00:12 UTC.
 - **Code:** HEAD `bbbeed5a3fd62ce3acb27b7785de9e222b5b4296`, equal to EXPECT, checked after
   the pull. No tracked changes.

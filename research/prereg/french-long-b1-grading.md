@@ -189,7 +189,7 @@ Wording from the parent's section i:
 
 ## 8. Host, runtime and operator steps
 
-**Platform:** the holdout host (`i-0886a189b85d4d051`, c7a.8xlarge, 32 vCPU, Linux x86_64).
+**Platform:** the holdout host (`<holdout-host>`, c7a.8xlarge, 32 vCPU, Linux x86_64).
 The compute box is not used for grading.
 
 **Runtime, estimated from BOX-B1** (fits of about 2,000–2,050 s each at 17,084 rows):
@@ -208,7 +208,7 @@ The compute box is not used for grading.
 - `grades.json`, the run record and the `b1-holdout` cut record are fetched (counts, dates, no
   value; the author confirmed);
 - once the author says the host work is done, the agent stops the host from the laptop with
-  `ssh og-holdout 'sudo shutdown -h now'`. That is the only command the agent ever runs on the
+  `ssh <holdout-host> 'sudo shutdown -h now'`. That is the only command the agent ever runs on the
   host (the author's rule, 2026-10-11; the instance's shutdown behaviour is "Stop"). The agent
   then confirms ssh no longer answers and records the stop time;
 - raw outputs and the run record are committed before the read, then read once, committed

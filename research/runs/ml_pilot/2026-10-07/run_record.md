@@ -5,7 +5,7 @@ appends). These raw outputs are committed before any read.
 
 ## The run
 
-- **Box:** c7a.48xlarge (ssh alias og-48, 18.224.252.87): 192 vCPU, 369 GB.
+- **Box:** c7a.48xlarge (ssh alias <compute-box>, <ip>): 192 vCPU, 369 GB.
 - **Code:** HEAD `fce5627fb53e5551aa8768a770aba3ce73ef8fb7`, checked on the box after the
   pull. No tracked changes.
 - **Environment:** Python 3.14.7, numpy 2.5.3.

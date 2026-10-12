@@ -739,7 +739,7 @@ includes this.
 **`ce4bc21e64b47d09714308560fa25f39540714dcfba6fb89ab3ee2d34e69df2a`** (the SHA-256 of
 `sha256sum *.csv`'s output, one `hash  filename` line per file in name order),
 identical on both machines — was copied by `rsync` from the laptop to an EC2
-c7a.48xlarge (x86_64, instance `i-0e0c1484de3c755ad`) on 2026-10-02, together with
+c7a.48xlarge (x86_64, instance `<compute-box>`) on 2026-10-02, together with
 `data/pinned/etf_features_X.npy`, whose SHA-256 the box computed as
 `4b4610704db0042c514c8ee4f230b239942d4b15be87d07188be3f0e7600b7ba`, the registered value.
 
@@ -817,7 +817,7 @@ scripted read.
 | B | **1,000**, both tiers, identical replicates per panel |
 | α | 0.05 and 0.01 |
 | code | `environments/planted_panel.py`, `experiments/planted_edge.py` at **`6fdd1ba`**; the launch uses `cloud/run.sh` at **`8e923c5`** or later (exact-match tmux targets, so the self-stop can fire) |
-| platform | x86_64, EC2 c7a.48xlarge (instance `i-0e0c1484de3c755ad`), shutdown behaviour **Stop** (confirmed in the console); every record carries its platform, and the launch writes the commit hash to the log |
+| platform | x86_64, EC2 c7a.48xlarge (instance `<compute-box>`), shutdown behaviour **Stop** (confirmed in the console); every record carries its platform, and the launch writes the commit hash to the log |
 | workers | **191** |
 
 **Box smoke, the sizing measurement** (`runs/_smoke/planted_edge_box/`, commit `58167e8`; run at `6fdd1ba` on 2026-10-03, 01:10:44 UTC, exit 0):
@@ -1286,7 +1286,7 @@ run:
         --seed0 "$seed" --out runs/_shakeout/planted_agent
   done
   git add runs/_shakeout/planted_agent && git commit -m "7.5 stage 2 shake-out: four run files, unpriced" && git push
-  ssh og-48 'cd ~/observable-garden && git pull --ff-only && python -m experiments.price_runs --dir runs/_shakeout/planted_agent --workers 4 --B 1000'
+  ssh <compute-box> 'cd ~/observable-garden && git pull --ff-only && python -m experiments.price_runs --dir runs/_shakeout/planted_agent --workers 4 --B 1000'
   python -m experiments.fidelity --dir _shakeout/planted_agent --panel planted --dry-run
   ```
 

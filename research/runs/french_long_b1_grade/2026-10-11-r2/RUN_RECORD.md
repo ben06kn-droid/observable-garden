@@ -3,7 +3,7 @@
 **The registration:** `prereg/french-long-b1-grading.md`, live at `00417de`, with amendment 1
 (`2ddf0fa`). The parent is `prereg/french-long-history.md` (live `756af89`; amendments 1–4).
 **The sheet:** `docs/etf_recent_operator_sheets.md`, HOST-1, steps 11–20.
-**The host:** `og-holdout` (`i-0886a189b85d4d051`, c7a.8xlarge, 32 vCPU), IP 13.58.172.90. Up
+**The host:** `<holdout-host>` (`<holdout-host>`, c7a.8xlarge, 32 vCPU), IP <ip>. Up
 at about 11:46 CDT (16:46 UTC, from the author's message; `uptime` gives 5:40 at 22:26 UTC).
 **Every host command was run by the author, in his own terminal.** The agent ran only:
 - the read-only log `tail`, under the author's rule extension below;
@@ -41,7 +41,7 @@ at about 11:46 CDT (16:46 UTC, from the author's message; `uptime` gives 5:40 at
   author said "do not stop, just continue running". The stop-and-ask mark was then set at 21:00
   CDT.
 - **The rule extension (the author, about 15:30 CDT):**
-  - "You may run ssh og-holdout 'tail -n 30 ~/observable-garden/logs/b1g.log', read-only, to watch
+  - "You may run ssh <holdout-host> 'tail -n 30 ~/observable-garden/logs/b1g.log', read-only, to watch
     the B1 grading, and nothing else on the host besides the shutdown."
   - It later covered the relaunch log `logs/b1g2.log` the same way (the author's brief for
     amendment 1).
@@ -105,8 +105,8 @@ at about 11:46 CDT (16:46 UTC, from the author's message; `uptime` gives 5:40 at
   | `b1_holdout.cut.json` | `491f2b77e18c1dd160aa088679a40cb7291d79fe3c2464aeffc98f8b6b965ba8` |
 
 - **The stop:** the author said "host work done". The agent ran
-  `ssh og-holdout 'sudo shutdown -h now'` at **18:11:54 CDT** (exit 0). By 18:12:49 CDT,
-  `ssh og-holdout` timed out.
+  `ssh <holdout-host> 'sudo shutdown -h now'` at **18:11:54 CDT** (exit 0). By 18:12:49 CDT,
+  `ssh <holdout-host>` timed out.
   - The instance's shutdown behaviour is "Stop", as the author confirmed in the console.
   - The host was up about 6 h 26 min in all.
 - **No holdout row or value left the host.** Only `grades.json`, the logs and the holdout cut

@@ -54,7 +54,7 @@ from pathlib import Path
 import numpy as np
 
 REPO = Path(__file__).resolve().parent.parent
-PINNED_PLATFORM = ("Linux", "x86_64")            # the holdout host, i-0886a189b85d4d051
+PINNED_PLATFORM = ("Linux", "x86_64")            # the holdout host, <holdout-host>
 GRADE_START = dt.date(2023, 1, 1)
 GRADE_END = dt.date(2025, 12, 31)
 COSTS_BPS = (5.0, 10.0)

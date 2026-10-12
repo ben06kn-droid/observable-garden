@@ -2,12 +2,12 @@
 # Wait for a detached run to finish, fetch its results, then stop the instance.
 # Run this from the repository root ON YOUR MAC, not on the instance.
 #
-#   cloud/wait_fetch_stop.sh og calib
+#   cloud/wait_fetch_stop.sh <compute-box> calib
 #
 # HOST is an alias from ~/.ssh/config carrying HostName, User and IdentityFile:
 #
-#   Host og
-#       HostName 18.217.175.127
+#   Host <compute-box>
+#       HostName <ip>
 #       User ubuntu
 #       IdentityFile "/path/to/key.pem"
 #
@@ -36,7 +36,7 @@ if [ $# -lt 2 ]; then
   echo "usage: cloud/wait_fetch_stop.sh HOST NAME [POLL_SECONDS] [RESULTS_DIR]" >&2
   echo "  RESULTS_DIR, repo-relative (e.g. runs/planted_edge_scripted), is fetched" >&2
   echo "  FIRST; if it fails the instance is not stopped" >&2
-  echo "  HOST is an ~/.ssh/config alias, e.g. og" >&2
+  echo "  HOST is an ~/.ssh/config alias, e.g. <compute-box>" >&2
   exit 2
 fi
 HOST="$1"; NAME="$2"; POLL="${3:-60}"; RESULTS="${4:-}"
