@@ -1,6 +1,8 @@
 # ETF recent panel: holdout grading of the panel's three objects and the cell's 240 submissions, a registration
 
-**Status: DRAFT, NOT LIVE (2026-10-11, America/Chicago).** For the author's review.
+**Status: LIVE, 2026-10-11 (America/Chicago).**
+- The author's decisions are written in (`f60a96f`). This status is set in a commit
+  touching only this file. The grader's `GRADING` constant is set in the following commit.
 - **Nothing has run for it.** No holdout value of this panel has been computed for any purpose.
   The holdout rows sit in the raw fetch on the holdout host only.
 - The grader (`experiments/etf_recent_grade.py`, written and tested at `0870dca` → `ae246d7`)
