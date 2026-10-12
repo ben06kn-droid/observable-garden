@@ -33,8 +33,14 @@ refused, and all three are graded** (the parent's section g).
 - The submission list is `runs/agent_cell_etf_recent_priced/2026-10-11/submissions.json`
   (SHA-256 `45cedcab7dff8d426ca8c649808c5df67bb9bef6f2b11e7085f561b1bce4066c`). It holds 240
   submissions and 0 `no_submit`, collected from the committed logs (`870e07c`).
-- They were priced from those logs on the pinned precompute in `priced.json` (committed before
-  any read; pinned by SHA-256 on the grader's command line).
+- They were priced from those logs on the pinned precompute (on the compute box, 96 workers, a
+  byte-identical-to-one-worker pool):
+  - `runs/agent_cell_etf_recent_priced/2026-10-11/priced.json`, SHA-256
+    **`388cc6f2636fcbab6a007335e76b6cc2b3dd5f529c82edf0f1c410f5aedf37c7`**;
+  - committed at `0d6f55d` before anything read it;
+  - pinned on the grader's command line.
+  - Its integrity fields: the replay is computed for all 240, the log consistency holds in all
+    240, and all 240 are rules.
 - Each submission's bound is **its own UNWEIGHTED L90**, as the cell's section 0 fixes. Its W2 L90
   is beside, labelled "recency-weighted, descriptive".
 
