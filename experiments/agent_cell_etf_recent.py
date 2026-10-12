@@ -416,20 +416,36 @@ def is_transient(error) -> bool:
     return bool(error) and bool(TRANSIENT.search(str(error)))
 
 
+class RetriesExhausted(RuntimeError):
+    """A session's transient-error retries ran out: it is not written; the launcher stops
+    (amendment 1) and a resume reruns it on the same index and seed."""
+
+
+def _attempts_path(out, run_id: str) -> Path:
+    return Path(out) / f"{run_id}.attempts.json"
+
+
 def run_with_retry(pre, arm: str, seed: int, index: int, prompts: dict, *, credential="seat",
-                   driver=None, smoke=False, sleep=time.sleep):
+                   driver=None, smoke=False, sleep=time.sleep, out=None):
     """The session, retried on a transient model-service error with the same seed, at most
-    MAX_ATTEMPTS times. Each failed attempt's error and events are kept under `retried_attempts`
-    in the final record, just before its `end`. Anything else (a `no_submit`, or a non-transient
-    error) is final."""
-    tried = []
+    MAX_ATTEMPTS times. Failed attempts are kept under `retried_attempts` in the final record (and
+    carried across a stop in `<run_id>.attempts.json` when `out` is given). If the retries run out,
+    raises RetriesExhausted and nothing is written for the session (amendment 1). A `no_submit` or a
+    non-transient error is final."""
+    rid = run_id_for(arm, seed, index, smoke)
+    side = _attempts_path(out, rid) if out is not None else None
+    tried = json.loads(side.read_text()) if side is not None and side.exists() else []
     for attempt in range(1, MAX_ATTEMPTS + 1):
         rec = run_session(pre, arm, seed, index, prompts, credential=credential, driver=driver, smoke=smoke)
-        if attempt < MAX_ATTEMPTS and is_transient(getattr(rec, "error", None)):
-            tried.append({"attempt": attempt, "error": str(rec.error), "events": rec.events})
-            sleep(BACKOFF_S[min(attempt - 1, len(BACKOFF_S) - 1)])
-            continue
-        break
+        if not is_transient(getattr(rec, "error", None)):
+            break
+        tried.append({"attempt": len(tried) + 1, "error": str(rec.error), "events": rec.events})
+        if side is not None:
+            side.write_text(json.dumps(tried, default=str))
+        if attempt == MAX_ATTEMPTS:
+            raise RetriesExhausted(f"{rid}: {MAX_ATTEMPTS} attempts failed with a transient error "
+                                   f"({tried[-1]['error']}); nothing written for this session")
+        sleep(BACKOFF_S[min(attempt - 1, len(BACKOFF_S) - 1)])
     if tried:
         rec.events.insert(len(rec.events) - 1, {"t": time.time(), "kind": "retried_attempts", "attempts": tried})
     return rec
@@ -440,8 +456,12 @@ def _job(payload) -> str:
     process pool can pickle it."""
     pre_dir, arm, index, seed, credential, smoke, out, driver = payload
     pre = Precompute(Path(pre_dir))
-    rec = run_with_retry(pre, arm, seed, index, read_prompts(), credential=credential, driver=driver, smoke=smoke)
+    rec = run_with_retry(pre, arm, seed, index, read_prompts(), credential=credential, driver=driver,
+                         smoke=smoke, out=out)
     (Path(out) / f"{rec.run_id}.json").write_text(json.dumps(rec.to_json(), indent=1, default=str))
+    side = _attempts_path(out, rec.run_id)
+    if side.exists():
+        side.unlink()                                  # merged into the session's own log
     return rec.run_id
 
 
@@ -546,7 +566,12 @@ def main(argv=None) -> int:
     p = plan(out, a.arm, a.runs, a.smoke)
     print(f"  {len(p['skipped'])} complete skipped; {len(p['redone'])} partial deleted and redone; "
           f"{len(p['todo'])} to run", flush=True)
-    run_all(Path(a.precompute), p["todo"], out, workers=a.workers, credential=a.credential, smoke=a.smoke)
+    try:
+        run_all(Path(a.precompute), p["todo"], out, workers=a.workers, credential=a.credential, smoke=a.smoke)
+    except RetriesExhausted as e:
+        print(f"STOPPED (amendment 1): {e}\n  resume with the same command; complete sessions are skipped "
+              f"and this one reruns on its own seed", flush=True)
+        return 2
     sched = schedule(a.arm, a.runs, a.smoke)
     (out / "run_config.json").write_text(json.dumps({
         "registration": REGISTRATION, "precompute_manifest_sha256": PRECOMPUTE_MANIFEST_SHA256,

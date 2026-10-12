@@ -333,13 +333,28 @@ def test_a_no_submit_is_never_retried(pre):
     assert calls["n"] == 1 and rec.no_submit and not any(e["kind"] == "retried_attempts" for e in rec.events)
 
 
-def test_retries_run_out_into_a_no_submit(pre):
-    def always(cell, rec, prompt, prompts):
-        rec.error = "overloaded_error (529)"
+def always_overloaded(cell, rec, prompt, prompts):
+    rec.error = "overloaded_error (529)"
 
-    rec = E.run_with_retry(pre, "A", 79, 5, E.read_prompts(), driver=always, sleep=lambda s: None)
-    tried = [e for e in rec.events if e["kind"] == "retried_attempts"][0]["attempts"]
-    assert len(tried) == E.MAX_ATTEMPTS - 1 and rec.no_submit
+
+def test_retries_that_run_out_stop_without_writing_and_resume_on_the_same_seed(pre_dir, tmp_path, monkeypatch):
+    """Amendment 1: nothing is written, the launcher stops, and the resume reruns the session on its
+    own seed with every earlier attempt merged into its log."""
+    monkeypatch.setattr(E, "BACKOFF_S", (0, 0, 0, 0))                  # in-process (workers=1)
+    out = tmp_path / "cell_stop"
+    out.mkdir()
+    todo = E.schedule("A", 1)
+    with pytest.raises(E.RetriesExhausted):
+        E.run_all(pre_dir, todo, out, workers=1, driver=always_overloaded)
+    (a, i, s), = todo
+    rid = E.run_id_for(a, s, i)
+    assert not (out / f"{rid}.json").exists() and (out / f"{rid}.attempts.json").exists()
+    p = E.plan(out, "A", 1)
+    assert p["todo"] == todo                                             # the same index and seed
+    E.run_all(pre_dir, p["todo"], out, workers=1, driver=deterministic_driver)
+    d = json.loads((out / f"{rid}.json").read_text())
+    tried = [e for e in d["events"] if e["kind"] == "retried_attempts"][0]["attempts"]
+    assert len(tried) == E.MAX_ATTEMPTS and d["seed"] == s and not (out / f"{rid}.attempts.json").exists()
 
 
 def test_smoke_logs_are_never_collected_or_priced(pre, tmp_path):
