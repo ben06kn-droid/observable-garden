@@ -1,7 +1,12 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "observable-garden"
 version = "0.1.0"
-description = "Transcript-based overfitting estimator: bootstrapped null-maximum over a search's observed trial correlation structure."
+description = "Quixote, a backtest-overfitting gate for searches over trading rules (by humans, scripts or LLM agents), and Sancho, a fixed model to compare against."
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.24",
@@ -13,15 +18,35 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
+# Sancho, the fixed model: the registered results used LightGBM 4.7.0 exactly.
+sancho = ["lightgbm==4.7.0"]
+# The LLM agent example (examples/llm_agent.py); the SDK is optional.
+agent = ["anthropic>=0.40"]
 
 [project.scripts]
+quixote = "quixote.cli:main"
+# kept as an alias: registered material calls `garden`
 garden = "garden.cli:main"
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-
 [tool.setuptools]
-packages = ["environments", "searchers", "estimator", "garden", "quixote"]
+# The engine packages keep their import names (estimator, environments, searchers, garden) and
+# live under quixote/engine/, so no import line had to change.
+packages = ["quixote", "quixote.engine", "sancho", "estimator", "environments", "searchers", "garden"]
+
+[tool.setuptools.package-dir]
+estimator = "quixote/engine/estimator"
+environments = "quixote/engine/environments"
+searchers = "quixote/engine/searchers"
+garden = "quixote/engine/garden"
 
 [tool.setuptools.package-data]
 garden = ["data/*.npz"]
+
+[tool.pytest.ini_options]
+# tests/ covers quixote/, sancho/ and examples/; research/tests/ covers the research record.
+testpaths = ["tests", "research/tests"]
+# a source checkout imports from itself: the repository root, the engine and the research record
+pythonpath = [".", "quixote/engine", "research"]
+markers = [
+    "slow: longer tests, left out of the quick target (pytest -m 'not slow')",
+]
