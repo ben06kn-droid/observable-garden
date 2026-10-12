@@ -90,7 +90,12 @@ def test_a_good_setup_passes_the_file_and_platform_checks(tmp_path, monkeypatch)
     monkeypatch.setattr(R, "X_SHA256", hashlib.sha256(b"x").hexdigest())
     head = R._git("rev-parse", "HEAD").stdout.strip()
     rest = R.refusals(head, str(w), platform_name="Darwin arm64", lib=lib, x_path=x)
-    assert not any(k in r for r in rest for k in ("platform", "SHA-256", "blob", "ancestor", "expected")), rest
+    # the blobs themselves are checked at the tag pre-cleanup-2026-10-12
+    # (tests/test_pins_after_cleanup.py); at this layout the runner refuses on them, by design
+    blobs = [r for r in rest if "blob" in r]
+    assert {r.split(":")[0] for r in blobs} <= set(R.PINNED_BLOBS), blobs
+    rest = [r for r in rest if "blob" not in r]
+    assert not any(k in r for r in rest for k in ("platform", "SHA-256", "ancestor", "expected")), rest
 
 
 def test_the_registered_constants():
