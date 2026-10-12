@@ -5,9 +5,9 @@
 repository root. `git show <commit>:<path>` takes the path as it was at that commit, so those
 stay in the old form; the tag `pre-cleanup-2026-10-12` has every old path.*
 
-The note is `paper/note.md`, *Fixed and adaptive candidate sets under the DSR*.
-Each row is one claim in the note, in the note's order (Sections 3 to 6, then the
-closing).
+The note, *Fixed and adaptive candidate sets under the DSR*, is distributed separately; it is
+not in this repository. The note tells its reader that this table exists. Each row is one
+claim in the note, in the note's order (Sections 3 to 6, then the closing).
 
 **Commits:**
 - **Registration** is the commit at which the experiment was pre-registered (or went

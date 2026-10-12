@@ -7,10 +7,9 @@ on pure noise.
 - For an agent, it runs the search itself: the agent names each move, the harness carries it out
   and logs it, and the log can be re-run under the null.
 
-**Sancho** is a fixed model to compare against.
-
-The method and its evidence are in the note, [`paper/note.md`](paper/note.md), *Fixed and
-adaptive candidate sets under the DSR*.
+**Sancho** is a fixed model to compare against. It is block ridge regressions and small
+gradient-boosted trees over price, cross-asset and volume inputs, fixed before it sees the data,
+so its output counts as one strategy declared in advance.
 
 ## Install
 
@@ -109,8 +108,6 @@ are the registered version 2.
 
 ## What has been validated, and what has not
 
-From the note's Section 7. Nothing here is stated more strongly than the note states it.
-
 - **The direction of the error** under adaptive search is a limit result. It is proved for large
   samples and one common pair score, which requires equal volatilities and correlations. With
   finite samples it is measured, not proved.
@@ -124,13 +121,18 @@ From the note's Section 7. Nothing here is stated more strongly than the note st
 - **Block correlation and unequal volatilities** have not been tested.
 - **Stopping-rule replay**, the null Quixote certifies with, had error rates at or below nominal
   on the searchers tested. Exactness is not claimed and nothing is proved.
-- **The evidence** in the note's Sections 3 to 6 is scripted searchers and synthetic returns.
-  **Whether a result that passes holds out of sample on real data is untested.**
+- **The simulation evidence** is scripted searchers and synthetic returns.
+- **On real data** the gate refused on French industries 2013-2019, on Binance perpetuals and on
+  liquid ETFs 2015-2024. It issued one certificate, on French industries 1926-1989 under the
+  recency-weighted statistic, and that certificate's lower bound held on 1990-1995. That is
+  evidence for the gate, not for a tradable signal.
 - **Whatever a searcher considers without evaluating is never logged,** at any level of record.
 
 ## The research record
 
-Pre-registrations, runs, reads and the code behind the note are in [`research/`](research/README.md).
+Pre-registrations, runs, reads and the code behind every result are in
+[`research/`](research/README.md). `research/NOTE_MAP.md` maps each claim of the note, which is
+distributed separately, to its registration, result and read.
 
 ## Tests
 
@@ -138,3 +140,7 @@ Pre-registrations, runs, reads and the code behind the note are in [`research/`]
 pytest tests -m "not slow"        # the quick target, under two minutes (CI runs it)
 pytest tests research/tests       # everything; much of research/tests needs machine-local data
 ```
+
+## Licence
+
+MIT licence. The licence covers the code; the datasets keep their own terms.

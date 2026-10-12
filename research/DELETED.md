@@ -65,5 +65,6 @@ that heading.
 | `runs/recency_planted_smoke/` | 2 | 2,896 | smoke / cost-only output, cited by no registration |
 | `runs/shakeout_s0_orientation/` | 4 | 36,580 | shakeout run, cited by no registration, EXPERIMENTS.md or NOTE_MAP.md |
 | `runs/shakeout_s0_reasoned/` | 4 | 53,167 | shakeout run, cited by no registration, EXPERIMENTS.md or NOTE_MAP.md |
+| `paper/note.md` (on the branch; `docs/note.md` at the tag) | 1 | 18,442 | the note leaves the repository and is distributed separately; `NOTE_MAP.md` and `CITATIONS.md` moved to `research/` |
 
-**In all: 60 files, 4,533,257 bytes.**
+**In all: 61 files, 4,551,699 bytes.**

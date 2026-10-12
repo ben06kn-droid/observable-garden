@@ -17,10 +17,12 @@ pre-registration and amendment, every raw output, read and figure, and the code 
 | `cloud/`, `notebooks/`, `scratch/`, `ckpt_h63C/` | box scripts, notebooks, scratch work, checkpoints |
 | `THEORY.md`, `SCOPE.md`, `ROADMAP.md`, `OPEN_QUESTIONS.md`, `EXPERIMENTS.md` | the long-form docs |
 | `DELETED.md` | every path the cleanup deleted, with its size and reason |
+| `NOTE_MAP.md` | the map from each claim in the note (distributed separately) to its registration, result and read |
+| `CITATIONS.md` | what each cited source was checked for, and against which copy |
 
 ## Finding a registration or a result from the note
 
-1. Find the claim in `paper/NOTE_MAP.md`. Each row gives the experiment, its registration file
+1. Find the claim in `research/NOTE_MAP.md`. Each row gives the experiment, its registration file
    and commit, its result commit and its read commit.
 2. **A registration that is still open** is in `research/prereg/`. **One that has closed** has
    left that folder. Recover it with `git show <registration commit>:prereg/<file>`, using the

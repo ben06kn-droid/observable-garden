@@ -220,7 +220,7 @@ unconditionally valid, P(p <= α) <= α. It stops early when a draw is clearly n
 significant and samples to the cap only when it might be. (Formula and
 validity checked 2026-10-02 against secondary sources only, Stoepker & Castro,
 arXiv:2409.18908, §3.3; the paper's own text was not accessible. See
-`docs/CITATIONS.md`.) For a calibration sweep, where most draws are nowhere near α,
+`CITATIONS.md`.) For a calibration sweep, where most draws are nowhere near α,
 the saving should be large, and it grows as α falls, which is precisely the
 regime 6.1 is about.
 
