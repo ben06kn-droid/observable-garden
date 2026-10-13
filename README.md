@@ -1,5 +1,7 @@
 # The Observable Garden
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23332377.svg)](https://doi.org/10.5281/zenodo.23332377)
+
 ![Stated expected Sharpe against log(evaluation count), one panel per arm](research/figures/agent_stated_vs_log_count.png)
 
 In 240 LLM agent sessions on liquid ETFs, the agents' stated expected Sharpe barely moved with
