@@ -32,6 +32,7 @@ def _parser() -> argparse.ArgumentParser:
     e = sub.add_parser("example", help="audit the bundled example log and print the verdict")
     e.add_argument("--B", type=int, default=500)
     e.add_argument("--json", action="store_true")
+    e.add_argument("--verbose", action="store_true", help="print the reasons behind the verdict")
 
     r = sub.add_parser("run", help="run an agent through the harness and write its log")
     r.add_argument("--agent", required=True, help="MODULE:ATTR, e.g. examples.scripted_searcher:Agent")
@@ -49,6 +50,7 @@ def _parser() -> argparse.ArgumentParser:
     a.add_argument("--B", type=int, default=2000)
     a.add_argument("--seed", type=int, default=0)
     a.add_argument("--json", action="store_true")
+    a.add_argument("--verbose", action="store_true", help="print the reasons behind the verdict")
 
     w = sub.add_parser("power", help="the detection floor for a class and a number of years")
     w.add_argument("--years", type=float, required=True)
@@ -100,7 +102,7 @@ def main(argv=None) -> int:
                               EXAMPLES / "data" / "tiny_panel.npz", EXAMPLES / "class.json", B=a.B)
             _print(res.to_dict(), a.json,
                    "The bundled example: a scripted searcher's log on a small synthetic panel "
-                   "(examples/).\n" + A.render(res))
+                   "(examples/).\n" + A.render(res, a.verbose))
             return res.exit_code
         if a.command == "run":
             agent = R.load_agent(a.agent)
@@ -112,7 +114,7 @@ def main(argv=None) -> int:
             return 0
         if a.command == "audit":
             res = A.audit_log(a.log, a.panel, a.cls, B=a.B, seed=a.seed)
-            _print(res.to_dict(), a.json, A.render(res))
+            _print(res.to_dict(), a.json, A.render(res, a.verbose))
             return res.exit_code
         if a.command == "power":
             if a.size is not None:

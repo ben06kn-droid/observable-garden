@@ -43,6 +43,9 @@ def test_audit_returns_a_verdict(session):
     assert 0 < r.p_class <= 1 and r.class_size == 128 and r.class_bar > 0
     assert r.submitted_sharpe == pytest.approx(session["log"]["submitted"]["score"])
     assert "verdict:" in A.render(r)
+    short, long = A.render(r), A.render(r, verbose=True)
+    assert r.reasons and all(f"  - {x}" not in short for x in r.reasons)
+    assert f"  - {r.reasons[0]}" in long and "--verbose" not in long
 
 
 def test_audit_refuses_a_changed_class(session):

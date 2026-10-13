@@ -1,5 +1,13 @@
 # The Observable Garden
 
+![Stated expected Sharpe against log(evaluation count), one panel per arm](research/figures/agent_stated_vs_log_count.png)
+
+In 240 LLM agent sessions on liquid ETFs, the agents' stated expected Sharpe barely moved with
+how long they had searched, as in the synthetic sessions plotted above. Showing an agent the
+gate's lower bound during its search lowered that expectation by 0.13 Sharpe
+([read](research/runs/agent_cell_etf_recent_read/2026-10-11/read.txt),
+[synthetic analysis](research/figures/agent_analysis.txt)).
+
 A backtest is usually the best of many attempts, so its Sharpe ratio has to be judged against
 what the best of many attempts would look like on pure noise. The standard correction for this,
 the deflated Sharpe ratio, needs to know how the search was run, and for a human researcher
@@ -42,6 +50,7 @@ years that followed. It is evidence that the gate works, not a source of trading
 ## Install
 
 ```
+git clone --depth 1 https://github.com/ben06kn-droid/observable-garden   # the history is large, nearly all research/
 pip install -e .                  # Python 3.10 or later
 pip install -e ".[sancho]"        # adds LightGBM 4.7.0, pinned: Sancho's registered results used it exactly
 pip install -e ".[agent]"         # adds the Anthropic SDK, only for the LLM agent example
@@ -61,6 +70,7 @@ verdict: FAIL  (the submitted rule does not clear the bar its own search sets: a
 submitted: -mom60_z +rev5_rank  in-sample Sharpe 0.572 after 2 moves
 replay tier (the verdict): p 0.9721 at alpha 0.05, B 500
 class tier (beside it): p 0.9800; the class's bar 1.888 (critical Sharpe over all 128 members)
+--verbose adds the integrity check, the lower bounds and how the null was built
 ```
 
 To audit a log yourself: `quixote audit examples/logs/scripted_session.json --panel

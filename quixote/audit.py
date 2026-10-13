@@ -111,7 +111,7 @@ MEANINGS = {
 }
 
 
-def render(r: AuditResult) -> str:
+def render(r: AuditResult, verbose: bool = False) -> str:
     lines = [f"verdict: {r.status}  ({MEANINGS.get(r.status, '')})",
              f"submitted: {' '.join(r.submitted_feature_names)}  in-sample Sharpe {r.submitted_sharpe:.3f} "
              f"after {r.n_moves} moves",
@@ -119,5 +119,8 @@ def render(r: AuditResult) -> str:
              f"at alpha {r.alpha:g}, B {r.B}",
              f"class tier (beside it): p {r.p_class:.4f}; the class's bar {r.class_bar:.3f} "
              f"(critical Sharpe over all {r.class_size:,} members)"]
-    lines += [f"  - {x}" for x in r.reasons[:4]]
+    if verbose:
+        lines += [f"  - {x}" for x in r.reasons[:4]]
+    elif r.reasons:
+        lines.append("--verbose adds the integrity check, the lower bounds and how the null was built")
     return "\n".join(lines)
