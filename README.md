@@ -1,15 +1,45 @@
-# The Observable Garden: Quixote and Sancho
+# The Observable Garden
 
-**Quixote** is a gate between a search for trading rules and the decision to believe what it
-found. It judges the winner's backtest against what the best of the same search would look like
-on pure noise.
-- It works whoever searches: a script, a person or an LLM agent.
-- For an agent, it runs the search itself: the agent names each move, the harness carries it out
-  and logs it, and the log can be re-run under the null.
+# The Observable Garden
 
-**Sancho** is a fixed model to compare against. It is block ridge regressions and small
-gradient-boosted trees over price, cross-asset and volume inputs, fixed before it sees the data,
-so its output counts as one strategy declared in advance.
+A backtest is usually the best of many attempts, so its Sharpe ratio has to be judged against
+what the best of many attempts would look like on pure noise. The standard correction for this,
+the deflated Sharpe ratio, needs to know how the search was run, and for a human researcher
+nobody keeps that record. An AI agent can: every strategy it evaluates, kept or discarded, can be
+logged. This project asks what that log has to contain for the correction to be right.
+
+## What it found
+
+- **A list of tried strategies is not enough when the search is adaptive.** If what is tried next
+  depends on what has already been seen, testing against the list the search happened to produce
+  gives the wrong error rate. The direction of the error depends on what the search builds on:
+  building on its current best makes the test too lenient, building on its worst makes it too
+  strict.
+- **The error can be large.** In a simple two-stage search over 80 uncorrelated features, about a
+  third of searches on pure noise pass a test meant to pass one in twenty.
+- **The right record repairs it.** A class of strategies declared before the search gives a valid
+  test at a cost in power. A log of every decision that can be re-run on noise restores the
+  correct null.
+
+## What is in the repository
+
+- **Quixote** is the gate built on those results. An agent searches through it: the agent names
+  each move, Quixote carries it out and logs it, and afterwards re-runs the logged search on
+  reshuffled data to see how good a result that same search finds by luck. It then certifies the
+  submitted strategy or refuses it. It also audits a log from any other searcher.
+- **Sancho** is a fixed prediction model (ridge regressions and small gradient-boosted trees over
+  price, cross-asset and volume inputs). Because it is fixed before it sees the data, its output
+  counts as a single strategy declared in advance, which lets the gate test a non-linear strategy
+  at the price of one trial.
+- **`research/`** holds the full record: every pre-registration, run and result behind the claims
+  above, with a map from each claim to its commit.
+
+## Where it stands
+
+The gate keeps its error rate in every registered test. Its limit is power. On real data it has
+refused nearly everything it was shown, including 240 agent sessions on liquid ETFs, and issued
+one certificate, on a long history of industry portfolios, whose lower bound held on the six
+years that followed. It is evidence that the gate works, not a source of trading signals.
 
 ## Install
 
