@@ -1,5 +1,32 @@
 # The Observable Garden
 
+An overfitting gate for strategies found by AI agents.
+
+A backtest is usually the best of many attempts, so its Sharpe ratio has to be judged against
+what the best of many attempts would find on pure noise. The standard correction, the deflated
+Sharpe ratio, needs to know how the search was run, and for a human researcher nobody keeps that
+record. An AI agent can: every strategy it evaluates, kept or discarded, can be logged. This
+project asks what that log has to contain for the correction to be right, and builds a gate on
+the answer.
+
+- **The research: fixed versus adaptive candidates.** When the search is adaptive (what is tried
+  next depends on what has been seen), testing against the list of strategies it tried gives the
+  wrong error rate. A class of strategies declared before the search, or a log of every decision
+  that can be re-run on noise, restores a valid test.
+- **Quixote, the gate.** An agent searches through it; Quixote logs every move, replays the
+  search on reshuffled data, and certifies the submitted strategy or refuses it. It also audits
+  logs from any other searcher.
+- **Sancho**, a fixed prediction model that counts as one strategy declared in advance, so the
+  gate can test a non-linear strategy at the price of one trial.
+- **Where it stands.** The gate keeps its error rate in every registered test; its limit is
+  power. On real data it refused nearly everything, including 240 LLM agent sessions on liquid
+  ETFs, and issued one certificate whose lower bound held out of sample. It is evidence that the
+  gate works, not a source of trading signals.
+- **[`research/`](research/README.md)** holds every pre-registration, run and result behind the
+  claims.
+
+## The agent sessions
+
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23332377.svg)](https://doi.org/10.5281/zenodo.23332377)
 
 ![Stated expected Sharpe against log(evaluation count), one panel per arm](research/figures/agent_stated_vs_log_count.png)
@@ -9,12 +36,6 @@ how long they had searched, as in the synthetic sessions plotted above. Showing 
 gate's lower bound during its search lowered that expectation by 0.13 Sharpe
 ([read](research/runs/agent_cell_etf_recent_read/2026-10-11/read.txt),
 [synthetic analysis](research/figures/agent_analysis.txt)).
-
-A backtest is usually the best of many attempts, so its Sharpe ratio has to be judged against
-what the best of many attempts would look like on pure noise. The standard correction for this,
-the deflated Sharpe ratio, needs to know how the search was run, and for a human researcher
-nobody keeps that record. An AI agent can: every strategy it evaluates, kept or discarded, can be
-logged. This project asks what that log has to contain for the correction to be right.
 
 ## What it found
 
