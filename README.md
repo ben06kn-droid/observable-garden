@@ -1,7 +1,5 @@
 # The Observable Garden
 
-# The Observable Garden
-
 A backtest is usually the best of many attempts, so its Sharpe ratio has to be judged against
 what the best of many attempts would look like on pure noise. The standard correction for this,
 the deflated Sharpe ratio, needs to know how the search was run, and for a human researcher
