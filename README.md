@@ -13,62 +13,75 @@ the answer.
   next depends on what has been seen), testing against the list of strategies it tried gives the
   wrong error rate. A class of strategies declared before the search, or a log of every decision
   that can be re-run on noise, restores a valid test.
-- **Quixote, the gate.** An agent searches through it; Quixote logs every move, replays the
-  search on reshuffled data, and certifies the submitted strategy or refuses it. It also audits
-  logs from any other searcher.
-- **Sancho**, a fixed prediction model that counts as one strategy declared in advance, so the
+- **Quixote, the gate.** An agent searches through it; Quixote carries out and logs every move,
+  then replays the search on reshuffled data to see how good a result that same search finds by
+  luck, and certifies the submitted strategy or refuses it. It also audits logs from any other
+  searcher.
+- **Sancho**, a fixed prediction model (ridge regressions and small gradient-boosted trees over
+  price, cross-asset and volume inputs) that counts as one strategy declared in advance, so the
   gate can test a non-linear strategy at the price of one trial.
 - **Where it stands.** The gate keeps its error rate in every registered test; its limit is
   power. On real data it refused nearly everything, including 240 LLM agent sessions on liquid
-  ETFs, and issued one certificate whose lower bound held out of sample. It is evidence that the
-  gate works, not a source of trading signals.
+  ETFs, and issued one certificate, on a long history of industry portfolios, whose lower bound
+  held on the six years that followed. It is evidence that the gate works, not a source of
+  trading signals.
 - **[`research/`](research/README.md)** holds every pre-registration, run and result behind the
   claims.
 
-## The agent sessions
-
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23332377.svg)](https://doi.org/10.5281/zenodo.23332377)
-
-![Stated expected Sharpe against log(evaluation count), one panel per arm](research/figures/agent_stated_vs_log_count.png)
-
-In 240 LLM agent sessions on liquid ETFs, the agents' stated expected Sharpe barely moved with
-how long they had searched, as in the synthetic sessions plotted above. Showing an agent the
-gate's lower bound during its search lowered that expectation by 0.13 Sharpe
-([read](research/runs/agent_cell_etf_recent_read/2026-10-11/read.txt),
-[synthetic analysis](research/figures/agent_analysis.txt)).
-
 ## What it found
 
-- **A list of tried strategies is not enough when the search is adaptive.** If what is tried next
-  depends on what has already been seen, testing against the list the search happened to produce
-  gives the wrong error rate. The direction of the error depends on what the search builds on:
-  building on its current best makes the test too lenient, building on its worst makes it too
-  strict.
-- **The error can be large.** In a simple two-stage search over 80 uncorrelated features, about a
-  third of searches on pure noise pass a test meant to pass one in twenty.
-- **The right record repairs it.** A class of strategies declared before the search gives a valid
-  test at a cost in power. A log of every decision that can be re-run on noise restores the
-  correct null.
+A search is adaptive when what is tried next depends on what was previously seen.
 
-## What is in the repository
+**Direction.** The direction of the error depends on how the search is built: anchoring on the
+current winning strategy makes the test too lenient; on the current worst, too strict; on one
+chosen uniformly at random, exactly calibrated.
 
-- **Quixote** is the gate built on those results. An agent searches through it: the agent names
-  each move, Quixote carries it out and logs it, and afterwards re-runs the logged search on
-  reshuffled data to see how good a result that same search finds by luck. It then certifies the
-  submitted strategy or refuses it. It also audits a log from any other searcher.
-- **Sancho** is a fixed prediction model (ridge regressions and small gradient-boosted trees over
-  price, cross-asset and volume inputs). Because it is fixed before it sees the data, its output
-  counts as a single strategy declared in advance, which lets the gate test a non-linear strategy
-  at the price of one trial.
-- **`research/`** holds the full record: every pre-registration, run and result behind the claims
-  above, with a map from each claim to its commit.
+**Size.** For any adaptive search, the limiting error rate of the realized-set test is the
+probability that the process maximum clears the realized-set critical value, so the error is the
+gap between the two nulls. For the two-stage search the gap has a closed form, and
+pre-registered simulations match it.
 
-## Where it stands
+**Remedy.** The error is removed by recording enough of the search to test it correctly. If the
+candidate list was fixed before seeing the data, the returns alone suffice. If the list depends
+on the data, a class of strategies declared in advance suffices, at a cost in power. A fully
+re-executable record of every decision in the search restores the process null.
 
-The gate keeps its error rate in every registered test. Its limit is power. On real data it has
-refused nearly everything it was shown, including 240 agent sessions on liquid ETFs, and issued
-one certificate, on a long history of industry portfolios, whose lower bound held on the six
-years that followed. It is evidence that the gate works, not a source of trading signals.
+## How large the error is
+
+![Error rate of the realized-set test against the number of features K, limit and measured, for feature correlations 0 and 0.3](research/figures/realized_set_error_rate.png)
+
+*Error rate of the realized-set test at a nominal 5% for the two-stage, winner-anchored search on
+pure noise. Lines join the limit values at K = 10, 20, 40, 80; points are the pre-registered
+simulations (500 searches per cell).*
+
+The realized-set test is the one that judges a search against the list of strategies it happened
+to try.
+
+**How the error arises.** Take a two-stage search: evaluate all K single features, take the
+winner as the anchor, then evaluate every pair containing the anchor. The realized-set bootstrap
+keeps the logged pairs, so every reshuffle still builds its pairs around the feature that won on
+the real data. On fresh noise a different feature would typically win, so the frozen version
+explores less than the search it stands in for, and its p-values come out too small.
+
+**More features, more error.** With 80 uncorrelated features, roughly a third of searches run on
+pure noise pass a test meant to pass one in twenty.
+
+**Correlation.** When features are correlated, the best pair beats the best single feature less
+often, so freezing the anchor gives up less. Correlation among trials is the limiting factor of
+error, not its cause.
+
+Simulations registered in advance matched the limit values in every cell.
+
+## The agent sessions
+
+With Sancho available as a single fixed candidate, the agents were then run on liquid ETFs over
+2015–2024. No certificate was available on this panel: the best strategy in the declared class
+was refused, and so was Sancho's. The sessions therefore could not pass, regardless of what agent
+was used. In 240 independent sessions the agents converged on three strategies. Left to
+themselves, they predicted a little over half of what their backtests showed. This prediction
+did not change with how long or rigorously they had searched. Agents shown the gate's lower bound
+stated lower and less certain expectations. Over the following 21-month holdout the three
+strategies together lost slightly, which is consistent with the refusals.
 
 ## Install
 
@@ -192,8 +205,10 @@ are the registered version 2.
 ## The research record
 
 Pre-registrations, runs, reads and the code behind every result are in
-[`research/`](research/README.md). `research/NOTE_MAP.md` maps each claim of the note, which is
-distributed separately, to its registration, result and read.
+[`research/`](research/README.md). `research/NOTE_MAP.md` maps each claim to its registration, result
+and read.
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23332377.svg)](https://doi.org/10.5281/zenodo.23332377)
 
 ## Tests
 
