@@ -32,8 +32,8 @@ P4–P6 are the parts to have reviewed.
 
 ## Terminology
 
-This file and SCOPE.md use the repository's vocabulary; the note addressed to
-López de Prado & Porcu uses theirs. The mapping, so the two agree:
+This file and SCOPE.md use the repository's vocabulary; the note uses López de
+Prado & Porcu's. The mapping, so the two agree:
 
 | here | in the note | source |
 |---|---|---|
@@ -665,7 +665,10 @@ tags) except where an entry says otherwise:
   range is the main text's, confirmed via Crossref; the supplement's "50–66"
   refers to something else.
 - López de Prado, M. & Porcu, E. (2026). The deflated Sharpe ratio: a unified
-  framework for search-adjusted performance inference. SSRN 7198158,
+  framework for search-adjusted performance inference. *Journal of Portfolio
+  Management*, published online 26 September 2026, doi:10.3905/jpm.2026.070.
+  Title, authors, journal and online date confirmed via Crossref on 2026-10-15;
+  Crossref lists no volume, issue or pages yet. Working-paper version: SSRN 7198158,
   doi:10.2139/ssrn.7198158. Crossref registers 2026, deposited 30 August 2026,
   consistent with the 24 August 2026 version. The project owner has read the
   main text and supplement in full and confirmed the DSR-L, DSR-LS and DSR-EO
