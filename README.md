@@ -205,7 +205,7 @@ are the registered version 2.
 - **Stopping-rule replay**, the null Quixote certifies with, had error rates at or below nominal
   on the searchers tested. Exactness is not claimed and nothing is proved.
 - **The simulation evidence** is scripted searchers and synthetic returns.
-- **On real data** the gate refused on French industries 2013-2019, on Binance perpetuals and on
+- **On real data** the gate refused on French industries 2010-2019, on Binance perpetuals and on
   liquid ETFs 2015-2024. It issued one certificate, on French industries 1926-1989 under the
   recency-weighted statistic, and that certificate's lower bound held on 1990-1995. That is
   evidence for the gate, not for a tradable signal.
