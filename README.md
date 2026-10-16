@@ -28,6 +28,15 @@ the answer.
 - **[`research/`](research/README.md)** holds every pre-registration, run and result behind the
   claims.
 
+## Paper
+
+The method and results are written up in *The Observable Garden: Fixed and adaptive
+candidate sets under the DSR* (Knaster, 2026), on SSRN: <SSRN_LINK>.
+
+- The paper is licensed CC BY; the code is MIT.
+- [`research/NOTE_MAP.md`](research/NOTE_MAP.md) traces each claim in the paper to its
+  registration and result.
+
 ## What it found
 
 A search is adaptive when what is tried next depends on what was previously seen.
@@ -196,7 +205,7 @@ are the registered version 2.
 - **Stopping-rule replay**, the null Quixote certifies with, had error rates at or below nominal
   on the searchers tested. Exactness is not claimed and nothing is proved.
 - **The simulation evidence** is scripted searchers and synthetic returns.
-- **On real data** the gate refused on French industries 2013-2019, on Binance perpetuals and on
+- **On real data** the gate refused on French industries 2010-2019, on Binance perpetuals and on
   liquid ETFs 2015-2024. It issued one certificate, on French industries 1926-1989 under the
   recency-weighted statistic, and that certificate's lower bound held on 1990-1995. That is
   evidence for the gate, not for a tradable signal.
@@ -216,6 +225,14 @@ and read.
 pytest tests -m "not slow"        # the quick target, under two minutes (CI runs it)
 pytest tests research/tests       # everything; much of research/tests needs machine-local data
 ```
+
+## Use of generative AI
+
+The research question, the design of the experiments, and every decision on what was
+registered, run and reported are the author's. Generative AI tools (Claude, Anthropic) were
+used in drafting and editing text and in writing and reviewing code under the author's
+direction; the author checked the results and takes responsibility for them. Language-model
+agents are also the subject of the agent experiments.
 
 ## Licence
 
