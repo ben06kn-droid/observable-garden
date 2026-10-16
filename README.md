@@ -30,8 +30,8 @@ the answer.
 
 ## Paper
 
-The method and results are written up in *[The Observable Garden: Fixed and adaptive
-candidate sets under the DSR]([url](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559))* (Knaster, 2026), on SSRN.
+The method and results are written up in *The Observable Garden: Fixed and adaptive
+candidate sets under the DSR* (Knaster, 2026), on SSRN: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559
 
 - The paper is licensed CC BY; the code is MIT.
 - [`research/NOTE_MAP.md`](research/NOTE_MAP.md) traces each claim in the paper to its
