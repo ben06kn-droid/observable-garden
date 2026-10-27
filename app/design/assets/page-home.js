@@ -1,16 +1,17 @@
 document.addEventListener("DOMContentLoaded", function () {
-  var QX = window.QX, UI = window.QX_UI, v = QX.verdict;
-  var g = QXGarden.render(document.getElementById("hero-garden"), QX, {});
-  g.verdict(UI.WORD[v.status] || v.status);
-  UI.lastRun(QX);
+  var QX = window.QX, UI = window.QX_UI, ex = QX.examples.nothing, v = ex.verdict;
+  var word = UI.WORD[v.status] || v.status;
+  var g = QXGarden.render(document.getElementById("hero-garden"), ex, { species: "oak" });
+  g.verdict(word);
+  UI.lastRun(ex);
 
-  var evals = QX.trees.real.reduce(function (n, m) { return n + m.candidates.length; }, 0);
-  document.getElementById("hero-cap").textContent = "The bundled example: " + v.n_moves + " moves, " + evals +
-    " evaluations, submitted " + v.submitted_feature_names.join(" ") + " at " + v.submitted_sharpe.toFixed(3) +
-    ". " + (UI.WORD[v.status] || v.status) + ", p " + v.p_replay.toFixed(4) + ".";
+  document.getElementById("hero-cap").textContent = "The demo's first example, as an oak: " + v.n_moves + " moves, " +
+    ex.evaluations + " evaluations, submitted " + v.submitted_feature_names.join(" ") + " at " +
+    v.submitted_sharpe.toFixed(3) + ". " + word + ", p " + v.p_replay.toFixed(4) + ".";
   document.getElementById("null-p").textContent = "p " + v.p_replay.toFixed(4);
   document.getElementById("null-b").textContent = "B " + v.B;
-  document.getElementById("cmd").textContent = QX.command;
+  document.getElementById("cmd").textContent = ex.command;
+  QX_CARDS.certificate(document.getElementById("cert"), QX.certificate);
 
   var t = document.getElementById("statuses");
   ["PASS", "FAIL", "INADMISSIBLE", "UNDECIDABLE", "DEGENERATE"].forEach(function (s) {

@@ -139,3 +139,24 @@ Phone, 390px: [`demo-result`](screenshots/demo-result-phone.jpg).
   to 500.
 - **The example is small:** 2 moves, 30 evaluations, against a budget of 60. The status line reads
   "move 2 of 60".
+
+## Unfinished (phase 1b, stopped 2026-10-26)
+
+Phase 1b was stopped before this README was brought up to date. What is built, and what is not:
+
+- **Built:** the display face (Bricolage Grotesque 800) and the comparison strip on
+  `specimens.html`; the three species (oak for the demo, baobab for a visitor's run on
+  `result.html`, bonsai for Sancho on `specimens.html`); the day-to-night light, driven by the stage
+  of a run (scroll on `home.html`, the replicates on `demo-running.html`, day on `run.html`, night on
+  the verdict pages), with every text and graphic colour fitted to WCAG AA and the sweep over 101
+  states shown on `specimens.html`; the planted (PASS) and restart examples with the demo picker and
+  the planted truth on the verdict page; the certificate card on `home.html` and `demo-result.html`;
+  new screenshots in `screenshots/` (`light-day`, `light-dusk`, `light-night` are the three points
+  of the transition).
+- **Not done:** the design-system tables and the screenshot list above still describe phase 1 (the
+  night theme, the day/night switch, IBM Plex Sans for display, `?theme=`). The new review
+  parameter is `?n=0..1`; `?theme=` is gone. The motion section does not yet describe the light.
+- **Rough edges, not fixed:** the restart example's ghosts (18 stems in three replicates) read as
+  reeds, not baobabs; at the dusk crossover amber text has to go black or white to keep AA, so the
+  verdict word and labels lose their hue there briefly; the garden is still too small to read at
+  phone width.
