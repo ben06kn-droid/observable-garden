@@ -1,8 +1,9 @@
-/* Quixote, the site. Two pages and a hard cut between them: the overview on beige with the
-   search drawn behind it in dark green, then the demo on near-black, where the trees are neon
-   pink with an aura on their strokes and the null's replicates streak behind them.
-   Three hues on page two only: pink for trees, blue for a selected tree, amber for the verdict.
-   Glow is decoration on strokes, never on text; every text colour is WCAG AA on its background. */
+/* Quixote, the site. Two pages and a hard cut between them: the overview on paper, with the search
+   drawn behind it in dark green and yellow leaves falling, then the demo on near-black, where the
+   trees are neon pink with a halo. Page two's look switches on only when the snap onto it completes.
+   Three hues on page two: pink for trees, blue for a selected tree (and inside it), amber for the
+   verdict. Glow is decoration on strokes, never on text; every text colour is WCAG AA on its
+   background, and the washes behind text keep it so over the trees. */
 
 @import "@fontsource-variable/bricolage-grotesque/wght.css";
 @import "@fontsource/ibm-plex-mono/latin-400.css";
@@ -16,17 +17,20 @@
   --paper-ink: #1d1f17;        /* 13.4:1 on --paper */
   --paper-muted: #4a4a3d;      /* 7.2:1 */
   --paper-tree: #1f3b2a;       /* the trees behind the overview: opaque dark green */
+  --paper-wash: rgba(239, 230, 210, 0.9);   /* behind page one's text, over the trees */
+  --leaf: #e2b33a;             /* yellow leaves, falling */
+  --leaf-vein: #8a6a12;
 
   /* page two: night */
   --night: #05040b;
   --night-2: #0d0a19;          /* cards, the panel */
+  --night-wash: rgba(9, 7, 20, 0.86);       /* behind page two's text, over the trees */
   --ink: #eeeaf6;              /* 17.2:1 on --night, 16.5:1 on --night-2 */
   --muted: #b6afc9;            /* 9.7:1, 9.3:1 */
   --faint: #8f88a6;            /* 6.1:1, 5.8:1 */
   --rule: #2a2340;
   --pink: #ff3fd2;             /* trees */
   --pink-hot: #ffa6ee;         /* the submitted branch: brighter, heavier, same hue */
-  --pink-dim: #a3368f;         /* the null's streaks */
   --blue: #44b8ff;             /* a selected tree */
   --amber: #f5b544;            /* the verdict card only; 10.8:1 on --night-2 */
 
@@ -57,66 +61,80 @@ a { color: inherit; text-underline-offset: 3px; }
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 max(var(--gutter), calc((100vw - var(--page)) / 2));
   font: 12px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--ink); background: transparent; transition: color 200ms linear;
+  color: var(--ink); background: rgba(5, 4, 11, 0.86);
 }
-.top.on-paper { color: var(--paper-ink); }
+body:not([data-page="two"]) .top { color: var(--paper-ink); background: rgba(239, 230, 210, 0.92); }
 .brand { font: 800 18px/1 var(--display); letter-spacing: 0; text-transform: none; text-decoration: none; }
 .top nav { display: flex; gap: var(--s5); }
 .top nav a { text-decoration: none; padding: var(--s2) 0; }
 .top nav a:hover, .top nav a[aria-current="page"] { text-decoration: underline; }
 
-/* ---------- page one: the overview, on paper ---------- */
+/* ---------- page one: the overview, on paper, under the trees ---------- */
 .page { position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; }
-.one { background: var(--paper); color: var(--paper-ink); display: flex; align-items: center; }
-.one .bg-trees { position: absolute; right: -2%; bottom: 0; width: min(54vw, 980px); height: auto; pointer-events: none; }
-.one .bg-trees.garden .real { filter: none; }
-.one .bg-trees.garden .twig, .one .bg-trees.garden .trunk, .one .bg-trees.garden .bud, .one .bg-trees.garden .canopy { stroke: var(--paper-tree); stroke-width: 1.7; opacity: 1; }
-.one .bg-trees.garden .twig.down { opacity: 1; stroke-width: 1.2; }
-.one .bg-trees.garden .trunk { fill: var(--paper-tree); fill-opacity: 1; }
-.one .bg-trees.garden .canopy { fill: var(--paper-tree); fill-opacity: 0.16; }
-.one .bg-trees.garden .bud { fill: var(--paper); }
-.one .bg-trees.garden .bud.kept { fill: var(--paper-tree); }
-@media (max-width: 860px) { .one { flex-direction: column; } .one .bg-trees { position: static; width: 100%; margin-top: auto; } }
-.one .wrap { position: relative; width: 100%; max-width: var(--page); margin: 0 auto; padding: 96px var(--gutter) 72px; }
-.one .wrap > * { max-width: min(620px, 48vw); }
-@media (max-width: 860px) { .one .wrap > * { max-width: none; } }
-.one h1 { font: 800 clamp(2.6rem, 7vw, 5.8rem)/0.98 var(--display); letter-spacing: -0.03em; margin: 0 0 var(--s5); max-width: 12ch; }
-.one .lede { font-size: clamp(1.05rem, 1.7vw, 1.3rem); color: var(--paper-muted); max-width: 52ch; margin: 0 0 var(--s7); }
-.one ol.steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s5) var(--s6); }
+.one { background: var(--paper); color: var(--paper-ink); }
+.one .bg-trees { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.one .bg-trees .halo { display: none; }
+.one .bg-trees .real { filter: none; }
+.one .bg-trees .twig, .one .bg-trees .trunk, .one .bg-trees .bud, .one .bg-trees .canopy { stroke: var(--paper-tree); stroke-width: 2; opacity: 1; filter: none; }
+.one .bg-trees .twig.down { opacity: 1; stroke-width: 1.4; }
+.one .bg-trees .trunk { fill: var(--paper-tree); fill-opacity: 1; }
+.one .bg-trees .canopy { fill: var(--paper-tree); fill-opacity: 0.22; stroke-width: 2.4; }
+.one .bg-trees .bud, .one .bg-trees .bud.kept, .one .bg-trees .bud.path { fill: var(--paper-tree); }
+.one .wrap { position: relative; z-index: 2; max-width: var(--page); margin: 0 auto; padding: 84px var(--gutter) 64px; }
+.one .copy { max-width: 680px; background: var(--paper-wash); padding: var(--s6) var(--s6) var(--s5); }
+.one h1 { font: 800 clamp(2.4rem, 5.6vw, 4.6rem)/0.98 var(--display); letter-spacing: -0.03em; margin: 0 0 var(--s3); }
+.one .subhead { font: 800 clamp(1.15rem, 1.9vw, 1.5rem)/1.25 var(--display); letter-spacing: -0.01em; margin: 0 0 var(--s5); color: var(--paper-ink); }
+.one p { margin: 0 0 var(--s4); color: var(--paper-muted); }
+.one .copy a { color: var(--paper-ink); }
+.one ol.steps { list-style: none; padding: 0; margin: var(--s5) 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4) var(--s5); }
 .one ol.steps li { border-top: 2px solid var(--paper-ink); padding-top: var(--s3); font-size: 15px; color: var(--paper-muted); }
-.one ol.steps b { display: block; font: 800 15px/1.2 var(--display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--paper-ink); margin-bottom: var(--s2); }
-.one .cue { margin-top: var(--s7); font: 12px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper-muted); }
+.one ol.steps b { display: block; font: 800 14px/1.2 var(--display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--paper-ink); margin-bottom: var(--s2); }
+.one .cue { margin: var(--s5) 0 0; font: 12px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper-muted); }
 .one .cue a { text-decoration: none; }
-@media (max-width: 520px) { .one ol.steps { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .one ol.steps { grid-template-columns: 1fr; } .one .copy { padding: var(--s5) var(--s4); } }
 
-/* ---------- page two: the demo, at night ---------- */
-.two { background: var(--night); padding: 64px max(var(--gutter), calc((100vw - 1600px) / 2)) var(--s5); }
-.two .streaks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.two .streaks path { fill: none; stroke: var(--pink-dim); stroke-width: 1.1; stroke-linecap: round; opacity: 0; transition: opacity 900ms var(--ease);
-  filter: drop-shadow(0 0 3px var(--pink)) drop-shadow(0 0 9px rgba(255, 63, 210, 0.35)); }
-.two .streaks path.on { opacity: 0.28; }
-.two .stage { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 210px 268px; gap: var(--s5); align-items: center; }
-@media (max-width: 1100px) { .two .stage { grid-template-columns: minmax(0, 1fr) 280px; } .two .verdict { grid-column: 2; } }
-@media (max-width: 760px) { .two .stage { grid-template-columns: 1fr; } .two .verdict { grid-column: auto; } }
+/* leaves falling, behind the text */
+.leaves { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.leaf { position: absolute; left: var(--x); top: -6%; width: var(--size); height: var(--size); animation: leaf-fall var(--dur) linear var(--delay) infinite; }
+.leaf path { fill: var(--leaf); stroke: var(--leaf-vein); stroke-width: 0.8; }
+.leaves.blue .leaf path { fill: var(--blue); stroke: #1d5f8f; }
+@keyframes leaf-fall {
+  0%   { top: -6%;  transform: translateX(0) rotate(0deg); }
+  25%  { transform: translateX(var(--sway)) rotate(calc(var(--spin) * 0.25)); }
+  50%  { transform: translateX(0) rotate(calc(var(--spin) * 0.5)); }
+  75%  { transform: translateX(calc(var(--sway) * -1)) rotate(calc(var(--spin) * 0.75)); }
+  100% { top: 104%; transform: translateX(0) rotate(var(--spin)); }
+}
 
-.state { font-family: var(--mono); align-self: center; }
+/* ---------- page two: the demo, at night ----------
+   Nothing of it shows until the snap onto it completes: until then it is plain paper. */
+.two { background: var(--night); }
+body:not([data-page="two"]) .two, body:not([data-page="two"]) .below { background: var(--paper); }
+body:not([data-page="two"]) .two > *, body:not([data-page="two"]) .below > * { visibility: hidden; }
+.two .garden-wrap { position: absolute; inset: 60px 0 0 0; }
+.two .garden-wrap .garden { width: 100%; height: 100%; }
+.two .hud { position: relative; z-index: 2; min-height: 100vh; min-height: 100svh; padding: 64px max(var(--gutter), calc((100vw - 1600px) / 2)) var(--s5);
+  display: flex; flex-direction: column; pointer-events: none; }
+.two .hud > * { pointer-events: auto; }
+.two .side { margin-left: auto; margin-top: var(--s4); width: 300px; display: flex; flex-direction: column; gap: var(--s4); }
+@media (max-width: 760px) { .two .side { width: 100%; margin-top: 52vh; } .two .garden-wrap { inset: 140px 0 auto 0; height: 50vh; } }
+
+.state { font-family: var(--mono); background: var(--night-wash); border: 1px solid var(--rule); padding: var(--s5); }
 .state .phase { font: 800 13px/1.2 var(--display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 var(--s3); }
-.state .big { font: 500 clamp(2rem, 3.4vw, 2.8rem)/1.05 var(--mono); color: var(--ink); margin: 0; font-variant-numeric: tabular-nums; }
-.state .line { font-size: 14px; color: var(--muted); margin: var(--s2) 0 0; font-variant-numeric: tabular-nums; }
-.state .word { font: 800 clamp(2.4rem, 4.6vw, 3.6rem)/1 var(--display); color: var(--ink); margin: var(--s4) 0 var(--s2); }
+.state .big { font: 500 clamp(2rem, 3.2vw, 2.6rem)/1.05 var(--mono); color: var(--ink); margin: 0; font-variant-numeric: tabular-nums; }
+.state .line { font-size: 14px; color: var(--muted); margin: var(--s2) 0 var(--s4); font-variant-numeric: tabular-nums; }
 
-.controls { position: relative; display: flex; flex-wrap: wrap; gap: var(--s2); margin: 0 0 var(--s3); padding: 0; list-style: none; }
-.chip { font: 500 12px/1.2 var(--mono); letter-spacing: 0.06em; color: var(--muted); background: transparent; border: 1px solid var(--rule); padding: 10px 12px; cursor: pointer; min-height: 40px; text-align: left; }
-.chip[aria-pressed="true"] { color: var(--ink); border-color: var(--pink); box-shadow: inset 0 -2px 0 var(--pink); }
+.controls { display: flex; flex-wrap: wrap; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.chip { font: 500 12px/1.2 var(--mono); letter-spacing: 0.06em; color: var(--ink); background: var(--night-wash); border: 1px solid var(--rule); padding: 10px 12px; cursor: pointer; min-height: 40px; text-align: left; }
+.chip[aria-pressed="true"] { border-color: var(--pink); box-shadow: inset 0 -2px 0 var(--pink); }
 .chip[disabled] { cursor: not-allowed; color: var(--faint); border-style: dashed; }
 .chip small { display: block; color: var(--muted); font-size: 11px; letter-spacing: 0; margin-top: 2px; }
 .chip[disabled] small { color: var(--faint); }
 .run { font: 600 13px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--night); background: var(--ink); border: 0; padding: 0 var(--s5); min-height: 44px; cursor: pointer; }
 .run[disabled] { opacity: 0.5; cursor: progress; }
 
-.garden-wrap { position: relative; }
+/* the garden */
 .garden { width: 100%; height: auto; display: block; overflow: visible; }
-.garden-wrap .garden { max-height: calc(100vh - 150px); max-height: calc(100svh - 150px); }
 .garden .ground { stroke: var(--rule); stroke-width: 1.4; fill: none; }
 .garden .axis text { font: 13px var(--mono); fill: var(--faint); }
 .garden .axis line { stroke: var(--rule); }
@@ -124,29 +142,33 @@ a { color: inherit; text-underline-offset: 3px; }
 .garden .bar text { font: 13px var(--mono); fill: var(--muted); letter-spacing: 0.06em; }
 .garden .stem { cursor: pointer; outline: none; }
 .garden .twig, .garden .trunk, .garden .bud, .garden .canopy {
-  stroke: var(--pink); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
+  stroke: var(--pink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
   transition: stroke 600ms var(--ease), fill 600ms var(--ease), opacity 300ms var(--ease), stroke-dashoffset 260ms var(--ease);
 }
-.garden .real { filter: drop-shadow(0 0 2px var(--pink)) drop-shadow(0 0 8px rgba(255, 63, 210, 0.55)) drop-shadow(0 0 22px rgba(255, 63, 210, 0.25)); }
+.garden .real { filter: drop-shadow(0 0 2px var(--pink)) drop-shadow(0 0 7px rgba(255, 63, 210, 0.75)); }
 .garden .twig { fill: none; }
-.garden .twig.down { opacity: 0.4; stroke-width: 1.2; }
-.garden .trunk { fill: var(--pink); fill-opacity: 0.14; stroke-width: 2.4; }
+.garden .twig.down { opacity: 0.45; stroke-width: 1.3; }
+.garden .trunk { fill: var(--pink); fill-opacity: 0.18; stroke-width: 2.6; }
 .garden .bud { fill: var(--night); }
 .garden .bud.kept { fill: var(--pink); }
-.garden .canopy { fill: var(--pink); fill-opacity: 0.06; stroke-width: 1.4; opacity: 0.8; }
-.garden .path { stroke: var(--pink-hot); stroke-width: 3.4; }
+.garden .canopy { fill: var(--pink); fill-opacity: 0.07; stroke-width: 1.6; opacity: 0.85; }
+/* the halo: a blurred, heavier copy of every stroke behind the tree (an svg filter, not text) */
+.garden .halo .twig, .garden .halo .trunk { stroke-width: 9; opacity: 0.6; }
+.garden .halo .twig.down { stroke-width: 6; opacity: 0.35; }
+.garden .halo .canopy { stroke-width: 18; fill-opacity: 0.35; opacity: 0.55; }
+.garden .halo .bud { opacity: 0; }
+.garden .path { stroke: var(--pink-hot); stroke-width: 3.6; }
 .garden .bud.path { fill: var(--pink-hot); }
-.garden .trunk.path { stroke-width: 3.6; }
+.garden .trunk.path { stroke-width: 3.8; }
+.garden .halo .path { stroke-width: 14; opacity: 0.8; }
 .garden .stem.selected .twig, .garden .stem.selected .trunk, .garden .stem.selected .bud, .garden .stem.selected .canopy { stroke: var(--blue); }
-.garden .stem.selected .bud.kept, .garden .stem.selected .trunk { fill: var(--blue); }
-.garden .stem.selected .canopy { fill: var(--blue); }
-.garden .stem:focus-visible .canopy { stroke: var(--blue); stroke-width: 2.4; opacity: 1; }
-.garden .move.lit .twig, .garden .move.lit .bud { stroke-width: 3.4; opacity: 1; }
-.garden.growing .real .twig:not(.on) { stroke-dashoffset: 1; }
+.garden .stem.selected .bud.kept, .garden .stem.selected .trunk, .garden .stem.selected .canopy { fill: var(--blue); }
+.garden .real .stem:focus-visible .canopy { stroke: var(--blue); stroke-width: 3; opacity: 1; }
 .garden .twig { stroke-dasharray: 1; stroke-dashoffset: 0; }
-.garden.growing .real .bud:not(.on), .garden.growing .real .trunk:not(.on), .garden.growing .real .canopy:not(.on) { opacity: 0; }
+.garden.growing .twig[data-step]:not(.on) { stroke-dashoffset: 1; }
+.garden.growing .bud[data-step]:not(.on), .garden.growing .trunk[data-step]:not(.on), .garden.growing .canopy[data-step]:not(.on) { opacity: 0; }
 
-/* the verdict card: amber, smaller, at the right */
+/* the verdict card: amber, at the right */
 .verdict { background: var(--night-2); border: 1px solid var(--rule); border-top: 3px solid var(--amber); padding: var(--s5); }
 .verdict .k { font: 11px/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 0 0 var(--s2); }
 .verdict .word { font: 800 2.6rem/1 var(--display); color: var(--amber); margin: 0 0 var(--s2); }
@@ -159,30 +181,38 @@ a { color: inherit; text-underline-offset: 3px; }
 .verdict a { color: var(--ink); }
 .verdict.idle .word { color: var(--faint); }
 
-/* the process panel: what one tree, or one branch, tried */
-.panel {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 25; width: min(440px, 100vw);
-  background: var(--night-2); border-left: 1px solid var(--blue); color: var(--ink);
-  transform: translateX(102%); visibility: hidden; display: flex; flex-direction: column;
-  transition: transform 420ms var(--ease), visibility 0s linear 420ms;
+/* ---------- inside a tree: the tree fills the view, blue, and its process sits over it ---------- */
+.inside { position: fixed; inset: 0; z-index: 40; background: var(--night); color: var(--ink); overflow: hidden; }
+.inside-stage { position: absolute; inset: 0; transform-origin: 0 0; transition: transform 650ms var(--ease); }
+.inside-tree { width: 100%; height: 100%; display: block; }
+.inside .garden .twig, .inside .garden .trunk, .inside .garden .bud, .inside .garden .canopy { stroke: var(--blue); }
+.inside .garden .trunk, .inside .garden .bud.kept, .inside .garden .canopy { fill: var(--blue); }
+.inside .garden .real { filter: drop-shadow(0 0 2px var(--blue)) drop-shadow(0 0 8px rgba(68, 184, 255, 0.75)); }
+.inside .leaves { z-index: 1; transition: opacity 500ms var(--ease) 250ms; }
+.inside .process {
+  position: absolute; z-index: 2; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); overflow-y: auto;
+  background: var(--night-wash); border-left: 1px solid var(--blue); padding: 0 var(--s5) var(--s7);
+  transition: opacity 400ms var(--ease) 300ms;
 }
-.panel.open { transform: none; visibility: visible; transition: transform 420ms var(--ease), visibility 0s linear 0s; }
-.panel header { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s4); padding: var(--s5); border-bottom: 1px solid var(--rule); }
-.panel h2 { font: 800 1.4rem/1.1 var(--display); margin: 0; color: var(--ink); }
-.panel h2 small { display: block; font: 12px/1.5 var(--mono); color: var(--muted); margin-top: var(--s2); }
-.panel .close { font: 12px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); background: none; border: 1px solid var(--rule); padding: 8px 10px; cursor: pointer; }
-.panel ol { list-style: none; margin: 0; padding: var(--s3) var(--s5) var(--s6); overflow-y: auto; }
-.panel li { border-bottom: 1px solid var(--rule); }
-.panel .mv { width: 100%; text-align: left; background: none; border: 0; color: var(--ink); padding: var(--s3) 0; cursor: pointer; font: 14px/1.5 var(--sans); }
-.panel .mv b { font: 500 13px var(--mono); color: var(--blue); }
-.panel .mv span { display: block; font: 13px/1.5 var(--mono); color: var(--muted); }
-.panel .mv[aria-expanded="true"] b { text-decoration: underline; }
-.panel table { width: 100%; border-collapse: collapse; margin: 0 0 var(--s3); font: 12.5px/1.5 var(--mono); }
-.panel td { padding: 2px 0; color: var(--muted); }
-.panel td.s { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
-.panel tr.chosen td { color: var(--ink); }
-.panel tr.chosen td:first-child::before { content: "> "; color: var(--blue); }
-.panel .logline { font: 12px/1.5 var(--mono); color: var(--faint); margin: 0 0 var(--s3); overflow-wrap: anywhere; }
+.inside:not(.open) .process, .inside:not(.open) .leaves { opacity: 0; transition-delay: 0ms; }
+.inside .process header { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: baseline; gap: var(--s4);
+  padding: var(--s5) 0 var(--s4); background: var(--night-2); border-bottom: 1px solid var(--rule); }
+.inside h2 { font: 800 1.5rem/1.1 var(--display); margin: 0; color: var(--ink); }
+.inside h2 small { display: block; font: 12px/1.5 var(--mono); color: var(--muted); margin-top: var(--s2); }
+.inside .close { font: 12px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--night); border: 1px solid var(--blue); padding: 10px 12px; cursor: pointer; }
+.inside ol { list-style: none; margin: 0; padding: 0; }
+.inside li { border-bottom: 1px solid var(--rule); padding: var(--s4) 0; }
+.inside li.focus { border-left: 3px solid var(--blue); padding-left: var(--s3); }
+.inside .mv { margin: 0 0 var(--s2); font: 13px/1.5 var(--mono); color: var(--muted); }
+.inside .mv b { color: var(--blue); font-weight: 500; }
+.inside .mv .rule { color: var(--ink); }
+.inside .logline { font: 12px/1.5 var(--mono); color: var(--faint); margin: 0 0 var(--s3); overflow-wrap: anywhere; }
+.inside table { width: 100%; border-collapse: collapse; font: 12.5px/1.5 var(--mono); }
+.inside td { padding: 2px 0; color: var(--muted); }
+.inside td.s { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+.inside tr.chosen td { color: var(--ink); }
+.inside tr.chosen td:first-child::before { content: "> "; color: var(--blue); }
+body.inside-open { overflow: hidden; }
 
 /* ---------- below page two: free scrolling ---------- */
 .below { background: var(--night); padding: var(--s8) max(var(--gutter), calc((100vw - var(--page)) / 2)) var(--s7); border-top: 1px solid var(--rule); }
@@ -216,4 +246,5 @@ pre.cmd { margin: 0 0 var(--s4); padding: var(--s4); border: 1px solid var(--rul
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .leaf { top: var(--y); transform: rotate(var(--spin)); }
 }

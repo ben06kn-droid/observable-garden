@@ -8,7 +8,7 @@ import { defineConfig } from "vite";
 // the pinned Pyodide release: its files are served from /pyodide/<version>/
 const PYODIDE = JSON.parse(readFileSync(resolve(import.meta.dirname, "public/pyodide/MANIFEST.json"), "utf8")).pyodide;
 
-const pages = ["index", "result", "paper", "docs", "privacy", "terms", "run", "viewer", "404"];
+const pages = ["index", "result", "docs", "privacy", "terms", "run", "viewer", "404"];
 
 export default defineConfig({
   base: "/",

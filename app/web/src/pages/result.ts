@@ -1,8 +1,8 @@
-import { auditId, h, sha256Hex, word } from "../common";
+import { auditId, h, reduceMotion, sha256Hex, word } from "../common";
 import { command, demos, loadDemo } from "../demos";
 import { drawGarden } from "../garden";
 import { loadGate } from "../gate";
-import { makePanel } from "../panel";
+import { makeInside } from "../inside";
 import type { SearchTree } from "../types";
 import { idleCard, verdictCard } from "../verdict";
 
@@ -12,7 +12,7 @@ const q = new URLSearchParams(location.search);
 const status = $("r-status");
 idleCard($("verdict"), "Computing the verdict in your browser.");
 let tree: SearchTree | null = null;
-const panel = makePanel($("panel"), () => tree);
+const inside = makeInside($("inside"), () => tree);
 
 (async () => {
   const list = await demos();
@@ -31,9 +31,8 @@ const panel = makePanel($("panel"), () => tree);
     const g = drawGarden($("garden") as unknown as SVGSVGElement, tree, { interactive: true, bar: r.class_bar,
       submitted: { rule: r.submitted_feature_names.join(" "), sharpe: r.submitted_sharpe } });
     g.verdict(w);
-    g.onPick((stem, move) => { g.select(stem); panel.open(stem, move); });
-    panel.onClose(() => g.select(null));
-    panel.onLight((m) => g.light(m));
+    g.onPick((stem, move) => { g.select(stem); window.setTimeout(() => inside.open(stem, move, g.rectOf(stem)), reduceMotion ? 0 : 450); });
+    inside.onClose(() => g.select(null));
   }
   verdictCard($("verdict"), r, loaded.truth ? (box) => {
     const t = loaded.truth;

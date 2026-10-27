@@ -1,48 +1,71 @@
-import { auditId, h, headerOverPaper, reduceMotion, sha256Hex, word } from "../common";
+import { auditId, h, reduceMotion, sha256Hex, word } from "../common";
 import { command, demos, loadDemo, type Demo } from "../demos";
-import { drawGarden, scaleFor, type GardenHandle } from "../garden";
+import { drawGarden, type GardenHandle } from "../garden";
 import { loadGate } from "../gate";
-import { makePanel } from "../panel";
-import { drawStreaks } from "../streaks";
-import type { AuditResult, Progress, ReplicatePath, SearchTree } from "../types";
+import { makeInside } from "../inside";
+import { leaves } from "../leaves";
+import type { AuditResult, Progress, SearchTree } from "../types";
 import { idleCard, verdictCard } from "../verdict";
 
-const SEED = 0, PATHS = 48;
+const SEED = 0;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const one = $("overview"), two = $("demo");
-headerOverPaper(one);
+const two = $("demo");
+const body = document.body;
 
-// ---- the hard cut: scrolling down from the overview settles on the demo; scrolling up from the
-// demo's top settles back on the overview. Below the demo, scrolling is free.
+// ---- the cut. Page one scrolls freely to its last line. Leaving it (scrolling on while the two
+// pages share the screen) glides onto page two, and page two's look switches on only when the
+// glide has finished: until then the visitor sees only paper, trees and leaves. Scrolling back up
+// from the top of page two switches back to paper at once and glides to page one's last line.
+// Below page two, scrolling is free. Reduced motion: the same switch, without the glide.
+const night = (on: boolean) => { body.dataset.page = on ? "two" : "one"; };
 let settling = false;
-const go = (y: number) => {
+function glide(y: number, then?: () => void) {
   settling = true;
   window.scrollTo({ top: y, behavior: reduceMotion ? "auto" : "smooth" });
-  window.setTimeout(() => { settling = false; }, reduceMotion ? 50 : 700);
-};
+  const finish = () => { settling = false; then?.(); };
+  if (reduceMotion) { finish(); return; }
+  let last = -1, still = 0;
+  const watch = () => {                       // done when the scroll has stopped near its target
+    const now = window.scrollY;
+    still = Math.abs(now - last) < 0.5 ? still + 1 : 0; last = now;
+    if ((Math.abs(now - y) < 2 && still >= 2) || still > 30) finish(); else requestAnimationFrame(watch);
+  };
+  requestAnimationFrame(watch);
+}
 let lastY = window.scrollY;
-window.addEventListener("scroll", () => {
-  const y = window.scrollY, top = two.offsetTop, dir = y - lastY;
+function onScroll() {
+  const y = window.scrollY, top = two.offsetTop, oneEnd = top - window.innerHeight, dir = y - lastY;
   lastY = y;
   if (settling) return;
-  if (y > 4 && y < top - 4) go(dir > 0 ? top : 0);
-}, { passive: true });
+  if (y >= top - 2) { night(true); return; }
+  if (y <= oneEnd + 2) { night(false); return; }
+  // the two pages share the screen
+  if (dir > 0) glide(top, () => night(true));
+  else { night(false); glide(Math.max(0, oneEnd)); }
+}
+window.addEventListener("scroll", onScroll, { passive: true });
+night(window.scrollY >= two.offsetTop - 2);
+leaves($("leaves"));
 
-// ---- page one: the restart example's trees, dark green, behind the overview
+// ---- page one: the restart example's trees, dark green, filling the background
 fetch("/examples/overview-tree.json").then((r) => r.json()).then((tree: SearchTree) => {
-  drawGarden($<SVGSVGElement & HTMLElement>("bg-trees") as unknown as SVGSVGElement, tree, { quiet: true });
+  drawGarden($("bg-trees") as unknown as SVGSVGElement, tree, { quiet: true, fill: true, halo: false });
 }).catch(() => {});
 
 // ---- page two
 const svg = $("garden") as unknown as SVGSVGElement;
-const phase = $("phase"), big = $("big"), line = $("line"), stateWord = $("state-word"), runBtn = $<HTMLButtonElement>("run");
+const phase = $("phase"), big = $("big"), line = $("line"), runBtn = $<HTMLButtonElement>("run");
 const verdictBox = $("verdict");
 idleCard(verdictBox, "Run an example to see its verdict here.");
 let tree: SearchTree | null = null;
 let garden: GardenHandle | null = null;
-const panel = makePanel($("panel"), () => tree);
-panel.onClose(() => garden?.select(null));
-panel.onLight((m) => garden?.light(m));
+const inside = makeInside($("inside"), () => tree);
+inside.onClose(() => garden?.select(null));
+// clicking a tree turns it blue, then the view zooms inside it
+function enter(g: GardenHandle, stem: number, move: number | null) {
+  g.select(stem);
+  window.setTimeout(() => inside.open(stem, move, g.rectOf(stem)), reduceMotion ? 0 : 450);
+}
 
 let chosen: Demo;
 const chips = $("chips");
@@ -73,11 +96,8 @@ runBtn.addEventListener("click", () => { void run(chosen); });
 
 async function run(demo: Demo) {
   runBtn.disabled = true;
-  stateWord.hidden = true;
   idleCard(verdictBox, "Waiting for the verdict.");
   $("record").hidden = true;
-  const streakBox = $("streaks") as unknown as SVGSVGElement;
-  streakBox.replaceChildren();
   try {
     setState("Loading", "the gate", "Python and the package, into your browser; once per visit.");
     const [gate, loaded] = await Promise.all([loadGate(), loadDemo(demo)]);
@@ -93,7 +113,7 @@ async function run(demo: Demo) {
     };
     setState("The search", "0", "evaluations");
     const B = demo.B;
-    const out = await gate.audit({ ...loaded.inputs, B, seed: SEED, replicatePaths: PATHS }, {
+    const out = await gate.audit({ ...loaded.inputs, B, seed: SEED }, {
       onSearch: (t) => { tree = t; void animateSearch(t, log, demo).then(() => { nullShown = true; showNull(); searchDone(); }); },
       onProgress: (p) => { latest = p; if (nullShown) showNull(); },
     });
@@ -102,7 +122,7 @@ async function run(demo: Demo) {
       setState("Refused", "—", out.message);
       return;
     }
-    await land(out.result, out.replicatePaths, demo, loaded.inputs.panel, loaded.inputs.cls, loaded.inputs.log, log, gate.wheel);
+    await land(out.result, demo, loaded.inputs.panel, loaded.inputs.cls, loaded.inputs.log, log, gate.wheel);
   } catch (e) {
     setState("Error", "—", String((e as Error).message ?? e));
   } finally {
@@ -112,8 +132,8 @@ async function run(demo: Demo) {
 
 function animateSearch(t: SearchTree, log: any, _demo: Demo): Promise<void> {
   garden = drawGarden(svg, t, { interactive: true });
-  svg.setAttribute("aria-label", `The search drawn as ${t.stems} tree${t.stems > 1 ? "s" : ""}: ${t.moves.length} moves, ${t.evaluations} evaluations. Select a tree to see what it tried.`);
-  garden.onPick((stem, move) => { garden!.select(stem); panel.open(stem, move); });
+  svg.setAttribute("aria-label", `The search drawn as ${t.stems} tree${t.stems > 1 ? "s" : ""}: ${t.moves.length} moves, ${t.evaluations} evaluations. Choose a tree to go inside it and see what it tried.`);
+  garden.onPick((stem, move) => enter(garden!, stem, move));
   if (reduceMotion) { garden.setStep(garden.total); setState("The search", String(t.evaluations), `evaluations in ${t.moves.length} moves`); return Promise.resolve(); }
   garden.grow(); garden.setStep(0);
   const per = Math.min(90, 5000 / t.evaluations);
@@ -130,21 +150,14 @@ function animateSearch(t: SearchTree, log: any, _demo: Demo): Promise<void> {
   });
 }
 
-async function land(r: AuditResult, paths: ReplicatePath[] | null, demo: Demo, panelBytes: ArrayBuffer, cls: string,
+async function land(r: AuditResult, demo: Demo, panelBytes: ArrayBuffer, cls: string,
                     logText: string, log: any, wheel: string) {
-  if (paths?.length) {
-    const vals = paths.flatMap((p) => p.steps.map((s) => s.sharpe));
-    const sc = scaleFor(vals, r.class_bar);
-    const st = drawStreaks($("streaks") as unknown as SVGSVGElement, paths, sc.lo, sc.hi);
-    if (reduceMotion) st.reveal(1);
-    else await new Promise<void>((res) => { let i = 0; const n = 24; const t = () => { st.reveal(++i / n); if (i < n) window.setTimeout(t, 45); else res(); }; t(); });
-  }
   const w = word(r.status);
   garden?.verdict(w);
   if (tree) {   // redraw with the submitted branch marked, now that it is known
     const sel = drawGarden(svg, tree, { interactive: true, bar: r.class_bar,
       submitted: { rule: r.submitted_feature_names.join(" "), sharpe: r.submitted_sharpe } });
-    sel.onPick((stem, move) => { sel.select(stem); panel.open(stem, move); });
+    sel.onPick((stem, move) => enter(sel, stem, move));
     garden = sel;
   }
   setState("The verdict", w, `p ${r.p_replay === null ? "n/a" : r.p_replay.toFixed(4)} · B ${r.B.toLocaleString("en")}`);

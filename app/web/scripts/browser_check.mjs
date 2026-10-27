@@ -84,35 +84,62 @@ if (probe) {
   console.log(JSON.stringify(report.probe, null, 1)); process.exit(0);
 }
 try {
+  for (const [vw, vh, tag] of [[1440, 900, "desktop"], [1366, 768, "laptop"]]) {
+    await viewport(vw, vh);
+    await go("/");
+    await sleep(600);
+    await shot(`${tag}-1-overview-top`);
+    // page one scrolls freely to its last line, and page two stays plain paper meanwhile
+    const oneEnd = await evaluate(`document.getElementById('demo').offsetTop - innerHeight`);
+    if (oneEnd > 0) { await evaluate(`window.scrollTo(0, ${oneEnd}); true`); await sleep(500); await shot(`${tag}-2-overview-end`); }
+    report[`${tag}_page_one_scrolls_freely`] = oneEnd <= 0 || (await evaluate(`Math.abs(scrollY - ${Math.max(0, oneEnd)}) < 2`));
+    report[`${tag}_paper_until_snap`] = await evaluate(`document.body.dataset.page === 'one'`);
+    // leaving page one glides onto page two, and the night switches on only at the end
+    await evaluate(`window.scrollBy(0, 80); true`);
+    await sleep(120);
+    report[`${tag}_still_paper_mid_glide`] = await evaluate(`document.body.dataset.page === 'one'`);
+    await until(`document.body.dataset.page === 'two'`, 5000);
+    report[`${tag}_snapped`] = await evaluate(`Math.abs(scrollY - document.getElementById('demo').offsetTop) < 3`);
+    await sleep(300);
+    await shot(`${tag}-3-demo-ready`);
+  }
   await viewport(1440, 900);
   await go("/");
-  await shot("1-overview");
-  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop)`); await sleep(900);
-  await shot("2-demo-ready");
+  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop)`); await sleep(500);
   const idx = { nothing: 0, planted: 1, restart: 2 }[example];
   await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
   await evaluate(`document.querySelectorAll('#chips .chip')[${idx}].click(); document.getElementById('run').click(); true`);
   const t0 = Date.now();
   report.timings.gate_loaded_and_search_started_ms = await until(`document.getElementById('phase').textContent === 'The search'`, 120000);
-  await sleep(1600); await shot("3-demo-search");
-  await until(`document.getElementById('phase').textContent === 'The null'`, 120000); await sleep(400); await shot("4-demo-null");
+  await sleep(1600); await shot("4-demo-search");
+  await until(`document.getElementById('phase').textContent === 'The null'`, 120000); await sleep(400); await shot("5-demo-null");
   await until(`document.getElementById('phase').textContent === 'The verdict'`, 180000);
   report.timings.click_to_verdict_ms = Date.now() - t0;
-  await sleep(1800); await shot("5-demo-verdict");
+  await sleep(1800); await shot("6-demo-verdict");
   report.verdict = await evaluate(`({ word: document.getElementById('big').textContent, line: document.getElementById('line').textContent, card: document.querySelector('#verdict .word')?.textContent })`);
-  await evaluate(`document.querySelector('#garden .stem .move:last-child .bud')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
-  await sleep(900); await shot("6-tree-selected");
-  report.panel = await evaluate(`({ open: document.getElementById('panel').classList.contains('open'), title: document.getElementById('panel-title')?.textContent, selected: !!document.querySelector('#garden .stem.selected') })`);
-  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`); await sleep(500);
-  report.panel.closedByEsc = await evaluate(`!document.getElementById('panel').classList.contains('open') && !document.querySelector('#garden .stem.selected')`);
-  await evaluate(`window.scrollTo(0, document.getElementById('record').offsetTop); true`); await sleep(400); await shot("7-record");
+  report.streaks_gone = await evaluate(`!document.getElementById('streaks')`);
+  // into a tree: blue, then the zoom; out again with Esc
+  await evaluate(`document.querySelector('#garden .real .stem .move:last-child .bud')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
+  await sleep(250);
+  report.inside = { blue_first: await evaluate(`!!document.querySelector('#garden .real .stem.selected')`) };
+  await until(`!document.getElementById('inside').hidden`, 5000);
+  await sleep(1300); await shot("7-inside-tree");
+  report.inside.open = await evaluate(`document.getElementById('inside').classList.contains('open')`);
+  report.inside.title = await evaluate(`document.getElementById('inside-title')?.textContent`);
+  report.inside.moves = await evaluate(`document.querySelectorAll('#inside li').length`);
+  report.inside.focus_in = await evaluate(`document.activeElement?.id === 'inside-title'`);
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
+  await until(`document.getElementById('inside').hidden`, 5000); await sleep(200);
+  report.inside.closed_by_esc = await evaluate(`!document.querySelector('#garden .real .stem.selected') && document.body.dataset.page === 'two'`);
+  await evaluate(`window.scrollTo(0, document.getElementById('record').offsetTop); true`); await sleep(400); await shot("8-record");
   await go(`/result.html?ex=${example}`);
   await until(`!!document.querySelector('#verdict:not(.idle)')`, 180000); await sleep(1600);
-  await shot("8-result", true);
-  for (const p of ["/paper.html", "/docs.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/nope.html"]) { await go(p); }
-  await go("/docs.html"); await shot("9-docs");
-  await viewport(390, 844); await go("/"); await shot("10-phone-overview");
-  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop)`); await sleep(900); await shot("11-phone-demo");
+  await shot("9-result", true);
+  for (const p of ["/docs.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/nope.html"]) { await go(p); }
+  report.paper_link = await evaluate(`[...document.querySelectorAll('a')].filter(a => a.textContent === 'Paper').every(a => a.href.startsWith('https://papers.ssrn.com/') && a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer'))`);
+  await go("/docs.html"); await shot("10-docs");
+  await viewport(390, 844); await go("/"); await shot("11-phone-overview");
+  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop)`); await sleep(900); await shot("12-phone-demo");
   report.phone_overflow = await evaluate(`document.documentElement.scrollWidth > innerWidth`);
 } catch (e) {
   report.error = String(e.message ?? e);
