@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quixote · an overfitting gate</title>
+<meta name="description" content="An overfitting gate for strategies found by AI agents: it logs the search, re-grows it on noise, and certifies or refuses.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<script src="assets/site.js"></script>
+<script src="assets/example-data.js" defer></script>
+<script src="assets/garden.js" defer></script>
+</head>
+<body class="drift">
+<a class="skip" href="#main">Skip to content</a>
+<div class="env" aria-hidden="true">
+  <div class="grid"></div>
+  <div class="beams"><i></i><i></i><i></i></div>
+  <div class="scan"></div>
+  <svg class="grain"><filter id="grain-f"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#grain-f)"/></svg>
+</div>
+
+<header class="top">
+  <a class="brand" href="home.html"><b>QUIXOTE</b> <span>· THE OBSERVABLE GARDEN</span></a>
+  <div class="status" aria-live="off"><span class="dot"></span><span class="txt">LAST RUN</span></div>
+  <nav class="nav" aria-label="Main">
+    <a href="demo-running.html">Demo</a>
+    <a href="run.html">Run</a>
+    <button class="theme" type="button">Day</button>
+  </nav>
+</header>
+
+<main id="main">
+  <section class="wrap hero" aria-labelledby="hero-h">
+    <div class="cols">
+      <div>
+        <p class="label">An overfitting gate for strategies found by AI agents</p>
+        <h1 class="display" id="hero-h">A backtest is the best of many attempts.</h1>
+        <p class="lede">Quixote logs every strategy an agent tries, re-grows the same search on noise, and certifies
+          the one it submitted only if it stands above what that garden grows by luck.</p>
+        <div class="actions">
+          <a class="btn primary" href="demo-running.html">Run the demo</a>
+          <a class="btn" href="run.html">Run your own</a>
+        </div>
+      </div>
+      <figure>
+        <svg id="hero-garden"></svg>
+        <figcaption id="hero-cap">The bundled example.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="s1">
+    <div class="wrap cols">
+      <div class="reveal">
+        <p class="label"><span class="n">01</span><span>The search</span></p>
+        <h2 class="display" id="s1">The agent names a move. The harness runs it.</h2>
+      </div>
+      <div class="reveal prose">
+        <p>An agent never hands in a rule it built. It names one move, and the harness performs it against a class
+          of strategies declared before the search, scores every candidate the move considers, and writes all of it
+          to the log. The log cannot disagree with what ran, because the log is what ran.</p>
+        <p>In the garden each bud is one evaluation, drawn at the height of its in-sample Sharpe. A move scores a
+          fan of candidates; the one it keeps grows on. A restart is a new stem.</p>
+        <table class="plain" aria-label="The moves">
+          <tr><th>init</th><td>anchor on the best single feature: a first fan from the ground</td></tr>
+          <tr><th>extend_best</th><td>add the feature that most improves the held rule</td></tr>
+          <tr><th>swap_worst</th><td>replace the weakest held feature</td></tr>
+          <tr><th>flip</th><td>reverse one held feature's sign</td></tr>
+          <tr><th>restart</th><td>only on a declared rule that fires: a new stem</td></tr>
+          <tr><th>stop</th><td>only on a declared rule that fires</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="s2">
+    <div class="wrap cols">
+      <div class="reveal">
+        <p class="label"><span class="n">02</span><span>The null</span></p>
+        <h2 class="display" id="s2">Then the garden is re-grown on noise.</h2>
+      </div>
+      <div class="reveal prose">
+        <p>The gate resamples the rows of the data, removes every rule's average return so none has an edge, and
+          re-executes the logged search on each copy: the same moves, the same declared stopping rules. Where a copy's
+          search would run on, it continues with the best one-step move.</p>
+        <p>Each copy keeps the best rule it reaches. The p-value is the share of copies that reach the submitted
+          Sharpe. On the example, <span class="mono" id="null-p">p</span> of <span class="mono" id="null-b">B</span>:
+          nearly every search on noise did at least as well.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="s3">
+    <div class="wrap cols">
+      <div class="reveal">
+        <p class="label"><span class="n">03</span><span>The verdict</span></p>
+        <h2 class="display" id="s3">One of five answers.</h2>
+      </div>
+      <div class="reveal prose">
+        <table class="plain" id="statuses" aria-label="What a verdict means"></table>
+        <p class="hint">Beside it, the lower bound L<sub>0.90</sub>: the Sharpe the selected rule is 90% confident of
+          exceeding, after the search is paid for.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="s4">
+    <div class="wrap cols">
+      <div class="reveal">
+        <p class="label"><span class="n">04</span><span>The record</span></p>
+        <h2 class="display" id="s4">Every run reproduces from one command.</h2>
+      </div>
+      <div class="reveal prose">
+        <p>The class is hashed before the first evaluation and the hash goes into the log, so a class changed after
+          results are seen is refused. The panel's hash, the seeds, the model and the budget go in beside it. Any
+          verdict here comes back from the command line, from the same code.</p>
+        <pre class="cmd" id="cmd"></pre>
+        <div class="fixed-lines"><p>Not investment advice.</p><p>Not a registered result; nothing from this app enters the research record.</p></div>
+        <p style="margin-top: var(--s6)"><a class="btn primary" href="demo-running.html">Run the demo</a></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <span>Quixote · MIT · the repository's own modules, no reimplementation</span>
+    <nav aria-label="Legal"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Security</a><a href="https://github.com/ben06kn-droid/observable-garden">Source</a></nav>
+  </div>
+</footer>
+
+<script src="assets/page-home.js" defer></script>
+</body>
+</html>
