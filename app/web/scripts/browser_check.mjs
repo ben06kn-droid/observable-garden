@@ -271,8 +271,20 @@ try {
     moves: document.querySelectorAll('#inside li').length, focus_in: document.activeElement?.id === 'run-title', hash: location.hash,
     tree_blue: getComputedStyle(document.querySelector('#garden .real .twig')).stroke, wood_blue: getComputedStyle(document.querySelector('#wood2 .real .twig')).stroke,
     cable_pink: getComputedStyle(document.querySelector('#city .cable .lit')).stroke })`);
+  // a run with several trees: the far left first and lit, the arrow keys and a click on a tree move between them
+  report.trees = await evaluate(`(async () => {
+    const where = () => document.querySelector('#inside .where').textContent, lit = () => document.querySelectorAll('#garden .real [data-stem]:not(.dimmed)').length;
+    const nav = !document.querySelector('#inside .trees').hidden, out = { nav, first: nav ? where() : null, lit_first: lit() };
+    if (!nav) return out;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); out.after_right = where();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); out.wraps_left = where();
+    document.querySelector('#garden .real .stem[data-stem="4"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 100));
+    out.after_click = where(); out.still_open = !document.getElementById('inside').hidden; out.lit_one = lit();
+    return out; })()`);
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
   await until(`document.getElementById('inside').hidden && !document.getElementById('demo').classList.contains('tiding') && !document.body.classList.contains('inside-open')`, 8000); await sleep(200);
+  report.trees.undimmed_after = await evaluate(`document.querySelectorAll('#garden .dimmed').length === 0`);
   report.inside.closed_by_esc = await evaluate(`document.body.dataset.page === 'two' && location.hash === '' && !document.getElementById('demo').classList.contains('in-run')`);
   await evaluate(`document.getElementById('bed').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
   await until(`!document.getElementById('inside').hidden && !document.getElementById('scene').getAnimations().length`, 8000); await sleep(400);
@@ -284,6 +296,7 @@ try {
   await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(1600);
   await shot("9-result", true);
   for (const p of ["/docs.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/nope.html"]) { await go(p); }
+  report.author = await evaluate(`({ name: document.querySelector('.who span.by')?.textContent, mail: document.querySelector('.who a[href^="mailto:"]')?.getAttribute('href'), linkedin: document.querySelector('.who a[href*="linkedin.com"]')?.href, safe: document.querySelector('.who a[href*="linkedin.com"]')?.rel })`);
   report.paper_link = await evaluate(`[...document.querySelectorAll('a')].filter(a => a.textContent === 'Paper').every(a => a.href.startsWith('https://papers.ssrn.com/') && a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer'))`);
   await go("/docs.html"); await shot("10-docs");
   await viewport(390, 844); await go("/"); await shot("11-phone-overview");

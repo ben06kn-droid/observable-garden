@@ -10,6 +10,10 @@
 // reversed: zoom out while the colour drains from the corners back to the tree. Reduced motion: a
 // cross-fade into the same end state, no travel.
 //
+// A run with restarts has several trees, each an independent search: the process shows one tree's
+// decisions at a time, starting with the far left one, which is lit while the others dim; the visitor
+// moves between them with the arrow keys, the previous and next controls, or by clicking a tree.
+//
 // Esc, the close control, a click outside the process, or Back closes it; the URL changes without a
 // reload (#run-<id>), so Back works.
 import { h, word } from "./common";
@@ -31,7 +35,11 @@ function timeAt(y: number): number {
 type Pt = [number, number];
 
 export interface RunView { id: string; title: string; tree: SearchTree; result: AuditResult | null; refused?: string }
-export interface RunViewOptions { two: HTMLElement; scene: HTMLElement; panel: HTMLElement; fx: Fx; tree: () => DOMRect | null; sparks: () => Pt[]; reduce: boolean }
+export interface RunViewOptions { two: HTMLElement; scene: HTMLElement; panel: HTMLElement; fx: Fx; tree: () => DOMRect | null; sparks: () => Pt[]; reduce: boolean;
+  /** the tree being read (null when the view closes), for the drawing to light it and dim the rest */
+  onTree?: (stem: number | null) => void;
+  /** a click here is a choice of tree, not a click outside */
+  isTree?: (target: Element) => boolean }
 
 export function makeRunView(o: RunViewOptions) {
   const root = o.panel;
@@ -78,14 +86,33 @@ export function makeRunView(o: RunViewOptions) {
     });
   }
 
+  // one tree at a time: the process of the tree at `sel`, with the way to the others
+  let trees: ReturnType<typeof processOfRun> = [], sel = 0;
+  const nav = h("nav", "trees", null, root); nav.setAttribute("aria-label", "Trees of this run");
+  root.insertBefore(nav, body);
+  const prev = h("button", "step", "← Previous tree", nav) as HTMLButtonElement; prev.type = "button";
+  const where = h("p", "where", null, nav); where.setAttribute("aria-live", "polite");
+  const next = h("button", "step", "Next tree →", nav) as HTMLButtonElement; next.type = "button";
+  prev.addEventListener("click", () => pick(sel - 1)); next.addEventListener("click", () => pick(sel + 1));
+
   function fill(run: RunView) {
     const r = run.result;
     title.replaceChildren(run.title);
     h("span", "vh", ": ", title);
     h("small", null, `${run.refused ? "refused" : r ? word(r.status) : "running"}${r?.p_replay != null ? ` · p ${r.p_replay.toFixed(4)}` : ""}${r ? ` · B ${r.B.toLocaleString("en")}` : ""} · ${run.tree.moves.length} moves · ${run.tree.evaluations} evaluations`, title);
+    trees = processOfRun(run.tree);
+    nav.hidden = trees.length < 2;
+    pick(0);                                                   // the far left tree first
+  }
+  function pick(i: number) {
+    if (!trees.length) return;
+    sel = (i + trees.length) % trees.length;
+    const stem = trees[sel];
+    where.textContent = `Tree ${sel + 1} of ${trees.length} · ${stem.moves.length} moves · ${stem.evaluations} evaluations`;
     body.replaceChildren();
-    for (const stem of processOfRun(run.tree)) {
-      if (run.tree.stems > 1) h("h3", null, `Tree ${stem.stem + 1} · ${stem.moves.length} moves · ${stem.evaluations} evaluations`, body);
+    body.scrollTop = 0; root.scrollTop = 0;
+    o.onTree?.(trees.length > 1 ? stem.stem : null);
+    {
       const list = h("ol", null, null, body);
       for (const m of stem.moves) {
         const li = h("li", null, null, list);
@@ -100,7 +127,7 @@ export function makeRunView(o: RunViewOptions) {
     }
   }
 
-  const outside = (e: Event) => { if (!busy && !root.contains(e.target as Node)) shut(); };
+  const outside = (e: Event) => { const t = e.target as Element; if (!busy && !root.contains(t) && !o.isTree?.(t)) shut(); };
 
   function show(run: RunView) {
     if (open) return;
@@ -130,7 +157,7 @@ export function makeRunView(o: RunViewOptions) {
     if (pushed && !fromHistory) { pushed = false; history.back(); return; }   // popstate comes back here
     pushed = false; busy = true;
     document.removeEventListener("click", outside);
-    const end = () => { open = false; busy = false; document.body.classList.remove("inside-open"); (returnTo as HTMLElement | null)?.focus?.({ preventScroll: true }); };
+    const end = () => { open = false; busy = false; document.body.classList.remove("inside-open"); o.onTree?.(null); (returnTo as HTMLElement | null)?.focus?.({ preventScroll: true }); };
     if (o.reduce) {
       o.scene.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: "forwards" }).finished.then((a) => {
         o.two.classList.remove("in-run", "zoomed"); o.scene.style.transform = ""; root.hidden = true;
@@ -144,6 +171,12 @@ export function makeRunView(o: RunViewOptions) {
 
   window.addEventListener("popstate", () => { if (open) shut(true); });
   closeBtn.addEventListener("click", () => shut());
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && open) shut(); });
-  return { open: show, close: () => shut(), isOpen: () => open };
+  document.addEventListener("keydown", (e) => {
+    if (!open) return;
+    if (e.key === "Escape") shut();
+    else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && trees.length > 1 && !(e.target as Element).closest?.("input, textarea")) { e.preventDefault(); pick(sel + (e.key === "ArrowRight" ? 1 : -1)); }
+  });
+  /** the visitor chose a tree (by its stem) in the drawing */
+  const choose = (stem: number) => { const i = trees.findIndex((t) => t.stem === stem); if (i >= 0) pick(i); };
+  return { open: show, close: () => shut(), isOpen: () => open, choose };
 }

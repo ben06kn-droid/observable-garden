@@ -28,7 +28,10 @@ const sparks = (): [number, number][] => {   // the heads the ring strikes light
   const blossoms = Array.from(svg.querySelectorAll(".blossom.open")).map((e) => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2 - b.left, r.top + r.height / 2 - b.top] as [number, number]; });
   return [...bed.heads(), ...blossoms];
 };
-const inside = makeRunView({ two, scene, panel: $("inside"), fx, tree: () => garden?.treeRect() ?? null, sparks, reduce: reduceMotion });
+// inside a run with several trees, the one being read is lit and the others dim
+const litTree = (stem: number | null) => svg.querySelectorAll<SVGGElement>("[data-stem]").forEach((g) => g.classList.toggle("dimmed", stem !== null && Number(g.dataset.stem) !== stem));
+const inside = makeRunView({ two, scene, panel: $("inside"), fx, tree: () => garden?.treeRect() ?? null, sparks, reduce: reduceMotion,
+  onTree: litTree, isTree: (t) => !!t.closest?.("#garden .real .stem") });
 
 // ---- the cut, and the scroll (scroll.ts)
 const night = (on: boolean) => { body.dataset.page = on ? "two" : "one"; };
@@ -92,7 +95,7 @@ function drawRun(d: Demo, t: SearchTree, r: AuditResult | null) {
   garden = drawGarden(svg, t, { interactive: true, halo: true, neon: true, canopy: false, twigs: true, bar: r?.class_bar,
     blossom: { kind: kindOf(d.key), colour: colourOf(d.key) },
     submitted: r ? { rule: r.submitted_feature_names.join(" "), sharpe: r.submitted_sharpe } : undefined });
-  garden.onPick(() => enter());
+  garden.onPick((stem) => (inside.isOpen() ? inside.choose(stem) : enter()));   // inside, a click picks that tree
   requestAnimationFrame(placeChoice);
   svg.setAttribute("aria-label", `${d.title}: the run's tree, ${t.moves.length} moves and ${t.evaluations} evaluations. Choose it to go inside the run once the verdict is in.`);
   return garden;
