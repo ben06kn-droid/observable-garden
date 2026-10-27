@@ -19,7 +19,11 @@ const srv = await serve(port);
 const base = `http://127.0.0.1:${port}`;
 const profile = mkdtempSync(join(tmpdir(), "qx-check-"));
 const headed = process.argv.includes("--headed");   // a real window, for the frame profile
-const chrome = spawn(chromePath, [...(headed ? ["--window-size=1366,868"] : ["--headless=new"]), "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--hide-scrollbars", "about:blank"],
+// --uncapped: no vsync and no frame-rate limit, so a profile shows how many frames the page can make
+// and what the worst one costs, even when the machine's display clock is throttled (a sleeping or
+// locked display paces headless Chrome at 30 Hz)
+const uncapped = process.argv.includes("--uncapped") ? ["--disable-frame-rate-limit", "--disable-gpu-vsync"] : [];
+const chrome = spawn(chromePath, [...(headed ? ["--window-size=1366,868"] : ["--headless=new"]), ...uncapped, "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--hide-scrollbars", "about:blank"],
                      { stdio: ["ignore", "ignore", "pipe"] });
 const wsUrl = await new Promise((res, rej) => {
   let buf = "";
@@ -83,7 +87,17 @@ const report = { base, example, timings: {}, issues };
 const probe = arg("--probe", null);   // evaluate one expression on the home page and stop
 if (probe) {
   await viewport(1440, 900); await go("/");
+  // --trace: record the probe like the performance panel and list where the time went, by event
+  const tracing = process.argv.includes("--trace");
+  if (tracing) await send("Tracing.start", { traceConfig: { includedCategories: ["devtools.timeline", "disabled-by-default-devtools.timeline", "blink", "cc", "viz", "gpu"], recordMode: "recordContinuously" } }, page);
   report.probe = await evaluate(probe);
+  if (tracing) {
+    const done = new Promise((r) => { traceDone = r; });
+    await send("Tracing.end", {}, page); await done;
+    const tot = new Map();
+    for (const e of traceEvents) if (e.ph === "X" && e.dur) { const k = `${e.name} [tid ${e.tid}]`; tot.set(k, (tot.get(k) ?? 0) + e.dur / 1000); }
+    report.probe = { result: report.probe, top: [...tot].sort((x, y) => y[1] - x[1]).slice(0, 30).map(([k, v]) => `${v.toFixed(0)} ms ${k}`) };
+  }
   chrome.kill(); srv.close();
   console.log(JSON.stringify(report.probe, null, 1)); process.exit(0);
 }

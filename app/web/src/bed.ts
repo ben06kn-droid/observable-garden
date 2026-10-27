@@ -26,7 +26,8 @@ const f = (n: number) => n.toFixed(1);
 
 export function makeBed(svg: SVGSVGElement, page: HTMLElement, n = 230): BedHandle {
   svg.setAttribute("aria-hidden", "true");
-  let flowers: Bloom[] = [], groups: SVGGElement[] = [], mirrors: SVGGElement[] = [], heads: SVGGElement[] = [], grown: number[] = [], last = -1, id = "";
+  let flowers: Bloom[] = [], groups: SVGGElement[] = [], heads: SVGGElement[] = [], grown: number[] = [], last = -1, id = "";
+  let refl: SVGImageElement | null = null, size = [0, 0];
 
   function reset(runId: string) {
     id = runId;
@@ -35,7 +36,7 @@ export function makeBed(svg: SVGSVGElement, page: HTMLElement, n = 230): BedHand
     svg.replaceChildren();
     const c = W / 2, yv = Hb - 0.07 * P, ye = Hb - 0.18 * P;
     const ground = (x: number) => { const u = (x - c) / c; return yv - (yv - ye) * u * u; };
-    flowers = []; groups = []; mirrors = []; heads = []; grown = []; last = -1;
+    flowers = []; groups = []; heads = []; grown = []; last = -1; lastTenth = -1; window.clearTimeout(timer); timer = 0;
     for (let i = 0; i < n; i++) {
       const fid = `${runId}:${i}`, hsh = hash(fid), q = (k: number) => ((hsh >>> k) % 1000) / 1000;
       // densest at the centre: |u| = q^1.7; a small gap left for the run's trunk
@@ -49,7 +50,10 @@ export function makeBed(svg: SVGSVGElement, page: HTMLElement, n = 230): BedHand
     let d = "";
     for (let k = 0; k <= 64; k++) { const x = (k / 64) * W; d += `${k ? "L" : "M"}${f(x)} ${f(ground(x) + 4)}`; }
     el("path", { d: `${d} L${f(W)} ${f(Hb)} L0 ${f(Hb)} Z`, class: "ground-fill" }, svg);
-    const refl = el("g", { class: "reflection" }, svg);
+    // the reflection: one image of the mirrored flowers, redrawn now and then (as hundreds of mirrored
+    // groups it doubled what the compositor sorts on every frame of the run and slowed it fourfold)
+    refl = el("image", { class: "reflection", x: 0, y: 0, width: f(W), height: f(Hb), preserveAspectRatio: "none" }, svg) as SVGImageElement;
+    size = [W, Hb];
     el("path", { d, class: "ground-line" }, svg);
     const live = el("g", { class: "flowers" }, svg);
     for (const fl of flowers) {
@@ -58,27 +62,44 @@ export function makeBed(svg: SVGSVGElement, page: HTMLElement, n = 230): BedHand
       const head = el("g", { transform: `translate(${f(hx)} ${f(top)})` }, g);
       const inner = el("g", { class: "bloom" }, head) as SVGGElement;
       drawHead(inner, fl.kind, fl.colour, fl.r, 1);
-      // the reflection: a plain copy mirrored about the flower's foot (a <use> would rebuild its copy
-      // on every change to the original)
-      const m = g.cloneNode(true) as SVGGElement; refl.appendChild(m);
-      groups.push(g); mirrors.push(m); heads.push(inner); grown.push(-1);
+      groups.push(g); heads.push(inner); grown.push(-1);
     }
   }
 
+  // Each repaint of the bed rasterises every flower, so it is redrawn at most about six times a second
+  // (the latest progress wins), and the reflections, which double that cost, only at each tenth of
+  // the run and at its end.
+  let pending = -1, timer = 0, lastPaint = 0, lastTenth = -1;
   function grow(g: number) {
     if (!id || Math.abs(g - last) < 0.004) return;
-    last = g;
+    pending = g;
+    const wait = 160 - (performance.now() - lastPaint);
+    if (g >= 1 || wait <= 0) paint();
+    else if (!timer) timer = window.setTimeout(paint, wait);
+  }
+  function paint() {
+    window.clearTimeout(timer); timer = 0;
+    const g = pending; last = g; lastPaint = performance.now();
+    const tenth = g >= 1 ? 10 : Math.floor(g * 10), mirror = tenth !== lastTenth;
+    lastTenth = tenth;
     flowers.forEach((fl, i) => {
       const u = Math.round(Math.max(0, Math.min(1, (g - fl.t) / 0.45)) * 200) / 200;   // this flower's own growth
-      if (u !== grown[i]) {                                     // only the flowers that changed are touched
-        grown[i] = u;
-        const t = `translate(${f(fl.x)} ${f(fl.base)}) skewX(${f(fl.lean)}) scale(${u.toFixed(3)})`;
-        groups[i].setAttribute("transform", t);
-        mirrors[i].setAttribute("transform", `translate(0 ${f(2 * fl.base + 8)}) scale(1 -1) ${t}`);
-      }
+      const t = `translate(${f(fl.x)} ${f(fl.base)}) skewX(${f(fl.lean)}) scale(${u.toFixed(3)})`;
+      if (u !== grown[i]) { grown[i] = u; groups[i].setAttribute("transform", t); }   // only the flowers that changed are touched
       const open = g > 0.5 + 0.3 * fl.t;                        // heads open over the replay half
-      if (heads[i].classList.contains("open") !== open) { heads[i].classList.toggle("open", open); (mirrors[i].querySelector(".bloom") as Element).classList.toggle("open", open); }
+      if (heads[i].classList.contains("open") !== open) heads[i].classList.toggle("open", open);
     });
+    if (mirror) reflect();
+  }
+  // the flowers as they stand, each mirrored about its foot, serialised into an svg image (data: is
+  // allowed by img-src); the bed's own styles go with it, since page css does not reach into images
+  function reflect() {
+    if (!refl) return;
+    const parts = flowers.map((fl, i) => `<g transform="translate(0 ${f(2 * fl.base + 8)}) scale(1 -1) ${groups[i].getAttribute("transform") ?? ""}">${groups[i].innerHTML}</g>`);
+    const css = ".petal{fill-opacity:.3;stroke-width:.7px}.stem{stroke-width:1px;opacity:.75}.leaf-on-stem{fill-opacity:.2;stroke:#2fd6a6;stroke-width:2.4}"
+      + ".bloom{opacity:.55;transform:scale(.3);transform-box:fill-box;transform-origin:center}.bloom.open{opacity:1;transform:none}";
+    const doc = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${f(size[0])} ${f(size[1])}"><style>${css}</style>${parts.join("").replaceAll("var(--stem)", "#2fd6a6")}</svg>`;
+    refl.setAttribute("href", "data:image/svg+xml;charset=utf-8," + encodeURIComponent(doc));
   }
   return { grow, reset };
 }
