@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en" data-stage="day">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quixote · run your own</title>
+<meta name="description" content="Run an LLM agent through the gate on your own panel and class, with your own API key.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<script src="assets/site.js"></script>
+<script src="assets/example-data.js" defer></script>
+</head>
+<body class="drift">
+<a class="skip" href="#main">Skip to content</a>
+<div class="env" aria-hidden="true">
+  <div class="grid"></div>
+  <div class="beams"><i></i><i></i><i></i></div>
+  <div class="scan"></div>
+  <svg class="grain"><filter id="grain-f"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#grain-f)"/></svg>
+</div>
+
+<header class="top">
+  <a class="brand" href="home.html"><b>Quixote</b> <span>· THE OBSERVABLE GARDEN</span></a>
+  <div class="status" aria-live="off"><span class="dot"></span><span class="txt">LAST RUN</span></div>
+  <nav class="nav" aria-label="Main"><a href="demo-running.html">Demo</a><a href="run.html" aria-current="page">Run</a></nav>
+</header>
+
+<main id="main">
+  <section class="wrap" aria-labelledby="h">
+    <p class="label"><span class="n">Run</span><span>Your panel, your class, your agent</span></p>
+    <h1 class="display small" id="h">Declare the class, then let the agent search.</h1>
+    <p class="lede">In daylight, before any search. The server runs your model through the harness; it names moves, the harness performs them, and the gate
+      prices the log. Nothing you upload is executed: a panel is arrays and a class is a declaration.</p>
+
+    <form action="result.html" method="get" novalidate>
+      <fieldset>
+        <legend class="label"><span class="n">01</span><span>Panel</span></legend>
+        <div class="choices" role="radiogroup" aria-label="Panel">
+          <label class="choice"><input type="radio" name="panel" value="tiny" checked>
+            <div><b>tiny_panel.npz</b><span id="tiny-desc">The bundled synthetic panel.</span></div></label>
+          <label class="choice disabled"><input type="radio" name="panel" value="etf" disabled>
+            <div><b>A planted ETF panel</b><span>Later phase.</span></div></label>
+          <label class="choice"><input type="radio" name="panel" value="upload">
+            <div><b>Upload a panel</b><span>One .npz with <code>returns</code> (T × M), <code>features</code> (T × M × K),
+              <code>feature_names</code> and <code>periods_per_year</code>; optional costs, delay and row labels.</span></div></label>
+        </div>
+        <label class="drop" style="margin-top: var(--s3)">Choose a .npz file
+          <input type="file" name="panel_file" accept=".npz">
+          <span class="hint" style="display:block">Read by the repository's loader (<code>quixote.panel.load</code>) with
+            <code>allow_pickle=False</code>, up to a size limit set in phase 2. Its sha256 goes into the log.</span>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend class="label"><span class="n">02</span><span>Class</span></legend>
+        <div class="choices" role="radiogroup" aria-label="Class">
+          <label class="choice"><input type="radio" name="cls" value="example" checked>
+            <div><b>class.json · 128 members</b><span>Every signed combination of up to 2 of the panel's 8 features.</span></div></label>
+          <label class="choice"><input type="radio" name="cls" value="upload">
+            <div><b>Upload a class</b><span>A JSON file naming the features, the maximum number in a rule and whether
+              signs are free.</span></div></label>
+        </div>
+        <p class="hint">The class is hashed before the first evaluation. A class changed after results are seen is a search
+          over classes, and the audit refuses it.</p>
+        <div class="field" style="margin-top: var(--s5)">
+          <span class="fl">Detection floor for this class and panel</span>
+          <p class="mono" style="margin: 0; font-size: 14px">smallest Sharpe the gate can certify (the bar): <b id="pw-bar"></b><br>
+            true Sharpe needed for 80% power: <b id="pw-80"></b></p>
+          <p class="hint">From <code id="pw-cmd"></code>: independent members, the worst case.
+            Look at it before you search.</p>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend class="label"><span class="n">03</span><span>Agent</span></legend>
+        <div class="field">
+          <label for="model">Model</label>
+          <select id="model" name="model"><option>claude-sonnet-5</option></select>
+          <p class="hint">The default in <code>examples/llm_agent.py</code>. The model, not the key, is recorded.</p>
+        </div>
+        <div class="field">
+          <label for="key">API key</label>
+          <input id="key" name="key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" aria-describedby="key-promise">
+          <p class="promise" id="key-promise">Held in memory for this run only; sent to the provider over TLS; never stored or logged.</p>
+          <p class="hint">The provider bills your key for the agent's calls; the budget below caps them.</p>
+        </div>
+        <div class="field">
+          <label for="prompt">Agent prompt</label>
+          <textarea id="prompt" name="prompt" spellcheck="false">You search for a trading rule on a panel of assets. A rule is an equal-weight combination of up to the class's maximum number of the panel's features, each long or short. You do not build rules: you name a move and the harness performs it and reports what happened. Before your first evaluation, declare the stopping rule you will search under (declare_triggers). Stop only when a declared rule fires. Finish with predict (the out-of-sample Sharpe you expect, mean and sd) and submit. Call exactly one tool per turn.</textarea>
+          <p class="hint">The default is <code>SYSTEM</code> in <code>examples/llm_agent.py</code>. Edit it freely: the prompt's
+            hash is recorded, and the moves the model can name do not change.</p>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend class="label"><span class="n">04</span><span>Budget</span></legend>
+        <div class="row">
+          <div class="field"><label for="moves">Max moves</label><input id="moves" type="number" name="max_moves" value="60" min="1"></div>
+          <div class="field"><label for="b">Replicates B</label><input id="b" type="number" name="B" value="2000" min="100"></div>
+          <div class="field"><label for="alpha">Alpha</label><input id="alpha" type="number" name="alpha" value="0.05" step="0.01" min="0.001" max="0.5"></div>
+          <div class="field"><label for="seed">Seed</label><input id="seed" type="number" name="seed" value="0"></div>
+        </div>
+        <p class="hint">The defaults are the command line's (<code>quixote run</code>, <code>quixote audit</code>). If the budget
+          runs out, the harness submits the best rule reached.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend class="vh">Start</legend>
+        <label class="inline-check"><input type="checkbox" name="terms" required>
+          <span>I have the right to use the data I upload, and I accept the <a href="#">terms of use</a> and the
+            <a href="#">privacy notice</a>.</span></label>
+        <div class="actions" style="margin-top: var(--s5)">
+          <button class="btn primary" type="submit">Start the run</button>
+          <a class="btn" href="demo-running.html">Watch the demo first</a>
+        </div>
+        <p class="hint">Runs are queued, with a daily cap. The result gets a permanent page.</p>
+        <div class="fixed-lines"><p>Not investment advice.</p><p>Not a registered result; nothing from this app enters the research record.</p></div>
+      </fieldset>
+    </form>
+  </section>
+</main>
+
+<footer class="foot" style="margin-top: var(--s8)">
+  <div class="wrap">
+    <span>Quixote · MIT · the repository's own modules, no reimplementation</span>
+    <nav aria-label="Legal"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Security</a><a href="https://github.com/ben06kn-droid/observable-garden">Source</a></nav>
+  </div>
+</footer>
+
+<script src="assets/page-run.js" defer></script>
+</body>
+</html>
