@@ -43,5 +43,10 @@ jobs:
         run: python scripts/make_overview_tree.py --check
       - name: Equivalence with the CLI
         run: node scripts/equivalence.mjs --python python
+      # a Chrome of the action's own, not the runner's system Chrome (whose start-up timed out under load)
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: stable
       - name: The demo in Chrome under the production headers
-        run: node scripts/browser_check.mjs --chrome "$(command -v google-chrome)"
+        run: node scripts/browser_check.mjs --chrome "${{ steps.chrome.outputs.chrome-path }}"

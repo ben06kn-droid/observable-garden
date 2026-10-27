@@ -3,7 +3,7 @@
 // from the gate's worker), how long the gate takes, and screenshots of each stage.
 //   node scripts/browser_check.mjs [--shots DIR] [--example nothing|planted|restart] [--chrome PATH]
 import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,13 +24,32 @@ const headed = process.argv.includes("--headed");   // a real window, for the fr
 // and what the worst one costs, even when the machine's display clock is throttled (a sleeping or
 // locked display paces headless Chrome at 30 Hz)
 const uncapped = process.argv.includes("--uncapped") ? ["--disable-frame-rate-limit", "--disable-gpu-vsync"] : [];
-const chrome = spawn(chromePath, [...(headed ? ["--window-size=1366,868"] : ["--headless=new"]), ...uncapped, "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--hide-scrollbars", "about:blank"],
+// on CI only: a downloaded Chrome on Ubuntu 24.04 runners cannot start its sandbox (AppArmor), and the
+// one page it loads is this site's own build
+const ci = process.env.CI ? ["--no-sandbox"] : [];
+const chrome = spawn(chromePath, [...(headed ? ["--window-size=1366,868"] : ["--headless=new"]), ...uncapped, ...ci, "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--hide-scrollbars", "about:blank"],
                      { stdio: ["ignore", "ignore", "pipe"] });
-const wsUrl = await new Promise((res, rej) => {
-  let buf = "";
-  chrome.stderr.on("data", (d) => { buf += d; const m = /DevTools listening on (ws:\/\/\S+)/.exec(buf); if (m) res(m[1]); });
-  setTimeout(() => rej(new Error("Chrome did not start")), 15000);
-});
+// Readiness: Chrome writes its debugging port to DevToolsActivePort in the profile once it listens;
+// poll for that file, then for /json/version answering, for up to 60 s (a cold CI runner can take well
+// over the 15 s this used to allow). If Chrome exits first, fail at once with what it printed.
+let chromeErr = "", chromeExited = null;
+chrome.stderr.on("data", (d) => { chromeErr = (chromeErr + d).slice(-4000); });
+chrome.once("exit", (code, signal) => { chromeExited = { code, signal }; });
+chrome.once("error", (e) => { chromeExited = { error: e.message }; });   // not found, not executable
+async function chromeReady(ms = 60000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    if (chromeExited) throw new Error(`Chrome exited before it was ready (${JSON.stringify(chromeExited)}): ${chromeErr.trim().split("\n").slice(-5).join(" | ")}`);
+    try {
+      const p = readFileSync(join(profile, "DevToolsActivePort"), "utf8").trim().split("\n")[0];
+      const v = await (await fetch(`http://127.0.0.1:${p}/json/version`)).json();
+      if (v.webSocketDebuggerUrl) return v.webSocketDebuggerUrl;
+    } catch { /* not yet */ }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error(`Chrome did not become ready within ${ms / 1000} s: ${chromeErr.trim().split("\n").slice(-5).join(" | ")}`);
+}
+const wsUrl = await chromeReady();
 
 const ws = new WebSocket(wsUrl);
 await new Promise((r) => ws.addEventListener("open", r, { once: true }));
