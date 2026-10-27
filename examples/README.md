@@ -7,8 +7,15 @@
 | `scripted_searcher.py` | a scripted agent: declares a stopping rule, anchors, extends, stops, predicts, submits |
 | `llm_agent.py` | an adapter that lets a language model name the moves (optional SDK; API key from the environment) |
 | `logs/scripted_session.json` | the log `quixote run` wrote for the scripted agent on the tiny panel |
+| `data/tiny_panel_planted.npz` | the tiny panel with a known rule planted on top, `+rev5_rank -vol20_rank`, at population Sharpe 3.0 net of costs (`make_tiny_panel.py --plant` writes it) |
+| `data/tiny_panel_planted.json` | the planted rule, its strength, its population Sharpe and how that was measured (a long simulation of the same process, another seed) |
+| `logs/planted_session.json` | the scripted agent on the planted panel: CERTIFIED, submitting `+rev5_z -vol20_z`, the planted signals in z form |
+| `restart_searcher.py` | a scripted agent that restarts: one declared rule (restart after two moves that do not beat the best), extends, swaps, flips, and runs until the harness runs out of anchors |
+| `logs/restart_session.json` | the restart agent on the tiny panel: 26 moves on 8 stems, FAIL |
 
     quixote example                                   # audit the bundled log: a few seconds
+    quixote audit examples/logs/planted_session.json --panel examples/data/tiny_panel_planted.npz \
+        --class examples/class.json                   # the planted example
     quixote run --agent examples.scripted_searcher:Agent --panel examples/data/tiny_panel.npz \
         --class examples/class.json --out my_session.json
     quixote audit my_session.json --panel examples/data/tiny_panel.npz --class examples/class.json
