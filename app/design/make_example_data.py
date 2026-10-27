@@ -1,0 +1,108 @@
+"""Write assets/example-data.js: the mockups' placeholder data, taken from `quixote example`.
+
+Run from the repository root (reads the package; writes only under app/design/):
+
+    python app/design/make_example_data.py
+
+Every number and hash on the mockup pages comes from here, so nothing on a page is typed by hand.
+
+- `verdict`: `quixote example --json` (B 500, seed 0), plus L_0.90 parsed out of its reasons line,
+  where the audit reports it (it has no field of its own).
+- `log`: examples/logs/scripted_session.json, verbatim except for the panel's arrays.
+- `power`: `quixote power` for the class's size and the panel's length (the run page's floor).
+- `trees.real`: every candidate the two logged moves evaluated, rescored through the class table
+  (the scorer the audit uses); the kept ones reproduce the logged scores exactly, and the script
+  refuses to write if they do not.
+- `trees.ghosts`: ILLUSTRATIVE. The scripted policy (init, then extend_best) re-run on three
+  stationary-bootstrap replicates of the class table's rows, demeaned, at the audit's block length.
+  They show what a search re-grown on noise looks like; they are not the certifying replicates,
+  which use trigger replay with the fill and are not exposed by the audit.
+"""
+
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+
+from estimator.bootstrap import select_block_length, stationary_bootstrap_indices
+from quixote import audit as A
+from quixote import classes, panel as P
+from quixote.grammar import Grammar, Move
+from quixote.run import replay
+
+REPO = Path(__file__).resolve().parents[2]
+EX = REPO / "examples"
+LOG, PANEL, CLASS = EX / "logs" / "scripted_session.json", EX / "data" / "tiny_panel.npz", EX / "class.json"
+B, SEED, N_GHOSTS = 500, 0, 3
+
+
+def grow(lc, base, ann, score_fn, kept_check=None):
+    g = Grammar(lc.spec_class, base, ann, score_fn=score_fn)
+    support, out = (), []
+    for i, kind in enumerate(("init", "extend_best")):
+        cands = g.candidates(support, Move(kind, statistic="sharpe"))
+        score, best = max(cands, key=lambda c: c[0])      # first maximum: the grammar's tie order
+        if kept_check is not None and score != kept_check[i]:
+            raise SystemExit(f"{kind}: rescored {score!r}, the log says {kept_check[i]!r}")
+        out.append({"move": kind,
+                    "candidates": [{"feature": int(ns[-1][0]), "sign": int(ns[-1][1]), "sharpe": float(s)}
+                                   for s, ns in cands],
+                    "kept": {"feature": int(best[-1][0]), "sign": int(best[-1][1]), "sharpe": float(score)}})
+        support = best
+    return out
+
+
+def main():
+    log = json.loads(LOG.read_text())
+    arrays = P.read(str(PANEL))
+    lc = classes.load(str(CLASS), arrays, compute_bar=False)
+    h = replay(log, arrays, lc)
+    base = h.sandbox.base_feature_columns()
+    ann = float(np.sqrt(h.panel.periods_per_year))
+
+    kept = [c["state"]["score"] for c in log["calls"] if c["tool"] in ("init", "extend_best")]
+    real = grow(lc, base, ann, h.table.scorer(None), kept_check=kept)
+
+    L = int(select_block_length(base - base.mean(axis=0)))
+    rng = np.random.default_rng(SEED)
+    ghosts = [grow(lc, base, ann, h.table.scorer(stationary_bootstrap_indices(h.table.T, L, rng),
+                                                  demeaned=True))
+              for _ in range(N_GHOSTS)]
+
+    res = A.audit_log(LOG, PANEL, CLASS, B=B, seed=SEED)
+    v = res.to_dict()
+    m = re.search(r"L_0\.90 (-?\d+\.\d+)", " ".join(v["reasons"]))
+    v["L90"] = float(m.group(1)) if m else None
+    v["meaning_cli"] = A.MEANINGS.get(v["status"], "")
+
+    years = round(h.table.T / h.panel.periods_per_year, 3)
+    power = json.loads(subprocess.run([sys.executable, "-m", "quixote.cli", "power", "--years", str(years), "--size",
+                                       str(res.class_size), "--json"], check=True, capture_output=True,
+                                      text=True, cwd=REPO).stdout)
+    power["command"] = f"quixote power --years {years} --size {res.class_size}"
+
+    data = {
+        "source": "quixote example (B 500, seed 0) on examples/; written by app/design/make_example_data.py",
+        "command": "quixote audit examples/logs/scripted_session.json --panel examples/data/tiny_panel.npz "
+                   "--class examples/class.json --B 500 --seed 0 --verbose",
+        "verdict": v,
+        "log": log,
+        "feature_names": [str(x) for x in h.panel.feature_names],
+        "panel_shape": {"rows": int(arrays["returns"].shape[0]), "assets": int(arrays["returns"].shape[1]),
+                        "features": int(arrays["features"].shape[2])},
+        "block_length": L,
+        "power": power,
+        "trees": {"real": real, "ghosts": ghosts},
+    }
+    out = Path(__file__).parent / "assets" / "example-data.js"
+    out.parent.mkdir(exist_ok=True)
+    out.write_text("// Generated by app/design/make_example_data.py. Do not edit by hand.\n"
+                   "window.QX = " + json.dumps(data, indent=1) + ";\n")
+    print(f"wrote {out.relative_to(REPO)}: {v['status']}, p {v['p_replay']:.4f}, L90 {v['L90']}")
+
+
+if __name__ == "__main__":
+    main()
