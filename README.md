@@ -1,3 +1,5 @@
+Try it in your browser: https://observable-garden.vercel.app (the demo runs the gate on three recorded searches; no sign-up)
+
 # The Observable Garden
 
 An overfitting gate for strategies found by AI agents.
