@@ -47,7 +47,10 @@ class AuditResult:
 
 
 def audit_log(log_path, panel_path, class_path, *, B: int = 2000, seed: int = 0,
-              alpha: float | None = None) -> AuditResult:
+              alpha: float | None = None, progress=None) -> AuditResult:
+    """Price a log the harness wrote. `progress`, if given, is called as progress(stage, done,
+    total) for the class tier ("class") and the replay ("replay"), at most every few hundred
+    replicates; it only observes."""
     from quixote import classes, panel as P
     from quixote.certify import certify
     from quixote.run import ReplayMismatch, replay
@@ -80,14 +83,18 @@ def audit_log(log_path, panel_path, class_path, *, B: int = 2000, seed: int = 0,
     L = int(select_block_length(base - base.mean(axis=0)))
     rng = np.random.default_rng(seed)
     T = h.table.T
+    if progress is not None:
+        progress("class", 0, B)
     rows = [stationary_bootstrap_indices(T, L, rng) for _ in range(B)]
     M = h.table.null_max(rows)
+    if progress is not None:
+        progress("class", B, B)
     S = float(h.table.sharpe(support))
     p_class = float((1 + np.sum(M >= S)) / (B + 1))
     bar = float(np.quantile(M, 1 - alpha))
     ann = float(np.sqrt(h.panel.periods_per_year))
     v = certify(session.log, lc.spec_class, base, ann, alpha=alpha, B=B, seed=seed,
-                p_declared_class=p_class, table=h.table)
+                p_declared_class=p_class, table=h.table, progress=progress)
     names = list(h.panel.feature_names)
     return AuditResult(
         status=v.status, exit_code=EXIT_CODES.get(v.status, 3),

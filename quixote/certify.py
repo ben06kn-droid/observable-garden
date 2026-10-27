@@ -55,6 +55,16 @@ FILL_NOTE = (
     "McNemar p = 1.0000), so strengthening the fill is optional rather than "
     "required. Continuations stronger than a width-2 beam are untested.")
 
+# A progress callback, where one is given, is called as progress(stage, done, total) at most
+# this often (in replicates) and once at the end. It only observes: no draw or result changes.
+PROGRESS_EVERY = 200
+
+
+def _report(progress, stage: str, done: int, total: int) -> None:
+    if progress is not None and (done % PROGRESS_EVERY == 0 or done == total):
+        progress(stage, done, total)
+
+
 NO_FILL_NOTE = ("The fill was never used: no replicate ran past the realized "
                 "length, so nulls 2 and 3 can only differ by chance in the "
                 "bootstrap, not by the fill's choice.")
@@ -64,7 +74,7 @@ def three_nulls(log, spec_class, base: np.ndarray, annualization: float = 1.0,
                 B: int = 10_000, block_length: int | None = None,
                 seed: int | None = None,
                 pricing: PricingOptions = NO_PRICING,
-                table=None) -> tuple[ReplayNulls, np.ndarray]:
+                table=None, progress=None) -> tuple[ReplayNulls, np.ndarray]:
     """Nulls 1-3 for a logged search, plus the per-replicate engagement flag.
 
     The resampling is `estimator.trigger_replay.replay_nulls`', replicate for
@@ -104,6 +114,7 @@ def three_nulls(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         n2[b], engaged[b] = t2.score, bool(t2.filled)
         handed[b] = t2.handover_step is not None
         n3[b] = policy.trace(R, annualization, score_fn=sf).score
+        _report(progress, "replay", b + 1, B)
     return ReplayNulls(fixed_sequence=n1, trigger=n2, policy=n3, block_length=L, B=B,
                        realized_score=realized.score,
                        realized_actions=tuple(acts),
@@ -136,7 +147,7 @@ NO_STOP_RULE_NOTE = (
 def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
             alpha: float = 0.05, B: int = 10_000, block_length: int | None = None,
             seed: int | None = None, p_declared_class: float | None = None,
-            pricing: PricingOptions = NO_PRICING, table=None) -> QuixoteVerdict:
+            pricing: PricingOptions = NO_PRICING, table=None, progress=None) -> QuixoteVerdict:
     """Price a logged search against the trigger-replay null.
 
     A run whose replay disagrees with itself on the un-resampled data is
@@ -173,7 +184,8 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
         # fixed-sequence null reported as the bracket's liberal end.
         if changes:
             nulls, _ = three_nulls(log, spec_class, base, annualization, B,
-                                   block_length, seed, pricing=pricing, table=table)
+                                   block_length, seed, pricing=pricing, table=table,
+                                   progress=progress)
             first = changes[0]
             v = QuixoteVerdict(
                 status=DEPENDS_ON_JUDGMENT, alpha=alpha,
@@ -213,7 +225,7 @@ def certify(log, spec_class, base: np.ndarray, annualization: float = 1.0,
 
     priced, pricing_reasons = steps_to_price(log, pricing)
     nulls, engaged = three_nulls(log, spec_class, base, annualization, B, block_length,
-                                 seed, pricing=pricing, table=table)
+                                 seed, pricing=pricing, table=table, progress=progress)
     n_eng = int(engaged.sum())
     # The PROCEDURE's statistic: what the declared procedure reaches on the
     # realized data, which is what the replay produces.
