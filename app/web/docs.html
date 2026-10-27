@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quixote · docs</title>
+<meta name="description" content="How the gate works, how to reproduce a verdict, and how this site runs it.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="module" src="/src/pages/plain.ts"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="/">Quixote</a>
+  <nav aria-label="Main"><a href="/paper.html">Paper</a><a href="/docs.html" aria-current="page">Docs</a><a href="/run.html">Run</a></nav>
+</header>
+<main class="doc" id="main">
+<p class="label">Docs</p>
+<h1>Run the gate yourself</h1>
+<h2>Install</h2>
+<pre class="cmd">git clone --depth 1 https://github.com/ben06kn-droid/observable-garden
+pip install -e .                  # Python 3.10 or later</pre>
+<h2>One minute</h2>
+<pre class="cmd">quixote example</pre>
+<p>This audits a bundled log, a scripted searcher's moves on a small synthetic panel, and prints the verdict. Every
+verdict on this site comes with the command that reproduces it, for example:</p>
+<pre class="cmd">quixote audit examples/logs/scripted_session.json --panel examples/data/tiny_panel.npz --class examples/class.json --B 2000 --seed 0 --json</pre>
+<h2>What a verdict means</h2>
+<table>
+<tr><th>PASS</th><td>p is below α: the submitted rule beats what the search would find on noise.</td></tr>
+<tr><th>FAIL</th><td>p is at or above α, and the test had the power to tell: the result is what this search finds by luck.</td></tr>
+<tr><th>INADMISSIBLE</th><td>p is at or above α, and the search was too wide to certify anything.</td></tr>
+<tr><th>UNDECIDABLE</th><td>the record alone cannot license a correction.</td></tr>
+<tr><th>DEGENERATE</th><td>the test statistic broke on this menu. Do not read its p.</td></tr>
+</table>
+<p>The code reports a pass as <code>CERTIFIED</code>; this site shows it as PASS.</p>
+<h2>How this site runs it</h2>
+<p>Nothing is computed on a server. Your browser downloads Python (Pyodide 314.0.7), numpy and pandas, and the
+observable-garden package built from the repository's own source, all served from this site with their hashes
+recorded. A Web Worker runs <code>quixote.audit.audit_log</code>, the function behind <code>quixote audit</code>.
+Two functions the package takes from compiled libraries are replaced in the browser only, by ports held equal to the
+originals by tests: the Politis–White block length (from <code>arch</code>) and the normal distribution functions
+(from <code>scipy</code>). An equivalence test runs the browser build against the command line on every example.</p>
+<h2>The record on a result</h2>
+<p>The <strong>config hash</strong> is the SHA-256 of the JSON object (keys sorted, no spaces)
+<code>{"B", "alpha", "class_sha256", "log_sha256", "panel_sha256", "seed", "wheel"}</code>: the inputs' hashes,
+the replicate count, the seed, α and the exact package build.</p>
+<h2>Recorded replays (format)</h2>
+<p>Searches too large for a browser, such as the 82,240-member ETF class, will be shown as recorded replays: a run
+made locally with the package, played back here. A recording is one JSON file:</p>
+<pre class="cmd">{
+  "format": "quixote-replay/1",
+  "log": { ...the quixote-log/1 file the harness wrote... },
+  "result": { ...quixote.audit.AuditResult.to_dict(), plus "replicate_paths" if exported... },
+  "package": "observable_garden-0.1.0+g&lt;commit&gt;-py3-none-any.whl",
+  "command": "quixote audit ... --json",
+  "pace": { "search_ms": 6000, "null_ms": 8000,
+            "progress": [ { "t_ms": 0, "stage": "class", "done": 0, "total": 2000 }, ... ] }
+}</pre>
+<p>No recording exists yet.</p>
+</main>
+<footer class="foot">
+  <span>Quixote · MIT · computed in your browser; nothing is sent to a server</span>
+  <nav aria-label="Site"><a href="/paper.html">Paper</a><a href="/docs.html">Docs</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://github.com/ben06kn-droid/observable-garden">Source</a></nav>
+</footer>
+</body>
+</html>

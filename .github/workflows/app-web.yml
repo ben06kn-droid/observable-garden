@@ -1,0 +1,47 @@
+name: app-web
+
+# The browser site (app/web): dependency audits, the build with its checks (pinned files match
+# their manifests and ASSETS.lock.json, example copies equal their sources, no inline script or
+# style, nothing from another origin), the equivalence of the browser build with the CLI on every
+# example, and the demo in Chrome under the production headers.
+on:
+  push:
+    paths: ["app/**", "examples/**", "quixote/**", "pyproject.toml", ".github/workflows/app-web.yml"]
+  pull_request:
+    paths: ["app/**", "examples/**", "quixote/**", "pyproject.toml", ".github/workflows/app-web.yml"]
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # check_wheel.mjs compares the wheel's commit with HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+          cache: npm
+          cache-dependency-path: app/web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install the package (the CLI side of the equivalence test)
+        working-directory: .
+        run: python -m pip install -e . pip-audit
+      - name: pip-audit
+        working-directory: .
+        run: pip-audit --skip-editable
+      - run: npm ci
+      - name: npm audit
+        run: npm audit --audit-level=moderate
+      - name: Build, with every check
+        run: npm run build
+      - name: The overview trees are current
+        run: python scripts/make_overview_tree.py --check
+      - name: Equivalence with the CLI
+        run: node scripts/equivalence.mjs --python python
+      - name: The demo in Chrome under the production headers
+        run: node scripts/browser_check.mjs --chrome "$(command -v google-chrome)"
