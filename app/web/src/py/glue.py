@@ -99,3 +99,155 @@ def run_audit(log_path, panel_path, class_path, B, seed, replicate_paths, progre
                 if names:
                     s["rule"] = _rule(s["support"], names)
     return json.dumps({"result": d, "replicate_paths": paths})
+
+
+# ---- the full run (phase 4): the visitor's model as the agent, in the browser ---------------------
+#
+# `inspect_inputs(panel, class)` reads both with the package's own loaders (np.load with
+# allow_pickle=False inside quixote.panel.read) before any key is used, and returns what the page
+# shows: the class's description, its kind and size, the panel's shape, and the class table's
+# memory (members x rows x 8 bytes, the float64 streams `classes.table_for` builds). A package error
+# comes back as {"error": its message}, word for word.
+#
+# `run_agent(...)` drives `quixote.run.run_session`, the function behind `quixote run`, with an
+# agent whose next_move asks the model. The model is reached through `call_model(body) -> reply`, a
+# JavaScript function the worker passes in (a synchronous request to the provider, made in the
+# worker; the key never enters Python). The prompt and the tool schemas are the ones
+# examples/llm_agent.py uses (its file is served as a checked copy and executed here for SYSTEM and
+# SCHEMAS); the request differs from that adapter only where the current models require it:
+# tool_choice "auto" with one tool call per turn (forced tool use is refused by Claude Opus 5.5 and
+# Sonnet 5.5), a max_tokens with room for the model's thinking, and the thinking blocks passed back
+# unchanged. The log `run_session` writes is the CLI's quixote-log/1, so `quixote audit` reads it
+# unchanged.
+
+
+def inspect_inputs(panel_path, class_path):
+    try:
+        arrays = P.read(panel_path)
+        lc = classes.load(class_path, arrays, compute_bar=False)
+    except (P.PanelError, classes.ClassError, ValueError, OSError) as e:
+        return json.dumps({"error": str(e)})
+    T, M = (int(x) for x in arrays["returns"].shape)
+    K = int(arrays["features"].shape[2])
+    out = {"kind": lc.kind, "size": int(lc.size), "rows": T, "assets": M, "features": K,
+           "class_name": lc.spec_class.name if lc.spec_class is not None else "",
+           "describe": lc.describe(), "panel_sha256": P.sha256(panel_path), "class_sha256": lc.sha256,
+           "table_bytes": int(lc.size) * T * 8}
+    if lc.kind != "subsets":
+        out["error"] = ("the harness searches a subsets class; a streams class is audited as a transcript "
+                        "(garden audit)")
+    return json.dumps(out)
+
+
+class StopRun(Exception):
+    """The model's provider refused or failed: the run ends, with no result."""
+
+
+def _agent_module(path):
+    ns = {"__name__": "examples_llm_agent"}
+    exec(compile(open(path).read(), path, "exec"), ns)
+    return ns
+
+
+def agent_prompt(agent_path):
+    """The CLI adapter's system prompt and tool schemas, for the page to show."""
+    ns = _agent_module(agent_path)
+    return json.dumps({"system": ns["SYSTEM"], "schemas": ns["SCHEMAS"]})
+
+
+class ModelAgent:
+    """next_move(view) -> dict, backed by the visitor's model (the adapter interface)."""
+
+    def __init__(self, agent_path, opts, call_model, on_event, paths=None):
+        ns = _agent_module(agent_path)
+        self.paths, self.calls, self.last_move = paths, [], None   # for drawing the tree as it grows
+        self.system = opts.get("system") or ns["SYSTEM"]
+        self.model, self.effort = opts["model"], opts.get("effort")
+        self.max_tokens = int(opts.get("max_tokens", 16000))
+        self.fallbacks = bool(opts.get("fallbacks", True))
+        self.call_model, self.on_event = call_model, on_event
+        self.messages, self.pending = [], None
+        self.tools = [{"name": n, "description": f"the harness's `{n}` move",
+                       "input_schema": {"type": "object", "properties": p, "required": [k for k in p if k != "note"]}}
+                      for n, p in ns["SCHEMAS"].items()]
+        self.usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "requests": 0}
+
+    def _observe(self, view):     # what examples/llm_agent.py shows the model, field for field
+        return json.dumps({"step": view.step, "features": view.feature_names, "class": view.class_name,
+                           "last": view.last, "support": view.support, "best": view.best,
+                           "info": view.info, "max_moves": view.max_moves})
+
+    def next_move(self, view):
+        if view.last is not None:
+            self.on_event(json.dumps({"type": "result", "last": view.last}))
+            if self.last_move is not None:     # the call as run_session logs it, for the growing tree
+                tool, args = self.last_move
+                self.calls.append({"tool": tool, "args": args, **view.last})
+                if tool in CONTENT + ("restart",) and view.last.get("ok") and self.paths:
+                    self._tree()
+        obs = self._observe(view)
+        if self.pending is None:
+            self.messages.append({"role": "user", "content": obs})
+        else:                     # the harness's answer to the last call
+            self.messages.append({"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": self.pending, "content": obs}]})
+        body = {"model": self.model, "max_tokens": self.max_tokens, "system": self.system, "tools": self.tools,
+                "tool_choice": {"type": "auto", "disable_parallel_tool_use": True}, "messages": self.messages}
+        if self.effort:
+            body["output_config"] = {"effort": self.effort}
+        if self.fallbacks:
+            body["fallbacks"] = "default"
+        reply = json.loads(self.call_model(json.dumps(body)))
+        u = reply.get("usage") or {}
+        for k in ("input_tokens", "output_tokens", "cache_read_input_tokens"):
+            self.usage[k] += int(u.get(k) or 0)
+        self.usage["requests"] += 1
+        if reply.get("stop_reason") == "refusal":
+            cat = (reply.get("stop_details") or {}).get("category")
+            raise StopRun(f"the model declined to continue{f' ({cat})' if cat else ''}")
+        content = reply.get("content") or []
+        self.messages.append({"role": "assistant", "content": content})   # thinking blocks included, unchanged
+        call = next((b for b in content if b.get("type") == "tool_use"), None)
+        text = " ".join(b.get("text", "") for b in content if b.get("type") == "text").strip()
+        self.on_event(json.dumps({"type": "usage", "usage": self.usage, "model": reply.get("model")}))
+        if call is None:          # no tool named: the harness logs it as a refused move and asks again
+            self.pending = None
+            self.last_move = (None, {})
+            self.on_event(json.dumps({"type": "move", "tool": None, "args": {}, "text": text[:400],
+                                      "stop_reason": reply.get("stop_reason")}))
+            return {}
+        self.pending = call["id"]
+        move = {"tool": call["name"], **dict(call.get("input") or {})}
+        self.last_move = (call["name"], dict(call.get("input") or {}))
+        self.on_event(json.dumps({"type": "move", "tool": call["name"], "args": dict(call.get("input") or {}),
+                                  "text": text[:400]}))
+        return move
+
+
+    def _tree(self):
+        """The search so far, drawn from a partial log (the header run_session wrote, the calls so far)."""
+        out, panel, cls = self.paths
+        try:
+            head = json.loads(open(out).read())
+            head["calls"] = self.calls
+            part = out + ".part"
+            open(part, "w").write(json.dumps(head))
+            self.on_event(json.dumps({"type": "tree", "tree": json.loads(search_tree(part, panel, cls))}))
+        except Exception:          # the drawing is decoration on the run; the run never depends on it
+            pass
+
+
+ModelAgent.__module__ = "browser"      # the log's "agent" field: browser.ModelAgent
+
+
+def run_agent(agent_path, panel_path, class_path, out_path, opts_json, call_model, on_event):
+    """The run. Returns {"log": quixote-log, "usage": ...} or {"stopped": message}."""
+    from quixote import run as R
+    opts = json.loads(opts_json)
+    agent = ModelAgent(agent_path, opts, call_model, on_event, (out_path, panel_path, class_path))
+    try:
+        log = R.run_session(agent, panel_path, class_path, out_path, seed=int(opts.get("seed", 0)),
+                            max_moves=int(opts["max_moves"]), echo=lambda *_: None)
+    except StopRun as e:
+        return json.dumps({"stopped": str(e), "usage": agent.usage})
+    return json.dumps({"log": log, "usage": agent.usage})

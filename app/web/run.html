@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quixote · run</title>
-<meta name="description" content="Run your own agent through the gate: a later phase.">
+<meta name="description" content="Run your own model as the agent through the gate, in your browser, with your own key.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<script type="module" src="/src/pages/plain.ts"></script>
+<script type="module" src="/src/pages/run.ts"></script>
 </head>
-<body>
+<body data-page="two">
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <div class="who">
@@ -19,15 +19,101 @@
   </div>
   <nav aria-label="Main"><a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559" target="_blank" rel="noopener noreferrer">Paper</a><a href="/docs.html">Docs</a><a href="/run.html" aria-current="page">Run</a></nav>
 </header>
-<main class="doc" id="main">
-<p class="label">Run · not yet built</p>
-<h1>Run your own agent</h1>
-<p>This page will let you upload a panel and declare a class, paste your own API key, and drive a language-model agent
-through the gate, all in your browser: the key goes from your browser straight to the provider, and the panel is
-read here, never uploaded.</p>
-<p>Until then, run it locally: <code>quixote run --agent mymodule:MyAgent --panel my.npz --class my_class.json --out log.json</code>,
-then <code>quixote audit</code>. See <a href="/docs.html">Docs</a>.</p>
+<main id="main" class="run-main">
+  <section class="doc wide run-setup" aria-labelledby="run-h">
+    <p class="label">Run your own agent</p>
+    <h1 id="run-h">Your model as the agent</h1>
+    <p>Bring a panel and a class, your API key and a budget. The harness runs your chosen model as the agent through the
+      same search the demo shows, here in your browser, and the gate prices it. You get a log the command line can audit,
+      and a verdict you can download or share. Your panel and class are read in this page and never uploaded; your key goes
+      from this page straight to the provider.</p>
+    <form id="run-form" class="run-form" novalidate>
+      <fieldset>
+        <legend>Data</legend>
+        <p class="fine">The bundled tiny panel and class are loaded to start with, so you can try a run with only a key.</p>
+        <label><span>Panel (<code>.npz</code>)</span> <input type="file" id="f-panel" accept=".npz"></label>
+        <label><span>Class (<code>.json</code>)</span> <input type="file" id="f-class" accept=".json,application/json"></label>
+        <button type="button" class="link" id="f-bundled">Use the bundled panel and class</button>
+        <p class="status" id="in-status" aria-live="polite">Reading the bundled panel and class…</p>
+        <p class="fine" id="in-cap"></p>
+      </fieldset>
+      <fieldset>
+        <legend>Model</legend>
+        <label>Provider <select id="f-provider"><option value="anthropic">Anthropic</option></select></label>
+        <label>Model <select id="f-model">
+          <option value="claude-opus-5-5">Claude Opus 5.5</option>
+          <option value="claude-sonnet-5-5">Claude Sonnet 5.5</option>
+          <option value="claude-haiku-5-5">Claude Haiku 5.5</option>
+        </select></label>
+        <label>Effort <select id="f-effort"><option value="low">low</option><option value="medium" selected>medium</option><option value="high">high</option></select></label>
+        <label>API key <input type="password" id="f-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…"></label>
+        <p class="fine">Held in this page's memory for one run, sent only from your browser to the provider, never stored,
+          never in a URL, the log or the result, and cleared when the run ends or you leave the page.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Search</legend>
+        <label>Budget, in moves (1 to 60, the harness's cap) <input type="number" id="f-moves" min="1" max="60" step="1" value="20"></label>
+        <label>Null replicates, B <input type="number" id="f-B" min="100" max="10000" step="100" value="2000"></label>
+        <label class="wide"><span>The prompt (from <code>examples/llm_agent.py</code>; you can edit it)</span>
+          <textarea id="f-prompt" rows="7" spellcheck="false"></textarea></label>
+        <details><summary>The tools the model is given</summary><pre class="cmd" id="f-tools"></pre></details>
+      </fieldset>
+      <p class="estimate" id="estimate" aria-live="polite"></p>
+      <div class="actions">
+        <button type="submit" class="run" id="start">Start the run</button>
+        <button type="button" class="run" id="cancel" hidden>Cancel the run</button>
+      </div>
+      <p class="problem" id="run-error" role="alert"></p>
+    </form>
+  </section>
+
+  <section class="page two" id="demo" aria-label="The run">
+    <div class="scene" id="scene">
+      <div class="tide-sky" aria-hidden="true"></div>
+      <svg class="city" id="city"></svg>
+      <svg class="wood2" id="wood2" role="group" aria-label="Trees"></svg>
+      <canvas class="air" id="air-two" aria-hidden="true"></canvas>
+      <div class="spot notes-host" id="spot">
+        <svg id="garden" role="group" aria-label="The run's tree, growing as the model searches."></svg>
+        <div class="seed" id="seed" aria-hidden="true"><span class="glow"></span><span class="core"></span><svg class="sprout" viewBox="-10 -30 20 32"><path d="M0 0 C1.5 -8 -2 -14 0 -24"/><path class="leaflet" d="M0 -13 C3 -17 7 -16 9 -21 C5 -22 1 -19 0 -13 Z"/></svg></div>
+      </div>
+      <svg class="bed" id="bed"></svg>
+      <canvas class="pile" id="pile-two" aria-hidden="true"></canvas>
+      <div class="shade" aria-hidden="true"></div>
+      <canvas class="fx" id="fx" aria-hidden="true"></canvas>
+    </div>
+  </section>
+
+  <section class="below" aria-labelledby="log-h">
+    <h2 id="log-h">The model's moves</h2>
+    <p class="fine" id="tokens" aria-live="polite">No run yet.</p>
+    <ol class="log run-log" id="run-log"></ol>
+  </section>
+
+  <section class="below" id="record" aria-labelledby="rec-h" hidden>
+    <div class="verdict-text">
+      <h2 id="rec-h">The verdict</h2>
+      <p class="meaning" id="rec-meaning"></p>
+      <h3>Reasons</h3>
+      <ul class="reasons" id="rec-reasons"></ul>
+    </div>
+    <h2>The record</h2>
+    <dl class="kv" id="rec-kv"></dl>
+    <h3>Audit it yourself</h3>
+    <pre class="cmd" id="rec-cmd"></pre>
+    <div class="actions">
+      <button type="button" class="run" id="dl-log">Download the log</button>
+      <button type="button" class="run" id="dl-result">Download the result</button>
+      <button type="button" class="run" id="share">Copy a share link</button>
+    </div>
+    <p class="fine" id="share-out" aria-live="polite"></p>
+  </section>
+
+  <section class="below">
+    <div class="two-lines"><p>This is not investment advice.</p><p>This is not a registered result; nothing from this app enters the research record.</p></div>
+  </section>
 </main>
+<div id="inside" class="run-panel" hidden></div>
 <footer class="foot">
   <span>Quixote · MIT · computed in your browser; nothing is sent to a server</span>
   <nav aria-label="Site"><a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559" target="_blank" rel="noopener noreferrer">Paper</a><a href="/docs.html">Docs</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://github.com/ben06kn-droid/observable-garden">Source</a></nav>

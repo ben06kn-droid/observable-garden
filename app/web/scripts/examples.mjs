@@ -9,6 +9,7 @@ export const FILES = [
   ["examples/data/tiny_panel_planted.npz", "tiny_panel_planted.npz"],
   ["examples/data/tiny_panel_planted.json", "tiny_panel_planted.json"],
   ["examples/logs/restart_session.json", "restart_session.json"],
+  ["examples/llm_agent.py", "llm_agent.py"],      // the full run's prompt and tool schemas (run page)
 ];
 
 export const DEMOS = [

@@ -16,7 +16,8 @@ const chromePath = arg("--chrome", "/Applications/Google Chrome.app/Contents/Mac
 if (shots) mkdirSync(shots, { recursive: true });
 
 const port = 4100 + Math.floor(Math.random() * 800);
-const srv = await serve(port);
+const runPage = process.argv.includes("--run-page");   // the full run against the mock provider (scripts/mock_anthropic.mjs)
+const srv = await serve(port, { mock: runPage });
 const base = `http://127.0.0.1:${port}`;
 const profile = mkdtempSync(join(tmpdir(), "qx-check-"));
 const headed = process.argv.includes("--headed");   // a real window, for the frame profile
@@ -44,6 +45,7 @@ const send = (method, params = {}, sessionId) => new Promise((res, rej) => {
   ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
 });
 const traceEvents = []; let traceDone = null;
+const requests = [];
 const note = (where, kind, text) => issues.push({ where, kind, text: String(text).slice(0, 400) });
 ws.addEventListener("message", async (ev) => {
   const m = JSON.parse(ev.data);
@@ -55,16 +57,18 @@ ws.addEventListener("message", async (ev) => {
     const sid = m.params.sessionId; sessions.add(sid);
     await send("Runtime.enable", {}, sid).catch(() => {});
     await send("Log.enable", {}, sid).catch(() => {});
+    await send("Network.enable", {}, sid).catch(() => {});      // the worker's requests too
     await send("Runtime.runIfWaitingForDebugger", {}, sid).catch(() => {});
     await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sid).catch(() => {});
-  } else if (m.method === "Runtime.exceptionThrown") note(where, "exception", m.params.exceptionDetails?.exception?.description ?? m.params.exceptionDetails?.text);
+  } else if (m.method === "Network.requestWillBeSent") requests.push({ url: m.params.request.url, method: m.params.request.method, headers: m.params.request.headers });
+  else if (m.method === "Runtime.exceptionThrown") note(where, "exception", m.params.exceptionDetails?.exception?.description ?? m.params.exceptionDetails?.text);
   else if (m.method === "Runtime.consoleAPICalled" && ["error", "warning"].includes(m.params.type)) note(where, "console." + m.params.type, m.params.args.map((a) => a.value ?? a.description).join(" "));
   else if (m.method === "Log.entryAdded" && ["error", "warning"].includes(m.params.entry.level)) note(where, "log." + m.params.entry.source, m.params.entry.text);
 });
 
 const { targetId } = await send("Target.createTarget", { url: "about:blank" });
 const { sessionId: page } = await send("Target.attachToTarget", { targetId, flatten: true });
-for (const d of ["Runtime", "Log", "Page"]) await send(`${d}.enable`, {}, page);
+for (const d of ["Runtime", "Log", "Page", "Network"]) await send(`${d}.enable`, {}, page);
 await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, page);
 const evaluate = async (expr) => (await send("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true }, page)).result.value;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -187,6 +191,72 @@ async function contrast(selector, samples = 6) {
 }
 
 async function wheel(dy) { await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: 400, y: 400, deltaX: 0, deltaY: dy }, page); }
+if (runPage) {
+  // The run page end to end, under the production headers, with the provider replaced by the mock:
+  // the bundled inputs checked, a bad key, a rate limit, a cancel, then a complete run; the key never
+  // appears in the page, the URL or storage; every request goes to the site (the mock is served
+  // from it) or the provider; the share link opens as an unverified result.
+  const KEY = "sk-ant-test-0123456789abcdef";
+  try {
+    await viewport(1440, 900);
+    await go("/run.html?provider=mock");
+    await until(`document.getElementById('f-prompt').value.length > 100 && /rows/.test(document.getElementById('in-status').textContent)`, 60000);
+    report.inputs = await evaluate(`({ status: document.getElementById('in-status').textContent, cap: document.getElementById('in-cap').textContent, estimate: document.getElementById('estimate').textContent, start_enabled: !document.getElementById('start').disabled })`);
+    await shot("run-1-setup", true);
+    const startWith = async (k, moves = 8) => evaluate(`(() => { document.getElementById('f-key').value = ${JSON.stringify(k)}; document.getElementById('f-moves').value = '${moves}'; document.getElementById('f-B').value = '500'; document.getElementById('run-form').requestSubmit(); return true; })()`);
+    await startWith("");
+    report.no_key = await evaluate(`document.getElementById('run-error').textContent`);
+    for (const [k, name] of [["sk-ant-bad", "bad_key"], ["sk-ant-ratelimit", "rate_limit"], ["sk-ant-nocredit", "no_credit"]]) {
+      await startWith(k);
+      await until(`!document.getElementById('start').disabled && document.getElementById('run-error').textContent.length > 0`, 60000);
+      report[name] = await evaluate(`({ message: document.getElementById('run-error').textContent, key_field: document.getElementById('f-key').value, record_hidden: document.getElementById('record').hidden })`);
+    }
+    await startWith(KEY);
+    await until(`document.querySelectorAll('#run-log li.move').length >= 2`, 60000);
+    await evaluate(`document.getElementById('cancel').click(); true`);
+    await until(`!document.getElementById('start').disabled`, 10000);
+    report.cancel = await evaluate(`({ message: document.getElementById('run-error').textContent, record_hidden: document.getElementById('record').hidden, key_field: document.getElementById('f-key').value })`);
+    const t0 = Date.now();
+    await startWith(KEY, 12);
+    await until(`!document.getElementById('record').hidden`, 240000);
+    report.run_ms = Date.now() - t0;
+    await sleep(1500);
+    report.run = await evaluate(`({ word: document.getElementById('verdict-word')?.textContent, labels: [...document.querySelectorAll('#spot .note:not([hidden])')].map((e) => e.textContent),
+      moves: document.querySelectorAll('#run-log li.move').length, tokens: document.getElementById('tokens').textContent,
+      record: [...document.querySelectorAll('#rec-kv dt')].map((d) => d.textContent + ': ' + d.nextElementSibling.textContent),
+      cmd: document.getElementById('rec-cmd').textContent, twigs: document.querySelectorAll('#garden .real .twig').length })`);
+    await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); true`); await sleep(600); await shot("run-2-verdict");
+    await evaluate(`window.scrollTo(0, document.getElementById('record').offsetTop - 60); true`); await sleep(300); await shot("run-3-record");
+    report.key_gone = await evaluate(`({ in_text: document.body.innerText.includes(${JSON.stringify(KEY)}), in_html: document.documentElement.outerHTML.includes(${JSON.stringify(KEY)}),
+      in_url: location.href.includes(${JSON.stringify(KEY)}), local: localStorage.length, session: sessionStorage.length, field: document.getElementById('f-key').value })`);
+    // the share link: copied (or shown, where the clipboard is not allowed), then opened
+    await send("Browser.grantPermissions", { permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"], origin: base }).catch(() => {});
+    const shareUrl = await evaluate(`(async () => { document.getElementById('share').click(); await new Promise((r) => setTimeout(r, 400));
+      const t = document.getElementById('share-out').textContent; if (t.startsWith('http')) return t; try { return await navigator.clipboard.readText(); } catch { return null; } })()`);
+    report.share = { length: shareUrl?.length ?? null, has_key: !!shareUrl?.includes(KEY), fragment_only: !!shareUrl && new URL(shareUrl).search === "" };
+    if (shareUrl) {
+      await go(new URL(shareUrl).pathname + new URL(shareUrl).hash);
+      await until(`document.querySelectorAll('#sh-body dd').length > 5`, 10000);
+      report.share.page = await evaluate(`({ unverified: document.getElementById('sh-note').textContent.includes('Unverified'), word: document.querySelector('.share-word')?.textContent,
+        rows: [...document.querySelectorAll('#sh-body dt')].map((d) => d.textContent) })`);
+      await shot("run-4-share", true);
+    }
+    const model = requests.filter((r) => r.url.includes("/__mock/anthropic/"));
+    report.network = { requests: requests.length, model_calls: model.length,
+      elsewhere: [...new Set(requests.map((r) => new URL(r.url).origin).filter((o) => o !== base && !o.startsWith("data:") && !o.startsWith("blob:")))],
+      key_only_in_header: model.every((r) => r.headers["x-api-key"] === KEY || r.headers["x-api-key"] === "sk-ant-bad" || r.headers["x-api-key"] === "sk-ant-ratelimit" || r.headers["x-api-key"] === "sk-ant-nocredit"),
+      key_in_any_url: requests.some((r) => r.url.includes(KEY)) };
+  } catch (e) { report.error = String(e.message ?? e); }
+  const exited = new Promise((r) => chrome.once("exit", r));
+  chrome.kill(); srv.close();
+  await Promise.race([exited, sleep(5000)]);
+  try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* temporary */ }
+  report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text)).length;
+  report.issues = issues.filter((i) => !/404/.test(i.text)).slice(0, 10);
+  console.log(JSON.stringify(report, null, 1));
+  process.exit(report.error || report.csp_violations || issues.some((i) => i.kind === "exception") ? 1 : 0);
+}
+
 try {
   for (const [vw, vh, tag] of [[1440, 900, "desktop"], [1366, 768, "laptop"]]) {
     await viewport(vw, vh);

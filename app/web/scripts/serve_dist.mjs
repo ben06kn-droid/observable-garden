@@ -2,11 +2,14 @@
 // and the rest can be tested before a deploy. Two of them only make sense over https and are left
 // out here, on plain http: `upgrade-insecure-requests` (Safari applies it to localhost and would
 // rewrite every request to an https port nobody listens on) and Strict-Transport-Security.
-//   node scripts/serve_dist.mjs [port]
+// With `mock: true` (tests only, never a deploy) it also answers /__mock/anthropic/v1/messages
+// as a stand-in for the Messages API (scripts/mock_anthropic.mjs).
+//   node scripts/serve_dist.mjs [port] [--mock]
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { handle as mockAnthropic } from "./mock_anthropic.mjs";
 
 const web = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(web, "dist");
@@ -16,10 +19,11 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", "
   ".npz": "application/octet-stream", ".woff2": "font/woff2", ".woff": "font/woff", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8" };
 const rules = conf.headers.map((h) => ({ re: new RegExp("^" + h.source.replace(/\(\.\*\)/g, ".*") + "$"), headers: h.headers }));
 
-export function serve(port = 4173) {
+export function serve(port = 4173, { mock = false } = {}) {
   return new Promise((resolve) => {
     const srv = createServer((req, res) => {
       let path = decodeURIComponent(new URL(req.url, "http://x").pathname);
+      if (mock && path === "/__mock/anthropic/v1/messages") { mockAnthropic(req, res); return; }
       if (path.endsWith("/")) path += "index.html";
       let file = join(dist, path);
       if (!file.startsWith(dist) || !existsSync(file) || statSync(file).isDirectory()) { file = join(dist, "404.html"); res.statusCode = 404; }
@@ -36,6 +40,6 @@ export function serve(port = 4173) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const port = Number(process.argv[2] ?? 4173);
-  await serve(port);
+  await serve(port, { mock: process.argv.includes("--mock") });
   console.log(`dist on http://127.0.0.1:${port}/ with vercel.json's headers`);
 }
