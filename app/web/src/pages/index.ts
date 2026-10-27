@@ -1,4 +1,4 @@
-import { h, headerOverPaper, reduceMotion, sha256Hex, word } from "../common";
+import { auditId, h, headerOverPaper, reduceMotion, sha256Hex, word } from "../common";
 import { command, demos, loadDemo, type Demo } from "../demos";
 import { drawGarden, scaleFor, type GardenHandle } from "../garden";
 import { loadGate } from "../gate";
@@ -159,8 +159,7 @@ async function land(r: AuditResult, paths: ReplicatePath[] | null, demo: Demo, p
 
 async function record(r: AuditResult, demo: Demo, panelBytes: ArrayBuffer, cls: string, logText: string, log: any, wheel: string) {
   const [panelSha, classSha, logSha] = await Promise.all([sha256Hex(panelBytes), sha256Hex(cls), sha256Hex(logText)]);
-  const config = { alpha: r.alpha, B: r.B, class_sha256: classSha, log_sha256: logSha, panel_sha256: panelSha, seed: SEED, wheel };
-  const configHash = await sha256Hex(JSON.stringify(config));
+  const id = await auditId({ alpha: r.alpha, B: r.B, class_sha256: classSha, log_sha256: logSha, panel_sha256: panelSha, seed: SEED, wheel });
   const kv = $("rec-kv"); kv.replaceChildren();
   const rows: [string, string][] = [
     ["Class", `${log.class_name} · ${r.class_size} members`],
@@ -168,7 +167,7 @@ async function record(r: AuditResult, demo: Demo, panelBytes: ArrayBuffer, cls: 
     ["Panel hash", `${panelSha}${panelSha === log.panel_sha256 ? "" : " (differs from the log's!)"}`],
     ["Seeds", `search ${log.seed} · audit ${SEED}`],
     ["B", r.B.toLocaleString("en")],
-    ["Config hash", configHash],
+    ["Audit id", id],
     ["Package", wheel],
   ];
   for (const [k, v] of rows) { h("dt", null, k, kv); h("dd", null, v, kv); }

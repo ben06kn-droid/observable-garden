@@ -14,7 +14,7 @@ Node 22.12 or later (pinned in development: 24.21.0).
 
 | script | what it does |
 |---|---|
-| `scripts/fetch_pyodide.mjs` | puts the pinned Pyodide files in `public/pyodide/` and checks each against `MANIFEST.json` |
+| `scripts/fetch_pyodide.mjs` | puts the pinned Pyodide files in `public/pyodide/<version>/` and checks each against `MANIFEST.json` |
 | `scripts/build_wheel.py` (`npm run build-wheel`) | builds the observable-garden wheel from `git archive HEAD`, the commit in its version |
 | `scripts/check_wheel.mjs` | the wheel matches its manifest, and the package source has not changed since |
 | `scripts/copy_examples.mjs`, `check_examples.mjs` | copies the demo's examples from `examples/`; the check fails if a copy differs |
@@ -61,11 +61,27 @@ declares no stop rule, so each replicate runs to its 60-move budget; at B 2000 i
 Pyodide). The 82,240-member ETF class is too large for a browser and will be a recorded replay; the
 format is in `docs.html`. No recording exists yet.
 
-## Deploy
+## Deploy (Vercel)
 
-`vercel.json` holds the build command, output directory and headers. A preview deploy, from this
-directory, by someone logged in to the Vercel account:
+Settings, all of which `vercel.json` carries except the first two, which are set when the project is
+created:
 
-    npx vercel@<pinned version> deploy
+| setting | value |
+|---|---|
+| Root directory | `app/web` |
+| Framework preset | Other (`"framework": null`) |
+| Install command | `npm ci` |
+| Build command | `npm run build` (fetches and checks Pyodide, checks the examples and the wheel, typechecks, builds, checks `dist/`) |
+| Output directory | `dist` |
+| Node.js version | 22.x or 24.x (`engines`: `>=22.12.0`) |
+| Environment variables | none |
+| Headers | in `vercel.json`: the CSP and security headers on every path; immutable caching for `/assets/`, `/py/*.whl` and `/pyodide/314.0.7/`; revalidation for `.json` and `.html` |
+| Set in the dashboard, not in code | Firewall and rate limits; deployment protection for previews if wanted |
 
-Rate limits and the firewall are set in the Vercel dashboard (see `app/SECURITY.md`).
+A preview deploy, from this directory, logged in to the account:
+
+    npx vercel@64.0.2 login
+    npx vercel@64.0.2 deploy
+
+`check_wheel.mjs` skips its git-history check when the build runs from an uploaded copy without
+history (as `vercel deploy` from a local directory does); CI runs it with full history.

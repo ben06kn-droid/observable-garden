@@ -55,3 +55,13 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string | 
   if (parent) parent.appendChild(e);
   return e;
 }
+
+/** The audit id: SHA-256 of the canonical JSON (keys in code-point order, no spaces) of what fixes a
+ *  verdict: the inputs' hashes, B, the seed, alpha and the exact package build. Not Sancho's config
+ *  hash, which is the hash of its lever file. */
+export async function auditId(f: { alpha: number; B: number; class_sha256: string; log_sha256: string;
+                                    panel_sha256: string; seed: number; wheel: string }): Promise<string> {
+  const o = f as unknown as Record<string, unknown>;
+  const keys = Object.keys(o).sort();
+  return sha256Hex("{" + keys.map((k) => JSON.stringify(k) + ":" + JSON.stringify(o[k])).join(",") + "}");
+}

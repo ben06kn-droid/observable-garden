@@ -27,7 +27,7 @@ man = json.loads((PUB / "pyodide" / "MANIFEST.json").read_text())
 for f in man["files"]:
     if not f.get("package"):
         continue
-    z = zipfile.ZipFile(PUB / "pyodide" / f["file"])
+    z = zipfile.ZipFile(PUB / "pyodide" / man["pyodide"] / f["file"])
     lic = [n for n in z.namelist() if ".dist-info/" in n and ("LICEN" in n.upper() or "COPYING" in n.upper())]
     text = "\n\n".join(f"--- {n.split('.dist-info/')[-1]} ---\n" + z.read(n).decode("utf-8", "replace") for n in lic)
     section(f"{f['package']} {f['version']} ({f['file']})", text)

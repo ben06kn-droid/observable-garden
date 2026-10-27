@@ -25,8 +25,9 @@ const web = join(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = join(web, "..", "..");
 const pub = join(web, "public");
 
-const { loadPyodide } = await import(pathToFileURL(join(pub, "pyodide", "pyodide.mjs")).href);
-const py = await loadPyodide({ indexURL: join(pub, "pyodide") + "/", stdout: () => {}, stderr: () => {} });
+const pyodideDir = join(pub, "pyodide", JSON.parse(readFileSync(join(pub, "pyodide", "MANIFEST.json"), "utf8")).pyodide);
+const { loadPyodide } = await import(pathToFileURL(join(pyodideDir, "pyodide.mjs")).href);
+const py = await loadPyodide({ indexURL: pyodideDir + "/", stdout: () => {}, stderr: () => {} });
 await py.loadPackage(["numpy", "pandas"], { messageCallback: () => {} });
 const wheel = JSON.parse(readFileSync(join(pub, "py", "MANIFEST.json"), "utf8")).wheel;
 py.unpackArchive(new Uint8Array(readFileSync(join(pub, "py", wheel))), "wheel");

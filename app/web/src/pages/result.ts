@@ -1,4 +1,4 @@
-import { h, sha256Hex, word } from "../common";
+import { auditId, h, sha256Hex, word } from "../common";
 import { command, demos, loadDemo } from "../demos";
 import { drawGarden } from "../garden";
 import { loadGate } from "../gate";
@@ -42,10 +42,10 @@ const panel = makePanel($("panel"), () => tree);
       + `submitted ${r.submitted_feature_names.join(" ")}`, box);
   } : undefined);
   const [panelSha, classSha, logSha] = await Promise.all([sha256Hex(loaded.inputs.panel), sha256Hex(loaded.inputs.cls), sha256Hex(loaded.inputs.log)]);
-  const configHash = await sha256Hex(JSON.stringify({ alpha: r.alpha, B: r.B, class_sha256: classSha, log_sha256: logSha, panel_sha256: panelSha, seed: SEED, wheel: gate.wheel }));
+  const id = await auditId({ alpha: r.alpha, B: r.B, class_sha256: classSha, log_sha256: logSha, panel_sha256: panelSha, seed: SEED, wheel: gate.wheel });
   const kv = $("rec-kv");
   for (const [k, v] of [["Class", `${log.class_name} · ${r.class_size} members`], ["Class hash", classSha], ["Panel hash", panelSha],
-                        ["Seeds", `search ${log.seed} · audit ${SEED}`], ["B", r.B.toLocaleString("en")], ["Config hash", configHash],
+                        ["Seeds", `search ${log.seed} · audit ${SEED}`], ["B", r.B.toLocaleString("en")], ["Audit id", id],
                         ["Package", gate.wheel], ["Exit code", String(r.exit_code)]] as [string, string][]) {
     h("dt", null, k, kv); h("dd", null, v, kv);
   }

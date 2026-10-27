@@ -51,6 +51,12 @@ if (process.argv.includes("--update")) {
   for (const k of Object.keys(lock)) if (!(k in now)) problems.push(`${k}: in ASSETS.lock.json but not served`);
 }
 
+// the immutable cache rule must name the pinned Pyodide version, or an upgrade would be served stale
+const pyodideVersion = JSON.parse(readFileSync(join(web, "public", "pyodide", "MANIFEST.json"), "utf8")).pyodide;
+const vercel = JSON.parse(readFileSync(join(web, "vercel.json"), "utf8"));
+if (!vercel.headers.some((h) => h.source === `/pyodide/${pyodideVersion}/(.*)` && h.headers.some((x) => /immutable/.test(x.value))))
+  problems.push(`vercel.json: no immutable cache rule for /pyodide/${pyodideVersion}/`);
+
 const bytes = files.reduce((n, f) => n + statSync(join(dist, f)).size, 0);
 if (problems.length) { console.error(problems.join("\n")); process.exit(1); }
 console.log(`dist: ${files.length} files, ${(bytes / 1e6).toFixed(1)} MB; no inline script or style, no other origin, ${pinned.length} pinned files match the lock`);

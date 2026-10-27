@@ -1,13 +1,18 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
 // A static export. Every page is its own HTML entry; Vite emits external module scripts only
 // (no inline scripts, which the content security policy forbids), and nothing is inlined as a
 // data: URI, so the CSP needs no data: source either.
+// the pinned Pyodide release: its files are served from /pyodide/<version>/
+const PYODIDE = JSON.parse(readFileSync(resolve(import.meta.dirname, "public/pyodide/MANIFEST.json"), "utf8")).pyodide;
+
 const pages = ["index", "result", "paper", "docs", "privacy", "terms", "run", "viewer", "404"];
 
 export default defineConfig({
   base: "/",
+  define: { __PYODIDE_VERSION__: JSON.stringify(PYODIDE) },
   build: {
     outDir: "dist",
     emptyOutDir: true,

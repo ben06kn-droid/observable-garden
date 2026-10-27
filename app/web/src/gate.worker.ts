@@ -14,7 +14,7 @@ let loading: Promise<void> | null = null;
 
 async function load(): Promise<void> {
   const t0 = performance.now();
-  const base = new URL("/pyodide/", self.location.origin).href;
+  const base = new URL(`/pyodide/${__PYODIDE_VERSION__}/`, self.location.origin).href;
   const { loadPyodide } = await import(/* @vite-ignore */ base + "pyodide.mjs");
   py = await loadPyodide({ indexURL: base, fullStdLib: false });
   await py.loadPackage(["numpy", "pandas"], { messageCallback: () => {}, errorCallback: () => {} });

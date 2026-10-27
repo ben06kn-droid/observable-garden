@@ -1,5 +1,7 @@
-// Serves dist/ on 127.0.0.1 with exactly the headers vercel.json declares, so the content
-// security policy and the rest can be tested before a deploy.
+// Serves dist/ on 127.0.0.1 with the headers vercel.json declares, so the content security policy
+// and the rest can be tested before a deploy. Two of them only make sense over https and are left
+// out here, on plain http: `upgrade-insecure-requests` (Safari applies it to localhost and would
+// rewrite every request to an https port nobody listens on) and Strict-Transport-Security.
 //   node scripts/serve_dist.mjs [port]
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
@@ -21,7 +23,10 @@ export function serve(port = 4173) {
       if (path.endsWith("/")) path += "index.html";
       let file = join(dist, path);
       if (!file.startsWith(dist) || !existsSync(file) || statSync(file).isDirectory()) { file = join(dist, "404.html"); res.statusCode = 404; }
-      for (const r of rules) if (r.re.test(path)) for (const h of r.headers) res.setHeader(h.key, h.value);
+      for (const r of rules) if (r.re.test(path)) for (const h of r.headers) {
+        if (h.key === "Strict-Transport-Security") continue;
+        res.setHeader(h.key, h.key === "Content-Security-Policy" ? h.value.replace(/;\s*upgrade-insecure-requests/, "") : h.value);
+      }
       res.setHeader("Content-Type", TYPES[extname(file)] ?? "application/octet-stream");
       res.end(readFileSync(file));
     });
