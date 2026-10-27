@@ -20,6 +20,8 @@ import type { SearchTree } from "./types";
 const NS = "http://www.w3.org/2000/svg";
 export const W = 1080, H = 600;
 const GROUND = 560, TOP = 30;
+/** Where a one-tree garden's trunk stands (layout's root for one stem in an interactive garden). */
+export const SEED: [number, number] = [(60 + W - 30) / 2, GROUND];
 
 type Pt = [number, number];
 const TREE = { trunk: [22, 9], flare: 12, spread: 1.0, pad: 20, bump: 30, lean: 0.06 };

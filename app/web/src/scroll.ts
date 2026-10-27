@@ -126,5 +126,5 @@ export function startScroll(o: CutOptions) {
   }, { passive: true });
 
   o.night(window.scrollY >= twoTop() - 1.5);
-  return { toTwo: () => { if (window.scrollY < twoTop() - 1) { put(oneEnd()); current = target = oneEnd(); startCarry(1); } } };
+  return { carrying: () => !!carry, toTwo: () => { if (window.scrollY < twoTop() - 1) { put(oneEnd()); current = target = oneEnd(); startCarry(1); } } };
 }

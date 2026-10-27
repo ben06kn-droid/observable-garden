@@ -6,7 +6,7 @@
 // custom properties set with the CSSOM, so no inline style attribute is written and the content
 // security policy needs no 'unsafe-inline'.
 const NS = "http://www.w3.org/2000/svg";
-const SHAPES = {
+export const SHAPES = {
   leaf: "M0 -9 C5 -6 7 0 0 9 C-7 0 -5 -6 0 -9 Z M0 -9 L0 9",
   // five-notched cherry petal: rounded, with the notch at its tip
   petal: "M0 9 C-6 6 -8 -2 -4 -7 C-2.5 -9 -1 -9 0 -6.5 C1 -9 2.5 -9 4 -7 C8 -2 6 6 0 9 Z",

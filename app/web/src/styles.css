@@ -109,6 +109,17 @@ body:not([data-page="two"]) .top { color: var(--paper-ink); background: rgba(239
   100% { transform: translate3d(0, var(--fall), 0) rotate(var(--spin)); }
 }
 
+/* life (life.ts): the cursor's trail, one pool of sprites per page, and the piles on the ground.
+   Sprites move by transform; a pile is one canvas, so it costs nothing a frame however big it grows. */
+.trail { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.pile { position: absolute; left: 0; top: 0; width: var(--w, 0); height: var(--h, 0); pointer-events: none; z-index: 1; }   /* a canvas strip along the ground */
+.two .trail, .two .pile { z-index: 4; }   /* over the bed's ground, under the text */
+.sprite, .piece { position: absolute; left: 0; top: 0; width: var(--size, 14px); height: var(--size, 14px); }
+.sprite { opacity: 0; will-change: transform, opacity; }
+.sprite.l path, .piece.l path { fill: var(--leaf); stroke: var(--leaf-vein); stroke-width: 0.8; }
+.sprite.p path, .piece.p path { fill: var(--petal); }
+.falling .leaf, .falling .petal { translate: 0 0; }   /* the wind's push composes with the fall */
+
 /* ---------- page two: the demo, Night City ----------
    A city garden at night, sharp and clean: hairlines with a narrow glow, neon tubing, a lit ground
    line. Nothing blurred, no glitch, no scan lines, no gradient text; text sits straight on the dark. */
@@ -123,7 +134,9 @@ main { will-change: transform; }
 /* the city (city.ts): pylons, cables, a pulse, two dim signs */
 .two .city { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .city .pylon { fill: none; stroke: #5f5385; stroke-width: 0.8; opacity: 0.6; }
-.city .cable { fill: none; stroke: var(--wire); stroke-width: 0.8; opacity: 0.42; filter: drop-shadow(0 0 2px rgba(63, 240, 255, 0.55)); }
+.city .cable { fill: none; stroke: var(--wire); stroke-width: 0.8; opacity: 0.42; filter: drop-shadow(0 0 2px rgba(63, 240, 255, 0.55)); transition: opacity 250ms linear, stroke-width 250ms linear; }
+.city .cable.lit { opacity: 1; stroke-width: 1.3; }
+.city .cable-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; }
 .city .pulse { fill: none; stroke: #effdff; stroke-width: 1.8; stroke-linecap: round; stroke-dasharray: 0.05 1.2;
   filter: drop-shadow(0 0 2px #3ff0ff) drop-shadow(0 0 6px rgba(63, 240, 255, 0.6)); }
 .city .glyphs { font: 11px/1 var(--mono); fill: #4f4670; letter-spacing: 0.1em; }
@@ -135,7 +148,37 @@ main { will-change: transform; }
 .two .petals { z-index: 1; }
 
 /* the run's own tree, centred, the brightest thing on the page, with a dark margin round it */
-.two .spot { position: absolute; z-index: 2; top: 92px; left: 25%; right: 25%; bottom: 1.5%; }
+.two .spot { position: absolute; z-index: 2; top: 92px; left: 25%; right: 25%; bottom: 1.5%; pointer-events: none; }
+.two .spot .real { pointer-events: auto; }
+/* the seed: where the trunk will stand; breathing, a sprout swaying; spent once the trunk grows */
+.seed { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: opacity 900ms linear; }
+.seed.spent { opacity: 0; }
+.seed .glow { position: absolute; left: -20px; top: -20px; width: 40px; height: 40px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 63, 210, 0.6) 0%, rgba(255, 63, 210, 0) 68%); will-change: transform, opacity; animation: breathe 3.6s ease-in-out infinite; }
+.seed .core { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--core); box-shadow: 0 0 4px var(--pink), 0 0 12px rgba(255, 63, 210, 0.6); }
+.seed .sprout { position: absolute; left: -15px; top: -46px; width: 30px; height: 48px; overflow: visible; transform-origin: 50% 94%; will-change: transform; animation: sway 4.4s ease-in-out infinite; }
+.seed .sprout path { fill: none; stroke: var(--pink); stroke-width: 1.3; stroke-linecap: round; }
+.seed .sprout .leaflet { fill: rgba(255, 63, 210, 0.3); stroke-width: 1; }
+@keyframes breathe { 0%, 100% { opacity: 0.5; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15); } }
+@keyframes sway { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+/* the choice beside the seed: the three example names, faint until chosen */
+.two .choice { position: absolute; z-index: 5; left: 0; top: 0; width: 190px; transition: transform 1000ms cubic-bezier(.35, 0, 0, 1); }   /* over the bed, which takes clicks */
+.choice .chip { min-height: 30px; padding: 5px 0; border-top: 0; color: var(--faint); letter-spacing: 0.12em; }
+.choice .chip small { display: none; }
+.choice .chip:hover { color: var(--ink); }
+.choice .chip[aria-pressed="true"] { color: var(--ink); border: 0; box-shadow: inset 2px 0 0 var(--pink); padding-left: 10px; }
+.replay-note { margin: var(--s4) 0 0; font: 11px/1.5 var(--mono); color: var(--faint); }
+/* the trunk grows up out of the seed */
+#garden.growing .trunk[data-step] { transform-box: fill-box; transform-origin: 50% 100%; transition: transform 700ms cubic-bezier(.35, 0, 0, 1), opacity 300ms linear; }
+#garden.growing .trunk[data-step]:not(.on) { opacity: 1; transform: scaleY(0); }
+/* hover: the run's tree brightens and its branches tremble; the background trees do nothing */
+#garden.neon .halo { opacity: 0.72; transition: opacity 300ms linear; }
+#garden:has(.real .stem:hover) .halo { opacity: 1; }
+#garden:has(.real .stem:hover) .move { transform-box: fill-box; transform-origin: 50% 100%; animation: tremble 1.3s ease-in-out infinite; }
+#garden:has(.real .stem:hover) .move:nth-child(2n) { animation-duration: 1.1s; animation-delay: -0.4s; }
+#garden:has(.real .stem:hover) .move:nth-child(3n) { animation-duration: 1.55s; animation-delay: -0.8s; }
+@keyframes tremble { 0%, 100% { transform: rotate(0deg); } 30% { transform: rotate(0.7deg); } 70% { transform: rotate(-0.6deg); } }
+.bar-petal { z-index: 3; }
 .two .spot::before { content: ""; position: absolute; inset: -6% -14% 0;
   background: radial-gradient(closest-side at 50% 56%, rgba(5, 4, 11, 0.96) 0%, rgba(5, 4, 11, 0.88) 60%, rgba(5, 4, 11, 0) 100%); }
 .two .spot svg { position: relative; width: 100%; height: 100%; display: block; }
@@ -222,7 +265,8 @@ main { will-change: transform; }
 .garden .real .stem:focus-visible .canopy { stroke: var(--blue); stroke-width: 3; opacity: 1; }
 .garden .twig { stroke-dasharray: 1; stroke-dashoffset: 0; }
 .garden.growing .twig[data-step]:not(.on) { stroke-dashoffset: 1; }
-.garden.growing .bud[data-step]:not(.on), .garden.growing .trunk[data-step]:not(.on), .garden.growing .canopy[data-step]:not(.on) { opacity: 0; }
+.garden.growing .bud[data-step]:not(.on), .garden.growing .canopy[data-step]:not(.on) { opacity: 0; }
+.garden.growing:not(#garden) .trunk[data-step]:not(.on) { opacity: 0; }
 
 /* neon tubing (garden.ts `neon`): a thin bright core over a lit stroke, a narrow halo behind */
 .garden.neon .real { filter: none; }

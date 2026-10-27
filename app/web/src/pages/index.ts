@@ -2,10 +2,11 @@ import { auditId, h, reduceMotion, sha256Hex, word } from "../common";
 import { makeBed } from "../bed";
 import { makeCity } from "../city";
 import { command, demos, loadDemo, type Demo } from "../demos";
-import { drawGarden, type GardenHandle } from "../garden";
+import { drawGarden, H as GH, SEED as SEED_AT, W as GW, type GardenHandle } from "../garden";
 import { loadGate } from "../gate";
 import { colourOf, kindOf } from "../heads";
-import { fall } from "../leaves";
+import { fall, SHAPES } from "../leaves";
+import { startLife } from "../life";
 import { makeRunInside } from "../runInside";
 import { startScroll } from "../scroll";
 import { woodOne, woodTwo } from "../woods";
@@ -76,6 +77,7 @@ function drawRun(d: Demo, t: SearchTree, r: AuditResult | null) {
     blossom: { kind: kindOf(d.key), colour: colourOf(d.key) },
     submitted: r ? { rule: r.submitted_feature_names.join(" "), sharpe: r.submitted_sharpe } : undefined });
   garden.onPick(() => enter());
+  requestAnimationFrame(placeChoice);
   svg.setAttribute("aria-label", `${d.title}: the run's tree, ${t.moves.length} moves and ${t.evaluations} evaluations. Choose a tree to go inside the run.`);
   return garden;
 }
@@ -92,17 +94,13 @@ demos().then((ds) => {
       chosen = d; markChip();
       const r = runs.get(d.key);
       if (r?.tree && !busy) {                         // a run already made: show it as it ended
-        shown = d.key; bed.reset(d.key); bed.grow(1); drawRun(d, r.tree, r.result).bloom(r.refused ? 0 : 1);
+        shown = d.key; bed.reset(d.key); bed.grow(1); drawRun(d, r.tree, r.result).bloom(r.refused ? 0 : 1); seed.classList.add("spent");
         if (r.result) verdictCard(verdictBox, r.result); enterBtn.hidden = false;
       }
     });
   }
-  const li = h("li", null, null, chips);
-  const rp = h("button", "chip", "82,240-member ETF class", li) as HTMLButtonElement;
-  rp.type = "button"; rp.disabled = true;
-  rp.title = "Too large for a browser: it will be a recorded replay of a local run. The format is in Docs; no recording yet.";
-  h("small", null, "recorded replay · not yet", rp);
   markChip();
+  placeSeed();
 });
 function markChip() { $("chips").querySelectorAll<HTMLButtonElement>(".chip[data-key]").forEach((c) => c.setAttribute("aria-pressed", String(c.dataset.key === chosen.key))); }
 
@@ -115,7 +113,8 @@ async function run(demo: Demo) {
   const key = demo.key, B = demo.B;
   runs.set(key, { tree: null, result: null });
   shown = key; bed.reset(key); bed.grow(0);
-  svg.replaceChildren();
+  svg.replaceChildren(); idleBox(); placeChoice();
+  seed.classList.remove("spent");
   try {
     setState("Loading", "the gate", "Python and the package, into your browser; once per visit.");
     const [gate, loaded] = await Promise.all([loadGate(), loadDemo(demo)]);
@@ -161,11 +160,68 @@ async function run(demo: Demo) {
   }
 }
 
+// ---- the seed: before a run, a bright point in the ground where the trunk will stand (the garden's
+// own trunk position, garden.ts SEED), breathing, with one swaying sprout, and the three examples
+// beside it as the choice. Run grows the trunk out of it (the trunk scales up from its foot), so the
+// idle is the run's first frame. For an example with restarts, the first tree stands here.
+const spot = $("spot"), seed = $("seed");
+function idleBox() { svg.setAttribute("viewBox", `0 0 ${GW} ${GH}`); svg.setAttribute("preserveAspectRatio", "xMidYMax meet"); svg.classList.add("garden"); }
+function placeSeed() {
+  if (!svg.getAttribute("viewBox")) idleBox();
+  const m = svg.getScreenCTM(), sr = spot.getBoundingClientRect();
+  if (!m) return;
+  const p = svg.createSVGPoint(); p.x = SEED_AT[0]; p.y = SEED_AT[1];
+  const q = p.matrixTransform(m), x = q.x - sr.left, y = q.y - sr.top;
+  seed.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+  seedAt = [q.x, q.y];
+  placeChoice();
+}
+// the choice sits in the section, over the bed: beside the seed, and once a tree stands there, just
+// past the tree's right edge so no branch crosses a name
+let seedAt: [number, number] = [0, 0];
+function placeChoice() {
+  const list = $("chips"), tr = two.getBoundingClientRect(), tree = svg.querySelector(".real") ? garden?.treeRect() : null;
+  const x = tree && tree.width ? Math.max(seedAt[0] + 34, tree.right + 28) : seedAt[0] + 34;
+  list.style.transform = `translate3d(${(x - tr.left).toFixed(1)}px, ${(seedAt[1] - tr.top - list.offsetHeight - 18).toFixed(1)}px, 0)`;
+}
+idleBox(); placeSeed();
+window.addEventListener("resize", () => requestAnimationFrame(placeSeed));
+
+// ---- a petal now and then lands on the bar (once a run has drawn it), rests, slides off an end and
+// falls. Decoration on the gate's bar: it reads where the bar is, nothing else.
+const barPetal = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+barPetal.setAttribute("viewBox", "-10 -10 20 20"); barPetal.setAttribute("class", "sprite p bar-petal"); barPetal.setAttribute("aria-hidden", "true");
+barPetal.innerHTML = `<path d="${SHAPES.petal}"></path>`;
+spot.appendChild(barPetal);
+function petalOnBar() {
+  const line = svg.querySelector(".bar line");
+  if (!reduceMotion && line && body.dataset.page === "two" && !inside.isOpen() && !document.hidden) {
+    const lr = line.getBoundingClientRect(), sr = spot.getBoundingClientRect(), s = 12;
+    const x = lr.left - sr.left + lr.width * (0.2 + Math.random() * 0.6), y = lr.top - sr.top - s * 0.75, dir = Math.random() < 0.5 ? -1 : 1;
+    const end = dir > 0 ? lr.right - sr.left : lr.left - sr.left - s, r0 = Math.random() * 90;
+    const T = (px: number, py: number, r: number) => `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0) rotate(${r.toFixed(0)}deg)`;
+    barPetal.animate([
+      { transform: T(x - dir * 40, y - 160, r0), opacity: 0 },
+      { transform: T(x, y, r0 + 140), opacity: 1, offset: 0.32, easing: "cubic-bezier(.3, .6, .4, 1)" },
+      { transform: T(x, y, r0 + 140), opacity: 1, offset: 0.5, easing: "cubic-bezier(.5, 0, .9, .6)" },
+      { transform: T(end, y + 2, r0 + 140 + dir * 25), opacity: 1, offset: 0.82 },
+      { transform: T(end + dir * 24, y + 150, r0 + 330), opacity: 0 },
+    ], { duration: 7200, easing: "linear" });
+  }
+  window.setTimeout(petalOnBar, 9000 + Math.random() * 7000);
+}
+window.setTimeout(petalOnBar, 6000);
+
+// ---- life before anything is clicked (life.ts): the cursor's trail, its wind, the piles, the gusts
+startLife({ one: $("overview"), two, leaves: $("leaves"), petals: $("petals"),
+  textOne: () => document.querySelector(".one .copy")?.getBoundingClientRect() ?? null,
+  paused: () => inside.isOpen() || scroll.carrying() });
+
 // the run's tree grows evaluation by evaluation in the log's order; the bed's first half follows it
 function grow(d: Demo, t: SearchTree, maxMoves: number): Promise<void> {
   const g = drawRun(d, t, null);
   const finish = () => setState("The search", String(t.evaluations), `evaluations in ${t.moves.length} moves`);
-  if (reduceMotion) { g.setStep(g.total); bed.grow(0.5); finish(); return Promise.resolve(); }
+  if (reduceMotion) { g.setStep(g.total); bed.grow(0.5); seed.classList.add("spent"); finish(); return Promise.resolve(); }
   g.grow(); g.setStep(0);
   const per = Math.min(70, 4200 / t.evaluations);
   return new Promise((resolve) => {
@@ -173,6 +229,7 @@ function grow(d: Demo, t: SearchTree, maxMoves: number): Promise<void> {
     const tick = () => {
       if (mi >= t.moves.length) { finish(); resolve(); return; }
       k++; inMove++; g.setStep(k); bed.grow(0.5 * k / t.evaluations);
+      if (k === 1) seed.classList.add("spent");                // the trunk has grown out of the seed
       setState("The search", String(k), `evaluations · move ${mi + 1} of ${maxMoves}`);
       if (inMove >= t.moves[mi].candidates.length) { mi++; inMove = 0; }
       window.setTimeout(tick, per);

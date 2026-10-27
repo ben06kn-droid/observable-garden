@@ -63,6 +63,10 @@ export function makeCity(svg: SVGSVGElement, reduce: boolean): City {
     [0, 0.09, 0.18].forEach((k, i) => {
       const y = top + (foot - top) * k, pts = catenary(xl + (i - 1) * pw * 1.2, y, xr + (i - 1) * pw * 1.2, y, H * (0.05 + 0.02 * i));
       const path = el("path", { d: line(pts), class: "cable" }, g) as SVGPathElement;
+      // a wide invisible stroke over the cable to hover: the cable brightens under the pointer
+      const hit = el("path", { d: line(pts), class: "cable-hit" }, g);
+      hit.addEventListener("pointerenter", () => path.classList.add("lit"));
+      hit.addEventListener("pointerleave", () => path.classList.remove("lit"));
       cables.push({ pts, path });
     });
     // the signs: a vertical strip of glyphs at the right, a thin ring at the left; dim and static
