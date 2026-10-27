@@ -41,16 +41,25 @@ class AuditResult:
     n_moves: int
     class_size: int
     reasons: list = field(default_factory=list)
+    # The first replicates of the certifying null, step by step, only when asked for
+    # (`audit_log(..., replicate_paths=n)`): what the search looks like re-grown on noise. Absent
+    # otherwise, and left out of to_dict, so a default audit's output is unchanged.
+    replicate_paths: list | None = None
 
     def to_dict(self) -> dict:
-        return {k: getattr(self, k) for k in self.__dataclass_fields__}
+        d = {k: getattr(self, k) for k in self.__dataclass_fields__}
+        if d["replicate_paths"] is None:
+            del d["replicate_paths"]
+        return d
 
 
 def audit_log(log_path, panel_path, class_path, *, B: int = 2000, seed: int = 0,
-              alpha: float | None = None, progress=None) -> AuditResult:
+              alpha: float | None = None, progress=None, replicate_paths: int = 0) -> AuditResult:
     """Price a log the harness wrote. `progress`, if given, is called as progress(stage, done,
     total) for the class tier ("class") and the replay ("replay"), at most every few hundred
-    replicates; it only observes."""
+    replicates; it only observes. `replicate_paths=n` also returns the first n replicates of the
+    certifying null as paths (each held rule and its Sharpe on that replicate); it changes no
+    number."""
     from quixote import classes, panel as P
     from quixote.certify import certify
     from quixote.run import ReplayMismatch, replay
@@ -93,8 +102,10 @@ def audit_log(log_path, panel_path, class_path, *, B: int = 2000, seed: int = 0,
     p_class = float((1 + np.sum(M >= S)) / (B + 1))
     bar = float(np.quantile(M, 1 - alpha))
     ann = float(np.sqrt(h.panel.periods_per_year))
+    paths: list = []
     v = certify(session.log, lc.spec_class, base, ann, alpha=alpha, B=B, seed=seed,
-                p_declared_class=p_class, table=h.table, progress=progress)
+                p_declared_class=p_class, table=h.table, progress=progress,
+                replicate_paths=replicate_paths, paths_out=paths if replicate_paths else None)
     names = list(h.panel.feature_names)
     return AuditResult(
         status=v.status, exit_code=EXIT_CODES.get(v.status, 3),
@@ -102,7 +113,8 @@ def audit_log(log_path, panel_path, class_path, *, B: int = 2000, seed: int = 0,
         submitted_feature_names=[("+" if s > 0 else "-") + names[int(k)] for k, s in support],
         submitted_sharpe=float(score), p_replay=None if v.p_certifying is None else float(v.p_certifying),
         p_class=p_class, class_bar=bar, alpha=alpha, B=B, n_moves=int(session.log.n_moves),
-        class_size=int(h.table.N), reasons=[str(r) for r in v.reasons])
+        class_size=int(h.table.N), reasons=[str(r) for r in v.reasons],
+        replicate_paths=paths if replicate_paths else None)
 
 
 MEANINGS = {
