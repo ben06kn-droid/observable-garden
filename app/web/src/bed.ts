@@ -1,9 +1,10 @@
-// The bed along the bottom of page two: small neon flowers growing up from the ground as the run
-// proceeds. It reads one number: the run's progress g in 0..1, half from the search (evaluations shown
-// / evaluations in the log) and half from the replay (done / total from the worker's progress
-// events). Flower i starts growing when g passes its threshold and is full grown a little after; its
-// head opens over the replay half. Everything else here (each flower's place, height, lean, kind and
-// colour) is decoration, picked from the run's id so a run's bed looks the same on every visit.
+// The bed along the bottom of page two: small neon flowers growing up from the ground when a run
+// starts. It is decoration and reads nothing from the gate: it keeps its own clock, so it blooms at
+// the same pace however fast the gate runs. From the click, flower i starts at its own moment
+// (staggered over the first 4.5 s), its stem grows on an eased curve over 1.6 s, and its head opens
+// from bud on its own eased curve over 1.8 s; the whole bed is open about 8.5 s after the click, before
+// the quickest verdict (about 11 s). Each flower's place, height, lean, kind and colour come from the
+// run's id, so a run's bed looks the same on every visit.
 //
 // The ground is a parabola: lowest at the bottom centre, where the flowers are densest, climbing each
 // side to about 18% up the page, where they thin out and lean inwards; nothing grows above it. Under
@@ -16,7 +17,7 @@ import { colourOf, canvasSink, drawHead, drawStem, hash, kindOf, type Sink } fro
 const NS = "http://www.w3.org/2000/svg";
 
 interface Bloom { x: number; base: number; h: number; t: number; lean: number; kind: ReturnType<typeof kindOf>; colour: number; r: number; seed: number }
-export interface BedHandle { grow(g: number): void; reset(runId: string): void; heads(): [number, number][] }
+export interface BedHandle { start(): void; finish(): void; reset(runId: string): void; heads(): [number, number][] }
 
 const el = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string, string | number>, parent: Element) => {
   const e = document.createElementNS(NS, name);
@@ -31,7 +32,7 @@ export function makeBed(svg: SVGSVGElement, page: HTMLElement, n = 230): BedHand
   svg.setAttribute("aria-hidden", "true");
   const cv = document.createElement("canvas"); cv.className = "bed-cv"; cv.setAttribute("aria-hidden", "true");
   svg.after(cv);
-  let flowers: Bloom[] = [], grown: number[] = [], last = -1, id = "", size = [0, 0], dpr = 1;
+  let flowers: Bloom[] = [], grown: number[] = [], id = "", size = [0, 0], dpr = 1;
 
   function reset(runId: string) {
     id = runId;
@@ -42,7 +43,7 @@ export function makeBed(svg: SVGSVGElement, page: HTMLElement, n = 230): BedHand
     cv.width = Math.ceil(W * dpr); cv.height = Math.ceil(Hb * dpr);
     const c = W / 2, yv = Hb - 0.07 * P, ye = Hb - 0.18 * P;
     const ground = (x: number) => { const u = (x - c) / c; return yv - (yv - ye) * u * u; };
-    flowers = []; grown = []; last = -1; window.clearTimeout(timer); timer = 0;
+    flowers = []; grown = []; running = false;
     for (let i = 0; i < n; i++) {
       const fid = `${runId}:${i}`, hsh = hash(fid), q = (k: number) => ((hsh >>> k) % 1000) / 1000;
       // densest at the centre: |u| = q^1.7; a small gap left for the run's trunk
@@ -67,29 +68,39 @@ export function makeBed(svg: SVGSVGElement, page: HTMLElement, n = 230): BedHand
     const ctx = cv.getContext("2d"); ctx?.clearRect(0, 0, cv.width, cv.height);
   }
 
-  // redrawn at most about six times a second (the latest progress wins)
-  let pending = -1, timer = 0, lastPaint = 0;
-  function grow(g: number) {
-    if (!id || Math.abs(g - last) < 0.004) return;
-    pending = g;
-    const wait = 160 - (performance.now() - lastPaint);
-    if (g >= 1 || wait <= 0) paint();
-    else if (!timer) timer = window.setTimeout(paint, wait);
+  // the clock: one loop while the bed is growing, drawing every other frame; idle otherwise
+  const START = 4.5, GROW = 1.6, OPEN = 1.8, ease = (x: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, x)), 3);
+  const smooth = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
+  let t0 = 0, running = false, odd = false;
+  const at = (fl: Bloom, t: number) => {
+    const s0 = (fl.t / 0.42) * START, h = (fl.seed % 1000) / 1000;
+    return [ease((t - s0) / GROW), smooth((t - s0 - 1.2 - 0.8 * h) / OPEN)];   // stem grown, head open
+  };
+  function start() {
+    if (!id) return;
+    t0 = performance.now(); if (running) return;
+    running = true;
+    const frame = (now: number) => {
+      const t = (now - t0) / 1000;
+      odd = !odd;
+      if (odd || t > START + 1.2 + 0.8 + OPEN) paint(t);
+      if (t <= START + 1.2 + 0.8 + OPEN + 0.05) requestAnimationFrame(frame); else running = false;
+    };
+    requestAnimationFrame(frame);
   }
-  function paint() {
-    window.clearTimeout(timer); timer = 0;
-    const g = pending; last = g; lastPaint = performance.now();
+  function finish() { running = false; t0 = performance.now() - 60000; paint(60); }
+  function paint(t: number) {
     const c = cv.getContext("2d");
     if (!c) return;
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
     let alpha = 1;
     const sink: Sink = canvasSink(c, () => alpha, STEM);
+    const state = flowers.map((fl) => at(fl, t));
     for (const mirror of [true, false]) {                   // the reflections first, faint, under the ground line
       flowers.forEach((fl, i) => {
-        const u = Math.max(0, Math.min(1, (g - fl.t) / 0.45));   // this flower's own growth
+        const [u, op] = state[i];
         grown[i] = u;
         if (u <= 0) return;
-        const op = Math.max(0, Math.min(1, (g - 0.5 - 0.3 * fl.t) / 0.06));   // its head opens over the replay half
         c.setTransform(dpr, 0, 0, dpr, 0, 0);
         if (mirror) { c.translate(0, 2 * fl.base + 8); c.scale(1, -1); }
         c.translate(fl.x, fl.base); c.transform(1, 0, Math.tan((fl.lean * Math.PI) / 180), 1, 0, 0); c.scale(u, u);
@@ -107,5 +118,5 @@ export function makeBed(svg: SVGSVGElement, page: HTMLElement, n = 230): BedHand
     const off = page.clientHeight - size[1];
     return flowers.flatMap((fl, i) => (grown[i] > 0 ? [[fl.x, off + fl.base - fl.h * grown[i]] as [number, number]] : []));
   }
-  return { grow, reset, heads: headPoints };
+  return { start, finish, reset, heads: headPoints };
 }

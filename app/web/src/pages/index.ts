@@ -10,8 +10,8 @@ import { SHAPES } from "../leaves";
 import { Field, startLife } from "../particles";
 import { makeRunView } from "../runView";
 import { startScroll } from "../scroll";
-import { makeSign } from "../sign";
-import { branchSources, shakeable, shakeTree, woodOne, woodTwo } from "../woods";
+import { makeNotes } from "../notes";
+import { branchSources, shakeable, woodOne, woodTwo } from "../woods";
 import type { AuditResult, SearchTree } from "../types";
 
 const SEED = 0;
@@ -42,9 +42,12 @@ let text = textBox();
 const leaves = new Field({ box: one, air: $("air-one") as HTMLCanvasElement, pile: $("pile-one") as HTMLCanvasElement, kind: "leaf", count: 90, start: 46,
   ground: () => one.clientHeight - 4,
   cap: (x) => (text && x > text.l - 20 && x < text.r + 20 ? Math.max(0, Math.min(26, text.below)) : 26) });
+// the verdict written onto the drawing (notes.ts); the petals fade behind its labels and the choice
+const notes = makeNotes(spot, two, () => bed.heads());
+let choiceBox = { x: 0, y: 0, w: 0, h: 0 };
 const petals = new Field({ box: two, air: $("air-two") as HTMLCanvasElement, pile: $("pile-two") as HTMLCanvasElement, kind: "petal", count: 80, start: 36,
   ground: (x) => { const W = two.clientWidth, u = (x - W / 2) / (W / 2); return two.clientHeight * (0.93 - 0.11 * u * u); },
-  cap: () => (innerWidth < 760 ? 0 : 12) });
+  cap: () => (innerWidth < 760 ? 0 : 12), avoid: () => [...notes.boxes(), choiceBox] });
 let busy = false;
 startLife({ fields: [leaves, petals], paused: () => inside.isOpen(), throttled: () => busy, reduce: reduceMotion });
 
@@ -67,19 +70,7 @@ const city = makeCity($("city") as unknown as SVGSVGElement, reduceMotion, fx);
 city.draw();
 city.start(() => body.dataset.page !== "two" || inside.isOpen() || document.hidden);
 let resizeT = 0;
-window.addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => { text = textBox(); woods(); city.draw(); placeSeed(); hangSign(); }, 200); });
-
-// ---- the sign (sign.ts): the run state, then the verdict, hung level with the bar at the bed's right
-const enterBtn = h("button", "enter", "Enter the run") as HTMLButtonElement; enterBtn.type = "button"; enterBtn.id = "enter"; enterBtn.hidden = true;
-const sign = makeSign($("sign"), enterBtn);
-function hangSign() {
-  const b = two.getBoundingClientRect(), bar = svg.querySelector(".bar line");
-  const y = bar ? bar.getBoundingClientRect().top - b.top : b.height * 0.46;
-  const x = b.width * 0.77, W = b.width, u = (x - W / 2) / (W / 2);
-  sign.hang(y, b.height * (0.93 - 0.11 * u * u));
-}
-sign.state("ready", "Ready", [["Choose", "an example by the seed, then run the gate"]]);
-requestAnimationFrame(hangSign);
+window.addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => { text = textBox(); woods(); city.draw(); placeSeed(); notes.place(); }, 200); });
 
 // ---- page two: the run's tree in the spot, the bed along the bottom
 const runBtn = $<HTMLButtonElement>("run");
@@ -93,23 +84,15 @@ function enter() {
   inside.open({ id: d.key, title: d.title, tree: r.tree, result: r.result, refused: r.refused });
 }
 $("bed").addEventListener("click", enter);
-enterBtn.addEventListener("click", enter);
 
-// hovering the run's tree shakes it (its click enters the run), at most every 1.5 s, shedding petals
-let lastShake = 0;
+// the run's tree: every evaluation of the search a twig (garden.ts `twigs`); hovering only brightens
+// it, a click (or Enter) goes inside once the verdict is in
 function drawRun(d: Demo, t: SearchTree, r: AuditResult | null) {
-  garden = drawGarden(svg, t, { interactive: true, halo: true, neon: true, canopy: false, bar: r?.class_bar,
+  garden = drawGarden(svg, t, { interactive: true, halo: true, neon: true, canopy: false, twigs: true, bar: r?.class_bar,
     blossom: { kind: kindOf(d.key), colour: colourOf(d.key) },
     submitted: r ? { rule: r.submitted_feature_names.join(" "), sharpe: r.submitted_sharpe } : undefined });
   garden.onPick(() => enter());
-  svg.querySelectorAll<SVGGElement>(".real .stem").forEach((g) => g.addEventListener("pointerenter", () => {
-    const now = performance.now();
-    if (now - lastShake < 1500 || reduceMotion) return;
-    lastShake = now;
-    const s = Number(g.dataset.stem);
-    shakeTree(svg, s); petals.burst(branchSources(svg, two, s), 10);
-  }));
-  requestAnimationFrame(() => { placeChoice(); hangSign(); });
+  requestAnimationFrame(placeChoice);
   svg.setAttribute("aria-label", `${d.title}: the run's tree, ${t.moves.length} moves and ${t.evaluations} evaluations. Choose it to go inside the run once the verdict is in.`);
   return garden;
 }
@@ -126,8 +109,8 @@ demos().then((ds) => {
       chosen = d; markChip();
       const r = runs.get(d.key);
       if (r?.tree && !busy) {                         // a run already made: show it as it ended
-        shown = d.key; bed.reset(d.key); bed.grow(1); drawRun(d, r.tree, r.result).bloom(r.refused ? 0 : 1); seed.classList.add("spent");
-        if (r.result) { sign.verdict(r.result); below(r.result); } enterBtn.hidden = !(r.result || r.refused);
+        shown = d.key; bed.reset(d.key); bed.finish(); settle(drawRun(d, r.tree, r.result)).bloom(r.refused ? 0 : 1); seed.classList.add("spent");
+        if (r.result) { notes.verdict(garden!, r.result, r.tree.evaluations, SEED); below(r.result); } else if (r.refused) notes.refused(garden, r.refused, r.tree.evaluations);
       }
     });
   }
@@ -139,49 +122,40 @@ function markChip() { $("chips").querySelectorAll<HTMLButtonElement>(".chip[data
 runBtn.addEventListener("click", () => { if (!busy) void run(chosen); });
 
 async function run(demo: Demo) {
-  busy = true; runBtn.disabled = true; enterBtn.hidden = true;
+  busy = true; runBtn.disabled = true;
   $("record").hidden = true;
   const key = demo.key, B = demo.B;
   runs.set(key, { tree: null, result: null });
-  shown = key; bed.reset(key); bed.grow(0);
-  svg.replaceChildren(); idleBox(); garden = null; placeChoice(); hangSign();
+  shown = key; bed.reset(key); bed.start();     // the bed blooms on its own clock from the click
+  svg.replaceChildren(); idleBox(); garden = null; notes.clear(); placeChoice();
   seed.classList.remove("spent");
   try {
-    sign.state("loading", "Loading", [["Gate", "Python and the package, into your browser; once per visit"]]);
     const [gate, loaded] = await Promise.all([loadGate(), loadDemo(demo)]);
     let searched: () => void = () => {};
     const searchShown = new Promise<void>((r) => { searched = r; });
     let replay = 0, searchDone = false;
-    const showNull = () => {
-      garden?.bloom(replay); bed.grow(0.5 + 0.5 * replay);
-      sign.state("null", "Null", [["Replicates", `${Math.round(replay * B).toLocaleString("en")} of ${B.toLocaleString("en")}`], ["Search", "re-run on noise, move for move"]]);
-    };
-    sign.state("search", "Search", [["Evaluated", "0"]]);
+    const showNull = () => notes.replay(`replay · ${Math.round(replay * B).toLocaleString("en")} of ${B.toLocaleString("en")}`);
     const out = await gate.audit({ ...loaded.inputs, B, seed: SEED }, {
-      onSearch: (t) => { runs.get(key)!.tree = t; void grow(demo, t, loaded.logJson.max_moves).then(() => { searchDone = true; showNull(); searched(); }); },
+      onSearch: (t) => { runs.get(key)!.tree = t; void grow(demo, t).then(() => { searchDone = true; garden?.bloomAll(2600); showNull(); searched(); }); },
       onProgress: (p) => { if (p.stage === "replay") replay = p.done / p.total; if (searchDone) showNull(); },
     });
     await searchShown;
     if (out.kind === "refused") {
       runs.get(key)!.refused = out.message;
       (garden as GardenHandle | null)?.bloom(0);
-      sign.state("refused", "Refused", [["Reason", out.message]]);
-      enterBtn.hidden = false;
+      notes.refused(garden, out.message, runs.get(key)!.tree?.evaluations ?? 0);
       return;
     }
     const r = out.result;
     runs.get(key)!.result = r;
-    drawRun(demo, runs.get(key)!.tree!, r).bloom(1);     // the submitted branch and the bar, now known
-    bed.grow(1);
+    settle(drawRun(demo, runs.get(key)!.tree!, r)).bloom(1);     // the submitted branch and the bar, now known
     const tr = garden!.treeRect(), cr = ($("city") as HTMLElement).getBoundingClientRect();   // the verdict's pulse arrives at the tree's top
     city.pulseTo(tr.left + tr.width / 2 - cr.left, tr.top - cr.top);
-    sign.verdict(r);
-    requestAnimationFrame(hangSign);
-    enterBtn.hidden = false;
+    notes.verdict(garden!, r, runs.get(key)!.tree!.evaluations, SEED);
     below(r);
     await record(r, demo, loaded.inputs.panel, loaded.inputs.cls, loaded.inputs.log, loaded.logJson, gate.wheel);
   } catch (e) {
-    sign.state("error", "Error", [["Reason", String((e as Error).message ?? e)]]);
+    notes.refused(garden, String((e as Error).message ?? e), 0, "ERROR");
   } finally {
     busy = false; runBtn.disabled = false;
   }
@@ -214,11 +188,22 @@ function placeSeed() {
 // the sign across the page, where no branch, flower or petal pile sits behind the names
 function placeChoice() {
   const box = $("choice"), tr = two.getBoundingClientRect(), tree = svg.querySelector(".real") ? garden?.treeRect() : null;
-  const [x, y] = tree && tree.width && innerWidth >= 760 ? [tr.width * 0.06, tr.height * 0.34] : [seedAt[0] + 34, seedAt[1] - box.offsetHeight - 64];   // clear of the pile on the ground
+  const [x, y] = tree && tree.width && innerWidth >= 760 ? freeSpot(box.offsetWidth, box.offsetHeight, tr) : [seedAt[0] + 34, seedAt[1] - box.offsetHeight - 64];   // clear of the pile on the ground
   box.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+  choiceBox = { x: x - 12, y: y - 8, w: box.offsetWidth + 24, h: box.offsetHeight + 16 };
 }
+// the first place in the upper left, scanning down then right, where the names touch no frond of a
+// background tree and no cable (14 px clear): the text moves, never the drawing
+function freeSpot(w: number, hgt: number, tr: DOMRect): [number, number] {
+  const pts = [...branchSources(bgTwo, two), ...city.points()], pad = 14, W = tr.width, H = tr.height;
+  const clear = (x: number, y: number) => pts.every((p) => !("x" in p ? p.x > x - pad && p.x < x + w + pad && p.y > y - pad && p.y < y + hgt + pad : p[0] > x - pad && p[0] < x + w + pad && p[1] > y - pad && p[1] < y + hgt + pad));
+  for (let x = W * 0.045; x < W * 0.24 - w; x += 12) for (let y = 70; y < H * 0.6 - hgt; y += 8) if (clear(x, y)) return [x, y];
+  return [W * 0.06, H * 0.34];
+}
+// a redrawn tree shows its blossoms as they were, without opening them again
+function settle(g: GardenHandle) { svg.classList.add("settled"); requestAnimationFrame(() => requestAnimationFrame(() => svg.classList.remove("settled"))); return g; }
 idleBox(); placeSeed();
-bed.reset("idle"); bed.grow(0);   // the ground and its line from the start; the flowers come with a run
+bed.reset("idle");   // the ground and its line from the start; the flowers come with a run
 
 // ---- a petal now and then lands on the bar (once a run has drawn it), rests, slides off an end and
 // falls. Decoration on the gate's bar: it reads where the bar is, nothing else.
@@ -246,19 +231,19 @@ function petalOnBar() {
 window.setTimeout(petalOnBar, 6000);
 
 // the run's tree grows evaluation by evaluation in the log's order; the bed's first half follows it
-function grow(d: Demo, t: SearchTree, maxMoves: number): Promise<void> {
+function grow(d: Demo, t: SearchTree): Promise<void> {
   const g = drawRun(d, t, null);
-  const finish = () => sign.state("search", "Search", [["Evaluated", String(t.evaluations)], ["Moves", String(t.moves.length)]]);
-  if (reduceMotion) { g.setStep(g.total); bed.grow(0.5); seed.classList.add("spent"); finish(); return Promise.resolve(); }
+  const finish = () => notes.search(g, g.total, "search", `${t.evaluations} evaluations`);
+  if (reduceMotion) { g.setStep(g.total); seed.classList.add("spent"); finish(); return Promise.resolve(); }
   g.grow(); g.setStep(0);
   const per = Math.min(70, 4200 / t.evaluations);
   return new Promise((resolve) => {
     let k = 0, mi = 0, inMove = 0;
     const tick = () => {
       if (mi >= t.moves.length) { finish(); resolve(); return; }
-      k++; inMove++; g.setStep(k); bed.grow(0.5 * k / t.evaluations);
+      k++; inMove++; g.setStep(k);
       if (k === 1) seed.classList.add("spent");                // the trunk has grown out of the seed
-      sign.state("search", "Search", [["Move", t.moves[mi].kind], ["Evaluated", `${k} of ${t.evaluations}`], ["Moves", `${mi + 1} of ${maxMoves}`]]);
+      notes.search(g, k, t.moves[mi].kind, `${k} of ${t.evaluations}`);
       if (inMove >= t.moves[mi].candidates.length) { mi++; inMove = 0; }
       window.setTimeout(tick, per);
     };

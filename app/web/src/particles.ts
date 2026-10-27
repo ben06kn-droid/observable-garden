@@ -6,9 +6,11 @@
 // Pieces are released from points spread over the branches (garden tips and along the limbs,
 // weighted toward the outer canopy, woods.ts), each starting with the small drift of its branch.
 // The cursor is the wind: its movement leaves short-lived puffs of velocity that push what they pass
-// through sideways and up, in proportion to the cursor's speed and falling off with distance; a slow
-// pass barely stirs, a fast swipe scatters, and pieces lying in the pile are lifted and resettle.
-// Nothing is spawned by the cursor. Every half minute to a minute a gust crosses the page: the falling
+// through sideways and up, in proportion to the cursor's speed and falling off to nothing at about a
+// hand's width (90 px); pieces further away are untouched. The push is capped and damped quickly, so
+// a fast swipe scatters pieces a short way and they fall back; nothing is ever carried off the page.
+// Pieces lying in the pile are lifted and resettle. Nothing is spawned by the cursor. Pieces fade as
+// they pass behind a label (the labels need no background). Every half minute to a minute a gust crosses the page: the falling
 // pieces lean with it and a few in the pile lift. Each page opens with a small pile already gathered;
 // the pile stays for the visit (memory only) and is capped so it never covers text.
 // The simulation runs only while its page is on screen, at half rate while a run is computing, and not
@@ -18,7 +20,7 @@ import { SHAPES } from "./leaves";
 export interface Source { x: number; y: number; vx: number; w: number }   // section pixels, drift, weight
 interface Piece { x: number; y: number; vx: number; vy: number; a: number; va: number; s: number; vt: number; ph: number; ph2: number; rest: boolean; bin: number; fade: number }
 
-const BIN = 8, THICK = 2.2, R = 110, PUFF_LIFE = 0.35;
+const BIN = 8, THICK = 2.2, R = 90, PUFF_LIFE = 0.3, VX_MAX = 150, VY_UP = 110;
 const rnd = Math.random;
 
 export interface FieldOptions {
@@ -29,6 +31,7 @@ export interface FieldOptions {
   start: number;                    // pieces in the pile when the page opens
   ground: (x: number) => number;    // the ground's y at x, section pixels
   cap: (x: number) => number;       // the pile's height limit at x
+  avoid?: () => { x: number; y: number; w: number; h: number }[];   // labels the pieces fade behind
 }
 
 export class Field {
@@ -110,9 +113,13 @@ export class Field {
       const [ax, ay] = wind.at(p.x, p.y, this.o.box);
       const sway = 22 * Math.cos(p.ph + t * 0.9);
       const k = 1 - Math.exp(-1.3 * dt);
-      p.vx += ((sway + g) - p.vx) * k * 0.35 + ax * dt;   // the branch's drift decays into the sway
+      const pushed = Math.abs(p.vx - sway - g) > 30;       // a push is damped fast; the branch's drift slowly
+      p.vx += ((sway + g) - p.vx) * (pushed ? 1 - Math.exp(-3 * dt) : k * 0.35) + ax * dt;
       p.vy += (p.vt - p.vy) * k + ay * dt;
+      p.vx = Math.max(-VX_MAX, Math.min(VX_MAX, p.vx)); p.vy = Math.max(-VY_UP, p.vy);
       p.x += p.vx * dt; p.y += p.vy * dt;
+      if (ax && (p.x < 8 || p.x > this.W - 8)) { p.x = Math.max(8, Math.min(this.W - 8, p.x)); p.vx = -p.vx * 0.3; }   // the wind never takes one off the page
+      if (p.y < 4) { p.y = 4; p.vy = Math.max(0, p.vy); }
       p.a += p.va * dt; p.va += ((p.va > 0 ? 1 : -1) * 0.8 - p.va) * k * 0.3;
       if (p.x < -40 || p.x > this.W + 40) { out.push(p); continue; }
       if (p.fade < 1) { p.fade -= dt; if (p.fade <= 0) out.push(p); continue; }
@@ -124,7 +131,7 @@ export class Field {
     if (wind.active()) for (const p of this.rest.slice()) {
       const [ax, ay] = wind.at(p.x, p.y, this.o.box);
       const dv = Math.hypot(ax, ay) * dt;
-      if (dv > 9) this.lift(p, ax * dt * 1.2, -Math.abs(ay * dt) - dv * 0.6);
+      if (dv > 9) this.lift(p, Math.max(-VX_MAX, Math.min(VX_MAX, ax * dt * 1.2)), Math.max(-VY_UP, -Math.abs(ay * dt) - dv * 0.6));
     }
     if (g !== 0 && wind.gustKick() && this.rest.length) for (let i = 0; i < 2; i++) { const p = this.rest[Math.floor(rnd() * this.rest.length)]; this.lift(p, g * 1.5, -(40 + rnd() * 70)); }
     // keep the air full: new pieces leave the branches
@@ -134,17 +141,25 @@ export class Field {
 
   draw() {
     const c = this.o.air.getContext("2d");
-    if (c) { c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, this.o.air.width, this.o.air.height); for (const p of this.air) this.paint(c, p); }
+    if (c) {
+      c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, this.o.air.width, this.o.air.height);
+      const avoid = this.o.avoid?.() ?? [];
+      for (const p of this.air) {
+        let m = 1;                                            // fade near a label: gone within 6 px of it, whole by 36 px
+        for (const b of avoid) { const dx = Math.max(b.x - p.x, 0, p.x - b.x - b.w), dy = Math.max(b.y - p.y, 0, p.y - b.y - b.h); m = Math.min(m, Math.max(0, Math.min(1, (Math.hypot(dx, dy) - 6) / 30))); }
+        if (m > 0) this.paint(c, p, m);
+      }
+    }
     if (this.pileDirty) {
       const q = this.o.pile.getContext("2d");
       if (q) { q.setTransform(1, 0, 0, 1, 0, 0); q.clearRect(0, 0, this.o.pile.width, this.o.pile.height); for (const p of this.rest) this.paint(q, p); }
       this.pileDirty = false;
     }
   }
-  private paint(c: CanvasRenderingContext2D, p: Piece) {
+  private paint(c: CanvasRenderingContext2D, p: Piece, m = 1) {
     const k = (this.dpr * p.s) / 20, ca = Math.cos(p.a) * k, sa = Math.sin(p.a) * k;
     const sy = p.rest ? 0.62 : 0.35 + 0.65 * Math.abs(Math.cos(p.ph2 + p.y * 0.02));   // flat on the ground; tumbling in the air
-    c.globalAlpha = p.fade < 1 ? Math.max(0, p.fade) : 1;
+    c.globalAlpha = (p.fade < 1 ? Math.max(0, p.fade) : 1) * m;
     c.setTransform(ca, sa * sy, -sa, ca * sy, p.x * this.dpr, p.y * this.dpr);
     if (this.o.kind === "leaf") { c.fillStyle = "#e2b33a"; c.strokeStyle = "#8a6a12"; c.lineWidth = 0.8; c.fill(this.shape); c.stroke(this.shape); }
     else { c.fillStyle = "#ffb3d1"; c.fill(this.shape); }
@@ -172,8 +187,8 @@ export class Wind {
     let ax = 0, ay = 0;
     for (const p of this.puffs) {
       const dx = x + b[0] - p.x, dy = y + b[1] - p.y, d2 = dx * dx + dy * dy;
-      if (d2 > 9 * R * R) continue;
-      const f = Math.exp(-d2 / (R * R)) * (1 - (this.now - p.t) / PUFF_LIFE) * 2.6;   // sideways and up
+      if (d2 > R * R) continue;                               // a hand's width: beyond it, nothing
+      const q = 1 - Math.sqrt(d2) / R, f = q * q * (1 - (this.now - p.t) / PUFF_LIFE) * 1.6;   // sideways and up
       ax += p.vx * f; ay += (-Math.abs(p.vx) * 0.35 - Math.abs(p.vy) * 0.25 + p.vy * 0.4) * f;
     }
     return [ax, ay];

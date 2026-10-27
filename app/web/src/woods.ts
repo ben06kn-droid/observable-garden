@@ -29,7 +29,7 @@ export function woodTwo(svg: SVGSVGElement, tree: SearchTree): GardenHandle {
   const width = H * aspect(svg);
   const t = subTree(tree, [0, 1, 3, 5, 7, 6]);
   return drawGarden(svg, t, { quiet: true, halo: true, neon: true, canopy: false, width,
-    crown: { heights: [0.44, 0.58, 0.3, 0.32, 0.56, 0.42], xs: [0.022, 0.095, 0.185, 0.815, 0.905, 0.978], fan: width * 0.08 } });
+    crown: { heights: [0.44, 0.5, 0.3, 0.32, 0.56, 0.42], xs: [0.022, 0.095, 0.185, 0.815, 0.905, 0.978], fan: width * 0.08 } });
 }
 
 /** Points along every frond of the drawn trees (or one tree), in `box`'s pixels: the tips and three

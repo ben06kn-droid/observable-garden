@@ -1,13 +1,14 @@
-// Entering a run, after its verdict. Blue spreads out from the run's tree as a ring and turns what it
-// passes over to the run view's colours: the run's tree and the background trees blue, the ground,
-// the gradient, the bar and the text blue, the power lines pink. The flowers keep their colours; as
-// the ring crosses a petal it glows with blue lightning for a moment (fx.ts). Each element's colour
-// changes at the moment the ring reaches it: runView sets a delay on every [data-tide] element from
-// its distance to the tree. Only when the ring has reached the edges does the zoom begin: page two's
-// scene scales about the tree's centre, 1.0 s on cubic-bezier(.35, 0, 0, 1), transform only, and the
-// run's process (its moves and every rule scored) comes in over it. The visitor investigates the run
-// inside its own garden. Closing reverses it: zoom out, then the colour drains back from the edges to
-// the tree. Reduced motion: a cross-fade into the same end state, no ring and no travel.
+// Entering a run, after its verdict, is one motion: on the click, page two's scene starts to zoom about
+// the run's tree (1.0 s on cubic-bezier(.35, 0, 0, 1), transform only) and an invisible front spreads
+// out from the tree on the same curve, reaching the screen's corners exactly as the zoom completes.
+// Each element changes to the run view's colours as the front passes it, with a soft 320 ms falloff,
+// so the change reads as a wave and never as an edge: the run's tree and the background trees blue,
+// the ground, the gradient, the bar and the text blue, the power lines pink. The flowers keep their
+// colours; as the front crosses a petal it glows with blue lightning for a moment (fx.ts). runView
+// times each [data-tide] element by inverting the curve at its distance from the tree. The run's
+// process (its moves and every rule scored) comes in over the garden. Closing is the same motion
+// reversed: zoom out while the colour drains from the corners back to the tree. Reduced motion: a
+// cross-fade into the same end state, no travel.
 //
 // Esc, the close control, a click outside the process, or Back closes it; the URL changes without a
 // reload (#run-<id>), so Back works.
@@ -18,7 +19,15 @@ import type { AuditResult, SearchTree } from "./types";
 
 export const ZOOM_MS = 1000;
 export const ZOOM_EASE = "cubic-bezier(.35, 0, 0, 1)";
-const SPEED = 1500, K = 1.3;
+const K = 1.3;
+// the curve's progress y at time x is a cubic bezier with control points (.35, 0) and (0, 1); its
+// inverse (the time at which progress reaches y), by bisection on the curve's parameter
+const bez = (a: number, b: number, t: number) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
+function timeAt(y: number): number {
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (bez(0, 1, m) < y) lo = m; else hi = m; }
+  return bez(0.35, 0, (lo + hi) / 2);
+}
 type Pt = [number, number];
 
 export interface RunView { id: string; title: string; tree: SearchTree; result: AuditResult | null; refused?: string }
@@ -37,7 +46,7 @@ export function makeRunView(o: RunViewOptions) {
   let open = false, busy = false, pushed = false, centre: Pt = [0, 0], returnTo: Element | null = null;
   const zoomT = () => `translate3d(${(centre[0] * (1 - K)).toFixed(1)}px, ${(centre[1] * (1 - K)).toFixed(1)}px, 0) scale(${K})`;
 
-  /** the ring out (dir 1) or back in (dir -1); returns its length in seconds */
+  /** the front out (dir 1) or back in (dir -1), on the zoom's own curve and duration */
   function tide(dir: 1 | -1): number {
     const b = o.two.getBoundingClientRect();
     const corners: Pt[] = [[0, 0], [b.width, 0], [0, b.height], [b.width, b.height]];
@@ -45,13 +54,13 @@ export function makeRunView(o: RunViewOptions) {
     // every read first, then every write, so the layout is computed once
     const sparks = o.sparks(), els = Array.from(o.two.querySelectorAll<HTMLElement | SVGElement>("[data-tide]"));
     const ds = els.map((el) => { const r = el.getBoundingClientRect(); return Math.hypot(r.left + r.width / 2 - b.left - centre[0], r.top + r.height / 2 - b.top - centre[1]); });
-    els.forEach((el, i) => el.style.setProperty("--d", `${(((dir > 0 ? ds[i] : max - ds[i]) / SPEED) * 1000).toFixed(0)}ms`));
-    const T = max / SPEED;
-    o.two.style.setProperty("--T", `${(T * 1000).toFixed(0)}ms`);
+    const when = (d: number) => ZOOM_MS * timeAt(Math.min(1, dir > 0 ? d / max : 1 - d / max));
+    els.forEach((el, i) => el.style.setProperty("--d", `${when(ds[i]).toFixed(0)}ms`));
+    o.two.style.setProperty("--T", `${ZOOM_MS}ms`);
     o.two.classList.add("tiding");
     o.two.classList.toggle("in-run", dir > 0);
-    o.fx.ring({ c: centre, speed: SPEED, max, dir, sparks });
-    return T;
+    o.fx.sparks(sparks.map((p) => ({ p, t: when(Math.hypot(p[0] - centre[0], p[1] - centre[1])) / 1000 })));
+    return ZOOM_MS / 1000;
   }
 
   function zoom(forward: boolean): Promise<void> {
@@ -110,8 +119,10 @@ export function makeRunView(o: RunViewOptions) {
       });
       return;
     }
-    const T = tide(1);
-    window.setTimeout(() => { o.two.classList.remove("tiding"); root.hidden = false; void zoom(true).then(done); }, T * 1000 + 150);
+    const T = tide(1);                                         // the front and the zoom together
+    root.hidden = false;
+    void zoom(true).then(done);
+    window.setTimeout(() => o.two.classList.remove("tiding"), T * 1000 + 400);
   }
 
   function shut(fromHistory = false) {
@@ -127,10 +138,8 @@ export function makeRunView(o: RunViewOptions) {
       });
       return;
     }
-    void zoom(false).then(() => {
-      const T = tide(-1);
-      window.setTimeout(() => { o.two.classList.remove("tiding"); end(); }, T * 1000 + 200);
-    });
+    tide(-1);                                                  // zoom out while the colour drains, one motion
+    void zoom(false).then(() => window.setTimeout(() => { o.two.classList.remove("tiding"); end(); }, 400));
   }
 
   window.addEventListener("popstate", () => { if (open) shut(true); });

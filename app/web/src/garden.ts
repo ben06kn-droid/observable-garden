@@ -114,7 +114,54 @@ function canopy(pts: Pt[], pad: number, bump: number, seed: number): string | nu
   return d + " Z";
 }
 
-interface Laid { stem: number; move: number; step: number; tip: Pt; from: Pt | null; kept: boolean; sharpe: number; rule: string; trunk: string | null }
+interface Laid { stem: number; move: number; step: number; tip: Pt; from: Pt | null; kept: boolean; sharpe: number; rule: string; trunk: string | null; twig?: boolean }
+
+// The run's tree (`twigs`): the kept rules make the branches, each tip at its rule's in-sample Sharpe,
+// so the tree's height is the submitted Sharpe; every other rule a move scored is a short twig off
+// that move's branch (or, for a move that kept nothing, off the node it started from), longer the
+// better it scored. Every twig is an evaluation that happened.
+function layoutTwigs(tree: SearchTree, y: (s: number) => number, x0: number, x1: number) {
+  const per = (x1 - x0) / tree.stems, k = Math.min(1.3, per / 150);
+  const stems = new Map<number, StemState & { side: number }>(); const laid: Laid[] = []; let step = 0;
+  tree.moves.forEach((m, mi) => {
+    let st = stems.get(m.stem);
+    if (!st) { st = { root: x0 + per * (m.stem + 0.5), node: null, fork: null, buds: [], chainLen: 0, climbing: true, last: 0, k, side: 1 }; stems.set(m.stem, st); }
+    const order = m.candidates.map((_, i) => i).sort((a, b) => m.candidates[b].sharpe - m.candidates[a].sharpe);
+    const rank = new Map(order.map((ci, r) => [ci, m.candidates.length > 1 ? r / (m.candidates.length - 1) : 0]));
+    const chosen = m.candidates[m.chosen];
+    let a: Pt, b: Pt, seg: string | null = null;
+    if (m.from_ground || !st.node) {
+      a = [st.root, GROUND]; b = [st.root + jit(mi, 4), y(chosen.sharpe)];
+      seg = trunk(st.root, GROUND, b[0], b[1], k);
+    } else if (m.kept) {
+      a = st.node; b = [a[0] + st.side * (26 + 24 * k), y(chosen.sharpe)]; st.side *= -1;
+      const w = Math.max(2.5, TREE.trunk[1] * k * Math.pow(0.78, st.chainLen));
+      seg = limb(a, b, w * 1.25, w); st.chainLen++;
+    } else { a = st.node; b = st.node; }
+    const first = step + 1;
+    const others = m.candidates.map((_, i) => i).filter((i) => !(seg && i === m.chosen));
+    m.candidates.forEach((c, ci) => {
+      step++;
+      if (seg && ci === m.chosen) return;                     // the branch itself, below
+      const j = others.indexOf(ci), t = seg ? 0.3 + (0.68 * (j + 1)) / (others.length + 1) : 1;
+      const at: Pt = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      const r = rank.get(ci) ?? 1, side = j % 2 ? 1 : -1, L = (12 + 30 * (1 - r)) * k, ang = ((35 + 30 * r + jit(step, 6)) * Math.PI) / 180;
+      const tip: Pt = [at[0] + side * L * Math.sin(ang), at[1] - L * Math.cos(ang)];
+      laid.push({ stem: m.stem, move: mi, step, tip, from: at, kept: false, sharpe: c.sharpe, rule: c.rule, trunk: null, twig: true });
+      st!.buds.push(tip); st!.last = step;
+    });
+    if (seg) {   // the branch grows in with the move's first evaluation, its bud the kept rule
+      laid.push({ stem: m.stem, move: mi, step: first, tip: b, from: null, kept: m.kept || !!m.from_ground, sharpe: chosen.sharpe, rule: chosen.rule, trunk: seg });
+      st.node = b;
+    }
+  });
+  laid.sort((p, q) => p.step - q.step);
+  return { laid, stems, steps: step };
+}
+function twigPath(a: Pt, b: Pt, i: number): string {
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, dx = b[0] - a[0], dy = b[1] - a[1], bow = 0.18 + jit(i, 0.06);
+  return `M${f(a[0])} ${f(a[1])} Q${f(mx - dy * bow)} ${f(my + dx * bow)} ${f(b[0])} ${f(b[1])}`;
+}
 interface StemState { root: number; node: Pt | null; fork: Pt | null; buds: Pt[]; chainLen: number; climbing: boolean; last: number; k: number }
 
 export interface Crown { heights: number[]; xs?: number[]; fan?: number }   // per stem: height as a fraction of the box; x as a fraction of the width
@@ -177,6 +224,15 @@ export interface GardenHandle {
   select(stem: number | null): void;
   rectOf(stem: number): DOMRect | null;
   treeRect(): DOMRect;
+  /** a point of the drawing (its own units) on screen */
+  toScreen(x: number, y: number): DOMPoint;
+  /** the drawing's height for a Sharpe ratio, and the bar's ends (its own units) */
+  ySharpe(s: number): number;
+  ends: [number, number];
+  /** the highest kept branch tip grown by `step` (all steps when omitted) */
+  best(step?: number): { x: number; y: number; sharpe: number } | null;
+  /** open every blossom, staggered, each on its own eased curve, over about `ms` */
+  bloomAll(ms: number): void;
   bloom(fraction: number): void;
   onPick(cb: (stem: number, move: number | null) => void): void;
 }
@@ -194,6 +250,7 @@ export interface DrawOptions {
   neon?: boolean;      // neon tubing: a narrow halo and a thin bright core on every stroke
   crown?: Crown;       // decoration: tall and short trees, a bare trunk and one crown at the top
   width?: number;      // the viewBox width (default W), to match the box's aspect so nothing is cropped
+  twigs?: boolean;     // the run's tree: branches of kept rules, a twig for every other evaluation
 }
 
 export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptions = {}): GardenHandle {
@@ -224,7 +281,6 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
         el("line", { ...a, class: "glow" }, g); el("line", { ...a, class: "lit" }, g);
       }
       for (const x of [40, Wd - 10]) el("circle", { cx: x, cy: by, r: 2.4, class: "cap", "data-tide": "" }, bar);   // the tube's end caps
-      el("text", { x: 48, y: f(sc.y(opts.bar) - 8), "data-tide": "" }, bar).textContent = `BAR ${opts.bar.toFixed(3)}`;
     }
     el("path", { d: `M40 ${GROUND} L${Wd - 10} ${GROUND}`, class: "ground", "aria-hidden": "true" }, svg);
   }
@@ -241,7 +297,7 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
     yOf = (v, st) => { const [lo, hi] = range.get(st)!; return top(st) + depth(st) * (0.35 + 0.65 * (1 - (v - lo) / Math.max(1e-9, hi - lo))); };
     crownOpt = { ...c, base: top };
   }
-  const res = layout(tree, yOf, opts.quiet ? 30 : 60, Wd - 30, crownOpt);
+  const res = opts.twigs ? layoutTwigs(tree, sc.y, 60, Wd - 30) : layout(tree, yOf, opts.quiet ? 30 : 60, Wd - 30, crownOpt);
 
   // the submitted bud: the first kept evaluation of the submitted rule at its score
   const key = (r: string) => r.split(" ").sort().join(" ");
@@ -271,7 +327,7 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
     const cls = onPath.has(b.step) ? " path" : "";
     const e = b.trunk
       ? el("path", { d: b.trunk, class: "trunk" + cls }, mg)
-      : el("path", { d: branch(b.from!, b.tip, b.step), class: "twig" + cls + (b.tip[1] > b.from![1] + 4 ? " down" : ""), pathLength: 1 }, mg);
+      : el("path", { d: b.twig ? twigPath(b.from!, b.tip, b.step) : branch(b.from!, b.tip, b.step), class: "twig" + cls + (b.tip[1] > b.from![1] + 4 ? " down" : ""), pathLength: 1 }, mg);
     e.dataset.step = String(b.step);
     const r = b.kept ? 1.4 : 1;
     const bud = el("ellipse", { cx: f(b.tip[0]), cy: f(b.tip[1]), rx: f(2.6 * r), ry: f(3.6 * r), class: "bud" + cls + (b.kept ? " kept" : "") }, mg);
@@ -329,6 +385,15 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
     select: (stem) => svg.querySelectorAll<SVGGElement>(".stem").forEach((g) => g.classList.toggle("selected", Number(g.dataset.stem) === stem)),
     rectOf: (stem) => stemEls.get(stem)?.getBoundingClientRect() ?? null,
     treeRect: () => real.getBoundingClientRect(),
+    toScreen: (x, y) => { const p = svg.createSVGPoint(); p.x = x; p.y = y; return p.matrixTransform(svg.getScreenCTM() ?? new DOMMatrix()); },
+    ySharpe: (s) => sc.y(s),
+    ends: [40, Wd - 10],
+    best: (n) => {
+      let top: Laid | null = null;
+      for (const b of res.laid) if (b.kept && (n === undefined || b.step <= n) && (!top || b.sharpe > top.sharpe)) top = b;
+      return top ? { x: top.tip[0], y: top.tip[1], sharpe: top.sharpe } : null;
+    },
+    bloomAll: (ms) => heads.forEach((hd, i) => { hd.style.setProperty("--bd", `${((i / Math.max(1, heads.length)) * ms * 0.7).toFixed(0)}ms`); hd.classList.add("open"); }),
     bloom: (fraction) => { const k = Math.round(Math.max(0, Math.min(1, fraction)) * heads.length); heads.forEach((hd, i) => hd.classList.toggle("open", i < k)); },
     onPick: (cb) => { pick = cb; },
   };

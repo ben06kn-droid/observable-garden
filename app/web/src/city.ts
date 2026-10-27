@@ -23,7 +23,7 @@ const el = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string,
 const f = (n: number) => n.toFixed(1);
 const GLYPHS = "7F3A·0E9C·41B8·D2";
 
-export interface City { draw(): void; pulseTo(x: number, y: number): void; start(quiet: () => boolean): void }
+export interface City { draw(): void; pulseTo(x: number, y: number): void; start(quiet: () => boolean): void; points(): [number, number][] }
 const SEGS = 20;
 
 export function makeCity(svg: SVGSVGElement, reduce: boolean, fx: Fx): City {
@@ -137,5 +137,7 @@ export function makeCity(svg: SVGSVGElement, reduce: boolean, fx: Fx): City {
     };
     window.setTimeout(tick, 2000);
   }
-  return { draw, pulseTo, start };
+  /** points along every cable and up the pylons (the section's pixels), for text to keep clear of */
+  const points = () => [...cables.flatMap((c) => c.pts), ...[W * 0.018, W * 0.982].flatMap((x) => Array.from({ length: 30 }, (_, i) => [x, H * (0.075 + 0.87 * i / 29)] as [number, number]))];
+  return { draw, pulseTo, start, points };
 }

@@ -230,7 +230,7 @@ try {
     await wheel(100); await until(`document.body.dataset.page === 'two'`, 5000); await sleep(800);
     await sleep(500);
     await shot(`${tag}-3-demo-ready`);
-    if (tag === "desktop") report.contrast_ready = await contrast("#sign .sign-word, #sign dt, #sign dd, #chips .chip, #run");
+    if (tag === "desktop") report.contrast_ready = await contrast("#chips .chip, #run");
   }
   await viewport(1440, 900);
   await go("/");
@@ -239,17 +239,17 @@ try {
   await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
   await evaluate(`document.querySelectorAll('#chips .chip')[${idx}].click(); document.getElementById('run').click(); true`);
   const t0 = Date.now();
-  report.timings.gate_loaded_and_search_started_ms = await until(`document.getElementById('sign').dataset.phase === 'search'`, 120000);
+  report.timings.gate_loaded_and_search_started_ms = await until(`!!document.querySelector('#spot .note-line:not([hidden])') && /of /.test(document.querySelector('#spot .note-line').textContent)`, 120000);
   await sleep(1500); await shot("4-demo-search");
   report.search = await evaluate(`({ tree_stems: document.querySelectorAll('#garden .stem').length, bed_drawn: (() => { const c = document.querySelector('.bed-cv'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })() })`);
-  await until(`document.getElementById('sign').dataset.phase === 'null'`, 120000); await sleep(1200); await shot("5-demo-null");
-  await until(`document.getElementById('sign').dataset.phase === 'verdict'`, 180000);
+  await until(`/^replay/.test(document.querySelector('#spot .note-line')?.textContent ?? '')`, 120000); await sleep(1200); await shot("5-demo-null");
+  await until(`!!document.querySelector('#verdict-word.lit')`, 180000);
   report.timings.click_to_verdict_ms = Date.now() - t0;
   await sleep(1600); await shot("6-demo-verdict");
-  report.verdict = await evaluate(`({ word: document.getElementById('sign-word').textContent, numbers: [...document.querySelectorAll('#sign dd')].map((d) => d.textContent),
+  report.verdict = await evaluate(`({ word: document.getElementById('verdict-word').textContent, labels: [...document.querySelectorAll('#spot .note:not([hidden])')].map((d) => d.textContent),
     blossoms_open: document.querySelectorAll('#garden .blossom.open').length, blossoms: document.querySelectorAll('#garden .blossom').length,
-    enter_shown: !document.getElementById('enter').hidden })`);
-  report.contrast_verdict = await contrast("#sign .sign-word, #sign dt, #sign dd, #sign .enter, #chips .chip, #run");
+    twigs: document.querySelectorAll('#garden .real .twig').length })`);
+  report.contrast_verdict = await contrast("#spot .note, #verdict-word, #chips .chip, #run");
   // a background tree shakes and sheds; a cable strikes (vibration and a bolt on the effects canvas)
   report.shake = await evaluate(`(() => { const g = document.querySelector('#wood2 .real .stem'); g.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     return document.querySelectorAll('#wood2 [data-stem="' + g.dataset.stem + '"]')[0].getAnimations().length > 0; })()`);
@@ -262,9 +262,10 @@ try {
   await sleep(300); await shot("6b-wind");
   // into the run: the ring turns the scene blue from the tree out, then the zoom; out with Esc (via
   // history), the colour draining back; then in by the bed and out with Back
-  report.zoom_profile = await frameProfile("enter-run", async () => { await evaluate(`document.getElementById('enter').click(); true`); }, 2400);
+  report.zoom_profile = await frameProfile("enter-run", async () => { await evaluate(`document.querySelector('#garden .real .stem').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`); }, 1500);
   await until(`!document.getElementById('inside').hidden && !document.getElementById('scene').getAnimations().length`, 6000);
-  report.zoom_is = await evaluate(`({ scene_transform: getComputedStyle(document.getElementById('scene')).transform, ring_ms: getComputedStyle(document.getElementById('demo')).getPropertyValue('--T') })`);
+  report.zoom_is = await evaluate(`({ scene_transform: getComputedStyle(document.getElementById('scene')).transform, motion_ms: getComputedStyle(document.getElementById('demo')).getPropertyValue('--T'),
+    front_last_ms: Math.max(...[...document.querySelectorAll('#demo [data-tide]')].map((e) => parseFloat(e.style.getPropertyValue('--d')) || 0)), ring_drawn: false })`);
   await sleep(600); await shot("7-inside-run");
   report.inside = await evaluate(`({ in_run: document.getElementById('demo').classList.contains('in-run'), title: document.getElementById('run-title')?.textContent,
     moves: document.querySelectorAll('#inside li').length, focus_in: document.activeElement?.id === 'run-title', hash: location.hash,
@@ -295,8 +296,8 @@ try {
   await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); document.body.dataset.page = 'two'; true`); await sleep(500);
   await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
   await evaluate(`document.getElementById('run').click(); true`);
-  await until(`document.getElementById('sign').dataset.phase === 'verdict'`, 180000); await sleep(400);
-  await evaluate(`document.getElementById('enter').click(); true`);
+  await until(`!!document.querySelector('#verdict-word.lit')`, 180000); await sleep(400);
+  await evaluate(`document.querySelector('#garden .real .stem').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
   await until(`!document.getElementById('inside').hidden && document.getElementById('demo').classList.contains('in-run')`, 4000); await sleep(400);
   await shot("13-reduced-inside");
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);

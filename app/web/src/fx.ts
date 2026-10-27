@@ -72,20 +72,12 @@ export class Fx {
     });
   }
 
-  /** The ring: blue spreading from `c` out to `max` (or back in from it), at `speed` px/s; each of
-   *  `sparks` (petal heads) glows with blue lightning for a moment as the ring crosses it. */
-  ring(o: { c: Pt; speed: number; max: number; dir: 1 | -1; sparks: Pt[] }) {
-    const T = o.max / o.speed, hits = o.sparks.map((p) => {
-      const d = Math.hypot(p[0] - o.c[0], p[1] - o.c[1]);
-      return { p, t: o.dir > 0 ? d / o.speed : (o.max - d) / o.speed };
-    });
+  /** Blue lightning around each petal head at the moment (seconds from now) the colour front
+   *  crosses it, for a moment; the front itself is not drawn. */
+  sparks(hits: { p: Pt; t: number }[]) {
+    const T = Math.max(0, ...hits.map((h) => h.t));
     this.add((c, t) => {
-      if (t > T + 0.45) return false;
-      if (t <= T) {
-        const r = o.dir > 0 ? t * o.speed : o.max - t * o.speed;
-        c.globalAlpha = 0.22; c.strokeStyle = "#44b8ff"; c.lineWidth = 12; c.beginPath(); c.arc(o.c[0], o.c[1], Math.max(0, r), 0, 6.2832); c.stroke();
-        c.globalAlpha = 0.95; c.strokeStyle = "#bfe6ff"; c.lineWidth = 1.6; c.beginPath(); c.arc(o.c[0], o.c[1], Math.max(0, r), 0, 6.2832); c.stroke();
-      }
+      if (t > T + 0.4) return false;
       c.lineWidth = 1.1;
       for (const h of hits) {
         const u = (t - h.t) / 0.35;
