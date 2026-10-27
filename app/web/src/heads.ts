@@ -5,15 +5,13 @@ const NS = "http://www.w3.org/2000/svg";
 
 export const KINDS = ["daisy", "tulip", "forget-me-not", "lily", "hydrangea", "peony", "lavender"] as const;
 export type Kind = (typeof KINDS)[number];
-// Night City neon, to sit with the tubing on page two: [fill, deeper tone for the kept rule's bloom,
-// outline]. The fill is drawn translucent and the outline bright, so a head reads as lit glass.
+// The flowers' one family on page two, a narrow pastel range at low saturation (magenta is the trees',
+// cyan the cables' and the bar's, white the type's): [fill, deeper tone for the kept rule's bloom,
+// outline]. The fill is drawn translucent and the outline light.
 export const PALETTE: [string, string, string][] = [
-  ["#ff2ea6", "#ff0a84", "#ffc4e8"],   // hot magenta
-  ["#19e3f0", "#00b4d8", "#ccfbff"],   // cyan
-  ["#f3ec3a", "#e2c800", "#fffbc8"],   // electric yellow
-  ["#a65cff", "#7c2dff", "#e8d8ff"],   // violet
-  ["#ff4f6e", "#ff1f4b", "#ffd2db"],   // neon coral
-  ["#3dffb4", "#00e08c", "#d2ffee"],   // acid mint
+  ["#efc9d5", "#e2aabd", "#fbe9ef"],   // blush
+  ["#ece8f1", "#d6cfe0", "#fbfaff"],   // white
+  ["#cfc2e3", "#b8a6d6", "#efe9f8"],   // lilac
 ];
 
 export function hash(s: string): number {
@@ -48,13 +46,20 @@ export interface Sink {
   line(x2: number, y2: number, stroke: string, sw: number, cls: string): void;
   group(tf: string, fn: () => void): void;
 }
-export function svgSink(root: SVGGElement): Sink {
-  let g: Element = root;
+/** Into svg elements, every transform baked into the coordinates (`at` places the whole head): a head
+ *  is plain paths in one group, not one transformed element per petal, which the compositor would
+ *  otherwise sort one by one on every frame. */
+export function svgSink(root: SVGGElement, at: DOMMatrix = new DOMMatrix()): Sink {
+  let m = at;
+  const mat = (tf: string) => { let k = m; for (const x of tf.matchAll(TF)) { const v = x[2].split(/[ ,]+/).filter(Boolean).map(Number); k = x[1] === "translate" ? k.translate(v[0], v[1] ?? 0) : x[1] === "rotate" ? k.rotate(v[0]) : k.scale(v[0], v[1] ?? v[0]); } return k; };
+  const pt = (k: DOMMatrix, x: number, y: number) => { const p = k.transformPoint(new DOMPoint(x, y)); return `${f(p.x)} ${f(p.y)}`; };
+  const bake = (d: string, k: DOMMatrix) => d.replace(/(-?\d*\.?\d+)[ ,]+(-?\d*\.?\d+)/g, (_, x, y) => pt(k, Number(x), Number(y)));
+  const scale = (k: DOMMatrix) => Math.hypot(k.a, k.b);
   return {
-    path: (d, tf, fill, stroke, sw, cls) => { el("path", { d, ...(tf ? { transform: tf } : {}), fill, stroke, "stroke-width": f(sw), class: cls, ...(cls === "stem" ? { "stroke-linecap": "round" } : {}) }, g); },
-    circle: (r, fill, cls) => { el("circle", { cx: 0, cy: 0, r: f(r), fill, class: cls }, g); },
-    line: (x2, y2, stroke, sw, cls) => { el("line", { x1: 0, y1: 0, x2: f(x2), y2: f(y2), stroke, "stroke-width": f(sw), class: cls }, g); },
-    group: (tf, fn) => { const prev = g; g = el("g", { transform: tf }, g); fn(); g = prev; },
+    path: (d, tf, fill, stroke, sw, cls) => { const k = tf ? mat(tf) : m; el("path", { d: bake(d, k), fill, stroke, "stroke-width": f(sw * scale(k)), class: cls, ...(cls === "stem" ? { "stroke-linecap": "round" } : {}) }, root); },
+    circle: (r, fill, cls) => { const p = m.transformPoint(new DOMPoint(0, 0)); el("circle", { cx: f(p.x), cy: f(p.y), r: f(r * scale(m)), fill, class: cls }, root); },
+    line: (x2, y2, stroke, sw, cls) => { const a = m.transformPoint(new DOMPoint(0, 0)), b = m.transformPoint(new DOMPoint(x2, y2)); el("line", { x1: f(a.x), y1: f(a.y), x2: f(b.x), y2: f(b.y), stroke, "stroke-width": f(sw * scale(m)), class: cls }, root); },
+    group: (tf, fn) => { const prev = m; m = mat(tf); fn(); m = prev; },
   };
 }
 const TF = /(translate|rotate|scale)\(([^)]*)\)/g;

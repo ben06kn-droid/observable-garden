@@ -1,7 +1,7 @@
 // Entering a run, after its verdict, is one motion: on the click, page two's scene starts to zoom about
 // the run's tree (1.0 s on cubic-bezier(.35, 0, 0, 1), transform only) and an invisible front spreads
 // out from the tree on the same curve, reaching the screen's corners exactly as the zoom completes.
-// Each element changes to the run view's colours as the front passes it, with a soft 320 ms falloff,
+// Each element changes to the run view's colours as the front passes it, in a 90 ms fade, staggered,
 // so the change reads as a wave and never as an edge: the run's tree and the background trees blue,
 // the ground, the gradient, the bar and the text blue, the power lines pink. The flowers keep their
 // colours; as the front crosses a petal it glows with blue lightning for a moment (fx.ts). runView

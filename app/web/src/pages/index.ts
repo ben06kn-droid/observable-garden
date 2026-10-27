@@ -82,6 +82,7 @@ function enter() {
   const r = runs.get(shown), d = list.find((x) => x.key === shown)!;
   if (!r?.tree || (!r.result && !r.refused)) return;      // only once the verdict is in
   inside.open({ id: d.key, title: d.title, tree: r.tree, result: r.result, refused: r.refused });
+  notes.entered();
 }
 $("bed").addEventListener("click", enter);
 

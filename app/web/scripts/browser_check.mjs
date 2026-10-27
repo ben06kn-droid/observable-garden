@@ -243,7 +243,7 @@ try {
   await sleep(1500); await shot("4-demo-search");
   report.search = await evaluate(`({ tree_stems: document.querySelectorAll('#garden .stem').length, bed_drawn: (() => { const c = document.querySelector('.bed-cv'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })() })`);
   await until(`/^replay/.test(document.querySelector('#spot .note-line')?.textContent ?? '')`, 120000); await sleep(1200); await shot("5-demo-null");
-  await until(`!!document.querySelector('#verdict-word.lit')`, 180000);
+  await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000);
   report.timings.click_to_verdict_ms = Date.now() - t0;
   await sleep(1600); await shot("6-demo-verdict");
   report.verdict = await evaluate(`({ word: document.getElementById('verdict-word').textContent, labels: [...document.querySelectorAll('#spot .note:not([hidden])')].map((d) => d.textContent),
@@ -281,7 +281,7 @@ try {
   report.inside.closed_by_back = true;
   await evaluate(`window.scrollTo(0, document.getElementById('record').offsetTop); true`); await sleep(400); await shot("8-record");
   await go(`/result.html?ex=${example}`);
-  await until(`!!document.querySelector('#verdict:not(.idle)')`, 180000); await sleep(1600);
+  await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(1600);
   await shot("9-result", true);
   for (const p of ["/docs.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/nope.html"]) { await go(p); }
   report.paper_link = await evaluate(`[...document.querySelectorAll('a')].filter(a => a.textContent === 'Paper').every(a => a.href.startsWith('https://papers.ssrn.com/') && a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer'))`);
@@ -296,7 +296,7 @@ try {
   await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); document.body.dataset.page = 'two'; true`); await sleep(500);
   await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
   await evaluate(`document.getElementById('run').click(); true`);
-  await until(`!!document.querySelector('#verdict-word.lit')`, 180000); await sleep(400);
+  await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(400);
   await evaluate(`document.querySelector('#garden .real .stem').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
   await until(`!document.getElementById('inside').hidden && document.getElementById('demo').classList.contains('in-run')`, 4000); await sleep(400);
   await shot("13-reduced-inside");

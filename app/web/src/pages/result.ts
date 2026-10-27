@@ -3,14 +3,15 @@ import { command, demos, loadDemo } from "../demos";
 import { drawGarden } from "../garden";
 import { loadGate } from "../gate";
 import { makeInside } from "../inside";
+import { makeNotes } from "../notes";
 import type { SearchTree } from "../types";
-import { idleCard, verdictCard } from "../verdict";
 
 const SEED = 0;
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const q = new URLSearchParams(location.search);
 const status = $("r-status");
-idleCard($("verdict"), "Computing the verdict in your browser.");
+// the verdict written on the drawing, as on the demo (notes.ts)
+const notes = makeNotes($("r-spot"), $("r-spot"), () => []);
 let tree: SearchTree | null = null;
 const inside = makeInside($("inside"), () => tree);
 
@@ -28,18 +29,19 @@ const inside = makeInside($("inside"), () => tree);
   const r = out.result, log = loaded.logJson, w = word(r.status);
   status.textContent = `${w} · p ${r.p_replay?.toFixed(4) ?? "n/a"} · computed in ${(out.ms / 1000).toFixed(1)} s`;
   if (tree) {
-    const g = drawGarden($("garden") as unknown as SVGSVGElement, tree, { interactive: true, bar: r.class_bar,
+    const g = drawGarden($("garden") as unknown as SVGSVGElement, tree, { interactive: true, neon: true, halo: true, canopy: false, twigs: true, bar: r.class_bar,
       submitted: { rule: r.submitted_feature_names.join(" "), sharpe: r.submitted_sharpe } });
     g.verdict(w);
-    g.onPick((stem, move) => { g.select(stem); window.setTimeout(() => inside.open(stem, move, g.rectOf(stem)), reduceMotion ? 0 : 450); });
+    g.onPick((stem, move) => { notes.entered(); g.select(stem); window.setTimeout(() => inside.open(stem, move, g.rectOf(stem)), reduceMotion ? 0 : 450); });
     inside.onClose(() => g.select(null));
+    requestAnimationFrame(() => notes.verdict(g, r, tree!.evaluations, SEED));
+    window.addEventListener("resize", () => notes.place());
   }
-  verdictCard($("verdict"), r, loaded.truth ? (box) => {
-    const t = loaded.truth;
-    h("p", "k", "The planted truth", box);
-    h("p", "fine", `${t.planted_rule.join(" ")} · population Sharpe ${Number(t.population_sharpe).toFixed(2)} (target ${Number(t.population_sharpe_target).toFixed(1)}), net of costs; `
-      + `submitted ${r.submitted_feature_names.join(" ")}`, box);
-  } : undefined);
+  if (loaded.truth) {                                       // the planted example's truth, as plain type
+    const t = loaded.truth, p = $("r-truth");
+    p.textContent = `The planted truth: ${t.planted_rule.join(" ")} · population Sharpe ${Number(t.population_sharpe).toFixed(2)} (target ${Number(t.population_sharpe_target).toFixed(1)}), net of costs; submitted ${r.submitted_feature_names.join(" ")}`;
+    p.hidden = false;
+  }
   const [panelSha, classSha, logSha] = await Promise.all([sha256Hex(loaded.inputs.panel), sha256Hex(loaded.inputs.cls), sha256Hex(loaded.inputs.log)]);
   const id = await auditId({ alpha: r.alpha, B: r.B, class_sha256: classSha, log_sha256: logSha, panel_sha256: panelSha, seed: SEED, wheel: gate.wheel });
   const kv = $("rec-kv");

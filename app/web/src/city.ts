@@ -1,8 +1,10 @@
-// Night City around page two's garden, all drawn in code, thin and precise: two pylons at the edges
-// with three cables strung between them in shallow catenaries across the upper part of the page, a
-// pulse of light running along one cable every few seconds, and two dim static signs at the edges (a
-// vertical strip of glyphs, a thin ring). Decoration, except one thing: when a verdict lands, one
-// pulse runs along a cable and down to the run's tree (index.ts says where the tree stands).
+// Night City around page two's garden, all drawn in code, in two of the scene's three planes. Far: a
+// low haze rising from the ground and a skyline of flat silhouettes with a sparse scatter of lit
+// windows, a few percent above the background and never brighter than the trees. Middle: two pylons
+// at the edges with tapering members, and three cables between them that sag toward the centre and
+// converge there a little, as in perspective; a pulse of light runs along one every few seconds.
+// Decoration, except one thing: when a verdict lands, one pulse runs along a cable and down to the
+// run's tree (index.ts says where the tree stands).
 //
 // The cables answer a click (or Enter: each is focusable): the cable vibrates at that point, a damped
 // oscillation of under a second, and one bolt leaves along it toward its farther end (fx.ts). Hovering
@@ -21,7 +23,6 @@ const el = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string,
   return e;
 };
 const f = (n: number) => n.toFixed(1);
-const GLYPHS = "7F3A·0E9C·41B8·D2";
 
 export interface City { draw(): void; pulseTo(x: number, y: number): void; start(quiet: () => boolean): void; points(): [number, number][] }
 const SEGS = 20;
@@ -49,12 +50,14 @@ export function makeCity(svg: SVGSVGElement, reduce: boolean, fx: Fx): City {
   }
   const line = (pts: [number, number][]) => pts.map((p, i) => `${i ? "L" : "M"}${f(p[0])} ${f(p[1])}`).join(" ");
 
+  // a pylon whose legs taper from the foot to the top (filled), with hairline bracing and cross-arms
   function pylon(g: Element, x: number, top: number, foot: number, w: number) {
+    const leg = (s: number) => { const b = x + s * w, t = x + s * w * 0.18, wb = 3.2, wt = 0.9;
+      return `M${f(b - wb / 2)} ${f(foot)} L${f(t - wt / 2)} ${f(top)} L${f(t + wt / 2)} ${f(top)} L${f(b + wb / 2)} ${f(foot)} Z`; };
+    el("path", { d: `${leg(-1)} ${leg(1)}`, class: "pylon-leg", "data-tide": "" }, g);
     const d: string[] = [];
-    d.push(`M${f(x - w)} ${f(foot)} L${f(x - w * 0.18)} ${f(top)} L${f(x + w * 0.18)} ${f(top)} L${f(x + w)} ${f(foot)}`);
-    const n = 9;
-    for (let i = 0; i < n; i++) {                              // the lattice: crossed bracing up the legs
-      const t0 = i / n, t1 = (i + 1) / n, y0 = foot + (top - foot) * t0, y1 = foot + (top - foot) * t1;
+    for (let i = 0; i < 9; i++) {                              // the lattice: crossed bracing up the legs
+      const t0 = i / 9, t1 = (i + 1) / 9, y0 = foot + (top - foot) * t0, y1 = foot + (top - foot) * t1;
       const h0 = w - (w - w * 0.18) * t0, h1 = w - (w - w * 0.18) * t1;
       d.push(`M${f(x - h0)} ${f(y0)} L${f(x + h1)} ${f(y1)} M${f(x + h0)} ${f(y0)} L${f(x - h1)} ${f(y1)}`);
     }
@@ -62,18 +65,41 @@ export function makeCity(svg: SVGSVGElement, reduce: boolean, fx: Fx): City {
     el("path", { d: d.join(" "), class: "pylon", "data-tide": "" }, g);
   }
 
+  // the far plane: haze from the ground and a skyline, with a few lit windows (seeded, so it is the
+  // same on every visit)
+  function skyline(g: Element) {
+    let s = 7;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    const base = H * 0.86, defs = el("defs", {}, g);
+    const haze = el("linearGradient", { id: "haze", x1: 0, y1: 1, x2: 0, y2: 0 }, defs);
+    el("stop", { offset: 0, "stop-color": "#5a2c6e", "stop-opacity": 0.32 }, haze);
+    el("stop", { offset: 1, "stop-color": "#5a2c6e", "stop-opacity": 0 }, haze);
+    let d = "", win = "";
+    for (let x = -10; x < W + 10;) {
+      const bw = 26 + rnd() * 70, bh = H * (0.05 + rnd() * rnd() * 0.17), y = base - bh;
+      d += `M${f(x)} ${f(base)} V${f(y)} H${f(x + bw)} V${f(base)} Z `;
+      for (let wy = y + 6; wy < base - 6; wy += 9) for (let wx = x + 5; wx < x + bw - 5; wx += 8) if (rnd() < 0.05) win += `M${f(wx)} ${f(wy)} h2 v3 h-2 Z `;
+      x += bw + rnd() * 6;
+    }
+    el("rect", { x: 0, y: f(base - H * 0.3), width: f(W), height: f(H * 0.3 + 2), fill: "url(#haze)", class: "haze" }, g);
+    el("path", { d, class: "skyline", "data-tide": "" }, g);
+    el("path", { d: win, class: "windows" }, g);
+  }
+
   function draw() {
     const r = svg.getBoundingClientRect(); W = r.width; H = r.height;
     if (!W || !H) return;
     svg.setAttribute("viewBox", `0 0 ${f(W)} ${f(H)}`);
     svg.replaceChildren();
+    skyline(el("g", { class: "far" }, svg));
     const g = el("g", { class: "grid" }, svg);
     const foot = H * 0.94, top = H * 0.075, pw = Math.max(14, W * 0.012);
     const xl = W * 0.018, xr = W * 0.982;
     pylon(g, xl, top, foot, pw); pylon(g, xr, top, foot, pw);
     cables = [];
+    // the upper cables sag more, so toward the centre the three draw together, as in perspective
     [0, 0.09, 0.18].forEach((k, i) => {
-      const y = top + (foot - top) * k, pts = catenary(xl + (i - 1) * pw * 1.2, y, xr + (i - 1) * pw * 1.2, y, H * (0.05 + 0.02 * i));
+      const y = top + (foot - top) * k, pts = catenary(xl + (i - 1) * pw * 1.2, y, xr + (i - 1) * pw * 1.2, y, H * (0.1 - 0.025 * i));
       const segs: SVGGElement[] = [];
       for (let j = 0; j < SEGS; j++) segs.push(seg(g, line(pts.slice(Math.floor((j * 80) / SEGS), Math.floor(((j + 1) * 80) / SEGS) + 1))));
       // a wide invisible stroke over the cable: hover brightens it, a click or Enter strikes it
@@ -86,12 +112,6 @@ export function makeCity(svg: SVGSVGElement, reduce: boolean, fx: Fx): City {
       hit.addEventListener("keydown", (e) => { if ((e as KeyboardEvent).key === "Enter" || (e as KeyboardEvent).key === " ") { e.preventDefault(); strike(cable, W / 2); } });
       cables.push(cable);
     });
-    // the signs: a vertical strip of glyphs at the right, a thin ring at the left; dim and static
-    const strip = el("text", { x: f(W * 0.966), y: f(H * 0.3), class: "glyphs", "data-tide": "" }, g);
-    [...GLYPHS].forEach((ch, i) => { const t = el("tspan", { x: f(W * 0.966), dy: i ? "1.25em" : "0" }, strip); t.textContent = ch; });
-    const rr = Math.min(24, W * 0.016);
-    el("circle", { cx: f(W * 0.036), cy: f(H * 0.68), r: f(rr), class: "ring", "data-tide": "" }, g);
-    el("circle", { cx: f(W * 0.036), cy: f(H * 0.68), r: f(rr * 0.7), class: "ring inner", "data-tide": "" }, g);
     pulses = el("g", { class: "pulses" }, svg) as SVGGElement;
   }
 

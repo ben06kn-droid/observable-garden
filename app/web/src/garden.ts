@@ -14,7 +14,7 @@
 // and drapes down to its bud, the best-scoring buds hanging least far. No branch points up or out.
 //
 // Each tree (stem) is a focusable button; each branch (move) inside it is clickable too.
-import { drawHead, type Kind } from "./heads";
+import { drawHead, svgSink, type Kind } from "./heads";
 import type { SearchTree } from "./types";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -132,11 +132,11 @@ function layoutTwigs(tree: SearchTree, y: (s: number) => number, x0: number, x1:
     let a: Pt, b: Pt, seg: string | null = null;
     if (m.from_ground || !st.node) {
       a = [st.root, GROUND]; b = [st.root + jit(mi, 4), y(chosen.sharpe)];
-      seg = trunk(st.root, GROUND, b[0], b[1], k);
+      seg = trunk(st.root, GROUND, b[0], b[1], k * 0.45);   // weight at the base, a few pixels, tapering
     } else if (m.kept) {
       a = st.node; b = [a[0] + st.side * (26 + 24 * k), y(chosen.sharpe)]; st.side *= -1;
-      const w = Math.max(2.5, TREE.trunk[1] * k * Math.pow(0.78, st.chainLen));
-      seg = limb(a, b, w * 1.25, w); st.chainLen++;
+      const w = Math.max(1.4, TREE.trunk[1] * k * 0.45 * Math.pow(0.78, st.chainLen));
+      seg = limb(a, b, w * 1.2, w * 0.55); st.chainLen++;
     } else { a = st.node; b = st.node; }
     const first = step + 1;
     const others = m.candidates.map((_, i) => i).filter((i) => !(seg && i === m.chosen));
@@ -158,13 +158,52 @@ function layoutTwigs(tree: SearchTree, y: (s: number) => number, x0: number, x1:
   laid.sort((p, q) => p.step - q.step);
   return { laid, stems, steps: step };
 }
+// Upright neon trees (page two's background, `crown.upright`): decoration from the logged search. A
+// filled trunk tapering up to the crown's base; the first move of each tree a leader straight up to its
+// top, every later move a filled limb branching up and outward from the leader, tapering to its tip;
+// every second rule a move scored a hairline twig off that limb, up and outward, longer the better it
+// scored, ending in a solid point of light.
+function layoutUpright(tree: SearchTree, x0: number, x1: number, c: Crown) {
+  const stems = new Map<number, StemState & { a: Pt; top: number; base: number; ht: number; j: number; n: number }>(); const laid: Laid[] = []; let step = 0;
+  const count = new Map<number, number>(); tree.moves.forEach((m) => count.set(m.stem, (count.get(m.stem) ?? 0) + 1));
+  tree.moves.forEach((m, mi) => {
+    let st = stems.get(m.stem);
+    const first = step + 1;
+    if (!st) {
+      const hs = c.heights[m.stem % c.heights.length], ht = hs * (GROUND - TOP), root = x0 + (c.xs ? c.xs[m.stem] : (m.stem + 0.5) / tree.stems) * (x1 - x0);
+      st = { root, node: null, fork: null, buds: [], chainLen: 0, climbing: true, last: 0, k: Math.sqrt(hs) * 1.1, a: [root, GROUND - 0.42 * ht], top: GROUND - ht, base: GROUND - 0.42 * ht, ht, j: 0, n: count.get(m.stem) ?? 1 };
+      stems.set(m.stem, st);
+      laid.push({ stem: m.stem, move: mi, step: first, tip: [root, st.base], from: null, kept: false, sharpe: 0, rule: "", trunk: trunk(root, GROUND, root, st.base, st.k * 0.55) });
+    }
+    const j = st.j++, frac = st.n > 1 ? j / (st.n - 1) : 0, side = j % 2 ? 1 : -1;
+    const a: Pt = j === 0 ? [st.root, st.base] : [st.root, st.base - (st.base - st.top) * (0.18 + 0.45 * frac)];
+    const b: Pt = j === 0 ? [st.root + jit(mi, 3), st.top] : [st.root + side * st.ht * (0.2 - 0.06 * frac), a[1] - st.ht * (0.2 + 0.12 * (1 - frac))];
+    const wa = (j === 0 ? 5.5 : 4) * st.k * (1 - 0.3 * frac), wb = 1.1 * st.k;
+    laid.push({ stem: m.stem, move: mi, step: first, tip: b, from: null, kept: false, sharpe: 0, rule: "", trunk: limb(a, b, wa, wb) });
+    const order = m.candidates.map((_, i) => i).sort((p, q) => m.candidates[q].sharpe - m.candidates[p].sharpe);
+    const rank = new Map(order.map((ci, r) => [ci, m.candidates.length > 1 ? r / (m.candidates.length - 1) : 0]));
+    const dx = b[0] - a[0], dy = b[1] - a[1], L0 = Math.hypot(dx, dy) || 1, ux = dx / L0, uy = dy / L0;
+    m.candidates.forEach((cd, ci) => {
+      step++;
+      if (ci % 2) return;                                   // sparse: every second rule
+      const t = 0.3 + 0.68 * ((ci + 1) / (m.candidates.length + 1)), at: Pt = [a[0] + dx * t, a[1] + dy * t];
+      const r = rank.get(ci) ?? 1, s = (ci / 2) % 2 ? 1 : -1, ang = (s * (28 + 18 * r) * Math.PI) / 180;
+      const vx = ux * Math.cos(ang) - uy * Math.sin(ang), vy = ux * Math.sin(ang) + uy * Math.cos(ang), L = st!.ht * (0.05 + 0.08 * (1 - r));
+      const tip: Pt = [at[0] + vx * L, Math.min(at[1] + vy * L, at[1] - 2)];
+      laid.push({ stem: m.stem, move: mi, step, tip, from: at, kept: false, sharpe: cd.sharpe, rule: cd.rule, trunk: null, twig: true });
+      st!.buds.push(tip); st!.last = step;
+    });
+  });
+  laid.sort((p, q) => p.step - q.step);
+  return { laid, stems, steps: step };
+}
 function twigPath(a: Pt, b: Pt, i: number): string {
   const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, dx = b[0] - a[0], dy = b[1] - a[1], bow = 0.18 + jit(i, 0.06);
   return `M${f(a[0])} ${f(a[1])} Q${f(mx - dy * bow)} ${f(my + dx * bow)} ${f(b[0])} ${f(b[1])}`;
 }
 interface StemState { root: number; node: Pt | null; fork: Pt | null; buds: Pt[]; chainLen: number; climbing: boolean; last: number; k: number }
 
-export interface Crown { heights: number[]; xs?: number[]; fan?: number }   // per stem: height as a fraction of the box; x as a fraction of the width
+export interface Crown { heights: number[]; xs?: number[]; fan?: number; upright?: boolean; far?: number[] }   // per stem: height as a fraction of the box; x as a fraction of the width
 
 function layout(tree: SearchTree, y: (s: number, stem: number) => number, x0: number, x1: number, crown?: Crown & { base: (stem: number) => number }) {
   const stems = new Map<number, StemState>(); const laid: Laid[] = []; let step = 0;
@@ -297,7 +336,9 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
     yOf = (v, st) => { const [lo, hi] = range.get(st)!; return top(st) + depth(st) * (0.35 + 0.65 * (1 - (v - lo) / Math.max(1e-9, hi - lo))); };
     crownOpt = { ...c, base: top };
   }
-  const res = opts.twigs ? layoutTwigs(tree, sc.y, 60, Wd - 30) : layout(tree, yOf, opts.quiet ? 30 : 60, Wd - 30, crownOpt);
+  const res = opts.twigs ? layoutTwigs(tree, sc.y, 60, Wd - 30)
+    : opts.crown?.upright ? layoutUpright(tree, 30, Wd - 30, opts.crown)
+    : layout(tree, yOf, opts.quiet ? 30 : 60, Wd - 30, crownOpt);
 
   // the submitted bud: the first kept evaluation of the submitted rule at its score
   const key = (r: string) => r.split(" ").sort().join(" ");
@@ -309,7 +350,7 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
 
   const stemEls = new Map<number, SVGGElement>(), moveEls = new Map<number, SVGGElement>();
   for (const [s, st] of res.stems) {
-    const g = el("g", { class: `stem c${s % 3}`, "data-stem": s, "data-tide": "" }, real);
+    const g = el("g", { class: `stem c${s % 3}${opts.crown?.far?.includes(s) ? " far" : ""}`, "data-stem": s, "data-tide": "" }, real);
     if (opts.interactive) {
       const moves = tree.moves.filter((m) => m.stem === s);
       const best = Math.max(...moves.flatMap((m) => m.candidates.map((c) => c.sharpe)));
@@ -329,8 +370,8 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
       ? el("path", { d: b.trunk, class: "trunk" + cls }, mg)
       : el("path", { d: b.twig ? twigPath(b.from!, b.tip, b.step) : branch(b.from!, b.tip, b.step), class: "twig" + cls + (b.tip[1] > b.from![1] + 4 ? " down" : ""), pathLength: 1 }, mg);
     e.dataset.step = String(b.step);
-    const r = b.kept ? 1.4 : 1;
-    const bud = el("ellipse", { cx: f(b.tip[0]), cy: f(b.tip[1]), rx: f(2.6 * r), ry: f(3.6 * r), class: "bud" + cls + (b.kept ? " kept" : "") }, mg);
+    const r = b.kept ? 1.4 : 1, pt = opts.crown?.upright || opts.twigs;   // points of light, or the round buds
+    const bud = el("ellipse", { cx: f(b.tip[0]), cy: f(b.tip[1]), rx: f((pt ? 1.6 : 2.6) * r), ry: f((pt ? 1.6 : 3.6) * r), class: "bud" + cls + (b.kept ? " kept" : "") }, mg);
     bud.dataset.step = String(b.step);
   }
   if (opts.halo !== false) {
@@ -357,9 +398,8 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
     for (const list of byMove.values()) list.slice().sort((a, b) => b.sharpe - a.sharpe).slice(0, Math.ceil(list.length / 3)).forEach((b) => chosenSteps.add(b.step));
     for (const b of res.laid) {
       if (!chosenSteps.has(b.step)) continue;
-      const at = el("g", { transform: `translate(${f(b.tip[0])} ${f(b.tip[1])})` }, layer);
-      const hd = el("g", { class: "blossom" }, at);
-      drawHead(hd, opts.blossom.kind, opts.blossom.colour, b === sub ? 11 : 8, 1, b === sub);
+      const hd = el("g", { class: "blossom" }, layer);       // the head's place baked into its paths (heads.ts svgSink)
+      drawHead(svgSink(hd, new DOMMatrix().translate(b.tip[0], b.tip[1])), opts.blossom.kind, opts.blossom.colour, b === sub ? 8 : 6, 1, b === sub);
       heads.push(hd);
     }
   }

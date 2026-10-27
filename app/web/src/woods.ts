@@ -1,8 +1,9 @@
 // The background trees: decoration, drawn from the restart example's logged search (its eight
 // restarts are eight trees). Each is a tall or a short tree: a bare trunk and one crown at its own
 // top. Page one shows all eight, tall and short alternating, reaching high into the page. Page two
-// shows six, three at each edge (the outermost in front of the pylon), smaller than the run's tree, so
-// none can be mistaken for it and none crosses the animation spot.
+// shows six upright neon trees, three at each edge (the outermost in front of the pylon), the pair
+// nearest the centre further away (smaller, dimmer), all smaller than the run's tree, so none can be
+// mistaken for it and none crosses the animation spot.
 //
 // Every tree can be shaken: a click (or Enter, the trees are focusable) gives its crown a short damped
 // sway and sheds a burst of leaves or petals from its branches. Leaves and petals are released from
@@ -28,8 +29,9 @@ export function woodOne(svg: SVGSVGElement, tree: SearchTree): GardenHandle {
 export function woodTwo(svg: SVGSVGElement, tree: SearchTree): GardenHandle {
   const width = H * aspect(svg);
   const t = subTree(tree, [0, 1, 3, 5, 7, 6]);
+  // two depths: the pair nearest the centre is the far pair, smaller and dimmer (css .far)
   return drawGarden(svg, t, { quiet: true, halo: true, neon: true, canopy: false, width,
-    crown: { heights: [0.44, 0.5, 0.3, 0.32, 0.56, 0.42], xs: [0.022, 0.095, 0.185, 0.815, 0.905, 0.978], fan: width * 0.08 } });
+    crown: { upright: true, heights: [0.46, 0.5, 0.27, 0.29, 0.52, 0.44], xs: [0.022, 0.1, 0.19, 0.81, 0.9, 0.978], far: [2, 3] } });
 }
 
 /** Points along every frond of the drawn trees (or one tree), in `box`'s pixels: the tips and three

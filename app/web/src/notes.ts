@@ -1,12 +1,14 @@
 // The verdict written onto the drawing. No container, no background, no rounded corner, no icon; each
 // label is one word and a number, as wide as it needs.
-//   The bar carries its value at its right end, in its amber: "bar 1.921".
+//   The bar carries its value at its right end, in its cyan: "bar 1.921".
 //   The tree's height carries the submitted Sharpe: a hairline tick from the top of the trunk (the
 //   highest kept branch) to the right margin, labelled "submitted 0.572" in the tree's colour. The gap
 //   between the tick and the bar is the verdict, visible before any word is read.
-//   The word is the only large text: PASS or FAIL right of the bar at its height, amber, counting in;
-//   REFUSED the same in dim white. One small line under the bar: "p 0.9630 · B 2,000 · 30 evaluations
-//   · seed 0".
+//   The word is the only large text, about two lines of body text high: right of the bar at its
+//   height, PASS in white with a cyan glow, FAIL and REFUSED in dim white with none. One small line
+//   under the bar: "p 0.9630 · B 2,000 · 30 evaluations · seed 0". Once the verdict is in, a dim line
+//   of type sits on the submitted tick, "click a tree to enter the search", until the visitor has
+//   entered a run once in the visit.
 //   During the search the same places carry the live numbers: the tick at the best kept Sharpe so far
 //   ("best 0.341"), the line with the move and the count; the bar comes when the gate computes it.
 // A label that would sit on a branch or a flower is nudged; the drawing never moves.
@@ -20,8 +22,10 @@ export function makeNotes(spot: HTMLElement, section: HTMLElement, flowers: () =
   const tick = h("div", "tick", null, spot); tick.setAttribute("aria-hidden", "true");
   const sub = h("p", "note note-sub", null, spot), bar = h("p", "note note-bar", null, spot), big = h("p", "note-word", null, spot);
   const line = h("p", "note note-line", null, spot);
+  const invite = h("p", "note note-invite", "click a tree to enter the search", spot);
   line.setAttribute("aria-live", "polite"); big.id = "verdict-word";
-  for (const e of [tick, sub, bar, big, line]) { e.dataset.tide = ""; e.hidden = true; }
+  for (const e of [tick, sub, bar, big, line, invite]) { e.dataset.tide = ""; e.hidden = true; }
+  let entered = false;
   let g: GardenHandle | null = null, mode: "off" | "search" | "verdict" | "refused" = "off", step = 0, barValue: number | null = null, subValue: number | null = null;
   let boxes: Box[] = [];
 
@@ -58,6 +62,21 @@ export function makeNotes(spot: HTMLElement, section: HTMLElement, flowers: () =
       const [ax, ay] = at(best.x, ys), [bx] = at(x1, ys);
       tick.style.width = `${Math.max(0, bx - ax).toFixed(1)}px`; put(tick, ax, ay); tick.hidden = false;
       sub.hidden = false; label(sub, bx, ay - 4, avoid, placed);
+      invite.hidden = mode !== "verdict" || entered;
+      if (!invite.hidden) {                                  // on the line at its left end, past the branches; under it if the label leaves no room above
+        const w = invite.offsetWidth, hh = invite.offsetHeight;
+        let best: Box | null = null;
+        for (const y of [ay - hh - 2, ay + 3, ay + 3 + hh, ay + 3 + 2 * hh]) {
+          for (let x = ax + 10; x + w <= bx; x += 8) { const b = { x, y, w, h: hh }; if (!hits(b, avoid) && !hits(b, placed)) { best = b; break; } }
+          if (best) break;
+        }
+        if (!best && barValue !== null) {                     // a crowded drawing: under the line beneath the bar instead
+          const [bx2, by2] = at(x1, g.ySharpe(barValue)), y = by2 + 10 + line.offsetHeight + 4;
+          best = { x: bx2 - w, y, w, h: hh };
+        }
+        best ??= { x: ax + 10, y: ay + 3, w, h: hh };
+        put(invite, best.x, best.y); placed.push(best);
+      }
     }
     if (barValue !== null) {
       const [bx, by] = at(x1, g.ySharpe(barValue));
@@ -74,7 +93,9 @@ export function makeNotes(spot: HTMLElement, section: HTMLElement, flowers: () =
   }
 
   return {
-    clear() { mode = "off"; g = null; barValue = subValue = null; for (const e of [tick, sub, bar, big, line]) e.hidden = true; big.className = "note-word"; boxes = []; },
+    clear() { mode = "off"; g = null; barValue = subValue = null; for (const e of [tick, sub, bar, big, line, invite]) e.hidden = true; big.className = "note-word"; boxes = []; },
+    /** the visitor has gone inside a run: the invitation fades for the rest of the visit */
+    entered() { entered = true; invite.classList.add("gone"); },
     /** the replay's count on the line, the tick where the search left it */
     replay(text: string) { line.textContent = text; place(); },
     search(garden: GardenHandle, n: number, move: string, count: string) {
@@ -89,7 +110,7 @@ export function makeNotes(spot: HTMLElement, section: HTMLElement, flowers: () =
       g = garden; mode = "verdict"; barValue = r.class_bar; subValue = r.submitted_sharpe;
       sub.textContent = "submitted 0.000"; bar.textContent = "bar 0.000";
       line.textContent = `p ${r.p_replay === null ? "n/a" : r.p_replay.toFixed(4)} · B ${r.B.toLocaleString("en")} · ${evaluations} evaluations · seed ${seed}`;
-      big.textContent = word(r.status); big.className = "note-word lit"; big.hidden = false;
+      big.textContent = word(r.status); big.className = `note-word ${word(r.status) === "PASS" ? "lit" : "dim"}`; big.hidden = false;
       place();
       const sv = h("span", null, null), bv = h("span", null, null);
       sub.replaceChildren("submitted ", sv); bar.replaceChildren("bar ", bv);
