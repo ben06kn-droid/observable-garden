@@ -109,16 +109,18 @@ body:not([data-page="two"]) .top { color: var(--paper-ink); background: rgba(239
   100% { transform: translate3d(0, var(--fall), 0) rotate(var(--spin)); }
 }
 
-/* life (life.ts): the cursor's trail, one pool of sprites per page, and the piles on the ground.
-   Sprites move by transform; a pile is one canvas, so it costs nothing a frame however big it grows. */
-.trail { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
-.pile { position: absolute; left: 0; top: 0; width: var(--w, 0); height: var(--h, 0); pointer-events: none; z-index: 1; }   /* a canvas strip along the ground */
-.two .trail, .two .pile { z-index: 4; }   /* over the bed's ground, under the text */
-.sprite, .piece { position: absolute; left: 0; top: 0; width: var(--size, 14px); height: var(--size, 14px); }
-.sprite { opacity: 0; will-change: transform, opacity; }
-.sprite.l path, .piece.l path { fill: var(--leaf); stroke: var(--leaf-vein); stroke-width: 0.8; }
-.sprite.p path, .piece.p path { fill: var(--petal); }
-.falling .leaf, .falling .petal { translate: 0 0; }   /* the wind's push composes with the fall */
+/* leaves and petals (particles.ts): per page, one canvas for what is in the air and one for the pile */
+canvas.air, canvas.pile, canvas.fx { position: absolute; left: 0; top: 0; width: var(--w, 0); height: var(--h, 0); pointer-events: none; z-index: 1; }
+.two canvas.pile { z-index: 4; }   /* over the bed's ground */
+.two canvas.fx { z-index: 5; }
+/* every background tree can be shaken: a click or Enter (woods.ts); the crown sways from the trunk's foot */
+.bg-trees .real .stem, .wood2 .real .stem { pointer-events: visiblePainted; cursor: pointer; outline: none; }
+.garden .hit { fill: transparent; stroke: none; }
+.bg-trees .real .stem:focus-visible .hit { stroke: #1d5f8f; stroke-width: 2; stroke-dasharray: 6 5; }
+.wood2 .real .stem:focus-visible .hit { stroke: var(--blue); stroke-width: 2; stroke-dasharray: 6 5; }
+.bg-trees [data-stem], .wood2 [data-stem], #garden [data-stem] { transform-box: fill-box; transform-origin: 50% 100%; }
+.one .wrap { pointer-events: none; }
+.one .wrap .copy { pointer-events: auto; }
 
 /* ---------- page two: the demo, Night City ----------
    A city garden at night, sharp and clean: hairlines with a narrow glow, neon tubing, a lit ground
@@ -134,9 +136,13 @@ main { will-change: transform; }
 /* the city (city.ts): pylons, cables, a pulse, two dim signs */
 .two .city { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .city .pylon { fill: none; stroke: #5f5385; stroke-width: 0.8; opacity: 0.6; }
-.city .cable { fill: none; stroke: var(--wire); stroke-width: 0.8; opacity: 0.42; filter: drop-shadow(0 0 2px rgba(63, 240, 255, 0.55)); transition: opacity 250ms linear, stroke-width 250ms linear; }
-.city .cable.lit { opacity: 1; stroke-width: 1.3; }
-.city .cable-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; }
+.city .cable { color: #3ff0ff; opacity: 0.42; transition: opacity 250ms linear; }
+.city .cable path { fill: none; }
+.city .cable .lit { stroke: var(--wire); stroke-width: 0.8; }
+.city .cable .glow { stroke: currentColor; stroke-width: 4; opacity: 0.22; }
+.city .cable.hot { opacity: 1; }
+.city .cable-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; outline: none; }
+.city .cable-hit:focus-visible { stroke: rgba(68, 184, 255, 0.35); }
 .city .pulse { fill: none; stroke: #effdff; stroke-width: 1.8; stroke-linecap: round; stroke-dasharray: 0.05 1.2;
   filter: drop-shadow(0 0 2px #3ff0ff) drop-shadow(0 0 6px rgba(63, 240, 255, 0.6)); }
 .city .glyphs { font: 11px/1 var(--mono); fill: #4f4670; letter-spacing: 0.1em; }
@@ -145,7 +151,6 @@ main { will-change: transform; }
 
 /* page two's trees (woods.ts): four, at the edges, one dim violet-pink; dim versions of the run's tubing */
 .two .wood2 { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0.4; --tube: var(--tube-dim); --core: #f0d9ff; }
-.two .petals { z-index: 1; }
 
 /* the run's own tree, centred, the brightest thing on the page, with a dark margin round it */
 .two .spot { position: absolute; z-index: 2; top: 92px; left: 25%; right: 25%; bottom: 1.5%; pointer-events: none; }
@@ -161,13 +166,20 @@ main { will-change: transform; }
 .seed .sprout .leaflet { fill: rgba(255, 63, 210, 0.3); stroke-width: 1; }
 @keyframes breathe { 0%, 100% { opacity: 0.5; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15); } }
 @keyframes sway { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
-/* the choice beside the seed: the three example names, faint until chosen */
-.two .choice { position: absolute; z-index: 5; left: 0; top: 0; width: 190px; transition: transform 1000ms cubic-bezier(.35, 0, 0, 1); }   /* over the bed, which takes clicks */
-.choice .chip { min-height: 30px; padding: 5px 0; border-top: 0; color: var(--faint); letter-spacing: 0.12em; }
-.choice .chip small { display: none; }
-.choice .chip:hover { color: var(--ink); }
-.choice .chip[aria-pressed="true"] { color: var(--ink); border: 0; box-shadow: inset 2px 0 0 var(--pink); padding-left: 10px; }
-.replay-note { margin: var(--s4) 0 0; font: 11px/1.5 var(--mono); color: var(--faint); }
+/* the choice beside the seed: the three example names, faint until chosen, and the run control */
+.two .choice { position: absolute; z-index: 6; left: 0; top: 0; width: 200px; transition: transform 1000ms cubic-bezier(.35, 0, 0, 1); color: #a59ebc; }
+.controls { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.chip { width: 100%; font: 500 11px/1.3 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: inherit; background: transparent;
+  border: 0; padding: 5px 0; cursor: pointer; min-height: 30px; text-align: left; }
+.chip small { display: none; }
+.two .choice::before { content: ""; position: absolute; inset: -44px -60px -36px -60px; z-index: -1; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(5, 4, 11, 0.95) 0%, rgba(5, 4, 11, 0.9) 62%, rgba(5, 4, 11, 0) 100%); }
+.chip:hover { color: var(--ink); }
+.chip[aria-pressed="true"] { color: var(--ink); box-shadow: inset 2px 0 0 var(--pink); padding-left: 10px; }
+.run, .enter { display: block; margin-top: var(--s3); font: 600 12px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink); background: transparent;
+  border: 0; border-bottom: 1px solid var(--pink); padding: 0; min-height: 36px; cursor: pointer; }
+.run[disabled] { opacity: 0.5; cursor: progress; }
+.replay-note { margin: var(--s4) 0; font: 12px/1.6 var(--mono); color: var(--muted); }
 /* the trunk grows up out of the seed */
 #garden.growing .trunk[data-step] { transform-box: fill-box; transform-origin: 50% 100%; transition: transform 700ms cubic-bezier(.35, 0, 0, 1), opacity 300ms linear; }
 #garden.growing .trunk[data-step]:not(.on) { opacity: 1; transform: scaleY(0); }
@@ -178,7 +190,8 @@ main { will-change: transform; }
 #garden:has(.real .stem:hover) .move:nth-child(2n) { animation-duration: 1.1s; animation-delay: -0.4s; }
 #garden:has(.real .stem:hover) .move:nth-child(3n) { animation-duration: 1.55s; animation-delay: -0.8s; }
 @keyframes tremble { 0%, 100% { transform: rotate(0deg); } 30% { transform: rotate(0.7deg); } 70% { transform: rotate(-0.6deg); } }
-.bar-petal { z-index: 3; }
+.bar-petal { position: absolute; left: 0; top: 0; width: 12px; height: 12px; opacity: 0; z-index: 3; }
+.bar-petal path { fill: var(--petal); }
 .two .spot::before { content: ""; position: absolute; inset: -6% -14% 0;
   background: radial-gradient(closest-side at 50% 56%, rgba(5, 4, 11, 0.96) 0%, rgba(5, 4, 11, 0.88) 60%, rgba(5, 4, 11, 0) 100%); }
 .two .spot svg { position: relative; width: 100%; height: 100%; display: block; }
@@ -187,42 +200,34 @@ main { will-change: transform; }
 /* the bed (bed.ts): small neon flowers on a parabola of ground, with their reflections below it */
 .two .bed { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; width: 100%; height: 34%; cursor: pointer; --stem: #2fd6a6; }
 .bed .ground-fill { fill: #0a0613; }
-.bed .ground-line { fill: none; stroke: #ff6ade; stroke-width: 1; filter: drop-shadow(0 0 2px #ff3fd2) drop-shadow(0 0 6px rgba(255, 63, 210, 0.45)); }
-.bed .reflection { opacity: 0.13; }
-.bed .flowers { filter: drop-shadow(0 0 2px rgba(255, 90, 210, 0.45)); }
-.bed .stem { stroke-width: 1px; opacity: 0.75; }
-.bed .leaf-on-stem { fill-opacity: 0.2; stroke: var(--stem); stroke-width: 2.4; }
-.bed .petal { fill-opacity: 0.3; stroke-width: 0.7px; }
-.bed .bloom { opacity: 0.55; transform: scale(0.3); transform-box: fill-box; transform-origin: center;
-  transition: transform 600ms cubic-bezier(.35, 0, 0, 1), opacity 400ms linear; }
-.bed .bloom.open { opacity: 1; transform: none; }
+.bed .ground-line { color: #ff3fd2; }
+.bed .ground-line path { fill: none; }
+.bed .ground-line .lit { stroke: #ff6ade; stroke-width: 1; }
+.bed .ground-line .glow { stroke: currentColor; stroke-width: 7; opacity: 0.3; }
+.two .bed-cv { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; width: 100%; height: 34%; pointer-events: none;
+  filter: drop-shadow(0 0 2px rgba(255, 90, 210, 0.45)); }
 
-/* the text: straight on the dark, a hairline above each block, mono labels, display numbers */
-.two .hud { position: relative; z-index: 4; min-height: 100vh; min-height: 100svh; padding: 84px 4.5vw var(--s5);
-  display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; }
-.two .side { width: min(270px, 20vw); display: flex; flex-direction: column; gap: var(--s6); pointer-events: auto; }
-@media (max-width: 760px) {
-  .two .hud { flex-direction: column; padding-top: calc(150px + 44vh); }
-  .two .side { width: 100%; }
-  .two .spot { top: 140px; left: 0; right: 0; bottom: auto; height: 42vh; }
-  .two .bed { height: 22%; }
-}
-.state { font-family: var(--mono); border-top: 1px solid var(--hair); padding-top: var(--s3); }
-.state .phase { font: 500 11px/1.4 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin: 0 0 var(--s3); }
-.state .big { font: 800 clamp(2.1rem, 3.4vw, 2.9rem)/1 var(--display); color: var(--ink); margin: 0; font-variant-numeric: tabular-nums; }
-.state .line { font-size: 13px; color: var(--muted); margin: var(--s2) 0 var(--s4); font-variant-numeric: tabular-nums; }
-
-.controls { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.chip { width: 100%; font: 500 11px/1.3 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); background: transparent;
-  border: 0; border-top: 1px solid var(--hair); padding: 10px 0; cursor: pointer; min-height: 44px; text-align: left; }
-.chip:hover { color: var(--ink); }
-.chip[aria-pressed="true"] { color: var(--ink); border-top-color: var(--pink); }
-.chip[disabled] { cursor: not-allowed; color: var(--faint); }
-.chip small { display: block; color: var(--faint); font-size: 11px; letter-spacing: 0.02em; text-transform: none; margin-top: 3px; }
-.run { font: 600 12px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--night); background: var(--ink); border: 0; padding: 0 var(--s5); min-height: 44px; cursor: pointer; }
-.run[disabled] { opacity: 0.5; cursor: progress; }
-.enter { display: block; margin-top: var(--s3); font: 600 12px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink); background: transparent;
-  border: 0; border-bottom: 1px solid var(--pink); padding: 0; min-height: 40px; cursor: pointer; }
+/* the sign (sign.ts): the run state and the verdict, hung level with the bar at the bed's right on a
+   thin post; a word, one hairline neon rule, numbers with one-word labels. No border, no background, no
+   rounded corner; a soft dark vignette behind it only for legibility over the scene. */
+.two .sign { position: absolute; z-index: 6; left: 77%; top: 0; width: min(250px, 19vw); transition: transform 1000ms cubic-bezier(.35, 0, 0, 1); color: #d6d1e2; }
+.sign::before { content: ""; position: absolute; inset: -64px -80px -56px -80px; z-index: -1; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(5, 4, 11, 0.95) 0%, rgba(5, 4, 11, 0.92) 62%, rgba(5, 4, 11, 0) 100%); }
+.sign-word { position: relative; margin: 0 0 10px; font: 800 clamp(2.1rem, 3.2vw, 2.9rem)/1 var(--display); letter-spacing: 0.01em; color: #b9b2cc; }
+.sign-word::before { content: ""; position: absolute; inset: -22px -36px; z-index: -1; pointer-events: none;   /* the word is the largest type over the scene: its own vignette */
+  background: radial-gradient(closest-side, rgba(5, 4, 11, 0.97) 0%, rgba(5, 4, 11, 0.95) 70%, rgba(5, 4, 11, 0) 100%); }
+.sign-rule { position: relative; height: 1px; background: #8f88a6; color: #8f88a6; box-shadow: 0 0 2px currentColor; }
+.sign-rule::before, .sign-rule::after { content: ""; position: absolute; top: -1px; width: 3px; height: 3px; background: inherit; }
+.sign-rule::before { left: 0; } .sign-rule::after { right: 0; }
+.sign-nums { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 12px 0 0; font: 13px/1.45 var(--mono); }
+.sign-nums div { display: contents; }
+.sign-nums dt { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #bab3cf; padding-top: 2px; }
+.sign-nums dd { margin: 0; color: #d6d1e2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sign-post { position: absolute; left: 0; width: 1px; height: var(--post, 0); background: #3d3556; }
+.sign[data-phase="verdict"] .sign-word { color: var(--amber); text-shadow: 0 0 2px rgba(245, 181, 68, 0.9), 0 0 6px rgba(245, 181, 68, 0.45); }
+.sign[data-phase="verdict"] .sign-rule { background: var(--amber); color: var(--amber); box-shadow: 0 0 2px currentColor, 0 0 5px rgba(245, 181, 68, 0.5); }
+.sign[data-phase="verdict"] .sign-nums dd { color: #ece8f4; }
+@media (max-width: 760px) { .two .sign { left: auto; right: 16px; width: 46vw; } }
 
 /* blossoms on the run's tree: open by transform and opacity; translucent neon like the bed */
 .garden .blossoms { filter: drop-shadow(0 0 3px rgba(255, 90, 210, 0.6)); pointer-events: none; }
@@ -283,9 +288,11 @@ main { will-change: transform; }
 .garden.neon .core .twig.down { opacity: 0.45; }
 .garden.neon .core .path { stroke-width: 1; }
 /* the bar as a neon tube: a lit line, a tight glow, end caps; steady */
-.garden.neon .bar line { stroke: #dcfdff; stroke-width: 1.6; stroke-dasharray: none; stroke-linecap: round;
-  filter: drop-shadow(0 0 2px #3ff0ff) drop-shadow(0 0 5px rgba(63, 240, 255, 0.5)); }
-.garden.neon .bar .cap { display: inline; fill: #dcfdff; filter: drop-shadow(0 0 3px #3ff0ff); }
+.garden .bar .glow { display: none; }
+.garden.neon .bar g { color: #3ff0ff; }
+.garden.neon .bar .lit { stroke: #dcfdff; stroke-width: 1.6; stroke-dasharray: none; stroke-linecap: round; }
+.garden.neon .bar .glow { display: inline; stroke: currentColor; stroke-width: 6; opacity: 0.3; stroke-dasharray: none; }
+.garden.neon .bar .cap { display: inline; fill: #dcfdff; color: #3ff0ff; filter: drop-shadow(0 0 3px currentColor); }
 .garden.neon .bar text { fill: #9eefff; }
 .garden.neon .axis text { fill: #6f6790; }
 .garden.neon .axis line { stroke: var(--hair); }
@@ -306,20 +313,60 @@ main { will-change: transform; }
 .verdict.idle { border-top-color: var(--hair); }
 .verdict.idle .word { color: var(--faint); }
 
-/* ---------- inside a run: everything blue except the petals; moved by Web Animations
-   (transform and opacity only), drawn first while invisible ---------- */
-.inside.in-run.preparing { opacity: 0.001; }   /* not 0: Chrome skips painting a fully transparent layer, which would push the paint into the zoom's first frame */
-.inside.in-run .veil { position: absolute; inset: 0; background: linear-gradient(to top, #0b1830 0%, #050912 70%); will-change: opacity; }
-.inside.in-run .inside-wood { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.45; --tube: #3b6a96; --core: #9fc8ee; }
-.inside.in-run .petals { z-index: 1; }
-.inside.in-run .inside-stage { z-index: 2; will-change: transform; transition: none; }
-.inside.in-run .inside-tree { position: absolute; top: 0; bottom: 0; left: 0; right: min(560px, 100vw); width: auto; height: 100%; display: block; --tube: var(--blue); --core: #e2f4ff; }
-.inside.in-run .garden.neon .trunk { fill: #06101e; }
-.inside.in-run .blossom .petal { fill: var(--blue); stroke: #b6e2ff; }
-.inside.in-run .blossom .heart, .inside.in-run .blossom .stamen { fill: #b6e2ff; stroke: #b6e2ff; }
-.inside.in-run .blossoms { filter: drop-shadow(0 0 4px rgba(68, 184, 255, 0.6)); }
-.inside.in-run .process { z-index: 3; will-change: opacity, transform; transition: none; }
-.inside.in-run .process h3 { font: 800 1rem/1.2 var(--display); color: var(--blue); margin: var(--s5) 0 var(--s2); letter-spacing: 0.02em; }
+/* ---------- entering a run (runView.ts): the ring turns each [data-tide] element at its own moment
+   (--d, from its distance to the tree); then the scene zooms about the tree and the process comes in.
+   Inside: the trees, the ground, the gradient, the bar and the text blue, the power lines pink, the
+   flowers in their own colours. ---------- */
+.two .scene { position: absolute; inset: 0; transform-origin: 0 0; }
+.two .tide-sky { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity var(--T, 600ms) linear;
+  background: linear-gradient(to top, #0a1d3a 0%, #071229 30%, #04060d 70%); }
+.two.in-run .tide-sky { opacity: 1; }
+.two.tiding [data-tide], .two.tiding [data-tide] * { transition: stroke 160ms linear var(--d, 0ms), fill 160ms linear var(--d, 0ms), color 160ms linear var(--d, 0ms),
+  background-color 160ms linear var(--d, 0ms), text-shadow 160ms linear var(--d, 0ms), box-shadow 160ms linear var(--d, 0ms) !important; }
+.two.in-run { --tube: var(--blue); --core: #e2f4ff; --wire: #ff6ad5; }
+.two.in-run .wood2 { --tube: #3d7fc4; --core: #cfe8ff; }
+.two.in-run .garden.neon .trunk { fill: #06101e; }
+.two.in-run .city .cable { color: #ff3fd2; }
+.two.in-run .city .pylon { stroke: #2f5f8f; }
+.two.in-run .city .glyphs { fill: #3a6796; }
+.two.in-run .city .ring { stroke: #3a6796; }
+.two.in-run .bed .ground-line { color: var(--blue); }
+.two.in-run .bed .ground-line .lit { stroke: #8fd3ff; }
+.two.in-run .bed .ground-fill { fill: #040b18; }
+.two.in-run .garden.neon .bar g, .two.in-run .garden.neon .bar .cap { color: var(--blue); }
+.two.in-run .garden.neon .bar .lit { stroke: #d4eeff; }
+.two.in-run .garden.neon .bar .cap { fill: #d4eeff; }
+.two.in-run .garden.neon .bar text { fill: #9fd6ff; }
+.two.in-run .sign-word, .two.in-run .sign[data-phase="verdict"] .sign-word { color: #7cc8ff; text-shadow: 0 0 2px rgba(68, 184, 255, 0.9), 0 0 6px rgba(68, 184, 255, 0.45); }
+.two.in-run .sign-rule, .two.in-run .sign[data-phase="verdict"] .sign-rule { background: var(--blue); color: var(--blue); }
+.two.in-run .sign-nums dd, .two.in-run .sign-nums dt { color: #cfe6ff; }
+.two.in-run .choice, .two.in-run .chip[aria-pressed="true"] { color: #a9d6ff; }
+.two.in-run .chip[aria-pressed="true"] { box-shadow: inset 2px 0 0 var(--blue); }
+.two.in-run .run, .two.in-run .enter { color: #cfe6ff; border-bottom-color: var(--blue); }
+.two.in-run .seed .sprout path { stroke: var(--blue); }
+.two .choice, .two .sign { transition-property: transform, opacity; transition-duration: 1000ms, 400ms; transition-timing-function: cubic-bezier(.35, 0, 0, 1), linear; }
+.two.zoomed .choice, .two.zoomed .sign { opacity: 0; pointer-events: none; }
+
+/* the run's process, over the zoomed garden */
+.run-panel { position: fixed; z-index: 40; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); overflow-y: auto; color: var(--ink);
+  background: rgba(4, 8, 18, 0.9); border-left: 1px solid var(--blue); padding: 0 var(--s5) var(--s7); }
+.run-panel header { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: baseline; gap: var(--s4);
+  padding: var(--s5) 0 var(--s4); background: rgb(4, 8, 18); border-bottom: 1px solid #1b3352; }
+.run-panel h2 { font: 800 1.5rem/1.1 var(--display); margin: 0; outline: none; }
+.run-panel h2 small { display: block; font: 12px/1.5 var(--mono); color: #a9c8e6; margin-top: var(--s2); }
+.run-panel h3 { font: 800 1rem/1.2 var(--display); color: var(--blue); margin: var(--s5) 0 var(--s2); }
+.run-panel .close { font: 12px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--blue); padding: 8px 0; cursor: pointer; }
+.run-panel ol { list-style: none; margin: 0; padding: 0; }
+.run-panel li { border-bottom: 1px solid #1b3352; padding: var(--s4) 0; }
+.run-panel .mv { margin: 0 0 var(--s2); font: 13px/1.5 var(--mono); color: #b6c9de; }
+.run-panel .mv b { color: var(--blue); font-weight: 500; }
+.run-panel .mv .rule { color: var(--ink); }
+.run-panel .logline { font: 12px/1.5 var(--mono); color: #93a9c2; margin: 0 0 var(--s3); overflow-wrap: anywhere; }
+.run-panel table { width: 100%; border-collapse: collapse; font: 12.5px/1.5 var(--mono); }
+.run-panel td { padding: 2px 0; color: #b6c9de; }
+.run-panel td.s { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+.run-panel tr.chosen td { color: var(--ink); }
+.run-panel tr.chosen td:first-child::before { content: "> "; color: var(--blue); }
 
 /* ---------- inside a tree: the tree fills the view, blue, and its process sits over it ---------- */
 .inside { position: fixed; inset: 0; z-index: 40; background: var(--night); color: var(--ink); overflow: hidden; }
@@ -356,6 +403,11 @@ body.inside-open { overflow: hidden; }
 
 /* ---------- below page two: free scrolling; the record straight on the dark ---------- */
 .below { background: var(--night); padding: var(--s8) max(var(--gutter), calc((100vw - var(--page)) / 2)) var(--s7); border-top: 1px solid var(--rule); }
+.below .verdict-text { max-width: 860px; margin: 0 0 var(--s7); }
+.below h2 { border-top: 1px solid var(--rule); padding-top: var(--s3); }
+.below h3 { font: 500 11px/1.4 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin: var(--s5) 0 var(--s2); }
+.below .meaning { color: var(--muted); margin: 0; }
+.reasons { margin: 0; padding-left: 1.2em; font: 13px/1.7 var(--mono); color: var(--muted); }
 .below h2, .doc h1, .doc h2 { font: 800 clamp(1.5rem, 2.6vw, 2.1rem)/1.1 var(--display); margin: 0 0 var(--s4); }
 .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--s2) var(--s5); margin: 0 0 var(--s5); border-top: 1px solid var(--rule); padding-top: var(--s3); }
 .kv dt { font: 12px/1.6 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }

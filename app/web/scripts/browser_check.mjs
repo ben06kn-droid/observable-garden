@@ -4,6 +4,7 @@
 //   node scripts/browser_check.mjs [--shots DIR] [--example nothing|planted|restart] [--chrome PATH]
 import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { inflateSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve } from "./serve_dist.mjs";
@@ -132,6 +133,59 @@ async function frameProfile(name, act, ms) {
   return { window_ms: Math.round(span), frames: inside.length, longest_frame_ms: gaps.length ? +Math.max(...gaps).toFixed(1) : null,
     frames_over_20ms: gaps.filter((g) => g > 20).length, layouts: main("Layout"), paints: main("Paint"), ...raf };
 }
+// ---- contrast against the actual scene: hide the text, screenshot what is behind it (several frames,
+// petals falling), and compare the text's colour with every pixel behind each element (WCAG 2 ratio)
+function decodePng(buf) {
+  let p = 8, w = 0, h = 0, type = 0; const idat = [];
+  while (p < buf.length) {
+    const len = buf.readUInt32BE(p), kind = buf.toString("ascii", p + 4, p + 8), d = buf.subarray(p + 8, p + 8 + len);
+    if (kind === "IHDR") { w = d.readUInt32BE(0); h = d.readUInt32BE(4); type = d[9]; }
+    else if (kind === "IDAT") idat.push(d);
+    p += 12 + len;
+  }
+  const bpp = type === 6 ? 4 : 3, raw = inflateSync(Buffer.concat(idat)), stride = w * bpp, out = Buffer.alloc(h * stride);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)], row = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? out[y * stride + x - bpp] : 0, b = y ? out[(y - 1) * stride + x] : 0, c = x >= bpp && y ? out[(y - 1) * stride + x - bpp] : 0;
+      const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c);
+      const pred = f === 0 ? 0 : f === 1 ? a : f === 2 ? b : f === 3 ? (a + b) >> 1 : pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      out[y * stride + x] = (row[x] + pred) & 255;
+    }
+  }
+  return { w, h, bpp, px: out };
+}
+const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+const lum = (r, g, b) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+async function contrast(selector, samples = 6) {
+  const els = await evaluate(`[...document.querySelectorAll(${JSON.stringify(selector)})].filter((e) => e.offsetParent !== null && e.textContent.trim()).map((e, i) => {
+    e.dataset.measure = i; const r = e.getBoundingClientRect(), c = getComputedStyle(e).color.match(/[0-9.]+/g).map(Number);
+    return { i, name: (e.id || e.className || e.tagName) + ': ' + e.textContent.trim().slice(0, 24), x: r.left, y: r.top, w: r.width, h: r.height, c };
+  })`);
+  const worst = els.map(() => Infinity), lows = els.map(() => []);
+  for (let k = 0; k < samples; k++) {
+    // the text hidden, and its own underline or marker too, so only the scene behind it is measured
+    await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => { for (const [k, v] of [['color', 'transparent'], ['text-shadow', 'none'], ['border-color', 'transparent'], ['box-shadow', 'none']]) e.style.setProperty(k, v, 'important'); }); true`);
+    await sleep(60);
+    const { data } = await send("Page.captureScreenshot", { format: "png" }, page);
+    await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => { for (const k of ['color', 'text-shadow', 'border-color', 'box-shadow']) e.style.removeProperty(k); }); true`);
+    const img = decodePng(Buffer.from(data, "base64"));
+    els.forEach((e, n) => {
+      const L = lum(e.c[0], e.c[1], e.c[2]);
+      for (let y = Math.max(0, Math.floor(e.y)); y < Math.min(img.h, Math.ceil(e.y + e.h)); y++)
+        for (let x = Math.max(0, Math.floor(e.x)); x < Math.min(img.w, Math.ceil(e.x + e.w)); x++) {
+          const o = (y * img.w + x) * img.bpp, Lb = lum(img.px[o], img.px[o + 1], img.px[o + 2]);
+          const r = (Math.max(L, Lb) + 0.05) / (Math.min(L, Lb) + 0.05);
+          if (r < worst[n]) worst[n] = r;
+          if (r < 4.5) lows[n].push(r);
+        }
+    });
+    await sleep(450);
+  }
+  await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => e.removeAttribute('data-measure')); true`);
+  return els.map((e, n) => ({ el: e.name, worst: +worst[n].toFixed(2), px_below_4_5: lows[n].length }));
+}
+
 async function wheel(dy) { await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: 400, y: 400, deltaX: 0, deltaY: dy }, page); }
 try {
   for (const [vw, vh, tag] of [[1440, 900, "desktop"], [1366, 768, "laptop"]]) {
@@ -139,6 +193,8 @@ try {
     await go("/");
     await sleep(700);
     await shot(`${tag}-1-overview-top`);
+    if (tag === "desktop") report.shake_page_one = await evaluate(`(() => { const g = [...document.querySelectorAll('#bg-trees .real .stem')].find((e) => { const r = e.getBoundingClientRect(); return r.left > 800 && r.top < innerHeight; });
+      if (!g) return 'no tree in view'; g.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return g.getAnimations().length > 0; })()`);
     // page one scrolls freely by wheel to its last line; page two stays paper meanwhile
     const oneEnd = await evaluate(`document.getElementById('demo').offsetTop - innerHeight`);
     for (let left = oneEnd - 1; left > 0; left -= 100) { await wheel(Math.min(100, left)); await sleep(30); }
@@ -174,6 +230,7 @@ try {
     await wheel(100); await until(`document.body.dataset.page === 'two'`, 5000); await sleep(800);
     await sleep(500);
     await shot(`${tag}-3-demo-ready`);
+    if (tag === "desktop") report.contrast_ready = await contrast("#sign .sign-word, #sign dt, #sign dd, #chips .chip, #run");
   }
   await viewport(1440, 900);
   await go("/");
@@ -182,30 +239,44 @@ try {
   await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
   await evaluate(`document.querySelectorAll('#chips .chip')[${idx}].click(); document.getElementById('run').click(); true`);
   const t0 = Date.now();
-  report.timings.gate_loaded_and_search_started_ms = await until(`document.getElementById('phase').textContent === 'The search'`, 120000);
+  report.timings.gate_loaded_and_search_started_ms = await until(`document.getElementById('sign').dataset.phase === 'search'`, 120000);
   await sleep(1500); await shot("4-demo-search");
-  report.search = await evaluate(`({ tree_stems: document.querySelectorAll('#garden .stem').length, bed_growing: document.querySelectorAll('#bed .flowers .bf:not([transform*="scale(0.000)"])').length })`);
-  await until(`document.getElementById('phase').textContent === 'The null'`, 120000); await sleep(1200); await shot("5-demo-null");
-  await until(`document.getElementById('phase').textContent === 'The verdict'`, 180000);
+  report.search = await evaluate(`({ tree_stems: document.querySelectorAll('#garden .stem').length, bed_drawn: (() => { const c = document.querySelector('.bed-cv'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })() })`);
+  await until(`document.getElementById('sign').dataset.phase === 'null'`, 120000); await sleep(1200); await shot("5-demo-null");
+  await until(`document.getElementById('sign').dataset.phase === 'verdict'`, 180000);
   report.timings.click_to_verdict_ms = Date.now() - t0;
   await sleep(1600); await shot("6-demo-verdict");
-  report.verdict = await evaluate(`({ word: document.getElementById('big').textContent, line: document.getElementById('line').textContent, card: document.querySelector('#verdict .word')?.textContent,
+  report.verdict = await evaluate(`({ word: document.getElementById('sign-word').textContent, numbers: [...document.querySelectorAll('#sign dd')].map((d) => d.textContent),
     blossoms_open: document.querySelectorAll('#garden .blossom.open').length, blossoms: document.querySelectorAll('#garden .blossom').length,
-    bed_flowers: document.querySelectorAll('#bed .flowers .bf').length, bed_open: document.querySelectorAll('#bed .flowers .bloom.open').length, enter_shown: !document.getElementById('enter').hidden })`);
-  // into the run: the run enlarges and the view goes blue; out with Esc (via history), then Back
-  report.zoom_profile = await frameProfile("zoom", async () => { await evaluate(`document.getElementById('enter').click(); true`); }, 1400);
-  report.zoom_is = await evaluate(`document.getAnimations().filter((a) => !(a instanceof CSSAnimation) && a.effect?.target?.closest?.('#inside')).map((a) => ({ on: a.effect.target.className, props: [...new Set(a.effect.getKeyframes().flatMap((k) => Object.keys(k).filter((x) => !['offset', 'easing', 'composite', 'computedOffset'].includes(x))))], duration: a.effect.getTiming().duration, easing: a.effect.getTiming().easing }))`);
-  await shot("7-inside-run");
-  report.inside = await evaluate(`({ open: document.getElementById('inside').classList.contains('open'), title: document.getElementById('run-title')?.textContent,
+    enter_shown: !document.getElementById('enter').hidden })`);
+  report.contrast_verdict = await contrast("#sign .sign-word, #sign dt, #sign dd, #sign .enter, #chips .chip, #run");
+  // a background tree shakes and sheds; a cable strikes (vibration and a bolt on the effects canvas)
+  report.shake = await evaluate(`(() => { const g = document.querySelector('#wood2 .real .stem'); g.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    return document.querySelectorAll('#wood2 [data-stem="' + g.dataset.stem + '"]')[0].getAnimations().length > 0; })()`);
+  await evaluate(`document.querySelector('#city .cable-hit').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 500, clientY: 100 })); true`);
+  await sleep(150);
+  report.bolt_drawn = await evaluate(`(() => { const c = document.getElementById('fx'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })()`);
+  await sleep(1200);
+  // the cursor as wind: a fast swipe across the bed's ground (nothing is spawned; pieces only move)
+  for (let x = 200; x <= 1240; x += 40) { await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y: 780 }, page); await sleep(8); }
+  await sleep(300); await shot("6b-wind");
+  // into the run: the ring turns the scene blue from the tree out, then the zoom; out with Esc (via
+  // history), the colour draining back; then in by the bed and out with Back
+  report.zoom_profile = await frameProfile("enter-run", async () => { await evaluate(`document.getElementById('enter').click(); true`); }, 2400);
+  await until(`!document.getElementById('inside').hidden && !document.getElementById('scene').getAnimations().length`, 6000);
+  report.zoom_is = await evaluate(`({ scene_transform: getComputedStyle(document.getElementById('scene')).transform, ring_ms: getComputedStyle(document.getElementById('demo')).getPropertyValue('--T') })`);
+  await sleep(600); await shot("7-inside-run");
+  report.inside = await evaluate(`({ in_run: document.getElementById('demo').classList.contains('in-run'), title: document.getElementById('run-title')?.textContent,
     moves: document.querySelectorAll('#inside li').length, focus_in: document.activeElement?.id === 'run-title', hash: location.hash,
-    petals_pink: getComputedStyle(document.querySelector('#inside .petal path')).fill })`);
+    tree_blue: getComputedStyle(document.querySelector('#garden .real .twig')).stroke, wood_blue: getComputedStyle(document.querySelector('#wood2 .real .twig')).stroke,
+    cable_pink: getComputedStyle(document.querySelector('#city .cable .lit')).stroke })`);
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
-  await until(`document.getElementById('inside').hidden`, 5000); await sleep(200);
-  report.inside.closed_by_esc = await evaluate(`document.body.dataset.page === 'two' && location.hash === ''`);
+  await until(`document.getElementById('inside').hidden && !document.getElementById('demo').classList.contains('tiding') && !document.body.classList.contains('inside-open')`, 8000); await sleep(200);
+  report.inside.closed_by_esc = await evaluate(`document.body.dataset.page === 'two' && location.hash === '' && !document.getElementById('demo').classList.contains('in-run')`);
   await evaluate(`document.getElementById('bed').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
-  await until(`!document.getElementById('inside').hidden`, 5000); await sleep(800);
+  await until(`!document.getElementById('inside').hidden && !document.getElementById('scene').getAnimations().length`, 8000); await sleep(400);
   await evaluate(`history.back(); true`);
-  await until(`document.getElementById('inside').hidden`, 5000);
+  await until(`document.getElementById('inside').hidden && !document.body.classList.contains('inside-open')`, 8000);
   report.inside.closed_by_back = true;
   await evaluate(`window.scrollTo(0, document.getElementById('record').offsetTop); true`); await sleep(400); await shot("8-record");
   await go(`/result.html?ex=${example}`);
@@ -217,6 +288,21 @@ try {
   await viewport(390, 844); await go("/"); await shot("11-phone-overview");
   await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop)`); await sleep(900); await shot("12-phone-demo");
   report.phone_overflow = await evaluate(`document.documentElement.scrollWidth > innerWidth`);
+  // reduced motion: still pieces, the run entered and left as a cross-fade, a strike without travel
+  await viewport(1440, 900);
+  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, page);
+  await go("/");
+  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); document.body.dataset.page = 'two'; true`); await sleep(500);
+  await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
+  await evaluate(`document.getElementById('run').click(); true`);
+  await until(`document.getElementById('sign').dataset.phase === 'verdict'`, 180000); await sleep(400);
+  await evaluate(`document.getElementById('enter').click(); true`);
+  await until(`!document.getElementById('inside').hidden && document.getElementById('demo').classList.contains('in-run')`, 4000); await sleep(400);
+  await shot("13-reduced-inside");
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
+  await until(`document.getElementById('inside').hidden && !document.body.classList.contains('inside-open')`, 4000);
+  report.reduced = await evaluate(`({ out: !document.getElementById('demo').classList.contains('in-run'), scene: getComputedStyle(document.getElementById('scene')).transform })`);
+  await send("Emulation.setEmulatedMedia", { features: [] }, page);
 } catch (e) {
   report.error = String(e.message ?? e);
 } finally {

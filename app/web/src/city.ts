@@ -4,8 +4,15 @@
 // vertical strip of glyphs, a thin ring). Decoration, except one thing: when a verdict lands, one
 // pulse runs along a cable and down to the run's tree (index.ts says where the tree stands).
 //
+// The cables answer a click (or Enter: each is focusable): the cable vibrates at that point, a damped
+// oscillation of under a second, and one bolt leaves along it toward its farther end (fx.ts). Hovering
+// brightens a cable. Each cable is drawn in short segments so that colour can travel along it when the
+// visitor enters a run (runView.ts reads them by [data-tide]).
+//
 // The pulses animate stroke-dashoffset on one short path at a time (a small repaint, a few times a
 // minute), and none runs while the page is covered or a carry or zoom is playing.
+import type { Fx } from "./fx";
+
 const NS = "http://www.w3.org/2000/svg";
 const el = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string, string | number>, parent: Element) => {
   const e = document.createElementNS(NS, name);
@@ -17,10 +24,15 @@ const f = (n: number) => n.toFixed(1);
 const GLYPHS = "7F3A·0E9C·41B8·D2";
 
 export interface City { draw(): void; pulseTo(x: number, y: number): void; start(quiet: () => boolean): void }
+const SEGS = 20;
 
-export function makeCity(svg: SVGSVGElement, reduce: boolean): City {
-  svg.setAttribute("aria-hidden", "true");
-  let W = 0, H = 0, cables: { pts: [number, number][]; path: SVGPathElement }[] = [], pulses: SVGGElement;
+export function makeCity(svg: SVGSVGElement, reduce: boolean, fx: Fx): City {
+  svg.setAttribute("role", "group"); svg.setAttribute("aria-label", "Power lines");
+  let W = 0, H = 0, cables: { pts: [number, number][]; segs: SVGGElement[]; shake: number }[] = [], pulses: SVGGElement;
+  // a cable segment: a wider faint stroke for its glow under the lit hairline (no filter, so the
+  // compositor has nothing extra to sort each frame)
+  const seg = (g: Element, d: string) => { const s = el("g", { class: "cable", "data-tide": "" }, g) as SVGGElement; el("path", { d, class: "glow" }, s); el("path", { d, class: "lit" }, s); return s; };
+  const setSeg = (s: SVGGElement, d: string) => s.querySelectorAll("path").forEach((p) => p.setAttribute("d", d));
 
   // a cable hung from (x0, y0) to (x1, y1) sagging by `sag` mid-span: y = a cosh((x - m) / a), with
   // a solved so that a (cosh(L / a) - 1) = sag for the half-span L
@@ -47,7 +59,7 @@ export function makeCity(svg: SVGSVGElement, reduce: boolean): City {
       d.push(`M${f(x - h0)} ${f(y0)} L${f(x + h1)} ${f(y1)} M${f(x + h0)} ${f(y0)} L${f(x - h1)} ${f(y1)}`);
     }
     for (const k of [0, 0.09, 0.18]) d.push(`M${f(x - w * 1.5)} ${f(top + (foot - top) * k)} L${f(x + w * 1.5)} ${f(top + (foot - top) * k)}`);   // the cross-arms
-    el("path", { d: d.join(" "), class: "pylon" }, g);
+    el("path", { d: d.join(" "), class: "pylon", "data-tide": "" }, g);
   }
 
   function draw() {
@@ -62,20 +74,43 @@ export function makeCity(svg: SVGSVGElement, reduce: boolean): City {
     cables = [];
     [0, 0.09, 0.18].forEach((k, i) => {
       const y = top + (foot - top) * k, pts = catenary(xl + (i - 1) * pw * 1.2, y, xr + (i - 1) * pw * 1.2, y, H * (0.05 + 0.02 * i));
-      const path = el("path", { d: line(pts), class: "cable" }, g) as SVGPathElement;
-      // a wide invisible stroke over the cable to hover: the cable brightens under the pointer
-      const hit = el("path", { d: line(pts), class: "cable-hit" }, g);
-      hit.addEventListener("pointerenter", () => path.classList.add("lit"));
-      hit.addEventListener("pointerleave", () => path.classList.remove("lit"));
-      cables.push({ pts, path });
+      const segs: SVGGElement[] = [];
+      for (let j = 0; j < SEGS; j++) segs.push(seg(g, line(pts.slice(Math.floor((j * 80) / SEGS), Math.floor(((j + 1) * 80) / SEGS) + 1))));
+      // a wide invisible stroke over the cable: hover brightens it, a click or Enter strikes it
+      const hit = el("path", { d: line(pts), class: "cable-hit", tabindex: 0, role: "button", "aria-label": `Power line ${i + 1}: strike it` }, g);
+      const lit = (on: boolean) => segs.forEach((p) => p.classList.toggle("hot", on));
+      hit.addEventListener("pointerenter", () => lit(true));
+      hit.addEventListener("pointerleave", () => lit(false));
+      const cable = { pts, segs, shake: 0 };
+      hit.addEventListener("click", (e) => { const r = svg.getBoundingClientRect(); strike(cable, (e as MouseEvent).clientX - r.left); });
+      hit.addEventListener("keydown", (e) => { if ((e as KeyboardEvent).key === "Enter" || (e as KeyboardEvent).key === " ") { e.preventDefault(); strike(cable, W / 2); } });
+      cables.push(cable);
     });
     // the signs: a vertical strip of glyphs at the right, a thin ring at the left; dim and static
-    const strip = el("text", { x: f(W * 0.966), y: f(H * 0.3), class: "glyphs" }, g);
+    const strip = el("text", { x: f(W * 0.966), y: f(H * 0.3), class: "glyphs", "data-tide": "" }, g);
     [...GLYPHS].forEach((ch, i) => { const t = el("tspan", { x: f(W * 0.966), dy: i ? "1.25em" : "0" }, strip); t.textContent = ch; });
     const rr = Math.min(24, W * 0.016);
-    el("circle", { cx: f(W * 0.036), cy: f(H * 0.68), r: f(rr), class: "ring" }, g);
-    el("circle", { cx: f(W * 0.036), cy: f(H * 0.68), r: f(rr * 0.7), class: "ring inner" }, g);
+    el("circle", { cx: f(W * 0.036), cy: f(H * 0.68), r: f(rr), class: "ring", "data-tide": "" }, g);
+    el("circle", { cx: f(W * 0.036), cy: f(H * 0.68), r: f(rr * 0.7), class: "ring inner", "data-tide": "" }, g);
     pulses = el("g", { class: "pulses" }, svg) as SVGGElement;
+  }
+
+  // the strike: a damped vibration around the point (the cable's segments redrawn each frame for under
+  // a second) and one bolt toward the farther end
+  function strike(c: (typeof cables)[number], x: number) {
+    let k = 0; while (k < c.pts.length - 1 && c.pts[k][0] < x) k++;
+    const toEnd = k < c.pts.length / 2 ? c.pts.slice(k) : c.pts.slice(0, k + 1).reverse();
+    fx.bolt(toEnd, reduce);
+    if (reduce) return;
+    const xc = c.pts[k][0], id = ++c.shake, t0 = performance.now();
+    const frame = (now: number) => {
+      if (id !== c.shake) return;
+      const t = (now - t0) / 1000, done = t > 0.85;
+      const off = c.pts.map(([px, py]) => [px, py + (done ? 0 : 7 * Math.exp(-(((px - xc) / 90) ** 2)) * Math.sin(2 * Math.PI * 9 * t) * Math.exp(-t / 0.22))] as [number, number]);
+      c.segs.forEach((p, j) => setSeg(p, line(off.slice(Math.floor((j * 80) / SEGS), Math.floor(((j + 1) * 80) / SEGS) + 1))));
+      if (!done) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
   }
 
   function run(pts: [number, number][], ms: number) {

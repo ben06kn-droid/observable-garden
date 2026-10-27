@@ -39,14 +39,62 @@ export function petal(l: number, w: number, tip: "round" | "point" | "notch" = "
   return `M0 0 C${f(-w * 1.15)} ${f(-l * 0.3)} ${f(-w * 1.05)} ${f(-l)} 0 ${f(-l)} C${f(w * 1.05)} ${f(-l)} ${f(w * 1.15)} ${f(-l * 0.3)} 0 0 Z`;
 }
 
-/** Draw a head of `kind` at the origin of `g`, `r` its radius, opened by `o` (0..1). */
-export function drawHead(g: SVGGElement, kind: Kind, colour: number, r: number, o: number, deep = false) {
+/** Where a flower is drawn: into svg elements (the blossoms on the run's tree) or straight into a
+ *  canvas (the bed, which as elements would be thousands of transformed paths). Transforms are the
+ *  small set used here: translate, rotate, scale, in order. */
+export interface Sink {
+  path(d: string, tf: string, fill: string, stroke: string, sw: number, cls: string): void;
+  circle(r: number, fill: string, cls: string): void;
+  line(x2: number, y2: number, stroke: string, sw: number, cls: string): void;
+  group(tf: string, fn: () => void): void;
+}
+export function svgSink(root: SVGGElement): Sink {
+  let g: Element = root;
+  return {
+    path: (d, tf, fill, stroke, sw, cls) => { el("path", { d, ...(tf ? { transform: tf } : {}), fill, stroke, "stroke-width": f(sw), class: cls, ...(cls === "stem" ? { "stroke-linecap": "round" } : {}) }, g); },
+    circle: (r, fill, cls) => { el("circle", { cx: 0, cy: 0, r: f(r), fill, class: cls }, g); },
+    line: (x2, y2, stroke, sw, cls) => { el("line", { x1: 0, y1: 0, x2: f(x2), y2: f(y2), stroke, "stroke-width": f(sw), class: cls }, g); },
+    group: (tf, fn) => { const prev = g; g = el("g", { transform: tf }, g); fn(); g = prev; },
+  };
+}
+const TF = /(translate|rotate|scale)\(([^)]*)\)/g;
+const paths = new Map<string, Path2D>();
+const P2 = (d: string) => { let p = paths.get(d); if (!p) { p = new Path2D(d); paths.set(d, p); } return p; };
+/** The bed's look, as its css had it: translucent petals with a bright outline, hairline stems. */
+export function canvasSink(c: CanvasRenderingContext2D, alpha: () => number, stem: string): Sink {
+  const apply = (tf: string) => {
+    for (const m of tf.matchAll(TF)) {
+      const v = m[2].split(/[ ,]+/).filter(Boolean).map(Number);
+      if (m[1] === "translate") c.translate(v[0], v[1] ?? 0);
+      else if (m[1] === "rotate") c.rotate((v[0] * Math.PI) / 180);
+      else c.scale(v[0], v[1] ?? v[0]);
+    }
+  };
+  const col = (x: string) => (x === "var(--stem)" ? stem : x);
+  return {
+    path: (d, tf, fill, stroke, sw, cls) => {
+      c.save(); if (tf) apply(tf);
+      const p = P2(d), a = alpha();
+      if (fill !== "none") { c.globalAlpha = a * (cls === "petal" ? 0.3 : cls === "leaf-on-stem" ? 0.2 : 1); c.fillStyle = col(fill); c.fill(p); }
+      if (cls === "leaf-on-stem") { c.globalAlpha = a; c.strokeStyle = stem; c.lineWidth = 2.4; c.stroke(p); }
+      else if (stroke !== "none") { c.globalAlpha = a * (cls === "stem" ? 0.75 : 1); c.strokeStyle = col(stroke); c.lineWidth = cls === "petal" ? 0.7 : cls === "stem" ? 1 : sw; c.lineCap = "round"; c.stroke(p); }
+      c.restore();
+    },
+    circle: (r, fill) => { c.globalAlpha = alpha(); c.fillStyle = col(fill); c.beginPath(); c.arc(0, 0, r, 0, 6.2832); c.fill(); },
+    line: (x2, y2, stroke, sw) => { c.globalAlpha = alpha(); c.strokeStyle = col(stroke); c.lineWidth = sw; c.beginPath(); c.moveTo(0, 0); c.lineTo(x2, y2); c.stroke(); },
+    group: (tf, fn) => { c.save(); apply(tf); fn(); c.restore(); },
+  };
+}
+
+/** Draw a head of `kind` at the origin of `g` (an svg group, or a sink), `r` its radius, opened by `o` (0..1). */
+export function drawHead(g: SVGGElement | Sink, kind: Kind, colour: number, r: number, o: number, deep = false) {
+  const k = "path" in g ? g : svgSink(g);
   const [fill, deeper, line] = PALETTE[colour];
   const c = deep ? deeper : fill;
-  const P = (d: string, rot: number, extra = "") => el("path", { d, transform: `rotate(${f(rot)})${extra}`, fill: c, stroke: line, "stroke-width": f(Math.max(0.6, r * 0.05)), class: "petal" }, g);
+  const P = (d: string, rot: number, extra = "") => k.path(d, `rotate(${f(rot)})${extra}`, c, line, Math.max(0.6, r * 0.05), "petal");
   const s = 0.25 + 0.75 * o;
   const ring = (n: number, off: number, fn: (a: number, i: number) => void) => { for (let i = 0; i < n; i++) fn(off + (i / n) * 360, i); };
-  const heart = (rr: number, col = line) => el("circle", { cx: 0, cy: 0, r: f(rr), fill: col, class: "heart" }, g);
+  const heart = (rr: number, col = line) => k.circle(rr, col, "heart");
   switch (kind) {
     case "daisy":
       ring(12, 0, (a) => P(petal(r * s, r * 0.18 * s, "notch"), a));
@@ -60,23 +108,25 @@ export function drawHead(g: SVGGElement, kind: Kind, colour: number, r: number, 
       break;
     }
     case "forget-me-not":
-      [[0, -0.55], [-0.6, 0.05], [0.6, 0.05], [-0.25, 0.6], [0.35, 0.58]].slice(0, Math.max(1, Math.ceil(5 * o))).forEach(([dx, dy], k) => {
-        const sub = el("g", { transform: `translate(${f(dx * r)} ${f(dy * r)})` }, g) as SVGGElement;
-        for (let i = 0; i < 5; i++) el("path", { d: petal(r * 0.42 * s, r * 0.2 * s, "round"), transform: `rotate(${f(i * 72 + k * 13)})`, fill: c, stroke: line, "stroke-width": f(Math.max(0.5, r * 0.04)), class: "petal" }, sub);
-        el("circle", { cx: 0, cy: 0, r: f(r * 0.09 * s), fill: line, class: "heart" }, sub);
+      [[0, -0.55], [-0.6, 0.05], [0.6, 0.05], [-0.25, 0.6], [0.35, 0.58]].slice(0, Math.max(1, Math.ceil(5 * o))).forEach(([dx, dy], j) => {
+        k.group(`translate(${f(dx * r)} ${f(dy * r)})`, () => {
+          for (let i = 0; i < 5; i++) k.path(petal(r * 0.42 * s, r * 0.2 * s, "round"), `rotate(${f(i * 72 + j * 13)})`, c, line, Math.max(0.5, r * 0.04), "petal");
+          k.circle(r * 0.09 * s, line, "heart");
+        });
       });
       break;
     case "lily":
       ring(3, 30, (a) => P(petal(r * 1.1 * s, r * 0.3 * s, "point"), a));
       ring(3, 90, (a) => P(petal(r * 1.0 * s, r * 0.26 * s, "point"), a));
-      ring(5, 10, (a) => el("line", { x1: 0, y1: 0, x2: f(Math.sin(a * Math.PI / 180) * r * 0.55 * s), y2: f(-Math.cos(a * Math.PI / 180) * r * 0.55 * s), stroke: deeper, "stroke-width": f(r * 0.05), class: "stamen" }, g));
+      ring(5, 10, (a) => k.line(Math.sin(a * Math.PI / 180) * r * 0.55 * s, -Math.cos(a * Math.PI / 180) * r * 0.55 * s, deeper, r * 0.05, "stamen"));
       break;
     case "hydrangea": {
       const n = Math.max(3, Math.round(13 * o));
       for (let i = 0; i < n; i++) {
         const a = i * 2.4, rr = r * 0.22 * Math.sqrt(i + 0.5);
-        const sub = el("g", { transform: `translate(${f(Math.cos(a) * rr)} ${f(Math.sin(a) * rr * 0.85)})` }, g) as SVGGElement;
-        for (let k = 0; k < 4; k++) el("path", { d: petal(r * 0.3 * s, r * 0.17 * s, "round"), transform: `rotate(${f(k * 90 + i * 17)})`, fill: c, stroke: line, "stroke-width": f(Math.max(0.5, r * 0.035)), class: "petal" }, sub);
+        k.group(`translate(${f(Math.cos(a) * rr)} ${f(Math.sin(a) * rr * 0.85)})`, () => {
+          for (let j = 0; j < 4; j++) k.path(petal(r * 0.3 * s, r * 0.17 * s, "round"), `rotate(${f(j * 90 + i * 17)})`, c, line, Math.max(0.5, r * 0.035), "petal");
+        });
       }
       break;
     }
@@ -86,13 +136,13 @@ export function drawHead(g: SVGGElement, kind: Kind, colour: number, r: number, 
       ring(5, 8, (a) => P(petal(r * 0.45 * s, r * 0.28 * s, "round"), a));
       break;
     case "lavender":
-      [-0.35, 0, 0.35].forEach((dx, k) => {
-        const tall = r * (k === 1 ? 1.6 : 1.25), n = Math.max(2, Math.round(7 * o));
-        el("path", { d: `M0 0 Q${f(dx * r * 0.4)} ${f(-tall * 0.5)} ${f(dx * r)} ${f(-tall)}`, fill: "none", stroke: line, "stroke-width": f(r * 0.05), class: "spike" }, g);
+      [-0.35, 0, 0.35].forEach((dx, j) => {
+        const tall = r * (j === 1 ? 1.6 : 1.25), n = Math.max(2, Math.round(7 * o));
+        k.path(`M0 0 Q${f(dx * r * 0.4)} ${f(-tall * 0.5)} ${f(dx * r)} ${f(-tall)}`, "", "none", line, r * 0.05, "spike");
         for (let i = 0; i < n; i++) {
           const t = 0.3 + (i / 7) * 0.7, x = dx * r * t, y = -tall * t;
-          el("path", { d: petal(r * 0.2, r * 0.09, "point"), transform: `translate(${f(x)} ${f(y)}) rotate(${f(-35)})`, fill: c, stroke: line, "stroke-width": f(Math.max(0.4, r * 0.03)), class: "petal" }, g);
-          el("path", { d: petal(r * 0.2, r * 0.09, "point"), transform: `translate(${f(x)} ${f(y)}) rotate(${f(35)})`, fill: c, stroke: line, "stroke-width": f(Math.max(0.4, r * 0.03)), class: "petal" }, g);
+          k.path(petal(r * 0.2, r * 0.09, "point"), `translate(${f(x)} ${f(y)}) rotate(${f(-35)})`, c, line, Math.max(0.4, r * 0.03), "petal");
+          k.path(petal(r * 0.2, r * 0.09, "point"), `translate(${f(x)} ${f(y)}) rotate(${f(35)})`, c, line, Math.max(0.4, r * 0.03), "petal");
         }
       });
       break;
@@ -100,16 +150,17 @@ export function drawHead(g: SVGGElement, kind: Kind, colour: number, r: number, 
 }
 
 /** A wavy stem from (x, ground) to (x + lean, top) with two or three leaves along it; returns the top. */
-export function drawStem(g: SVGGElement, x: number, ground: number, top: number, seed: number, colour = "var(--stem)", leafScale = 1) {
+export function drawStem(g: SVGGElement | Sink, x: number, ground: number, top: number, seed: number, colour = "var(--stem)", leafScale = 1) {
+  const k = "path" in g ? g : svgSink(g);
   const len = ground - top, amp = Math.min(22, 5 + len * 0.08), side = seed % 2 ? 1 : -1, hx = x + side * amp * 0.4;
-  el("path", { d: `M${f(x)} ${f(ground)} C${f(x + side * amp)} ${f(ground - len * 0.25)} ${f(x + side * amp)} ${f(ground - len * 0.45)} ${f(x)} ${f(ground - len * 0.55)} S${f(hx - side * amp * 1.1)} ${f(top + len * 0.18)} ${f(hx)} ${f(top)}`,
-    fill: "none", stroke: colour, "stroke-width": f(Math.max(1.6, len * 0.018)), "stroke-linecap": "round", class: "stem" }, g);
+  k.path(`M${f(x)} ${f(ground)} C${f(x + side * amp)} ${f(ground - len * 0.25)} ${f(x + side * amp)} ${f(ground - len * 0.45)} ${f(x)} ${f(ground - len * 0.55)} S${f(hx - side * amp * 1.1)} ${f(top + len * 0.18)} ${f(hx)} ${f(top)}`,
+    "", "none", colour, Math.max(1.6, len * 0.018), "stem");
   if (len > 24 * leafScale) {
     const spots = len > 120 ? [0.3, 0.52, 0.72] : [0.35, 0.62];
     spots.forEach((t, i) => {
       const yy = ground - len * t, xx = x + side * amp * (t < 0.55 ? 0.7 * Math.sin((t / 0.55) * Math.PI) : -0.35 * Math.sin(((t - 0.55) / 0.45) * Math.PI));
       const dir = i % 2 ? -side : side, sz = Math.min(1.5, 0.35 + len / 160) * leafScale;
-      el("path", { d: `M0 0 C${f(7 * dir)} -4 ${f(20 * dir)} -6 ${f(30 * dir)} -18 C${f(19 * dir)} -1 ${f(9 * dir)} 3 0 0 Z`, transform: `translate(${f(xx)} ${f(yy)}) scale(${f(sz)})`, fill: colour, class: "leaf-on-stem" }, g);
+      k.path(`M0 0 C${f(7 * dir)} -4 ${f(20 * dir)} -6 ${f(30 * dir)} -18 C${f(19 * dir)} -1 ${f(9 * dir)} 3 0 0 Z`, `translate(${f(xx)} ${f(yy)}) scale(${f(sz)})`, colour, "none", 0, "leaf-on-stem");
     });
   }
   return [hx, top] as const;

@@ -218,9 +218,13 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
     }
     if (opts.bar !== undefined) {
       const bar = el("g", { class: "bar", "aria-hidden": "true" }, svg);
-      el("line", { x1: 40, x2: Wd - 10, y1: f(sc.y(opts.bar)), y2: f(sc.y(opts.bar)) }, bar);
-      for (const x of [40, Wd - 10]) el("circle", { cx: x, cy: f(sc.y(opts.bar)), r: 2.4, class: "cap" }, bar);   // the tube's end caps
-      el("text", { x: 48, y: f(sc.y(opts.bar) - 8) }, bar).textContent = `BAR ${opts.bar.toFixed(3)}`;
+      const by = f(sc.y(opts.bar)), n = 12;   // in segments, so colour can travel along it (runView.ts)
+      for (let j = 0; j < n; j++) {   // each a faint wide glow under a lit line (no filter)
+        const g = el("g", { "data-tide": "" }, bar), a = { x1: f(40 + ((Wd - 50) * j) / n), x2: f(40 + ((Wd - 50) * (j + 1)) / n), y1: by, y2: by };
+        el("line", { ...a, class: "glow" }, g); el("line", { ...a, class: "lit" }, g);
+      }
+      for (const x of [40, Wd - 10]) el("circle", { cx: x, cy: by, r: 2.4, class: "cap", "data-tide": "" }, bar);   // the tube's end caps
+      el("text", { x: 48, y: f(sc.y(opts.bar) - 8), "data-tide": "" }, bar).textContent = `BAR ${opts.bar.toFixed(3)}`;
     }
     el("path", { d: `M40 ${GROUND} L${Wd - 10} ${GROUND}`, class: "ground", "aria-hidden": "true" }, svg);
   }
@@ -249,7 +253,7 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
 
   const stemEls = new Map<number, SVGGElement>(), moveEls = new Map<number, SVGGElement>();
   for (const [s, st] of res.stems) {
-    const g = el("g", { class: `stem c${s % 3}`, "data-stem": s }, real);
+    const g = el("g", { class: `stem c${s % 3}`, "data-stem": s, "data-tide": "" }, real);
     if (opts.interactive) {
       const moves = tree.moves.filter((m) => m.stem === s);
       const best = Math.max(...moves.flatMap((m) => m.candidates.map((c) => c.sharpe)));
@@ -263,7 +267,7 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
   for (const b of res.laid) {
     const stem = stemEls.get(b.stem)!;
     let mg = moveEls.get(b.move);
-    if (!mg) { mg = el("g", { class: "move", "data-move": b.move }, stem); moveEls.set(b.move, mg); }
+    if (!mg) { mg = el("g", { class: "move", "data-move": b.move, "data-tide": "" }, stem); moveEls.set(b.move, mg); }
     const cls = onPath.has(b.step) ? " path" : "";
     const e = b.trunk
       ? el("path", { d: b.trunk, class: "trunk" + cls }, mg)
