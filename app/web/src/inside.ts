@@ -4,7 +4,7 @@
 // Reduced motion cuts instead of zooming.
 import { h, reduceMotion } from "./common";
 import { drawGarden } from "./garden";
-import { leaves } from "./leaves";
+import { fall } from "./leaves";
 import { processOf, treeOnly } from "./process";
 import type { SearchTree } from "./types";
 
@@ -20,7 +20,7 @@ export function makeInside(root: HTMLElement, tree: () => SearchTree | null): In
   svg.setAttribute("class", "inside-tree");
   svg.setAttribute("aria-hidden", "true");
   stage.appendChild(svg);
-  const fall = h("div", "leaves blue", null, root);
+  const falling = h("div", "falling leaves-blue", null, root);
   const card = h("section", "process", null, root);
   const head = h("header", null, null, card);
   const title = h("h2", null, null, head); title.id = "inside-title"; title.tabIndex = -1;
@@ -57,7 +57,7 @@ export function makeInside(root: HTMLElement, tree: () => SearchTree | null): In
         h("td", null, c.rule, tr); h("td", "s", c.sharpe.toFixed(4), tr);
       }
     }
-    leaves(fall, 16);
+    fall(falling, { n: 24, kind: "leaf", seed: 9 });
     root.hidden = false;
     stage.style.transform = flipFrom(from);
     root.classList.remove("open");

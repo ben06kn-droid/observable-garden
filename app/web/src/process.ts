@@ -30,3 +30,8 @@ export function treeOnly(tree: SearchTree, stem: number): SearchTree {
   const moves = tree.moves.filter((m) => m.stem === stem).map((m) => ({ ...m, stem: 0 }));
   return { ...tree, moves, stems: 1, evaluations: moves.reduce((n, m) => n + m.candidates.length, 0) };
 }
+
+/** The whole run's process: every tree (stem) in order, each with its moves. */
+export function processOfRun(tree: SearchTree): ProcessModel[] {
+  return Array.from({ length: tree.stems }, (_, s) => processOf(tree, s));
+}

@@ -1,9 +1,9 @@
 /* Quixote, the site. Two pages and a hard cut between them: the overview on paper, with the search
-   drawn behind it in dark green and yellow leaves falling, then the demo on near-black, where the
-   trees are neon pink with a halo. Page two's look switches on only when the snap onto it completes.
-   Three hues on page two: pink for trees, blue for a selected tree (and inside it), amber for the
-   verdict. Glow is decoration on strokes, never on text; every text colour is WCAG AA on its
-   background, and the washes behind text keep it so over the trees. */
+   drawn behind it in dark green and yellow leaves falling, then the demo at night in a city garden of
+   neon tubing. Page two's look switches on only when the carry onto it completes. On page two, pink
+   is the run's tree, blue a tree gone into, amber the verdict; the city's wires are a pale cyan. Glow
+   is decoration on strokes, never on text; every text colour is WCAG AA on its background, and the
+   washes behind text keep it so over the trees. */
 
 @import "@fontsource-variable/bricolage-grotesque/wght.css";
 @import "@fontsource/ibm-plex-mono/latin-400.css";
@@ -20,19 +20,21 @@
   --paper-wash: rgba(239, 230, 210, 0.9);   /* behind page one's text, over the trees */
   --leaf: #e2b33a;             /* yellow leaves, falling */
   --leaf-vein: #8a6a12;
+  --petal: #ffb3d1;            /* cherry petals: flat, pink always */
 
   /* page two: night */
   --night: #05040b;
-  --night-2: #0d0a19;          /* cards, the panel */
-  --night-wash: rgba(9, 7, 20, 0.86);       /* behind page two's text, over the trees */
+  --night-2: #0d0a19;          /* the inside panel */
+  --night-wash: rgba(9, 7, 20, 0.86);       /* behind text, over the trees */
   --ink: #eeeaf6;              /* 17.2:1 on --night, 16.5:1 on --night-2 */
   --muted: #b6afc9;            /* 9.7:1, 9.3:1 */
   --faint: #8f88a6;            /* 6.1:1, 5.8:1 */
   --rule: #2a2340;
-  --pink: #ff3fd2;             /* trees */
+  --hair: #2c2442;             /* the hairline above each block of text on page two */
+  --pink: #ff3fd2;             /* the run's tree */
   --pink-hot: #ffa6ee;         /* the submitted branch: brighter, heavier, same hue */
-  --blue: #44b8ff;             /* a selected tree */
-  --amber: #f5b544;            /* the verdict card only; 10.8:1 on --night-2 */
+  --blue: #44b8ff;             /* a tree gone into */
+  --amber: #f5b544;            /* the verdict only; 10.8:1 on --night */
 
   --display: "Bricolage Grotesque Variable", "Arial Black", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -72,14 +74,13 @@ body:not([data-page="two"]) .top { color: var(--paper-ink); background: rgba(239
 /* ---------- page one: the overview, on paper, under the trees ---------- */
 .page { position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; }
 .one { background: var(--paper); color: var(--paper-ink); }
+/* page one's trees (woods.ts): tall and short, a bare filled trunk and one crown of limbs, dark green */
 .one .bg-trees { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.one .bg-trees .halo { display: none; }
 .one .bg-trees .real { filter: none; }
-.one .bg-trees .twig, .one .bg-trees .trunk, .one .bg-trees .bud, .one .bg-trees .canopy { stroke: var(--paper-tree); stroke-width: 2; opacity: 1; filter: none; }
+.one .bg-trees .twig, .one .bg-trees .trunk, .one .bg-trees .bud { stroke: var(--paper-tree); stroke-width: 2; opacity: 1; fill: none; }
 .one .bg-trees .twig.down { opacity: 1; stroke-width: 1.4; }
-.one .bg-trees .trunk { fill: var(--paper-tree); fill-opacity: 1; }
-.one .bg-trees .canopy { fill: var(--paper-tree); fill-opacity: 0.22; stroke-width: 2.4; }
-.one .bg-trees .bud, .one .bg-trees .bud.kept, .one .bg-trees .bud.path { fill: var(--paper-tree); }
+.one .bg-trees .trunk { fill: var(--paper-tree); fill-opacity: 1; stroke-width: 2.4; }
+.one .bg-trees .bud, .one .bg-trees .bud.kept, .one .bg-trees .bud.path { fill: none; }
 .one .wrap { position: relative; z-index: 2; max-width: var(--page); margin: 0 auto; padding: 84px var(--gutter) 64px; }
 .one .copy { max-width: 680px; background: var(--paper-wash); padding: var(--s6) var(--s6) var(--s5); }
 .one h1 { font: 800 clamp(2.4rem, 5.6vw, 4.6rem)/0.98 var(--display); letter-spacing: -0.03em; margin: 0 0 var(--s3); }
@@ -93,52 +94,107 @@ body:not([data-page="two"]) .top { color: var(--paper-ink); background: rgba(239
 .one .cue a { text-decoration: none; }
 @media (max-width: 560px) { .one ol.steps { grid-template-columns: 1fr; } .one .copy { padding: var(--s5) var(--s4); } }
 
-/* leaves falling, behind the text */
-.leaves { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
-.leaf { position: absolute; left: var(--x); top: -6%; width: var(--size); height: var(--size); animation: leaf-fall var(--dur) linear var(--delay) infinite; }
+/* things falling: yellow leaves from page one's crowns, pink cherry petals on page two (pink always) */
+.falling { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.leaf, .petal { position: absolute; left: var(--x); top: var(--y0); width: var(--size); height: var(--size);
+  will-change: transform; animation: drop var(--dur) linear var(--delay) infinite; }
 .leaf path { fill: var(--leaf); stroke: var(--leaf-vein); stroke-width: 0.8; }
-.leaves.blue .leaf path { fill: var(--blue); stroke: #1d5f8f; }
-@keyframes leaf-fall {
-  0%   { top: -6%;  transform: translateX(0) rotate(0deg); }
-  25%  { transform: translateX(var(--sway)) rotate(calc(var(--spin) * 0.25)); }
-  50%  { transform: translateX(0) rotate(calc(var(--spin) * 0.5)); }
-  75%  { transform: translateX(calc(var(--sway) * -1)) rotate(calc(var(--spin) * 0.75)); }
-  100% { top: 104%; transform: translateX(0) rotate(var(--spin)); }
+.petal path { fill: var(--petal); }
+.leaves-blue .leaf path { fill: var(--blue); stroke: #1d5f8f; }
+@keyframes drop {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+  25%  { transform: translate3d(var(--sway), calc(var(--fall) * 0.25), 0) rotate(calc(var(--spin) * 0.25)); }
+  50%  { transform: translate3d(0, calc(var(--fall) * 0.5), 0) rotate(calc(var(--spin) * 0.5)); }
+  75%  { transform: translate3d(calc(var(--sway) * -1), calc(var(--fall) * 0.75), 0) rotate(calc(var(--spin) * 0.75)); }
+  100% { transform: translate3d(0, var(--fall), 0) rotate(var(--spin)); }
 }
 
-/* ---------- page two: the demo, at night ----------
-   Nothing of it shows until the snap onto it completes: until then it is plain paper. */
-.two { background: var(--night); }
-body:not([data-page="two"]) .two, body:not([data-page="two"]) .below { background: var(--paper); }
-body:not([data-page="two"]) .two > *, body:not([data-page="two"]) .below > * { visibility: hidden; }
-.two .garden-wrap { position: absolute; inset: 60px 0 0 0; }
-.two .garden-wrap .garden { width: 100%; height: 100%; }
-.two .hud { position: relative; z-index: 2; min-height: 100vh; min-height: 100svh; padding: 64px max(var(--gutter), calc((100vw - 1600px) / 2)) var(--s5);
-  display: flex; flex-direction: column; pointer-events: none; }
-.two .hud > * { pointer-events: auto; }
-.two .side { margin-left: auto; margin-top: var(--s4); width: 300px; display: flex; flex-direction: column; gap: var(--s4); }
-@media (max-width: 760px) { .two .side { width: 100%; margin-top: 52vh; } .two .garden-wrap { inset: 140px 0 auto 0; height: 50vh; } }
+/* ---------- page two: the demo, Night City ----------
+   A city garden at night, sharp and clean: hairlines with a narrow glow, neon tubing, a lit ground
+   line. Nothing blurred, no glitch, no scan lines, no gradient text; text sits straight on the dark. */
+.two { background: linear-gradient(to top, #1a0d24 0%, #0d0817 30%, #05040b 70%);
+  --tube: var(--pink); --core: #fff0fb; --tube-dim: #b866d9; --wire: #8fe9ff; }
+/* the cut: page two is drawn all along under an opaque paper cover; its look switches on when the
+   carry onto it ends, as that cover's opacity going to 0 (a compositor change, no repaint) */
+.two .cover { position: absolute; inset: 0; z-index: 9; background: var(--paper); pointer-events: none; will-change: opacity; }
+body[data-page="two"] .two .cover { opacity: 0; }
+main { will-change: transform; }
 
-.state { font-family: var(--mono); background: var(--night-wash); border: 1px solid var(--rule); padding: var(--s5); }
-.state .phase { font: 800 13px/1.2 var(--display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 var(--s3); }
-.state .big { font: 500 clamp(2rem, 3.2vw, 2.6rem)/1.05 var(--mono); color: var(--ink); margin: 0; font-variant-numeric: tabular-nums; }
-.state .line { font-size: 14px; color: var(--muted); margin: var(--s2) 0 var(--s4); font-variant-numeric: tabular-nums; }
+/* the city (city.ts): pylons, cables, a pulse, two dim signs */
+.two .city { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.city .pylon { fill: none; stroke: #5f5385; stroke-width: 0.8; opacity: 0.6; }
+.city .cable { fill: none; stroke: var(--wire); stroke-width: 0.8; opacity: 0.42; filter: drop-shadow(0 0 2px rgba(63, 240, 255, 0.55)); }
+.city .pulse { fill: none; stroke: #effdff; stroke-width: 1.8; stroke-linecap: round; stroke-dasharray: 0.05 1.2;
+  filter: drop-shadow(0 0 2px #3ff0ff) drop-shadow(0 0 6px rgba(63, 240, 255, 0.6)); }
+.city .glyphs { font: 11px/1 var(--mono); fill: #4f4670; letter-spacing: 0.1em; }
+.city .ring { fill: none; stroke: #4f4670; stroke-width: 0.8; }
+.city .ring.inner { stroke-dasharray: 2 6; }
 
-.controls { display: flex; flex-wrap: wrap; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
-.chip { font: 500 12px/1.2 var(--mono); letter-spacing: 0.06em; color: var(--ink); background: var(--night-wash); border: 1px solid var(--rule); padding: 10px 12px; cursor: pointer; min-height: 40px; text-align: left; }
-.chip[aria-pressed="true"] { border-color: var(--pink); box-shadow: inset 0 -2px 0 var(--pink); }
-.chip[disabled] { cursor: not-allowed; color: var(--faint); border-style: dashed; }
-.chip small { display: block; color: var(--muted); font-size: 11px; letter-spacing: 0; margin-top: 2px; }
-.chip[disabled] small { color: var(--faint); }
-.run { font: 600 13px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--night); background: var(--ink); border: 0; padding: 0 var(--s5); min-height: 44px; cursor: pointer; }
+/* page two's trees (woods.ts): four, at the edges, one dim violet-pink; dim versions of the run's tubing */
+.two .wood2 { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0.4; --tube: var(--tube-dim); --core: #f0d9ff; }
+.two .petals { z-index: 1; }
+
+/* the run's own tree, centred, the brightest thing on the page, with a dark margin round it */
+.two .spot { position: absolute; z-index: 2; top: 92px; left: 25%; right: 25%; bottom: 1.5%; }
+.two .spot::before { content: ""; position: absolute; inset: -6% -14% 0;
+  background: radial-gradient(closest-side at 50% 56%, rgba(5, 4, 11, 0.96) 0%, rgba(5, 4, 11, 0.88) 60%, rgba(5, 4, 11, 0) 100%); }
+.two .spot svg { position: relative; width: 100%; height: 100%; display: block; }
+.spot .garden .ground { display: none; }
+
+/* the bed (bed.ts): small neon flowers on a parabola of ground, with their reflections below it */
+.two .bed { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; width: 100%; height: 34%; cursor: pointer; --stem: #2fd6a6; }
+.bed .ground-fill { fill: #0a0613; }
+.bed .ground-line { fill: none; stroke: #ff6ade; stroke-width: 1; filter: drop-shadow(0 0 2px #ff3fd2) drop-shadow(0 0 6px rgba(255, 63, 210, 0.45)); }
+.bed .reflection { opacity: 0.13; }
+.bed .flowers { filter: drop-shadow(0 0 2px rgba(255, 90, 210, 0.45)); }
+.bed .stem { stroke-width: 1px; opacity: 0.75; }
+.bed .leaf-on-stem { fill-opacity: 0.2; stroke: var(--stem); stroke-width: 2.4; }
+.bed .petal { fill-opacity: 0.3; stroke-width: 0.7px; }
+.bed .bloom { opacity: 0.55; transform: scale(0.3); transform-box: fill-box; transform-origin: center;
+  transition: transform 600ms cubic-bezier(.35, 0, 0, 1), opacity 400ms linear; }
+.bed .bloom.open { opacity: 1; transform: none; }
+
+/* the text: straight on the dark, a hairline above each block, mono labels, display numbers */
+.two .hud { position: relative; z-index: 4; min-height: 100vh; min-height: 100svh; padding: 84px 4.5vw var(--s5);
+  display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+.two .side { width: min(270px, 20vw); display: flex; flex-direction: column; gap: var(--s6); pointer-events: auto; }
+@media (max-width: 760px) {
+  .two .hud { flex-direction: column; padding-top: calc(150px + 44vh); }
+  .two .side { width: 100%; }
+  .two .spot { top: 140px; left: 0; right: 0; bottom: auto; height: 42vh; }
+  .two .bed { height: 22%; }
+}
+.state { font-family: var(--mono); border-top: 1px solid var(--hair); padding-top: var(--s3); }
+.state .phase { font: 500 11px/1.4 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin: 0 0 var(--s3); }
+.state .big { font: 800 clamp(2.1rem, 3.4vw, 2.9rem)/1 var(--display); color: var(--ink); margin: 0; font-variant-numeric: tabular-nums; }
+.state .line { font-size: 13px; color: var(--muted); margin: var(--s2) 0 var(--s4); font-variant-numeric: tabular-nums; }
+
+.controls { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.chip { width: 100%; font: 500 11px/1.3 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); background: transparent;
+  border: 0; border-top: 1px solid var(--hair); padding: 10px 0; cursor: pointer; min-height: 44px; text-align: left; }
+.chip:hover { color: var(--ink); }
+.chip[aria-pressed="true"] { color: var(--ink); border-top-color: var(--pink); }
+.chip[disabled] { cursor: not-allowed; color: var(--faint); }
+.chip small { display: block; color: var(--faint); font-size: 11px; letter-spacing: 0.02em; text-transform: none; margin-top: 3px; }
+.run { font: 600 12px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--night); background: var(--ink); border: 0; padding: 0 var(--s5); min-height: 44px; cursor: pointer; }
 .run[disabled] { opacity: 0.5; cursor: progress; }
+.enter { display: block; margin-top: var(--s3); font: 600 12px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink); background: transparent;
+  border: 0; border-bottom: 1px solid var(--pink); padding: 0; min-height: 40px; cursor: pointer; }
 
-/* the garden */
+/* blossoms on the run's tree: open by transform and opacity; translucent neon like the bed */
+.garden .blossoms { filter: drop-shadow(0 0 3px rgba(255, 90, 210, 0.6)); pointer-events: none; }
+.garden .blossom .petal { fill-opacity: 0.4; }
+.garden .blossom { opacity: 0; transform: scale(0.15); transform-box: fill-box; transform-origin: center;
+  transition: transform 700ms cubic-bezier(.35, 0, 0, 1), opacity 400ms linear; }
+.garden .blossom.open { opacity: 1; transform: none; }
+
+/* the garden (the result page's search trees) */
 .garden { width: 100%; height: auto; display: block; overflow: visible; }
 .garden .ground { stroke: var(--rule); stroke-width: 1.4; fill: none; }
 .garden .axis text { font: 13px var(--mono); fill: var(--faint); }
 .garden .axis line { stroke: var(--rule); }
 .garden .bar line { stroke: var(--faint); stroke-width: 1.2; stroke-dasharray: 3 6; }
+.garden .bar .cap { display: none; }
 .garden .bar text { font: 13px var(--mono); fill: var(--muted); letter-spacing: 0.06em; }
 .garden .stem { cursor: pointer; outline: none; }
 .garden .twig, .garden .trunk, .garden .bud, .garden .canopy {
@@ -168,33 +224,73 @@ body:not([data-page="two"]) .two > *, body:not([data-page="two"]) .below > * { v
 .garden.growing .twig[data-step]:not(.on) { stroke-dashoffset: 1; }
 .garden.growing .bud[data-step]:not(.on), .garden.growing .trunk[data-step]:not(.on), .garden.growing .canopy[data-step]:not(.on) { opacity: 0; }
 
-/* the verdict card: amber, at the right */
-.verdict { background: var(--night-2); border: 1px solid var(--rule); border-top: 3px solid var(--amber); padding: var(--s5); }
-.verdict .k { font: 11px/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 0 0 var(--s2); }
-.verdict .word { font: 800 2.6rem/1 var(--display); color: var(--amber); margin: 0 0 var(--s2); }
-.verdict .meaning { font-size: 14px; color: var(--muted); margin: 0 0 var(--s4); }
-.verdict dl { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3) var(--s4); margin: 0 0 var(--s4); }
-.verdict dt { font: 11px/1.3 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-.verdict dd { margin: 2px 0 0; font: 500 1.35rem/1.1 var(--mono); color: var(--amber); font-variant-numeric: tabular-nums; }
-.verdict dd small { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
+/* neon tubing (garden.ts `neon`): a thin bright core over a lit stroke, a narrow halo behind */
+.garden.neon .real { filter: none; }
+.garden.neon .twig, .garden.neon .trunk, .garden.neon .bud { stroke: var(--tube); stroke-width: 2.2; }
+.garden.neon .trunk { fill: #0d0614; fill-opacity: 1; }
+.garden.neon .bud { fill: #0d0614; }
+.garden.neon .bud.kept { fill: var(--tube); }
+.garden.neon .real .path { stroke: var(--tube); stroke-width: 2.6; }
+.garden.neon .halo .twig, .garden.neon .halo .trunk { stroke-width: 5; opacity: 0.8; fill: none; }
+.garden.neon .halo .twig.down { stroke-width: 3.5; opacity: 0.45; }
+.garden.neon .halo .path { stroke-width: 7; }
+.garden.neon .core { pointer-events: none; }
+.garden.neon .core .twig, .garden.neon .core .trunk, .garden.neon .core .bud { stroke: var(--core); stroke-width: 0.9; fill: none; }
+.garden.neon .core .twig.down { opacity: 0.45; }
+.garden.neon .core .path { stroke-width: 1; }
+/* the bar as a neon tube: a lit line, a tight glow, end caps; steady */
+.garden.neon .bar line { stroke: #dcfdff; stroke-width: 1.6; stroke-dasharray: none; stroke-linecap: round;
+  filter: drop-shadow(0 0 2px #3ff0ff) drop-shadow(0 0 5px rgba(63, 240, 255, 0.5)); }
+.garden.neon .bar .cap { display: inline; fill: #dcfdff; filter: drop-shadow(0 0 3px #3ff0ff); }
+.garden.neon .bar text { fill: #9eefff; }
+.garden.neon .axis text { fill: #6f6790; }
+.garden.neon .axis line { stroke: var(--hair); }
+
+/* the verdict: no box; an amber rule, the word, the four numbers */
+.verdict { border-top: 1px solid var(--amber); padding-top: var(--s3); }
+.verdict .k { font: 500 11px/1.4 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin: 0 0 var(--s3); }
+.verdict .word { font: 800 2.9rem/1 var(--display); color: var(--amber); margin: 0 0 var(--s2); }
+.verdict .meaning { font-size: 14px; color: var(--muted); margin: 0 0 var(--s5); }
+.verdict dl { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); margin: 0 0 var(--s5); }
+.verdict dl > div { border-top: 1px solid var(--hair); padding-top: var(--s2); }
+.verdict dt { font: 500 10.5px/1.3 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.verdict dd { margin: 4px 0 0; font: 800 1.55rem/1.05 var(--display); color: var(--amber); font-variant-numeric: tabular-nums; }
+.verdict dd .num { font-family: var(--display); }
+.verdict dd small { display: block; font: 400 11px/1.4 var(--mono); color: var(--muted); margin-top: 3px; }
 .verdict .fine { font: 12px/1.6 var(--mono); color: var(--muted); margin: 0; }
 .verdict a { color: var(--ink); }
+.verdict.idle { border-top-color: var(--hair); }
 .verdict.idle .word { color: var(--faint); }
+
+/* ---------- inside a run: everything blue except the petals; moved by Web Animations
+   (transform and opacity only), drawn first while invisible ---------- */
+.inside.in-run.preparing { opacity: 0.001; }   /* not 0: Chrome skips painting a fully transparent layer, which would push the paint into the zoom's first frame */
+.inside.in-run .veil { position: absolute; inset: 0; background: linear-gradient(to top, #0b1830 0%, #050912 70%); will-change: opacity; }
+.inside.in-run .inside-wood { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.45; --tube: #3b6a96; --core: #9fc8ee; }
+.inside.in-run .petals { z-index: 1; }
+.inside.in-run .inside-stage { z-index: 2; will-change: transform; transition: none; }
+.inside.in-run .inside-tree { position: absolute; top: 0; bottom: 0; left: 0; right: min(560px, 100vw); width: auto; height: 100%; display: block; --tube: var(--blue); --core: #e2f4ff; }
+.inside.in-run .garden.neon .trunk { fill: #06101e; }
+.inside.in-run .blossom .petal { fill: var(--blue); stroke: #b6e2ff; }
+.inside.in-run .blossom .heart, .inside.in-run .blossom .stamen { fill: #b6e2ff; stroke: #b6e2ff; }
+.inside.in-run .blossoms { filter: drop-shadow(0 0 4px rgba(68, 184, 255, 0.6)); }
+.inside.in-run .process { z-index: 3; will-change: opacity, transform; transition: none; }
+.inside.in-run .process h3 { font: 800 1rem/1.2 var(--display); color: var(--blue); margin: var(--s5) 0 var(--s2); letter-spacing: 0.02em; }
 
 /* ---------- inside a tree: the tree fills the view, blue, and its process sits over it ---------- */
 .inside { position: fixed; inset: 0; z-index: 40; background: var(--night); color: var(--ink); overflow: hidden; }
 .inside-stage { position: absolute; inset: 0; transform-origin: 0 0; transition: transform 650ms var(--ease); }
 .inside-tree { width: 100%; height: 100%; display: block; }
-.inside .garden .twig, .inside .garden .trunk, .inside .garden .bud, .inside .garden .canopy { stroke: var(--blue); }
-.inside .garden .trunk, .inside .garden .bud.kept, .inside .garden .canopy { fill: var(--blue); }
-.inside .garden .real { filter: drop-shadow(0 0 2px var(--blue)) drop-shadow(0 0 8px rgba(68, 184, 255, 0.75)); }
-.inside .leaves { z-index: 1; transition: opacity 500ms var(--ease) 250ms; }
+.inside .garden:not(.neon) .twig, .inside .garden:not(.neon) .trunk, .inside .garden:not(.neon) .bud, .inside .garden:not(.neon) .canopy { stroke: var(--blue); }
+.inside .garden:not(.neon) .trunk, .inside .garden:not(.neon) .bud.kept, .inside .garden:not(.neon) .canopy { fill: var(--blue); }
+.inside .garden:not(.neon) .real { filter: drop-shadow(0 0 2px var(--blue)) drop-shadow(0 0 8px rgba(68, 184, 255, 0.75)); }
+.inside .leaves-blue { z-index: 1; transition: opacity 500ms var(--ease) 250ms; }
 .inside .process {
   position: absolute; z-index: 2; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); overflow-y: auto;
   background: var(--night-wash); border-left: 1px solid var(--blue); padding: 0 var(--s5) var(--s7);
   transition: opacity 400ms var(--ease) 300ms;
 }
-.inside:not(.open) .process, .inside:not(.open) .leaves { opacity: 0; transition-delay: 0ms; }
+.inside:not(.open) .process, .inside:not(.open) .leaves-blue { opacity: 0; transition-delay: 0ms; }
 .inside .process header { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: baseline; gap: var(--s4);
   padding: var(--s5) 0 var(--s4); background: var(--night-2); border-bottom: 1px solid var(--rule); }
 .inside h2 { font: 800 1.5rem/1.1 var(--display); margin: 0; color: var(--ink); }
@@ -214,14 +310,14 @@ body:not([data-page="two"]) .two > *, body:not([data-page="two"]) .below > * { v
 .inside tr.chosen td:first-child::before { content: "> "; color: var(--blue); }
 body.inside-open { overflow: hidden; }
 
-/* ---------- below page two: free scrolling ---------- */
+/* ---------- below page two: free scrolling; the record straight on the dark ---------- */
 .below { background: var(--night); padding: var(--s8) max(var(--gutter), calc((100vw - var(--page)) / 2)) var(--s7); border-top: 1px solid var(--rule); }
 .below h2, .doc h1, .doc h2 { font: 800 clamp(1.5rem, 2.6vw, 2.1rem)/1.1 var(--display); margin: 0 0 var(--s4); }
-.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--s2) var(--s5); margin: 0 0 var(--s5); }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--s2) var(--s5); margin: 0 0 var(--s5); border-top: 1px solid var(--rule); padding-top: var(--s3); }
 .kv dt { font: 12px/1.6 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 .kv dd { margin: 0; font: 13.5px/1.6 var(--mono); overflow-wrap: anywhere; }
-pre.cmd { margin: 0 0 var(--s4); padding: var(--s4); border: 1px solid var(--rule); background: var(--night-2); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.log { max-height: 340px; overflow: auto; border: 1px solid var(--rule); background: var(--night-2); padding: var(--s4); font: 12.5px/1.7 var(--mono); margin: 0 0 var(--s5); }
+pre.cmd { margin: 0 0 var(--s4); padding: var(--s3) 0 0; border-top: 1px solid var(--rule); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.log { max-height: 340px; overflow: auto; border-top: 1px solid var(--rule); padding: var(--s3) 0 0; font: 12.5px/1.7 var(--mono); margin: 0 0 var(--s5); }
 .log p { margin: 0 0 var(--s2); overflow-wrap: anywhere; }
 .log b { color: var(--pink-hot); font-weight: 500; }
 .two-lines { font: 13px/1.7 var(--mono); color: var(--muted); border-left: 2px solid var(--amber); padding-left: var(--s4); margin: var(--s5) 0; }
@@ -246,5 +342,5 @@ pre.cmd { margin: 0 0 var(--s4); padding: var(--s4); border: 1px solid var(--rul
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  .leaf { top: var(--y); transform: rotate(var(--spin)); }
+  .leaf, .petal { transform: translate3d(0, var(--hold), 0) rotate(var(--spin)); }
 }
