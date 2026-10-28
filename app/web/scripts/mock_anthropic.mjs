@@ -5,8 +5,11 @@
 // `handle(req, res)` over HTTP (scripts/serve_dist.mjs mounts it at /__mock/anthropic/v1/messages
 // when asked to; the run page only lets the provider URL be overridden on 127.0.0.1 or localhost).
 //
-// Keys: "sk-ant-bad" -> 401, "sk-ant-ratelimit" -> 429, "sk-ant-nocredit" -> 400 credit message;
+// Keys: "sk-ant-bad" -> 401, "sk-ant-ratelimit" -> 429, "sk-ant-nocredit" -> 400 credit message,
+// "sk-ant-badversion" -> a long 400 of the kind a rejected anthropic-version would give;
 // anything else is accepted. Every request is checked for what the run page must send.
+
+export const LONG_400 = 'anthropic-version: "2026-10-21" is not a supported version for this request. Use one of the versions listed at https://platform.claude.com/docs/en/api/versioning, or omit the header to use your organization\'s default; beta header "server-side-fallback-2026-07-01" was also checked and is valid for this model.';
 
 export const SCRIPT = [
   ["declare_triggers", { triggers: [{ trigger: "last_gain_at_most", param: 0.0, action: "stop" }] }],
@@ -60,6 +63,7 @@ export function handle(req, res) {
     const key = req.headers["x-api-key"];
     if (key === "sk-ant-bad") return send(401, err("authentication_error", "invalid x-api-key"));
     if (key === "sk-ant-ratelimit") return send(429, err("rate_limit_error", "Number of request tokens has exceeded your per-minute rate limit"));
+    if (key === "sk-ant-badversion") return send(400, err("invalid_request_error", LONG_400));
     if (key === "sk-ant-nocredit") return send(400, err("invalid_request_error", "Your credit balance is too low to access the Anthropic API."));
     const problem = check(body, req.headers);
     if (problem) return send(400, err("invalid_request_error", `mock: ${problem}`));

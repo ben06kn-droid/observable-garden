@@ -204,7 +204,9 @@ async function start() {
   const r = out.result, t = out.tree;
   bed.finish();
   if (t) { draw(t, r, runId).setStep(Number.MAX_SAFE_INTEGER); notes.verdict(garden!, r, t.evaluations, SEED); }
-  await showRecord(r, out.log as Record<string, unknown>, model, served, moves);
+  // the prompt actually sent: the adapter's own, or the visitor's edit (a different search)
+  const prompt = { edited: opts.system !== undefined, sha256: await sha256Hex(opts.system ?? defaultPrompt) };
+  await showRecord(r, out.log as Record<string, unknown>, model, served, moves, prompt);
 }
 
 function finish(message: string, usage?: RunUsage | null) {
@@ -218,19 +220,22 @@ function finish(message: string, usage?: RunUsage | null) {
 
 // ---- the result: the record, the CLI command, the downloads, the share link
 let lastLog = "", lastResult = "", lastShare = "";
-async function showRecord(r: AuditResult, log: Record<string, unknown>, model: string, served: string, moves: number) {
+async function showRecord(r: AuditResult, log: Record<string, unknown>, model: string, served: string, moves: number, prompt: { edited: boolean; sha256: string }) {
   const gate = await loadGate();
   lastLog = JSON.stringify(log, null, 1);
   const logSha = await sha256Hex(lastLog);
   const id = await auditId({ alpha: r.alpha, B: r.B, class_sha256: info!.class_sha256!, log_sha256: logSha, panel_sha256: info!.panel_sha256!, seed: SEED, wheel: gate.wheel });
   const record = { panel_file: panelName, panel_sha256: info!.panel_sha256!, class_file: className, class_sha256: info!.class_sha256!,
-    log_sha256: logSha, model, served_by: served, budget_moves: moves, B: r.B, seed: SEED, audit_id: id, package: gate.wheel };
+    log_sha256: logSha, model, served_by: served, budget_moves: moves, prompt: prompt.edited ? "edited" : "default", prompt_sha256: prompt.sha256,
+    B: r.B, seed: SEED, audit_id: id, package: gate.wheel };
   lastResult = JSON.stringify({ format: "quixote-browser-result/1", result: r, record }, null, 1);
   $("rec-meaning").textContent = `${word(r.status)}: ${MEANING[word(r.status)] ?? ""}`;
   const ul = $("rec-reasons"); ul.replaceChildren(); for (const x of r.reasons) h("li", null, x, ul);
   const kv = $("rec-kv"); kv.replaceChildren();
   const rows: [string, string][] = [["Panel", `${panelName} · ${record.panel_sha256}`], ["Class", `${className} · ${record.class_sha256}`],
-    ["Model", served !== model ? `${model} (served by ${served})` : model], ["Budget", `${moves} moves`], ["B", r.B.toLocaleString("en")],
+    ["Model", served !== model ? `${model} (served by ${served})` : model], ["Budget", `${moves} moves`],
+    ["Prompt", prompt.edited ? `edited, not the adapter's own: a different search · ${prompt.sha256}` : `default (examples/llm_agent.py's) · ${prompt.sha256}`],
+    ["B", r.B.toLocaleString("en")],
     ["Seed", String(SEED)], ["Audit id", id], ["Package", gate.wheel]];
   for (const [k, v] of rows) { h("dt", null, k, kv); h("dd", null, v, kv); }
   $("rec-cmd").textContent = `quixote audit log.json --panel ${panelName} --class ${className} --B ${r.B} --seed ${SEED}`;

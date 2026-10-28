@@ -17,8 +17,10 @@ if (shots) mkdirSync(shots, { recursive: true });
 
 const port = 4100 + Math.floor(Math.random() * 800);
 const runPage = process.argv.includes("--run-page");   // the full run against the mock provider (scripts/mock_anthropic.mjs)
-const srv = await serve(port, { mock: runPage });
-const base = `http://127.0.0.1:${port}`;
+// --base URL: check a deployed site (a Vercel preview) instead of serving dist/ locally
+const remote = arg("--base", null);
+const srv = remote ? { close() {} } : await serve(port, { mock: runPage });
+const base = remote ? remote.replace(/\/$/, "") : `http://127.0.0.1:${port}`;
 const profile = mkdtempSync(join(tmpdir(), "qx-check-"));
 const headed = process.argv.includes("--headed");   // a real window, for the frame profile
 // --uncapped: no vsync and no frame-rate limit, so a profile shows how many frames the page can make
@@ -225,7 +227,7 @@ if (runPage) {
     const startWith = async (k, moves = 8) => evaluate(`(() => { document.getElementById('f-key').value = ${JSON.stringify(k)}; document.getElementById('f-moves').value = '${moves}'; document.getElementById('f-B').value = '500'; document.getElementById('run-form').requestSubmit(); return true; })()`);
     await startWith("");
     report.no_key = await evaluate(`document.getElementById('run-error').textContent`);
-    for (const [k, name] of [["sk-ant-bad", "bad_key"], ["sk-ant-ratelimit", "rate_limit"], ["sk-ant-nocredit", "no_credit"]]) {
+    for (const [k, name] of [["sk-ant-bad", "bad_key"], ["sk-ant-ratelimit", "rate_limit"], ["sk-ant-nocredit", "no_credit"], ["sk-ant-badversion", "bad_version"]]) {
       await startWith(k);
       await until(`!document.getElementById('start').disabled && document.getElementById('run-error').textContent.length > 0`, 60000);
       report[name] = await evaluate(`({ message: document.getElementById('run-error').textContent, key_field: document.getElementById('f-key').value, record_hidden: document.getElementById('record').hidden })`);
@@ -246,6 +248,13 @@ if (runPage) {
       cmd: document.getElementById('rec-cmd').textContent, twigs: document.querySelectorAll('#garden .real .twig').length })`);
     await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); true`); await sleep(600); await shot("run-2-verdict");
     await evaluate(`window.scrollTo(0, document.getElementById('record').offsetTop - 60); true`); await sleep(300); await shot("run-3-record");
+    report.prompt_default = await evaluate(`[...document.querySelectorAll('#rec-kv dt')].find((d) => d.textContent === 'Prompt')?.nextElementSibling.textContent`);
+    // an edited prompt is a different search, and the record says so
+    await evaluate(`(() => { const p = document.getElementById('f-prompt'); p.value = p.value + ' Prefer short searches.'; p.dispatchEvent(new Event('input')); return true; })()`);
+    await startWith(KEY, 6);
+    await until(`!document.getElementById('record').hidden && !document.getElementById('start').disabled`, 240000);
+    await sleep(500);
+    report.prompt_edited = await evaluate(`[...document.querySelectorAll('#rec-kv dt')].find((d) => d.textContent === 'Prompt')?.nextElementSibling.textContent`);
     report.key_gone = await evaluate(`({ in_text: document.body.innerText.includes(${JSON.stringify(KEY)}), in_html: document.documentElement.outerHTML.includes(${JSON.stringify(KEY)}),
       in_url: location.href.includes(${JSON.stringify(KEY)}), local: localStorage.length, session: sessionStorage.length, field: document.getElementById('f-key').value })`);
     // the share link: copied (or shown, where the clipboard is not allowed), then opened
@@ -263,7 +272,7 @@ if (runPage) {
     const model = requests.filter((r) => r.url.includes("/__mock/anthropic/"));
     report.network = { requests: requests.length, model_calls: model.length,
       elsewhere: [...new Set(requests.map((r) => new URL(r.url).origin).filter((o) => o !== base && !o.startsWith("data:") && !o.startsWith("blob:")))],
-      key_only_in_header: model.every((r) => r.headers["x-api-key"] === KEY || r.headers["x-api-key"] === "sk-ant-bad" || r.headers["x-api-key"] === "sk-ant-ratelimit" || r.headers["x-api-key"] === "sk-ant-nocredit"),
+      key_only_in_header: model.every((r) => [KEY, "sk-ant-bad", "sk-ant-ratelimit", "sk-ant-nocredit", "sk-ant-badversion"].includes(r.headers["x-api-key"])),
       key_in_any_url: requests.some((r) => r.url.includes(KEY)) };
   } catch (e) { report.error = String(e.message ?? e); }
   const exited = new Promise((r) => chrome.once("exit", r));
@@ -304,6 +313,16 @@ try {
     await until(`document.body.dataset.page === 'two'`, 5000);
     await sleep(200);
     report[`${tag}_snapped`] = await evaluate(`Math.abs(scrollY - document.getElementById('demo').offsetTop) < 3`);
+    // the header's name from page two: the carry back to the top of page one, no reload
+    if (tag === "desktop") {
+      await evaluate(`window.__noReload = 1; document.querySelector('.top .brand').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); true`);
+      await sleep(80);
+      const carrying = await evaluate(`document.getAnimations().some((a) => a.effect?.target?.tagName === 'MAIN')`);
+      await until(`document.body.dataset.page === 'one' && scrollY < 2`, 5000);
+      report.home_link = { carried: carrying, no_reload: await evaluate(`window.__noReload === 1`), at_top: await evaluate(`scrollY < 2`) };
+      for (let left = oneEnd - 1; left > 0; left -= 100) { await wheel(Math.min(100, left)); await sleep(30); }   // down page one again,
+      await sleep(900); await wheel(100); await until(`document.body.dataset.page === 'two'`, 5000); await sleep(400);   // and on to page two
+    }
     // the leeway: a small nudge up stays on page two; a nudge, a pause and another goes back; so does
     // one gesture of 40% of the viewport
     const onTwo = `document.body.dataset.page === 'two' && Math.abs(scrollY - document.getElementById('demo').offsetTop) < 3`;

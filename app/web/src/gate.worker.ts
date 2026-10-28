@@ -38,19 +38,21 @@ async function load(): Promise<void> {
 
 const API_VERSION = "2026-10-21";
 
-/** The provider's error, said plainly; the key is never part of it. */
+/** The provider's error, said plainly, with the provider's own message word for word (a 400 over the
+ *  API version or the beta header must be readable as the provider put it); the key is never part
+ *  of it. */
 function providerError(status: number, text: string, key: string): string {
-  let msg = "";
-  try { msg = String(JSON.parse(text)?.error?.message ?? ""); } catch { /* not JSON */ }
+  let msg = "", type = "";
+  try { const e = JSON.parse(text)?.error; msg = String(e?.message ?? ""); type = String(e?.type ?? ""); } catch { msg = text.trim(); }
   if (key) msg = msg.split(key).join("[key]");
-  msg = msg.slice(0, 300);
-  if (status === 401) return "The provider did not accept the API key (401).";
+  msg = msg.slice(0, 4000);                                    // a guard on size, never on what the provider said
+  if (status === 401) return `The provider did not accept the API key (401)${msg ? `: ${msg}` : "."}`;
   if (status === 403) return `The API key is not allowed to do this (403)${msg ? `: ${msg}` : ""}.`;
   if (status === 429) return `Rate limited by the provider (429)${msg ? `: ${msg}` : ""}. Wait and try again.`;
   if (status === 400 && /credit/i.test(msg)) return `Insufficient credit: ${msg}`;
   if (status === 529 || status === 503) return `The provider is overloaded (${status}). Try again shortly.`;
   if (status >= 500) return `The provider failed (${status}). Try again shortly.`;
-  return `The provider refused the request (${status})${msg ? `: ${msg}` : ""}.`;
+  return `The provider refused the request (${status}${type ? `, ${type}` : ""})${msg ? `: ${msg}` : "."}`;
 }
 
 /** One model call, synchronously, from the worker: the reply's JSON, or {"__error": message}. */
