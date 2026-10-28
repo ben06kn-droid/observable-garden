@@ -73,6 +73,12 @@ const send = (method, params = {}, sessionId) => new Promise((res, rej) => {
 });
 const traceEvents = []; let traceDone = null;
 const requests = [];
+// every response of 400 or more, by URL. The one 404 the check asks for itself is /nope.html (the 404
+// page under the CSP); any other is a page or a file the site is missing, and fails the check. The mock
+// providers' deliberate errors (the run page's error cases) are answers, not missing files.
+const failedLoads = [];
+const INTENDED = (u) => u.endsWith("/nope.html") || u.includes("/__mock/") || /^http:\/\/localhost:\d+\/v1\//.test(u);
+const missing = () => failedLoads.filter((f) => !INTENDED(f.url));
 const note = (where, kind, text) => issues.push({ where, kind, text: String(text).slice(0, 400) });
 ws.addEventListener("message", async (ev) => {
   const m = JSON.parse(ev.data);
@@ -88,6 +94,7 @@ ws.addEventListener("message", async (ev) => {
     await send("Runtime.runIfWaitingForDebugger", {}, sid).catch(() => {});
     await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sid).catch(() => {});
   } else if (m.method === "Network.requestWillBeSent") requests.push({ url: m.params.request.url, method: m.params.request.method, headers: m.params.request.headers });
+  else if (m.method === "Network.responseReceived" && m.params.response.status >= 400) failedLoads.push({ url: m.params.response.url, status: m.params.response.status });
   else if (m.method === "Runtime.exceptionThrown") note(where, "exception", m.params.exceptionDetails?.exception?.description ?? m.params.exceptionDetails?.text);
   else if (m.method === "Runtime.consoleAPICalled" && ["error", "warning"].includes(m.params.type)) note(where, "console." + m.params.type, m.params.args.map((a) => a.value ?? a.description).join(" "));
   else if (m.method === "Log.entryAdded" && ["error", "warning"].includes(m.params.entry.level)) note(where, "log." + m.params.entry.source, m.params.entry.text);
@@ -289,8 +296,9 @@ if (process.argv.includes("--pages")) {
   try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* temporary */ }
   report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text)).length;
   report.issues = issues.filter((i) => !/404/.test(i.text)).slice(0, 10);
+  report.missing = missing();
   console.log(JSON.stringify(report, null, 1));
-  process.exit(report.error || report.csp_violations || issues.some((i) => i.kind === "exception") ? 1 : 0);
+  process.exit(report.error || report.csp_violations || report.missing.length || issues.some((i) => i.kind === "exception") ? 1 : 0);
 }
 
 async function wheel(dy) { await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: 400, y: 400, deltaX: 0, deltaY: dy }, page); }
@@ -418,8 +426,9 @@ if (runPage) {
   try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* temporary */ }
   report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text)).length;
   report.issues = issues.filter((i) => !/404/.test(i.text)).slice(0, 10);
+  report.missing = missing();
   console.log(JSON.stringify(report, null, 1));
-  process.exit(report.error || report.csp_violations || issues.some((i) => i.kind === "exception") ? 1 : 0);
+  process.exit(report.error || report.csp_violations || report.missing.length || issues.some((i) => i.kind === "exception") ? 1 : 0);
 }
 
 try {
@@ -540,7 +549,9 @@ try {
   await go(`/result.html?ex=${example}`);
   await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(1600);
   await shot("9-result", true);
-  for (const p of ["/docs.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/nope.html"]) { await go(p); }
+  for (const p of ["/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html"]) { await go(p); }
+  await go("/nope.html");                                    // on purpose: the 404 page itself, under the CSP
+  report.not_found_page = await evaluate(`document.title`);
   report.author = await evaluate(`({ name: document.querySelector('.who span.by')?.textContent, mail: document.querySelector('.who a[href^="mailto:"]')?.getAttribute('href'), linkedin: document.querySelector('.who a[href*="linkedin.com"]')?.href, safe: document.querySelector('.who a[href*="linkedin.com"]')?.rel })`);
   report.paper_link = await evaluate(`[...document.querySelectorAll('a')].filter(a => a.textContent === 'Paper').every(a => a.href.startsWith('https://papers.ssrn.com/') && a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer'))`);
   await go("/docs.html"); await shot("10-docs");
@@ -571,5 +582,6 @@ try {
   try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* a temporary profile; the OS will clear it */ }
 }
 report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text)).length;
+report.missing = missing();
 console.log(JSON.stringify(report, null, 1));
-process.exit(report.error || report.csp_violations || issues.some((i) => i.kind === "exception") ? 1 : 0);
+process.exit(report.error || report.csp_violations || report.missing.length || issues.some((i) => i.kind === "exception") ? 1 : 0);

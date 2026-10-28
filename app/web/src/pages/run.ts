@@ -16,7 +16,8 @@ import type { AuditResult, InputsInfo, ProviderId, RunEvent, RunUsage, SearchTre
  *  is 200 MB, about 0.4 GB at peak, and about 16 s to build; at 85 million it is 1.9 GB and 3.5 minutes) */
 export const CLASS_CAP = 25_000_000;
 const SEED = 0;
-// thinking plus one tool call, by effort (rough: a model's own default where no level is sent)
+// thinking plus one tool call, by effort: guesses, not measurements (a model's own default where no
+// level is sent); the page labels the estimate rough and points to the running count, the real figure
 const OUT_PER_TURN: Record<string, number> = { none: 150, minimal: 200, low: 250, medium: 600, high: 1500, xhigh: 3000, max: 6000, [NOT_SENT]: 600 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -158,11 +159,12 @@ function estimate() {
   const input = n * (base + obs) + ((obs + reply) * n * (n - 1)) / 2;   // each turn resends the history so far
   const output = n * out;
   const pr = price(), id = modelId() || "the model";
-  const tokensLine = `Estimate for up to ${n - 3} moves: about ${Math.round(input / 1000)}k input and ${Math.round(output / 1000)}k output tokens`;
-  if (!pr) { $("estimate").textContent = `${tokensLine}; cost unknown (${provider().id === "local" ? "a local server has no list price" : `no list price known for ${id}`}).`; return; }
+  const tokensLine = `Rough estimate for up to ${n - 3} moves: about ${Math.round(input / 1000)}k input and ${Math.round(output / 1000)}k output tokens`;
+  const real = " The output figure is a guess by effort level, not a measurement: once the run starts, the token count under “The model's moves” is the real figure, from the provider's own usage.";
+  if (!pr) { $("estimate").textContent = `${tokensLine}; cost unknown (${provider().id === "local" ? "a local server has no list price" : `no list price known for ${id}`}).${real}`; return; }
   const dollars = (input * pr[0] + output * pr[1]) / 1e6;
   $("estimate").textContent = `${tokensLine}, at most about $${dollars < 0.1 ? dollars.toFixed(3) : dollars.toFixed(2)} at ${provider().label}'s list prices for ${id} `
-    + "(less where the provider's prompt cache applies). A model that stops early costs less.";
+    + `(less where the provider's prompt cache applies; a model that stops early costs less).${real}`;
 }
 for (const el of [fMoves, fModel, fModelId, fEffort, fPrompt]) el.addEventListener("input", estimate);
 

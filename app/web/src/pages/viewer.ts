@@ -142,8 +142,9 @@ async function showSancho() {
     if (ch !== hash) errorBox.textContent = `${cfg.name} is not the config this output was run with.`;
   }
   $("v-rec-h").textContent = registered ? "Sancho, the registered model" : "Sancho, tailored";
-  $("v-meaning").textContent = "quixote sancho reports Sancho's stream in-sample; it gives no verdict. "
-    + (registered ? "This is the registered Sancho (the default levers); its registered tests are on the Sancho page."
+  $("v-meaning").textContent = "Sharpe and config hash, not a verdict: Sancho is a fixed model, not a search, so it gets no search verdict. "
+    + "There is no search for the gate to replay; what quixote sancho writes is Sancho's stream and its in-sample Sharpe, and that is all there is to show. "
+    + (registered ? "This is the registered Sancho (the default levers); its registered tests, priced as one declared strategy, are on the Sancho page."
                   : "This config is not the registered one: a different model from the registered Sancho, labelled by its config hash.");
   $("v-reasons-h").hidden = true; $("v-reasons").replaceChildren();
   const about = (j.panel_about ?? {}) as Values, turn = (j.turnover ?? {}) as Values;
