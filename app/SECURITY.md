@@ -17,9 +17,15 @@ visitor does is sent to us.
   `np.load(..., allow_pickle=False)`), inside the worker, with size limits.
 - It stores nothing: no cookies, no local or session storage, no IndexedDB, no analytics, no
   third-party requests.
-- It handles no secrets in this phase. When a later phase lets a visitor use their own model API key,
-  the key will go from the browser straight to the provider (`connect-src` will then name
-  `https://api.anthropic.com` and `https://api.openai.com` only), held in memory for one run.
+- The run page (`run.html`) takes a visitor's own model API key. It is held in one variable in the page
+  for one run, sent with the run message to the worker, put only into the `x-api-key` header of
+  requests made from the worker straight to the provider (`connect-src` names `'self'` and
+  `https://api.anthropic.com` only), and cleared, with the field, when the run ends in any way or the
+  page is left. It is never written to storage, never in a URL, never in the log, the result or the
+  share link, and scrubbed from any error text. The panel and the class are read in the worker by the
+  package's loaders (`np.load(..., allow_pickle=False)`) with size limits (512 MB, 4 MB) and checked
+  before the key is used. The browser check (`--run-page`) verifies the key appears nowhere in the
+  page, the URL or storage, and that every request goes to the site or the provider.
 
 ## Headers (app/web/vercel.json)
 

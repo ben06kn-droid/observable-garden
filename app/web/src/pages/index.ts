@@ -37,6 +37,14 @@ const inside = makeRunView({ two, scene, panel: $("inside"), fx, tree: () => gar
 const night = (on: boolean) => { body.dataset.page = on ? "two" : "one"; };
 const scroll = startScroll({ main, two, night, reduce: reduceMotion, paused: () => inside.isOpen() });
 document.querySelectorAll<HTMLAnchorElement>('a[href="#demo"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); scroll.toTwo(); }));
+// the header's name on this page: home without a reload (a carry back from page two); a modified click
+// (a new tab or window) is left to the browser; inside a run, it closes the run first
+document.querySelector<HTMLAnchorElement>(".top .brand")?.addEventListener("click", (e) => {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  if (inside.isOpen()) { inside.close(); return; }
+  scroll.home();
+});
 
 // ---- leaves and petals (particles.ts): page one's ground is its foot, page two's is the bed's
 // parabola (bed.ts); page one's pile stays below its text

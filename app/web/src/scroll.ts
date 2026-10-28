@@ -29,7 +29,7 @@ export function startScroll(o: CutOptions) {
   const K = 12, LEEWAY = 0.4, PAUSE = 250;
   let up = 0, lastUp = 0;   // the upward input at the top of page two in the current gesture, and when it came
   let target = window.scrollY, current = window.scrollY, last = performance.now(), running = false, lastSet = -1;
-  let carry: { anim: Animation; dir: 1 | -1; started: 1 | -1 } | null = null;
+  let carry: { anim: Animation; dir: 1 | -1; started: 1 | -1; to: number } | null = null;
   const put = (y: number) => { lastSet = Math.round(y); window.scrollTo(0, y); };
   const max = () => document.documentElement.scrollHeight - window.innerHeight;
   const twoTop = () => o.two.offsetTop;
@@ -43,28 +43,28 @@ export function startScroll(o: CutOptions) {
     lastUp = now; up += -delta;
     return (fresh && nudged) || up >= LEEWAY * window.innerHeight;
   }
-  function land(dir: 1 | -1) {
+  function land(dir: 1 | -1, at?: number) {
     up = 0; lastUp = 0;
-    const y = dir > 0 ? twoTop() : oneEnd();
+    const y = at ?? (dir > 0 ? twoTop() : oneEnd());
     put(y); current = target = y;
     if (carry) { carry.anim.cancel(); carry = null; }
     o.night(dir > 0);
     o.onCarry?.("end", dir);
   }
-  function startCarry(dir: 1 | -1) {
+  function startCarry(dir: 1 | -1, at?: number) {
     if (carry) { if (carry.dir !== dir) { carry.dir = dir; carry.anim.reverse(); } return; }   // reverse in place, or absorb
     running = false;
-    const from = window.scrollY, to = dir > 0 ? twoTop() : oneEnd();
+    const from = window.scrollY, to = at ?? (dir > 0 ? twoTop() : oneEnd());
     if (dir < 0) o.night(false);
     o.onCarry?.("start", dir);
-    if (o.reduce) { land(dir); return; }
+    if (o.reduce) { land(dir, to); return; }
     // the native position stays put while the transform plays; it moves at the end, in one task
     const anim = o.main.animate([{ transform: "translate3d(0, 0, 0)" }, { transform: `translate3d(0, ${from - to}px, 0)` }],
                                 { duration: CARRY_MS, easing: CARRY_EASE, fill: "both" });
-    carry = { anim, dir, started: dir };
+    carry = { anim, dir, started: dir, to };
     anim.onfinish = () => {
       if (!carry) return;
-      if (carry.dir === carry.started) land(carry.dir);                     // arrived
+      if (carry.dir === carry.started) land(carry.dir, carry.to);           // arrived
       else { anim.cancel(); carry = null; current = target = window.scrollY; o.night(window.scrollY >= twoTop() - 1.5); o.onCarry?.("end", dir === 1 ? -1 : 1); }  // reversed home
     };
   }
@@ -126,5 +126,14 @@ export function startScroll(o: CutOptions) {
   }, { passive: true });
 
   o.night(window.scrollY >= twoTop() - 1.5);
-  return { carrying: () => !!carry, toTwo: () => { if (window.scrollY < twoTop() - 1) { put(oneEnd()); current = target = oneEnd(); startCarry(1); } } };
+  /** Home, from the header's name: from page two (or below it) the carry back, on the same curve as the
+   *  carry forward, landing at the top of page one; on page one the eased scroll to its top. No reload. */
+  function home() {
+    if (carry) return;
+    if (window.scrollY >= twoTop() - 1.5) { startCarry(-1, 0); return; }
+    target = 0;
+    if (o.reduce) { current = 0; put(0); return; }
+    if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); }
+  }
+  return { home, carrying: () => !!carry, toTwo: () => { if (window.scrollY < twoTop() - 1) { put(oneEnd()); current = target = oneEnd(); startCarry(1); } } };
 }
