@@ -10,9 +10,10 @@
 // fetch, needs SharedArrayBuffer and so cross-origin isolation (COOP and COEP headers the site does
 // not set, and COEP would constrain every resource it loads). The key arrives with the run message,
 // lives in one variable for the run's length, goes only into the request header, and is dropped when
-// the run ends; no error message ever contains it.
+// the run ends; no error message ever contains it. The same holds for every provider: only the
+// header the key travels in differs (callModel).
 import glue from "./py/glue.py?raw";
-import type { FromWorker, RunEvent, ToWorker } from "./types";
+import type { FromWorker, ProviderId, RunEvent, ToWorker } from "./types";
 
 declare const self: DedicatedWorkerGlobalScope;
 const post = (m: FromWorker) => self.postMessage(m);
@@ -40,31 +41,48 @@ const API_VERSION = "2026-10-21";
 
 /** The provider's error, said plainly, with the provider's own message word for word (a 400 over the
  *  API version or the beta header must be readable as the provider put it); the key is never part
- *  of it. */
+ *  of it. The error bodies differ: {"error": {"message", "type"}} (Anthropic, OpenAI), {"error":
+ *  {"code", "message"}} (OpenRouter), {"error": "text"} (a local server). */
 function providerError(status: number, text: string, key: string): string {
   let msg = "", type = "";
-  try { const e = JSON.parse(text)?.error; msg = String(e?.message ?? ""); type = String(e?.type ?? ""); } catch { msg = text.trim(); }
+  try {
+    const e = JSON.parse(text)?.error;
+    if (typeof e === "string") msg = e;
+    else { msg = String(e?.message ?? ""); type = String(e?.type ?? e?.code ?? ""); }
+  } catch { msg = text.trim(); }
   if (key) msg = msg.split(key).join("[key]");
   msg = msg.slice(0, 4000);                                    // a guard on size, never on what the provider said
+  if (type === String(status)) type = "";                      // OpenRouter's code repeats the status
+  const end = /[.!?]$/.test(msg) ? "" : ".";
   if (status === 401) return `The provider did not accept the API key (401)${msg ? `: ${msg}` : "."}`;
+  if (status === 402) return `Insufficient credit (402)${msg ? `: ${msg}` : "."}`;
   if (status === 403) return `The API key is not allowed to do this (403)${msg ? `: ${msg}` : ""}.`;
-  if (status === 429) return `Rate limited by the provider (429)${msg ? `: ${msg}` : ""}. Wait and try again.`;
+  if (status === 429 && type === "insufficient_quota") return `Insufficient credit (429, insufficient_quota): ${msg}`;
+  if (status === 429) return `Rate limited by the provider (429)${msg ? `: ${msg}${end}` : "."} Wait and try again.`;
   if (status === 400 && /credit/i.test(msg)) return `Insufficient credit: ${msg}`;
-  if (status === 529 || status === 503) return `The provider is overloaded (${status}). Try again shortly.`;
-  if (status >= 500) return `The provider failed (${status}). Try again shortly.`;
+  if (status === 529 || status === 503) return `The provider is overloaded (${status})${msg ? `: ${msg}${end}` : "."} Try again shortly.`;
+  if (status >= 500) return `The provider failed (${status})${msg ? `: ${msg}${end}` : "."} Try again shortly.`;
   return `The provider refused the request (${status}${type ? `, ${type}` : ""})${msg ? `: ${msg}` : "."}`;
 }
 
-/** One model call, synchronously, from the worker: the reply's JSON, or {"__error": message}. */
-function callModel(url: string, key: string, body: string): string {
+/** One model call, synchronously, from the worker: the reply's JSON, or {"__error": message}. The key
+ *  goes into one header and nowhere else: x-api-key for Anthropic, Authorization for the rest (a local
+ *  server gets it only if one was given). */
+function callModel(provider: ProviderId, url: string, key: string, body: string): string {
   const x = new XMLHttpRequest();
   x.open("POST", url, false);
   x.setRequestHeader("content-type", "application/json");
-  x.setRequestHeader("x-api-key", key);
-  x.setRequestHeader("anthropic-version", API_VERSION);
-  x.setRequestHeader("anthropic-dangerous-direct-browser-access", "true");
-  if (JSON.parse(body).fallbacks) x.setRequestHeader("anthropic-beta", "server-side-fallback-2026-07-01");
-  try { x.send(body); } catch { return JSON.stringify({ __error: "Could not reach the provider (the network, or the request was blocked)." }); }
+  if (provider === "anthropic") {
+    x.setRequestHeader("x-api-key", key);
+    x.setRequestHeader("anthropic-version", API_VERSION);
+    x.setRequestHeader("anthropic-dangerous-direct-browser-access", "true");
+    if (JSON.parse(body).fallbacks) x.setRequestHeader("anthropic-beta", "server-side-fallback-2026-07-01");
+  } else if (key) x.setRequestHeader("authorization", `Bearer ${key}`);
+  try { x.send(body); } catch {
+    return JSON.stringify({ __error: provider === "local"
+      ? "Could not reach the local server: is it running at that address, and does it allow this site's origin (for Ollama, OLLAMA_ORIGINS)?"
+      : "Could not reach the provider (the network, or the request was blocked)." });
+  }
   if (x.status === 200) return x.responseText;
   return JSON.stringify({ __error: providerError(x.status, x.responseText, key) });
 }
@@ -79,7 +97,7 @@ async function runAgent(m: Extract<ToWorker, { type: "run" }>) {
   const t0 = performance.now();
   let stopped: string | null = null;
   const call = (body: string) => {
-    const out = callModel(m.url, key, body);
+    const out = callModel(m.provider, m.url, key, body);
     if (out.startsWith('{"__error"')) stopped = JSON.parse(out).__error;
     return out;
   };
@@ -132,6 +150,20 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       return post({ type: "inspected", id: m.id, info: JSON.parse(py.globals.get("inspect_inputs")(`${dir}/panel.npz`, `${dir}/class.json`)) });
     }
     if (m.type === "run") return await runAgent(m);
+    if (m.type === "tree") {                                   // the viewer: a logged search, drawn, with no audit
+      const dir = `/work/tree-${m.id}`, enc = new TextEncoder();
+      py.FS.mkdirTree(dir);
+      py.FS.writeFile(`${dir}/log.json`, enc.encode(m.log));
+      py.FS.writeFile(`${dir}/panel.npz`, new Uint8Array(m.panel));
+      py.FS.writeFile(`${dir}/class.json`, enc.encode(m.cls));
+      try {
+        return post({ type: "search", id: m.id, tree: JSON.parse(py.globals.get("search_tree")(`${dir}/log.json`, `${dir}/panel.npz`, `${dir}/class.json`)) });
+      } catch (e) {
+        const msg = String((e as Error).message ?? e);
+        if (msg.includes("AuditRefused")) return post({ type: "refused", id: m.id, message: msg.split("AuditRefused:").pop()!.trim() });
+        throw e;
+      }
+    }
     const dir = `/work/${m.id}`;
     py.FS.mkdirTree(dir);
     const enc = new TextEncoder();

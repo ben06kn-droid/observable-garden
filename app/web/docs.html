@@ -17,7 +17,7 @@
     <a class="by" href="mailto:ben06knaster@gmail.com">ben06knaster@gmail.com</a>
     <a class="by" href="https://www.linkedin.com/in/b-knaster" target="_blank" rel="noopener noreferrer">LinkedIn</a>
   </div>
-  <nav aria-label="Main"><a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559" target="_blank" rel="noopener noreferrer">Paper</a><a href="/docs.html" aria-current="page">Docs</a><a href="/run.html">Run</a></nav>
+  <nav aria-label="Main"><a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559" target="_blank" rel="noopener noreferrer">Paper</a><a href="/docs.html" aria-current="page">Docs</a><a href="/sancho.html">Sancho</a><a href="/run.html">Run</a></nav>
 </header>
 <main class="doc" id="main">
 <p class="label">Docs</p>
@@ -30,6 +30,24 @@ pip install -e .                  # Python 3.10 or later</pre>
 <p>This audits a bundled log, a scripted searcher's moves on a small synthetic panel, and prints the verdict. Every
 verdict on this site comes with the command that reproduces it, for example:</p>
 <pre class="cmd">quixote audit examples/logs/scripted_session.json --panel examples/data/tiny_panel.npz --class examples/class.json --B 2000 --seed 0 --json</pre>
+<h2 id="panel">The panel format</h2>
+<p>A panel is one <code>.npz</code> file (<code>quixote/panel.py</code>); <code>quixote run</code>, <code>quixote audit</code> and
+<code>quixote sancho</code> all read it.</p>
+<table>
+<tr><th>array</th><th>shape</th><th></th></tr>
+<tr><td><code>returns</code></td><td>(T, M)</td><td>simple returns; NaN = not tradable in that row</td></tr>
+<tr><td><code>features</code></td><td>(T, M, K)</td><td>what a rule may use in row t (data up to row t only)</td></tr>
+<tr><td><code>feature_names</code></td><td>(K,)</td><td></td></tr>
+<tr><td><code>periods_per_year</code></td><td>scalar</td><td>252 for daily rows</td></tr>
+<tr><td><code>delay</code></td><td>scalar, default 1</td><td>features at row t earn <code>returns[t + 1 + delay]</code></td></tr>
+<tr><td><code>cost_bps</code></td><td>scalar, default 5</td><td>one-way cost per unit of turnover</td></tr>
+<tr><td><code>borrow_bps_yr</code></td><td>scalar, default 50</td><td>borrow on short weight, a year</td></tr>
+<tr><td><code>row_labels</code>, <code>asset_names</code></td><td>(T,), (M,)</td><td>optional; <code>split</code> accepts a row label</td></tr>
+</table>
+<p>A rule's book is dollar-neutral at gross 1 over the tradable assets; <code>quixote.panel.save(...)</code> writes the file.
+<a href="/sancho.html">Sancho</a> reads the same file: it builds its return-structure block from <code>returns</code>, uses
+<code>features</code> as its 40 registered features only when K is 40, and needs a few years of rows (its first scored row is
+763 with the default levers).</p>
 <h2>What a verdict means</h2>
 <table>
 <tr><th>PASS</th><td>p is below α: the submitted rule beats what the search would find on noise.</td></tr>
@@ -51,7 +69,7 @@ originals by tests: the Politis–White block length (from <code>arch</code>) an
 spaces, <code>{"B", "alpha", "class_sha256", "log_sha256", "panel_sha256", "seed", "wheel"}</code>: the inputs'
 hashes, the replicate count, the seed, α and the exact package build. Two runs with the same audit id price the same
 search on the same data with the same code. (Sancho's <em>config hash</em> is a different thing: the hash of its
-lever file, shown by the viewer.)</p>
+lever file, shown on the <a href="/sancho.html">Sancho page</a> and by the <a href="/viewer.html">Viewer</a>.)</p>
 <h2>Recorded replays (format)</h2>
 <p>Searches too large for a browser, such as the 82,240-member ETF class, will be shown as recorded replays: a run
 made locally with the package, played back here. A recording is one JSON file:</p>

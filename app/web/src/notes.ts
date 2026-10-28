@@ -106,10 +106,10 @@ export function makeNotes(spot: HTMLElement, section: HTMLElement, flowers: () =
       line.textContent = `${move} · ${count}`;
       place();
     },
-    verdict(garden: GardenHandle, r: AuditResult, evaluations: number, seed: number) {
+    verdict(garden: GardenHandle, r: AuditResult, evaluations: number, seed: number | null) {
       g = garden; mode = "verdict"; barValue = r.class_bar; subValue = r.submitted_sharpe;
       sub.textContent = "submitted 0.000"; bar.textContent = "bar 0.000";
-      line.textContent = `p ${r.p_replay === null ? "n/a" : r.p_replay.toFixed(4)} · B ${r.B.toLocaleString("en")} · ${evaluations} evaluations · seed ${seed}`;
+      line.textContent = `p ${r.p_replay === null ? "n/a" : r.p_replay.toFixed(4)} · B ${r.B.toLocaleString("en")} · ${evaluations} evaluations · seed ${seed ?? "not recorded"}`;
       big.textContent = word(r.status); big.className = `note-word ${word(r.status) === "PASS" ? "lit" : "dim"}`; big.hidden = false;
       place();
       const sv = h("span", null, null), bv = h("span", null, null);

@@ -44,10 +44,14 @@ export type ToWorker =
   | ({ type: "audit"; id: number } & AuditInputs)
   | { type: "inspect"; id: number; panel: ArrayBuffer; cls: string }
   | { type: "prompt"; id: number }
-  | { type: "run"; id: number; panel: ArrayBuffer; cls: string; key: string; url: string; opts: RunOptions; B: number; seed: number };
+  | { type: "tree"; id: number; log: string; panel: ArrayBuffer; cls: string }
+  | { type: "run"; id: number; panel: ArrayBuffer; cls: string; key: string; provider: ProviderId; url: string; opts: RunOptions; B: number; seed: number };
+
+/** Who answers the model calls; the worker sets the key's header by it and glue.py picks the request shape. */
+export type ProviderId = "anthropic" | "openai" | "openrouter" | "local";
 
 /** What the full run sends the model and the harness: the visitor's choices. */
-export interface RunOptions { model: string; effort?: string; max_moves: number; system?: string; fallbacks: boolean; seed: number; max_tokens?: number }
+export interface RunOptions { provider: ProviderId; model: string; effort?: string; max_moves: number; system?: string; fallbacks: boolean; seed: number; max_tokens?: number }
 
 export interface InputsInfo { kind?: string; size?: number; rows?: number; assets?: number; features?: number; class_name?: string; describe?: string;
   panel_sha256?: string; class_sha256?: string; table_bytes?: number; error?: string }

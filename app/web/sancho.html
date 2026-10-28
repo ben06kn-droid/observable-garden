@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quixote · Sancho</title>
+<meta name="description" content="Sancho, the fixed model: what it is, its registered result, and its levers, with the command to run it on your own machine.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="module" src="/src/pages/sancho.ts"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="who">
+    <a class="brand" href="/">Quixote</a>
+    <span class="by">Benjamin Knaster</span>
+    <a class="by" href="mailto:ben06knaster@gmail.com">ben06knaster@gmail.com</a>
+    <a class="by" href="https://www.linkedin.com/in/b-knaster" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+  </div>
+  <nav aria-label="Main"><a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559" target="_blank" rel="noopener noreferrer">Paper</a><a href="/docs.html">Docs</a><a href="/sancho.html" aria-current="page">Sancho</a><a href="/run.html">Run</a></nav>
+</header>
+<main class="doc wide" id="main">
+<p class="label">Sancho · the fixed model</p>
+<h1>Sancho</h1>
+<p class="lede"><strong>Sancho does not run on this site.</strong> Its model uses LightGBM, which has no browser build, and a
+re-implementation would not be the registered Sancho. It runs on your own machine with the package. This page is where
+you tailor it and read its results: set the levers, download the config, copy the command, and open what it writes in the
+<a href="/viewer.html">Viewer</a>.</p>
+
+<h2>What Sancho is</h2>
+<p>Sancho is the fixed model the agents are compared against: one prediction model, declared in advance, that counts as a
+single strategy, so the gate can test a non-linear strategy at the price of one trial. Its design (the penalty grids, the
+training windows) was settled on synthetic returns, without the returns of any panel it was later tested on. Every real test
+was registered first, and its stream is built walk-forward: refit every 252 rows on past rows only, with an embargo of
+h + 1 + d rows between the training rows and the row scored. Inside, ridge regressions and small gradient-boosted trees
+(LightGBM, depth 2) over price, cross-asset and volume inputs, stacked with non-negative weights.</p>
+
+<h2>The registered result</h2>
+<section class="sancho-card" aria-label="Sancho's registered result">
+  <p class="fine">Sancho's stream, with the default levers (config hash <code id="default-hash">…</code>), in the registered real-data tests (the paper's Table 3). Read from the research record; nothing here is recomputed.</p>
+  <dl class="kv">
+    <dt>French 49 industries, 1926–1989</dt>
+    <dd><strong>Certified</strong> in-sample under the recency weights at the 96% level: weighted net Sharpe 1.084, p 0.0010, weighted lower bound +0.674.
+      On the holdout, 1990–1995, the bound held: realised net Sharpe +1.646.
+      <a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/runs/french_long_b1/2026-10-11/read.txt" target="_blank" rel="noopener noreferrer">read</a>,
+      <a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/runs/french_long_b1_grade/2026-10-11-r2/read.txt" target="_blank" rel="noopener noreferrer">grading</a></dd>
+    <dt>Liquid ETFs, 2015–2024</dt>
+    <dd><strong>Refused</strong>: weighted net Sharpe 0.246, p 0.1970, weighted lower bound −0.123. On the holdout, 2025-01-02 to 2026-10-09 (1.76 years, weak), the bound held.
+      <a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/runs/etf_recent/2026-10-11/read.txt" target="_blank" rel="noopener noreferrer">read</a></dd>
+    <dt>Binance USDT perpetuals, 4h bars, 2021 – Mar 2025</dt>
+    <dd><strong>Refused</strong> (stream at d = 0): net Sharpe 0.198, p 0.3611. The holdout was not opened.
+      <a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/runs/binance_insample/2026-10-09/read.txt" target="_blank" rel="noopener noreferrer">read</a></dd>
+  </dl>
+  <p class="fine">Each claim, its registration and its commits: <a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/NOTE_MAP.md" target="_blank" rel="noopener noreferrer">research/NOTE_MAP.md</a>, rows 31 and 33 to 35.</p>
+</section>
+
+<h2>The levers</h2>
+<p>Every lever Sancho has is in one file, <code>sancho/config.json</code>; the defaults are the registered version 2, and the
+registered results apply to the default only. Change any lever below and the page writes the file <code>quixote sancho</code>
+reads, with its config hash. Nothing you set here leaves this page or is stored.</p>
+<form id="levers" class="run-form levers" novalidate></form>
+<p class="problem" id="lever-problems" role="alert"></p>
+<div class="config-out">
+  <p class="fine"><span id="cfg-kind">The registered Sancho.</span> Config hash (SHA-256 of the canonical JSON, the hash the run records): <code id="cfg-hash">…</code></p>
+  <p class="fine">A run with a tailored config is a different model from the registered Sancho, and is labelled by its config hash.</p>
+  <div class="actions">
+    <button type="button" class="run" id="cfg-download">Download config</button>
+    <button type="button" class="run" id="cfg-reset">Reset to the registered levers</button>
+  </div>
+  <h3>Run it on your machine</h3>
+  <pre class="cmd" id="cfg-cmd"></pre>
+  <p class="fine" id="cfg-rows"></p>
+  <p class="fine">It writes <code>sancho_out/sancho.json</code>: the net stream from the first scored row, its in-sample net Sharpe and
+    turnover, and the config hash. Open it in the <a href="/viewer.html">Viewer</a>.</p>
+</div>
+</main>
+<section class="below statements">
+  <p>Sancho, the fixed model, does not run here; tailor it and get the command on the <a href="/sancho.html">Sancho page</a>.</p>
+  <p>Coming soon: the adaptive phase, in which the agent can modify Sancho as it searches and is not restricted to a fixed feature panel.</p>
+</section>
+<footer class="foot">
+  <span>Quixote · MIT · computed in your browser; nothing is sent to a server</span>
+  <nav aria-label="Site"><a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559" target="_blank" rel="noopener noreferrer">Paper</a><a href="/docs.html">Docs</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://github.com/ben06kn-droid/observable-garden">Source</a></nav>
+</footer>
+</body>
+</html>
