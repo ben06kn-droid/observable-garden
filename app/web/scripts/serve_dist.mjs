@@ -2,14 +2,14 @@
 // and the rest can be tested before a deploy. Two of them only make sense over https and are left
 // out here, on plain http: `upgrade-insecure-requests` (Safari applies it to localhost and would
 // rewrite every request to an https port nobody listens on) and Strict-Transport-Security.
-// With `mock: true` (tests only, never a deploy) it also answers /__mock/anthropic/v1/messages
-// as a stand-in for the Messages API (scripts/mock_anthropic.mjs).
+// With `mock: true` (tests only, never a deploy) it also answers the /__mock/ routes, stand-ins for
+// the providers' APIs (scripts/mock_providers.mjs, and scripts/mock_anthropic.mjs for Anthropic).
 //   node scripts/serve_dist.mjs [port] [--mock]
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { handle as mockAnthropic } from "./mock_anthropic.mjs";
+import { handle as mockProviders } from "./mock_providers.mjs";
 
 const web = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(web, "dist");
@@ -23,7 +23,7 @@ export function serve(port = 4173, { mock = false } = {}) {
   return new Promise((resolve) => {
     const srv = createServer((req, res) => {
       let path = decodeURIComponent(new URL(req.url, "http://x").pathname);
-      if (mock && path === "/__mock/anthropic/v1/messages") { mockAnthropic(req, res); return; }
+      if (mock && path.startsWith("/__mock/") && mockProviders(req, res, path)) return;
       if (path.endsWith("/")) path += "index.html";
       let file = join(dist, path);
       if (!file.startsWith(dist) || !existsSync(file) || statSync(file).isDirectory()) { file = join(dist, "404.html"); res.statusCode = 404; }

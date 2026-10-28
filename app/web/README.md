@@ -23,6 +23,7 @@ Node 22.12 or later (pinned in development: 24.21.0).
 | `scripts/check_dist.mjs` (`--update`) | no inline script or style, nothing from another origin, every pinned file matches `ASSETS.lock.json` |
 | `scripts/equivalence.mjs` | the browser build against the CLI on every example (below) |
 | `scripts/browser_check.mjs` | the built site in headless Chrome under the production headers: CSP violations, errors, timings, screenshots |
+| `scripts/mock_anthropic.mjs`, `mock_providers.mjs` | stand-ins for the providers' APIs (Anthropic's Messages API, OpenAI's Responses API, chat completions as OpenRouter and a local server speak it), for tests only: each checks every request the run page sends; `--run-page` runs the page against all four |
 
 ## Why Vite
 
@@ -50,9 +51,21 @@ TypeScript and DOM: there is no framework at runtime.
 Runs the shipped build (Pyodide from `public/pyodide/`, the wheel from `public/py/`, the worker's own
 glue with both stand-ins registered, the served example copies) and `quixote audit --json` on each
 example, at the B the demo uses. Verdict, exit code, reasons and support must be identical and every
-number within 1e-9; the largest difference is reported. Last run (wheel 6a13c9a): verdicts, exit codes,
+number within 1e-9; the largest difference is reported. It also runs the full run once per provider (Anthropic,
+OpenAI, OpenRouter, a local server), each against its mock, and audits each browser-written log with the CLI; and it holds
+the Sancho page's config hash (`src/levers.ts`) equal to `sancho.config.sha256_of` on the default and tailored configs. Last run (wheel 6a13c9a): verdicts, exit codes,
 reasons and p values identical on all three; largest difference 2.2e-16, the restart example's class bar at B 500;
 every other number exactly equal.
+
+## The Sancho page and the viewer
+
+`sancho.html` (`src/pages/sancho.ts`, `src/levers.ts`): Sancho does not run in a browser (LightGBM has no browser
+build). The page edits `sancho/config.json`'s levers, writes the file `quixote sancho --config` reads, and shows its
+config hash; the install line is one constant, `src/install.ts`. `viewer.html` (`src/pages/viewer.ts`): a log and its
+result (with the panel and class, which the worker's package replays to draw the search), or `sancho.json`, drawn in
+the run page's scene (`src/scene.ts`; Sancho as the bonsai in its pot, `src/bonsai.ts`). Checked by
+`node scripts/browser_check.mjs --pages --fixtures DIR` (DIR: `result.json` from `quixote audit --json` on the bundled
+log at B 500, and `sancho_out/sancho.json` from `quixote sancho` on a panel of at least 764 rows).
 
 ## Demo examples
 

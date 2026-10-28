@@ -2,12 +2,15 @@
 // would hit: console errors, exceptions and content-security-policy violations (from the page and
 // from the gate's worker), how long the gate takes, and screenshots of each stage.
 //   node scripts/browser_check.mjs [--shots DIR] [--example nothing|planted|restart] [--chrome PATH]
+//   node scripts/browser_check.mjs --run-page        the run page against the mock providers
+//   node scripts/browser_check.mjs --pages --fixtures DIR   the Sancho page's editor and the viewer
 import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve } from "./serve_dist.mjs";
+import { serveLocal } from "./mock_providers.mjs";
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const shots = arg("--shots", null);
@@ -20,6 +23,9 @@ const runPage = process.argv.includes("--run-page");   // the full run against t
 // --base URL: check a deployed site (a Vercel preview) instead of serving dist/ locally
 const remote = arg("--base", null);
 const srv = remote ? { close() {} } : await serve(port, { mock: runPage });
+// the Local provider's mock: an OpenAI-compatible server on its own loopback port, as Ollama would be
+const localPort = port + 1000;
+const localSrv = runPage && !remote ? await serveLocal(localPort) : { close() {} };
 const base = remote ? remote.replace(/\/$/, "") : `http://127.0.0.1:${port}`;
 const profile = mkdtempSync(join(tmpdir(), "qx-check-"));
 const headed = process.argv.includes("--headed");   // a real window, for the frame profile
@@ -67,6 +73,12 @@ const send = (method, params = {}, sessionId) => new Promise((res, rej) => {
 });
 const traceEvents = []; let traceDone = null;
 const requests = [];
+// every response of 400 or more, by URL. The one 404 the check asks for itself is /nope.html (the 404
+// page under the CSP); any other is a page or a file the site is missing, and fails the check. The mock
+// providers' deliberate errors (the run page's error cases) are answers, not missing files.
+const failedLoads = [];
+const INTENDED = (u) => u.endsWith("/nope.html") || u.includes("/__mock/") || /^http:\/\/localhost:\d+\/v1\//.test(u);
+const missing = () => failedLoads.filter((f) => !INTENDED(f.url));
 const note = (where, kind, text) => issues.push({ where, kind, text: String(text).slice(0, 400) });
 ws.addEventListener("message", async (ev) => {
   const m = JSON.parse(ev.data);
@@ -82,6 +94,7 @@ ws.addEventListener("message", async (ev) => {
     await send("Runtime.runIfWaitingForDebugger", {}, sid).catch(() => {});
     await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sid).catch(() => {});
   } else if (m.method === "Network.requestWillBeSent") requests.push({ url: m.params.request.url, method: m.params.request.method, headers: m.params.request.headers });
+  else if (m.method === "Network.responseReceived" && m.params.response.status >= 400) failedLoads.push({ url: m.params.response.url, status: m.params.response.status });
   else if (m.method === "Runtime.exceptionThrown") note(where, "exception", m.params.exceptionDetails?.exception?.description ?? m.params.exceptionDetails?.text);
   else if (m.method === "Runtime.consoleAPICalled" && ["error", "warning"].includes(m.params.type)) note(where, "console." + m.params.type, m.params.args.map((a) => a.value ?? a.description).join(" "));
   else if (m.method === "Log.entryAdded" && ["error", "warning"].includes(m.params.entry.level)) note(where, "log." + m.params.entry.source, m.params.entry.text);
@@ -211,6 +224,83 @@ async function contrast(selector, samples = 6) {
   return els.map((e, n) => ({ el: e.name, worst: +worst[n].toFixed(2), px_below_4_5: lows[n].length }));
 }
 
+// --pages --fixtures DIR: the Sancho page's lever editor and the viewer. DIR holds result.json
+// (quixote audit --json on examples/logs/scripted_session.json, B 500) and sancho_out/sancho.json
+// (quixote sancho on a panel long enough for it); the log, panel and class are examples/'.
+if (process.argv.includes("--pages")) {
+  const fx = arg("--fixtures", null), ex = join(import.meta.dirname, "..", "..", "..", "examples");
+  const setFiles = async (paths) => {
+    const { result } = await send("Runtime.evaluate", { expression: "document.getElementById('v-files')" }, page);
+    await send("DOM.enable", {}, page);
+    await send("DOM.setFileInputFiles", { files: paths, objectId: result.objectId }, page);
+  };
+  try {
+    await viewport(1440, 900);
+    await go("/sancho.html");
+    await until(`/^[0-9a-f]{64}$/.test(document.getElementById('cfg-hash').textContent)`, 10000);
+    const state = () => evaluate(`({ hash: document.getElementById('cfg-hash').textContent, kind: document.getElementById('cfg-kind').textContent,
+      problems: document.getElementById('lever-problems').textContent, download_disabled: document.getElementById('cfg-download').disabled,
+      rows: document.getElementById('cfg-rows').textContent, cmd: document.getElementById('cfg-cmd').textContent })`);
+    report.sancho = { levers: await evaluate(`[...document.querySelectorAll('.lever .lever-name')].map((e) => e.textContent)`),
+      default_hash: await evaluate(`document.getElementById('default-hash').textContent`), registered: await state() };
+    await shot("sancho-1", true);
+    const setLever = (name, value) => evaluate(`(() => { const l = [...document.querySelectorAll('.lever')].find((x) => x.querySelector('.lever-name').textContent === '${name}');
+      const c = l.querySelector('input:not([type=checkbox]), select, textarea'); c.value = ${JSON.stringify(value)}; c.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+    await setLever("horizon", "1"); await sleep(300);
+    report.sancho.tailored = await state();
+    await setLever("rates", "0.3, abc"); await sleep(300);
+    report.sancho.bad_rates = await state();
+    await evaluate(`document.getElementById('cfg-reset').click(); true`); await sleep(300);
+    report.sancho.after_reset = (await state()).hash === report.sancho.registered.hash;
+    // the download: the file the page writes, read back; its hash (the page's canonical form) is the one shown
+    const dl = mkdtempSync(join(tmpdir(), "qx-dl-"));
+    await send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: dl, eventsEnabled: true });
+    await setLever("horizon", "20"); await sleep(300);
+    const shown = (await state()).hash;
+    await evaluate(`document.getElementById('cfg-download').click(); true`); await sleep(1200);
+    const text = readFileSync(join(dl, "sancho_config.json"), "utf8");
+    const L = await import("../src/levers.ts");
+    report.sancho.download = { bytes: text.length, horizon: JSON.parse(text).horizon, hash_matches_shown: (await L.configSha256(JSON.parse(text))) === shown };
+    writeFileSync(join(fx, "tailored_config.json"), text);       // for the equivalence check against sancho.config, if wanted
+
+    await go("/viewer.html");
+    await setFiles([join(ex, "logs", "scripted_session.json"), join(fx, "result.json"), join(ex, "data", "tiny_panel.npz"), join(ex, "class.json")]);
+    await until(`!document.getElementById('v-record').hidden`, 90000); await sleep(1500);
+    report.viewer_search = await evaluate(`({ files: [...document.querySelectorAll('#v-list li')].map((e) => e.textContent.split(' · ')[0]), error: document.getElementById('v-error').textContent,
+      word: document.getElementById('verdict-word')?.textContent, labels: [...document.querySelectorAll('#spot .note:not([hidden])')].map((e) => e.textContent),
+      twigs: document.querySelectorAll('#garden .real .twig').length, meaning: document.getElementById('v-meaning').textContent,
+      record: [...document.querySelectorAll('#v-kv dt')].map((d) => d.textContent + ': ' + d.nextElementSibling.textContent), cmd: document.getElementById('v-cmd').textContent })`);
+    await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); true`); await sleep(500); await shot("viewer-search");
+    await go("/viewer.html");
+    await setFiles([join(fx, "sancho_out", "sancho.json")]);
+    await until(`!document.getElementById('v-record').hidden`, 30000); await sleep(800);
+    report.viewer_sancho = await evaluate(`({ error: document.getElementById('v-error').textContent, bonsai: !!document.querySelector('#garden .bonsai'),
+      label: document.querySelector('#garden .bonsai-label')?.textContent, heading: document.getElementById('v-rec-h').textContent, meaning: document.getElementById('v-meaning').textContent,
+      record: [...document.querySelectorAll('#v-kv dt')].map((d) => d.textContent + ': ' + d.nextElementSibling.textContent), cmd: document.getElementById('v-cmd').textContent })`);
+    await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); true`); await sleep(500); await shot("viewer-sancho");
+    await evaluate(`window.scrollTo(0, 0); true`); await sleep(300); await shot("viewer-sancho-full", true);
+    // every page at phone width (375 px): no horizontal scroll, and the header's links inside the header
+    await viewport(375, 740);
+    report.phone = {};
+    for (const pg of ["/", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html"]) {
+      await go(pg); await sleep(400);
+      report.phone[pg] = await evaluate(`(() => { const t = document.querySelector('.top').getBoundingClientRect(), n = document.querySelector('.top nav').getBoundingClientRect();
+        return { page_scrolls_sideways: document.documentElement.scrollWidth > innerWidth, nav_inside: n.right <= innerWidth + 0.5 && n.left >= 0, header_height: Math.round(t.height) }; })()`);
+      if (pg === "/sancho.html") await shot("sancho-phone");
+    }
+    report.network = { requests: requests.length, elsewhere: [...new Set(requests.map((r) => new URL(r.url).origin).filter((o) => o !== base && !o.startsWith("data:") && !o.startsWith("blob:")))] };
+  } catch (e) { report.error = String(e.message ?? e); }
+  const exited = new Promise((r) => chrome.once("exit", r));
+  chrome.kill(); srv.close();
+  await Promise.race([exited, sleep(5000)]);
+  try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* temporary */ }
+  report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text)).length;
+  report.issues = issues.filter((i) => !/404/.test(i.text)).slice(0, 10);
+  report.missing = missing();
+  console.log(JSON.stringify(report, null, 1));
+  process.exit(report.error || report.csp_violations || report.missing.length || issues.some((i) => i.kind === "exception") ? 1 : 0);
+}
+
 async function wheel(dy) { await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: 400, y: 400, deltaX: 0, deltaY: dy }, page); }
 if (runPage) {
   // The run page end to end, under the production headers, with the provider replaced by the mock:
@@ -269,20 +359,76 @@ if (runPage) {
         rows: [...document.querySelectorAll('#sh-body dt')].map((d) => d.textContent) })`);
       await shot("run-4-share", true);
     }
-    const model = requests.filter((r) => r.url.includes("/__mock/anthropic/"));
+    // the other providers: OpenAI (the Responses API), OpenRouter and a local server (chat completions).
+    // For each: an error shown word for word, then a complete run; the record names the provider,
+    // the effort and the host.
+    const OTHER = { openai: "sk-test-openai-0123456789", openrouter: "sk-or-test-0123456789" };
+    report.providers = {};
+    const record = () => evaluate(`({ word: document.getElementById('verdict-word')?.textContent, moves: document.querySelectorAll('#run-log li.move').length,
+      record: Object.fromEntries([...document.querySelectorAll('#rec-kv dt')].map((d) => [d.textContent, d.nextElementSibling.textContent])),
+      estimate: document.getElementById('estimate').textContent, key_host: document.getElementById('key-host').textContent })`);
+    const choose = (id) => evaluate(`(() => { const s = document.getElementById('f-provider'); s.value = '${id}'; s.dispatchEvent(new Event('change')); return true; })()`);
+    for (const id of ["openai", "openrouter", "local"]) {
+      const out = report.providers[id] = {};
+      const t0 = Date.now();
+      await go("/run.html?provider=mock");
+      await until(`document.getElementById('f-prompt').value.length > 100 && /rows/.test(document.getElementById('in-status').textContent)`, 60000);
+      await choose(id);
+      out.efforts = await evaluate(`[...document.getElementById('f-effort').options].map((o) => o.value)`);
+      out.key_placeholder = await evaluate(`document.getElementById('f-key').placeholder`);
+      if (id === "openrouter") {
+        out.list_before_key = await evaluate(`[...document.getElementById('f-model').options].map((o) => o.textContent)`);
+        await evaluate(`(() => { const k = document.getElementById('f-key'); k.value = '${OTHER.openrouter}'; k.dispatchEvent(new Event('input')); return true; })()`);
+        await until(`[...document.getElementById('f-model').options].some((o) => o.value === 'qwen/qwen3-235b-a22b')`, 10000);
+        out.list = await evaluate(`[...document.getElementById('f-model').options].map((o) => o.value)`);
+        await evaluate(`(() => { const s = document.getElementById('f-model'); s.value = 'qwen/qwen3-235b-a22b'; s.dispatchEvent(new Event('input')); return true; })()`);
+      }
+      if (id === "local") {
+        await evaluate(`(() => { const u = document.getElementById('f-local'); u.value = 'http://example.com:11434/v1'; u.dispatchEvent(new Event('input'));
+          document.getElementById('f-model-id').value = 'qwen3:32b'; return true; })()`);
+        await startWith("");
+        out.not_local = await evaluate(`document.getElementById('run-error').textContent`);
+        await evaluate(`(() => { const u = document.getElementById('f-local'); u.value = 'http://localhost:${localPort}/v1'; u.dispatchEvent(new Event('input')); return true; })()`);
+      } else {
+        await evaluate(`document.getElementById('f-effort').value = 'none'; true`);
+        await startWith(OTHER[id] + "-badeffort");
+        await until(`!document.getElementById('start').disabled && document.getElementById('run-error').textContent.length > 0`, 60000);
+        out.bad_effort = await evaluate(`document.getElementById('run-error').textContent`);
+        await startWith(OTHER[id] + "-nocredit");
+        await until(`!document.getElementById('start').disabled && document.getElementById('run-error').textContent.length > 0`, 60000);
+        out.no_credit = await evaluate(`document.getElementById('run-error').textContent`);
+        await evaluate(`document.getElementById('f-effort').value = 'high'; true`);
+      }
+      await startWith(id === "local" ? "" : OTHER[id], 10);
+      await until(`!document.getElementById('record').hidden && !document.getElementById('start').disabled`, 240000);
+      await sleep(800);
+      Object.assign(out, await record(), { ms: Date.now() - t0 });
+      await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); true`); await sleep(500); await shot(`run-provider-${id}`);
+    }
+    const mockHosts = [base, `http://localhost:${localPort}`];
+    const model = requests.filter((r) => r.url.includes("/__mock/") && !r.url.endsWith("/models") || r.url.startsWith(`http://localhost:${localPort}/`));
+    const keys = [KEY, "sk-ant-bad", "sk-ant-ratelimit", "sk-ant-nocredit", "sk-ant-badversion", ...Object.values(OTHER).flatMap((k) => [k, k + "-badeffort", k + "-nocredit"])];
     report.network = { requests: requests.length, model_calls: model.length,
-      elsewhere: [...new Set(requests.map((r) => new URL(r.url).origin).filter((o) => o !== base && !o.startsWith("data:") && !o.startsWith("blob:")))],
-      key_only_in_header: model.every((r) => [KEY, "sk-ant-bad", "sk-ant-ratelimit", "sk-ant-nocredit", "sk-ant-badversion"].includes(r.headers["x-api-key"])),
-      key_in_any_url: requests.some((r) => r.url.includes(KEY)) };
+      by_host: Object.fromEntries([...new Set(requests.map((r) => new URL(r.url).origin))].map((o) => [o, requests.filter((r) => new URL(r.url).origin === o).length])),
+      elsewhere: [...new Set(requests.map((r) => new URL(r.url).origin).filter((o) => !mockHosts.includes(o) && !o.startsWith("data:") && !o.startsWith("blob:")))],
+      key_only_in_header: model.filter((r) => r.method === "POST").every((r) => {
+        const h = Object.fromEntries(Object.entries(r.headers).map(([k, v]) => [k.toLowerCase(), v]));
+        if (r.url.includes("/__mock/anthropic/")) return keys.includes(h["x-api-key"]) && !h.authorization;
+        if (r.url.startsWith(`http://localhost:${localPort}/`)) return !h.authorization && !h["x-api-key"];
+        return keys.includes(String(h.authorization ?? "").replace(/^Bearer /, "")) && !h["x-api-key"];
+      }),
+      models_list_without_key: requests.filter((r) => r.url.endsWith("/api/v1/models")).every((r) => !Object.keys(r.headers).some((k) => /authorization|x-api-key/i.test(k))),
+      key_in_any_url: requests.some((r) => keys.some((k) => r.url.includes(k))) };
   } catch (e) { report.error = String(e.message ?? e); }
   const exited = new Promise((r) => chrome.once("exit", r));
-  chrome.kill(); srv.close();
+  chrome.kill(); srv.close(); localSrv.close();
   await Promise.race([exited, sleep(5000)]);
   try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* temporary */ }
   report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text)).length;
   report.issues = issues.filter((i) => !/404/.test(i.text)).slice(0, 10);
+  report.missing = missing();
   console.log(JSON.stringify(report, null, 1));
-  process.exit(report.error || report.csp_violations || issues.some((i) => i.kind === "exception") ? 1 : 0);
+  process.exit(report.error || report.csp_violations || report.missing.length || issues.some((i) => i.kind === "exception") ? 1 : 0);
 }
 
 try {
@@ -403,7 +549,9 @@ try {
   await go(`/result.html?ex=${example}`);
   await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(1600);
   await shot("9-result", true);
-  for (const p of ["/docs.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/nope.html"]) { await go(p); }
+  for (const p of ["/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html"]) { await go(p); }
+  await go("/nope.html");                                    // on purpose: the 404 page itself, under the CSP
+  report.not_found_page = await evaluate(`document.title`);
   report.author = await evaluate(`({ name: document.querySelector('.who span.by')?.textContent, mail: document.querySelector('.who a[href^="mailto:"]')?.getAttribute('href'), linkedin: document.querySelector('.who a[href*="linkedin.com"]')?.href, safe: document.querySelector('.who a[href*="linkedin.com"]')?.rel })`);
   report.paper_link = await evaluate(`[...document.querySelectorAll('a')].filter(a => a.textContent === 'Paper').every(a => a.href.startsWith('https://papers.ssrn.com/') && a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer'))`);
   await go("/docs.html"); await shot("10-docs");
@@ -434,5 +582,6 @@ try {
   try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* a temporary profile; the OS will clear it */ }
 }
 report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text)).length;
+report.missing = missing();
 console.log(JSON.stringify(report, null, 1));
-process.exit(report.error || report.csp_violations || issues.some((i) => i.kind === "exception") ? 1 : 0);
+process.exit(report.error || report.csp_violations || report.missing.length || issues.some((i) => i.kind === "exception") ? 1 : 0);

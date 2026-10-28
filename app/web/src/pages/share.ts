@@ -25,7 +25,9 @@ read().then((d) => {
   const rows: [string, string][] = [["Submitted", `${(r.submitted_feature_names ?? []).join(" ")} · in-sample Sharpe ${fmt(r.submitted_sharpe, 3)}`],
     ["Bar", fmt(r.class_bar, 3)], ["p", fmt(r.p_replay, 4)], ["B", String(r.B)], ["Class size", String(r.class_size)],
     ["Panel", `${rec.panel_file} · ${rec.panel_sha256}`], ["Class", `${rec.class_file} · ${rec.class_sha256}`], ["Log", String(rec.log_sha256)],
-    ["Model", String(rec.served_by && rec.served_by !== rec.model ? `${rec.model} (served by ${rec.served_by})` : rec.model)], ["Budget", `${rec.budget_moves} moves`],
+    ...(rec.provider ? [["Provider", `${rec.provider} · ${rec.endpoint_host}`] as [string, string]] : []),   // links made before providers carry none
+    ["Model", String(rec.served_by && rec.served_by !== rec.model ? `${rec.model} (served by ${rec.served_by})` : rec.model)],
+    ...(rec.effort ? [["Effort", String(rec.effort)] as [string, string]] : []), ["Budget", `${rec.budget_moves} moves`],
     ["Prompt", rec.prompt === "edited" ? `edited, not the adapter's own: a different search · ${rec.prompt_sha256}` : `default · ${rec.prompt_sha256}`],
     ["Seed", String(rec.seed)], ["Audit id", String(rec.audit_id)], ["Package", String(rec.package)]];
   for (const [k, v] of rows) { h("dt", null, k, kv); h("dd", null, v, kv); }

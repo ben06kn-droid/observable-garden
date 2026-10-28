@@ -7,7 +7,7 @@
 // before a key is used; gate.run(...) runs their model through the harness and audits the log;
 // gate.cancel() ends a run by terminating the worker (a worker blocked in a synchronous request
 // cannot be messaged), so a cancelled run leaves nothing behind; the next call starts a new worker.
-import type { AuditInputs, AuditResult, FromWorker, InputsInfo, Progress, ReplicatePath, RunEvent, RunOptions, RunUsage, SearchTree, ToWorker } from "./types";
+import type { AuditInputs, AuditResult, FromWorker, InputsInfo, Progress, ProviderId, ReplicatePath, RunEvent, RunOptions, RunUsage, SearchTree, ToWorker } from "./types";
 
 export type { AuditInputs, AuditResult, Progress, ReplicatePath, SearchTree } from "./types";
 
@@ -19,7 +19,7 @@ export type RunOutcome =
   | { kind: "done"; log: unknown; usage: RunUsage; result: AuditResult | null; refused?: string; tree: SearchTree | null; ms: number }
   | { kind: "stopped"; message: string; usage: RunUsage | null };
 
-export interface RunInputs { panel: ArrayBuffer; cls: string; key: string; url: string; opts: RunOptions; B: number; seed: number }
+export interface RunInputs { panel: ArrayBuffer; cls: string; key: string; provider: ProviderId; url: string; opts: RunOptions; B: number; seed: number }
 
 export interface Gate {
   loadedMs: number;
@@ -29,6 +29,8 @@ export interface Gate {
   inspect(panel: ArrayBuffer, cls: string): Promise<InputsInfo>;
   prompt(): Promise<{ system: string; schemas: Record<string, unknown> }>;
   run(inputs: RunInputs, on?: { onEvent?: (e: RunEvent) => void; onProgress?: (p: Progress) => void }): Promise<RunOutcome>;
+  /** a log's search, replayed by the package and drawn; no audit */
+  tree(log: string, panel: ArrayBuffer, cls: string): Promise<{ kind: "tree"; tree: SearchTree } | { kind: "refused"; message: string }>;
 }
 
 let current: Worker | null = null, failAll: ((e: Error) => void) | null = null;
@@ -47,7 +49,7 @@ export function loadGate(): Promise<Gate> {
     current = worker;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const jobs = new Map<number, { resolve: (o: any) => void; reject: (e: Error) => void;
-      onSearch?: (t: SearchTree) => void; onProgress?: (p: Progress) => void; onEvent?: (e: RunEvent) => void }>();
+      onSearch?: (t: SearchTree) => void; onProgress?: (p: Progress) => void; onEvent?: (e: RunEvent) => void; tree?: boolean }>();
     failAll = (e) => { for (const j of jobs.values()) j.reject(e); jobs.clear(); };
     let next = 1;
     const ask = <T,>(msg: ToWorker, extra: object = {}) => new Promise<T>((res, rej) => { jobs.set((msg as { id: number }).id, { resolve: res, reject: rej, ...extra }); worker.postMessage(msg); });
@@ -67,6 +69,7 @@ export function loadGate(): Promise<Gate> {
           inspect: (panel, cls) => ask<InputsInfo>({ type: "inspect", id: next++, panel, cls }),
           prompt: () => ask({ type: "prompt", id: next++ }),
           run: (inputs, on = {}) => ask<RunOutcome>({ type: "run", id: next++, ...inputs }, on),
+          tree: (log, panel, cls) => ask({ type: "tree", id: next++, log, panel, cls }, { tree: true }),
         });
         return;
       }
@@ -78,6 +81,7 @@ export function loadGate(): Promise<Gate> {
       if (m.type === "run-event") { job.onEvent?.(m.event); return; }
       if (m.type === "run-done") { jobs.delete(m.id); job.resolve({ kind: "done", log: m.log, usage: m.usage, result: m.result, refused: m.refused, tree: m.tree, ms: m.ms }); return; }
       if (m.type === "run-stopped") { jobs.delete(m.id); job.resolve({ kind: "stopped", message: m.message, usage: m.usage }); return; }
+      if (m.type === "search" && job.tree) { jobs.delete(m.id); job.resolve({ kind: "tree", tree: m.tree }); return; }
       if (m.type === "search") job.onSearch?.(m.tree);
       else if (m.type === "progress") job.onProgress?.({ stage: m.stage, done: m.done, total: m.total });
       else if (m.type === "result") { jobs.delete(m.id); job.resolve({ kind: "result", result: m.result, replicatePaths: m.replicatePaths, ms: m.ms }); }

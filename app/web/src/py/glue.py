@@ -117,8 +117,9 @@ def run_audit(log_path, panel_path, class_path, B, seed, replicate_paths, progre
 # SCHEMAS); the request differs from that adapter only where the current models require it:
 # tool_choice "auto" with one tool call per turn (forced tool use is refused by Claude Opus 5.5 and
 # Sonnet 5.5), a max_tokens with room for the model's thinking, and the thinking blocks passed back
-# unchanged. The log `run_session` writes is the CLI's quixote-log/1, so `quixote audit` reads it
-# unchanged.
+# unchanged. Other providers get the same prompt and tools translated into their request shape
+# (`SHAPES`, below: `opts["provider"]` picks one). The log `run_session` writes is the CLI's
+# quixote-log/1 whichever provider ran, so `quixote audit` reads it unchanged.
 
 
 def inspect_inputs(panel_path, class_path):
@@ -155,6 +156,172 @@ def agent_prompt(agent_path):
     return json.dumps({"system": ns["SYSTEM"], "schemas": ns["SCHEMAS"]})
 
 
+# ---- the request shapes: one adapter per shape a provider speaks ------------------------------------
+#
+# Each shape builds the next request from the observation (`request(obs) -> body`) and reads the reply
+# (`read(reply) -> turn`): the usage, the model that served it, and at most one tool call. The model's
+# own turn goes back into the history unchanged (thinking blocks, reasoning items and reasoning
+# details included), less any tool call after the first: the harness takes one move per turn.
+#   anthropic   the Messages API (Anthropic), as examples/llm_agent.py sends it
+#   responses   the Responses API (OpenAI: its flagship models take tools only there)
+#   chat        chat completions (OpenRouter, and a local OpenAI-compatible server)
+
+
+def _tool_defs(schemas):
+    return [(n, f"the harness's `{n}` move",
+             {"type": "object", "properties": p, "required": [k for k in p if k != "note"]})
+            for n, p in schemas.items()]
+
+
+def _declined(detail):
+    raise StopRun(f"the model declined to continue{f' ({detail})' if detail else ''}")
+
+
+def _provider_error(reply):
+    """A failure inside a 200 reply (OpenRouter reports an upstream failure this way), word for word."""
+    e = reply.get("error")
+    if e:
+        msg = e.get("message") if isinstance(e, dict) else str(e)
+        raise StopRun(f"The provider reported an error: {msg}")
+
+
+def _args(raw):
+    try:
+        a = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return {}                 # not JSON: the harness refuses the move for its missing arguments
+    return a if isinstance(a, dict) else {}
+
+
+class AnthropicShape:
+    def __init__(self, system, schemas, opts):
+        self.system, self.model, self.effort = system, opts["model"], opts.get("effort")
+        self.max_tokens = int(opts.get("max_tokens", 16000))
+        self.fallbacks = bool(opts.get("fallbacks", True))
+        self.tools = [{"name": n, "description": d, "input_schema": s} for n, d, s in _tool_defs(schemas)]
+        self.messages, self.pending = [], None
+
+    def request(self, obs):
+        if self.pending is None:
+            self.messages.append({"role": "user", "content": obs})
+        else:                     # the harness's answer to the last call
+            self.messages.append({"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": self.pending, "content": obs}]})
+        body = {"model": self.model, "max_tokens": self.max_tokens, "system": self.system, "tools": self.tools,
+                "tool_choice": {"type": "auto", "disable_parallel_tool_use": True}, "messages": self.messages}
+        if self.effort:
+            body["output_config"] = {"effort": self.effort}
+        if self.fallbacks:
+            body["fallbacks"] = "default"
+        return body
+
+    def read(self, reply):
+        u = reply.get("usage") or {}
+        usage = {k: int(u.get(k) or 0) for k in ("input_tokens", "output_tokens", "cache_read_input_tokens")}
+        if reply.get("stop_reason") == "refusal":
+            return {"usage": usage, "refused": (reply.get("stop_details") or {}).get("category")}
+        content = reply.get("content") or []
+        self.messages.append({"role": "assistant", "content": content})   # thinking blocks included, unchanged
+        call = next((b for b in content if b.get("type") == "tool_use"), None)
+        self.pending = call["id"] if call else None
+        return {"usage": usage, "model": reply.get("model"), "stop_reason": reply.get("stop_reason"),
+                "text": " ".join(b.get("text", "") for b in content if b.get("type") == "text").strip(),
+                "call": (call["name"], dict(call.get("input") or {})) if call else None}
+
+
+class ResponsesShape:
+    """OpenAI's Responses API, stateless: store false, the reasoning items sent back encrypted."""
+
+    def __init__(self, system, schemas, opts):
+        self.system, self.model, self.effort = system, opts["model"], opts.get("effort")
+        self.max_tokens = int(opts.get("max_tokens", 16000))
+        self.tools = [{"type": "function", "name": n, "description": d, "parameters": s, "strict": False}
+                      for n, d, s in _tool_defs(schemas)]
+        self.items, self.pending = [], None
+
+    def request(self, obs):
+        if self.pending is None:
+            self.items.append({"role": "user", "content": obs})
+        else:
+            self.items.append({"type": "function_call_output", "call_id": self.pending, "output": obs})
+        body = {"model": self.model, "instructions": self.system, "input": self.items, "tools": self.tools,
+                "tool_choice": "auto", "parallel_tool_calls": False, "max_output_tokens": self.max_tokens,
+                "store": False, "include": ["reasoning.encrypted_content"]}
+        if self.effort:
+            body["reasoning"] = {"effort": self.effort}
+        return body
+
+    def read(self, reply):
+        _provider_error(reply)
+        u = reply.get("usage") or {}
+        usage = {"input_tokens": int(u.get("input_tokens") or 0), "output_tokens": int(u.get("output_tokens") or 0),
+                 "cache_read_input_tokens": int((u.get("input_tokens_details") or {}).get("cached_tokens") or 0)}
+        output = reply.get("output") or []
+        parts = [c for o in output if o.get("type") == "message" for c in (o.get("content") or [])]
+        refusal = next((c.get("refusal") for c in parts if c.get("type") == "refusal"), None)
+        if refusal is not None:
+            return {"usage": usage, "refused": str(refusal)[:200]}
+        calls = [o for o in output if o.get("type") == "function_call"]
+        self.items.extend(o for o in output if o.get("type") != "function_call" or o is calls[0])
+        call = calls[0] if calls else None
+        self.pending = call["call_id"] if call else None
+        reason = reply.get("status")
+        if reply.get("incomplete_details"):
+            reason = f"{reason}: {reply['incomplete_details'].get('reason')}"
+        return {"usage": usage, "model": reply.get("model"), "stop_reason": reason,
+                "text": " ".join(c.get("text", "") for c in parts if c.get("type") == "output_text").strip(),
+                "call": (call["name"], _args(call.get("arguments"))) if call else None}
+
+
+class ChatShape:
+    """Chat completions. OpenRouter takes tool_choice, parallel_tool_calls and `reasoning`; a local server
+    is sent only what Ollama documents (`tools`, `reasoning`), its default tool choice being auto."""
+
+    def __init__(self, system, schemas, opts):
+        self.model, self.effort, self.local = opts["model"], opts.get("effort"), opts.get("provider") == "local"
+        self.max_tokens = None if self.local else int(opts.get("max_tokens", 16000))
+        self.tools = [{"type": "function", "function": {"name": n, "description": d, "parameters": s}}
+                      for n, d, s in _tool_defs(schemas)]
+        self.messages, self.pending = [{"role": "system", "content": system}], None
+
+    def request(self, obs):
+        if self.pending is None:
+            self.messages.append({"role": "user", "content": obs})
+        else:
+            self.messages.append({"role": "tool", "tool_call_id": self.pending, "content": obs})
+        body = {"model": self.model, "messages": self.messages, "tools": self.tools}
+        if not self.local:
+            body.update(tool_choice="auto", parallel_tool_calls=False)
+        if self.max_tokens:
+            body["max_tokens"] = self.max_tokens
+        if self.effort:
+            body["reasoning"] = {"effort": self.effort}
+        return body
+
+    def read(self, reply):
+        _provider_error(reply)
+        u = reply.get("usage") or {}
+        usage = {"input_tokens": int(u.get("prompt_tokens") or 0), "output_tokens": int(u.get("completion_tokens") or 0),
+                 "cache_read_input_tokens": int((u.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)}
+        choice = (reply.get("choices") or [{}])[0]
+        msg = dict(choice.get("message") or {"role": "assistant", "content": ""})
+        if msg.get("refusal"):
+            return {"usage": usage, "refused": str(msg["refusal"])[:200]}
+        calls = msg.get("tool_calls") or []
+        if calls:
+            msg["tool_calls"] = calls[:1]
+        self.messages.append(msg)                # reasoning details included, unchanged
+        call = calls[0] if calls else None
+        self.pending = call.get("id") if call else None
+        fn = (call or {}).get("function") or {}
+        return {"usage": usage, "model": reply.get("model"), "stop_reason": choice.get("finish_reason"),
+                "text": (msg.get("content") or "").strip() if isinstance(msg.get("content"), str) else "",
+                "call": (fn.get("name"), _args(fn.get("arguments"))) if call else None}
+
+
+SHAPES = {"anthropic": AnthropicShape, "openai": ResponsesShape, "openrouter": ChatShape, "local": ChatShape}
+
+
 class ModelAgent:
     """next_move(view) -> dict, backed by the visitor's model (the adapter interface)."""
 
@@ -162,14 +329,8 @@ class ModelAgent:
         ns = _agent_module(agent_path)
         self.paths, self.calls, self.last_move = paths, [], None   # for drawing the tree as it grows
         self.system = opts.get("system") or ns["SYSTEM"]
-        self.model, self.effort = opts["model"], opts.get("effort")
-        self.max_tokens = int(opts.get("max_tokens", 16000))
-        self.fallbacks = bool(opts.get("fallbacks", True))
+        self.shape = SHAPES[opts.get("provider", "anthropic")](self.system, ns["SCHEMAS"], opts)
         self.call_model, self.on_event = call_model, on_event
-        self.messages, self.pending = [], None
-        self.tools = [{"name": n, "description": f"the harness's `{n}` move",
-                       "input_schema": {"type": "object", "properties": p, "required": [k for k in p if k != "note"]}}
-                      for n, p in ns["SCHEMAS"].items()]
         self.usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "requests": 0}
 
     def _observe(self, view):     # what examples/llm_agent.py shows the model, field for field
@@ -185,43 +346,24 @@ class ModelAgent:
                 self.calls.append({"tool": tool, "args": args, **view.last})
                 if tool in CONTENT + ("restart",) and view.last.get("ok") and self.paths:
                     self._tree()
-        obs = self._observe(view)
-        if self.pending is None:
-            self.messages.append({"role": "user", "content": obs})
-        else:                     # the harness's answer to the last call
-            self.messages.append({"role": "user", "content": [
-                {"type": "tool_result", "tool_use_id": self.pending, "content": obs}]})
-        body = {"model": self.model, "max_tokens": self.max_tokens, "system": self.system, "tools": self.tools,
-                "tool_choice": {"type": "auto", "disable_parallel_tool_use": True}, "messages": self.messages}
-        if self.effort:
-            body["output_config"] = {"effort": self.effort}
-        if self.fallbacks:
-            body["fallbacks"] = "default"
+        body = self.shape.request(self._observe(view))
         reply = json.loads(self.call_model(json.dumps(body)))
-        u = reply.get("usage") or {}
-        for k in ("input_tokens", "output_tokens", "cache_read_input_tokens"):
-            self.usage[k] += int(u.get(k) or 0)
+        turn = self.shape.read(reply)
+        for k, v in turn["usage"].items():
+            self.usage[k] += v
         self.usage["requests"] += 1
-        if reply.get("stop_reason") == "refusal":
-            cat = (reply.get("stop_details") or {}).get("category")
-            raise StopRun(f"the model declined to continue{f' ({cat})' if cat else ''}")
-        content = reply.get("content") or []
-        self.messages.append({"role": "assistant", "content": content})   # thinking blocks included, unchanged
-        call = next((b for b in content if b.get("type") == "tool_use"), None)
-        text = " ".join(b.get("text", "") for b in content if b.get("type") == "text").strip()
-        self.on_event(json.dumps({"type": "usage", "usage": self.usage, "model": reply.get("model")}))
-        if call is None:          # no tool named: the harness logs it as a refused move and asks again
-            self.pending = None
+        if "refused" in turn:
+            _declined(turn["refused"])
+        self.on_event(json.dumps({"type": "usage", "usage": self.usage, "model": turn.get("model")}))
+        if turn["call"] is None:  # no tool named: the harness logs it as a refused move and asks again
             self.last_move = (None, {})
-            self.on_event(json.dumps({"type": "move", "tool": None, "args": {}, "text": text[:400],
-                                      "stop_reason": reply.get("stop_reason")}))
+            self.on_event(json.dumps({"type": "move", "tool": None, "args": {}, "text": turn["text"][:400],
+                                      "stop_reason": turn.get("stop_reason")}))
             return {}
-        self.pending = call["id"]
-        move = {"tool": call["name"], **dict(call.get("input") or {})}
-        self.last_move = (call["name"], dict(call.get("input") or {}))
-        self.on_event(json.dumps({"type": "move", "tool": call["name"], "args": dict(call.get("input") or {}),
-                                  "text": text[:400]}))
-        return move
+        name, args = turn["call"]
+        self.last_move = (name, args)
+        self.on_event(json.dumps({"type": "move", "tool": name, "args": args, "text": turn["text"][:400]}))
+        return {"tool": name, **args}
 
 
     def _tree(self):
