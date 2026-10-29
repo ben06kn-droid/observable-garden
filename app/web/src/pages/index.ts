@@ -200,7 +200,9 @@ function placeSeed() {
 // the sign across the page, where no branch, flower or petal pile sits behind the names
 function placeChoice() {
   const box = $("choice"), tr = two.getBoundingClientRect(), tree = svg.querySelector(".real") ? garden?.treeRect() : null;
-  const [x, y] = tree && tree.width && innerWidth >= 760 ? freeSpot(box.offsetWidth, box.offsetHeight, tr) : [seedAt[0] + 34, seedAt[1] - box.offsetHeight - 64];   // clear of the pile on the ground
+  const moved = !!(tree && tree.width && innerWidth >= 760);
+  box.classList.toggle("moved", moved);   // in the upper left, the names only: the line on the demo has been read
+  const [x, y] = moved ? freeSpot(box.offsetWidth, box.offsetHeight, tr) : [seedAt[0] + 34, seedAt[1] - box.offsetHeight - 64];   // clear of the pile on the ground
   box.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
   choiceBox = { x: x - 12, y: y - 8, w: box.offsetWidth + 24, h: box.offsetHeight + 16 };
 }
