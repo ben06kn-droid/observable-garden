@@ -18,19 +18,23 @@ visitor does is sent to us.
 - It stores nothing: no cookies, no local or session storage, no IndexedDB, no analytics, no
   third-party requests.
 - The run page (`run.html`) takes a visitor's own model API key. It is held in one variable in the page
-  for one run, sent with the run message to the worker, put only into the `x-api-key` header of
-  requests made from the worker straight to the provider (`connect-src` names `'self'` and
-  `https://api.anthropic.com` only), and cleared, with the field, when the run ends in any way or the
-  page is left. It is never written to storage, never in a URL, never in the log, the result or the
+  for one run, sent with the run message to the worker, put only into one header (`x-api-key` for
+  Anthropic, `Authorization` for the others) of requests made from the worker straight to the provider
+  (`connect-src` names `'self'`, `https://api.anthropic.com`, `https://api.openai.com`,
+  `https://openrouter.ai`, and `http://localhost:*` and `http://127.0.0.1:*`, any port, only), and
+  cleared, with the field, when the run ends in any way or the page is left. It is never written to storage, never in a URL, never in the log, the result or the
   share link, and scrubbed from any error text. The panel and the class are read in the worker by the
   package's loaders (`np.load(..., allow_pickle=False)`) with size limits (512 MB, 4 MB) and checked
-  before the key is used. The browser check (`--run-page`) verifies the key appears nowhere in the
+  before the key is used. The panel and class files are never uploaded. The model receives the prompt
+  and tools and what the harness shows any agent: the feature names, the class name, the rule it holds,
+  the scores of the rules it tries, the stopping-rule information and the move budget; not the returns
+  or the feature values. The browser check (`--run-page`) verifies the key appears nowhere in the
   page, the URL or storage, and that every request goes to the site or the provider.
 
 ## Headers (app/web/vercel.json)
 
 - `Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self';
-  connect-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none';
+  connect-src 'self' https://api.anthropic.com https://api.openai.com https://openrouter.ai http://localhost:* http://127.0.0.1:*; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none';
   base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests`.
   Everything not named is refused. No `unsafe-inline` and no `unsafe-eval`: `scripts/check_dist.mjs` fails the build on any inline
   script, inline handler, inline style or `<style>` block, and `scripts/browser_check.mjs` runs the
