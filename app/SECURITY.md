@@ -12,11 +12,14 @@ visitor does is sent to us.
 
 ## What it does not do
 
-- It executes no code supplied by a visitor. The demo audits bundled files; later phases that read a
-  visitor's panel will parse it only with the repository's loader (`quixote.panel.read`, which calls
+- It executes no code supplied by a visitor. The demo audits bundled files; the run page and the
+  viewer read a visitor's panel only with the repository's loader (`quixote.panel.read`, which calls
   `np.load(..., allow_pickle=False)`), inside the worker, with size limits.
-- It stores nothing: no cookies, no local or session storage, no IndexedDB, no analytics, no
-  third-party requests.
+- It stores nothing: no cookies, no local or session storage, no IndexedDB, no analytics.
+- The demo contacts only this site. The run page also sends each of the model's turns to the provider
+  the visitor chose, with the visitor's key, and for OpenRouter fetches its public model list without
+  the key; a visitor's panel and class files are read in the page and never uploaded, and the key is
+  never stored or sent to us.
 - The run page (`run.html`) takes a visitor's own model API key. It is held in one variable in the page
   for one run, sent with the run message to the worker, put only into one header (`x-api-key` for
   Anthropic, `Authorization` for the others) of requests made from the worker straight to the provider
