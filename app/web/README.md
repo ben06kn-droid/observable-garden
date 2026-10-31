@@ -71,8 +71,18 @@ log at B 500, and `sancho_out/sancho.json` from `quixote sancho` on a panel of a
 
 `scripts/examples.mjs`: nothing to find (B 2000), planted edge (B 2000), a longer search (B 500: it
 declares no stop rule, so each replicate runs to its 60-move budget; at B 2000 it takes about 60 s under
-Pyodide). The 82,240-member ETF class is too large for a browser and will be a recorded replay; the
-format is in `docs.html`. No recording exists yet.
+Pyodide). The 82,240-member ETF class is too large for a browser and will be a recorded replay: a run
+made locally with the package, played back on the site. No recording exists yet. A recording is one JSON file:
+
+    {
+      "format": "quixote-replay/1",
+      "log": { ...the quixote-log/1 file the harness wrote... },
+      "result": { ...quixote.audit.AuditResult.to_dict(), plus "replicate_paths" if exported... },
+      "package": "observable_garden-0.1.0+g<commit>-py3-none-any.whl",
+      "command": "quixote audit ... --json",
+      "pace": { "search_ms": 6000, "null_ms": 8000,
+                "progress": [ { "t_ms": 0, "stage": "class", "done": 0, "total": 2000 }, ... ] }
+    }
 
 ## Deploy (Vercel)
 
