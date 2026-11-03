@@ -15,7 +15,12 @@ visitor does is sent to us.
 - It executes no code supplied by a visitor. The demo audits bundled files; the run page and the
   viewer read a visitor's panel only with the repository's loader (`quixote.panel.read`, which calls
   `np.load(..., allow_pickle=False)`), inside the worker, with size limits.
-- It stores nothing: no cookies, no local or session storage, no IndexedDB, no analytics.
+- It stores nothing: no cookies, no local or session storage, no IndexedDB.
+- It counts visits with Vercel Web Analytics: `src/common.ts` calls `inject()` from `@vercel/analytics`
+  (pinned in `package-lock.json`) with the mode fixed to production, which adds
+  `<script defer src="/_vercel/insights/script.js">`; the script sends each page view to
+  `/_vercel/insights/view`. Both are a route Vercel serves on the site's own origin, so `script-src` and
+  `connect-src` stay `'self'`. That script is Vercel's and is not in `ASSETS.lock.json`.
 - The demo contacts only this site. The run page also sends each of the model's turns to the provider
   the visitor chose, with the visitor's key, and for OpenRouter fetches its public model list without
   the key; a visitor's panel and class files are read in the page and never uploaded, and the key is

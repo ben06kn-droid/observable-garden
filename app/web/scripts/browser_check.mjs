@@ -77,7 +77,21 @@ const requests = [];
 // page under the CSP); any other is a page or a file the site is missing, and fails the check. The mock
 // providers' deliberate errors (the run page's error cases) are answers, not missing files.
 const failedLoads = [];
-const INTENDED = (u) => u.endsWith("/nope.html") || u.includes("/__mock/") || /^http:\/\/localhost:\d+\/v1\//.test(u);
+const insights = [], insightMethod = new Map();   // every /_vercel/insights/ response: the analytics script and its page-view beacon
+const analytics = () => ({
+  script: [...new Set(insights.filter((r) => r.url.endsWith("/script.js")).map((r) => `${r.status} ${r.url}`))],
+  view: insights.filter((r) => new URL(r.url).pathname === "/_vercel/insights/view").map((r) => `${r.status} ${r.method} ${r.url}`),
+  // the package's debug script, or anything else of Vercel's from another host: must stay empty
+  other_hosts: [...new Set(requests.filter((r) => /vercel|insights/.test(r.url) && new URL(r.url).origin !== base).map((r) => r.url))],
+});
+// nothing analytics-related from another host, ever; on a deployment, the script loaded and a page view was sent
+const analyticsFails = (a) => a.other_hosts.length > 0 || (remote && (!a.script.some((x) => x.startsWith("200 ")) || !a.view.some((x) => /^2\d\d /.test(x))));
+// Vercel serves /_vercel/insights/ (the analytics script and its beacon) only on a deployment: served
+// locally it is missing by design; on a deployment (--base) it must load.
+const INTENDED = (u) => u.endsWith("/nope.html") || u.includes("/__mock/") || /^http:\/\/localhost:\d+\/v1\//.test(u)
+  || (!remote && new URL(u).pathname.startsWith("/_vercel/insights/"));
+// locally, the missing script's 404 page is refused as a script (MIME type, nosniff): the same absence, not a CSP violation
+const INTENDED_REFUSAL = (t) => !remote && /^Refused to execute script from '[^']*\/_vercel\/insights\/script\.js' because its MIME type/.test(t);
 const missing = () => failedLoads.filter((f) => !INTENDED(f.url));
 const note = (where, kind, text) => issues.push({ where, kind, text: String(text).slice(0, 400) });
 ws.addEventListener("message", async (ev) => {
@@ -86,6 +100,9 @@ ws.addEventListener("message", async (ev) => {
   if (m.method === "Tracing.dataCollected") { traceEvents.push(...m.params.value); return; }
   if (m.method === "Tracing.tracingComplete") { traceDone?.(); return; }
   const where = m.sessionId ?? "browser";
+  if (m.method === "Network.requestWillBeSent" && m.params.request.url.includes("/_vercel/insights/")) insightMethod.set(m.params.requestId, m.params.request.method);
+  if (m.method === "Network.responseReceived" && m.params.response.url.includes("/_vercel/insights/"))
+    insights.push({ url: m.params.response.url, status: m.params.response.status, method: insightMethod.get(m.params.requestId) ?? "?" });
   if (m.method === "Target.attachedToTarget") {
     const sid = m.params.sessionId; sessions.add(sid);
     await send("Runtime.enable", {}, sid).catch(() => {});
@@ -294,11 +311,12 @@ if (process.argv.includes("--pages")) {
   chrome.kill(); srv.close();
   await Promise.race([exited, sleep(5000)]);
   try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* temporary */ }
-  report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text)).length;
+  report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text) && !INTENDED_REFUSAL(i.text)).length;
   report.issues = issues.filter((i) => !/404/.test(i.text)).slice(0, 10);
   report.missing = missing();
+  report.analytics = analytics();
   console.log(JSON.stringify(report, null, 1));
-  process.exit(report.error || report.csp_violations || report.missing.length || issues.some((i) => i.kind === "exception") ? 1 : 0);
+  process.exit(report.error || report.csp_violations || report.missing.length || analyticsFails(report.analytics) || issues.some((i) => i.kind === "exception") ? 1 : 0);
 }
 
 async function wheel(dy) { await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: 400, y: 400, deltaX: 0, deltaY: dy }, page); }
@@ -424,11 +442,12 @@ if (runPage) {
   chrome.kill(); srv.close(); localSrv.close();
   await Promise.race([exited, sleep(5000)]);
   try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* temporary */ }
-  report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text)).length;
+  report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text) && !INTENDED_REFUSAL(i.text)).length;
   report.issues = issues.filter((i) => !/404/.test(i.text)).slice(0, 10);
   report.missing = missing();
+  report.analytics = analytics();
   console.log(JSON.stringify(report, null, 1));
-  process.exit(report.error || report.csp_violations || report.missing.length || issues.some((i) => i.kind === "exception") ? 1 : 0);
+  process.exit(report.error || report.csp_violations || report.missing.length || analyticsFails(report.analytics) || issues.some((i) => i.kind === "exception") ? 1 : 0);
 }
 
 try {
@@ -581,7 +600,8 @@ try {
   await Promise.race([exited, sleep(5000)]);
   try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* a temporary profile; the OS will clear it */ }
 }
-report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text)).length;
+report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text) && !INTENDED_REFUSAL(i.text)).length;
 report.missing = missing();
+report.analytics = analytics();
 console.log(JSON.stringify(report, null, 1));
-process.exit(report.error || report.csp_violations || report.missing.length || issues.some((i) => i.kind === "exception") ? 1 : 0);
+process.exit(report.error || report.csp_violations || report.missing.length || analyticsFails(report.analytics) || issues.some((i) => i.kind === "exception") ? 1 : 0);
