@@ -36,7 +36,9 @@ const uncapped = process.argv.includes("--uncapped") ? ["--disable-frame-rate-li
 // on CI only: a downloaded Chrome on Ubuntu 24.04 runners cannot start its sandbox (AppArmor), and the
 // one page it loads is this site's own build
 const ci = process.env.CI ? ["--no-sandbox"] : [];
-const chrome = spawn(chromePath, [...(headed ? ["--window-size=1366,868"] : ["--headless=new"]), ...uncapped, ...ci, "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--hide-scrollbars", "about:blank"],
+// --analytics with --headed: Chrome as a plain visitor (navigator.webdriver false), so Vercel's script sends its beacons
+const visitor = process.argv.includes("--analytics") && headed ? ["--disable-blink-features=AutomationControlled"] : [];
+const chrome = spawn(chromePath, [...(headed ? ["--window-size=1366,868"] : ["--headless=new"]), ...uncapped, ...ci, ...visitor, "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--hide-scrollbars", "about:blank"],
                      { stdio: ["ignore", "ignore", "pipe"] });
 // Readiness: Chrome writes its debugging port to DevToolsActivePort in the profile once it listens;
 // poll for that file, then for /json/version answering, for up to 60 s (a cold CI runner can take well
@@ -84,8 +86,10 @@ const analytics = () => ({
   // the package's debug script, or anything else of Vercel's from another host: must stay empty
   other_hosts: [...new Set(requests.filter((r) => /vercel|insights/.test(r.url) && new URL(r.url).origin !== base).map((r) => r.url))],
 });
-// nothing analytics-related from another host, ever; on a deployment, the script loaded and a page view was sent
-const analyticsFails = (a) => a.other_hosts.length > 0 || (remote && (!a.script.some((x) => x.startsWith("200 ")) || !a.view.some((x) => /^2\d\d /.test(x))));
+// nothing analytics-related from another host, ever; on a deployment, the script loaded; and when Chrome runs as
+// a plain visitor (--analytics --headed; Vercel's script sends nothing to a headless or automated browser), page views were sent
+const analyticsFails = (a) => a.other_hosts.length > 0 || (remote && !a.script.some((x) => x.startsWith("200 ")))
+  || (visitor.length > 0 && !a.view.some((x) => /^2\d\d /.test(x)));
 // Vercel serves /_vercel/insights/ (the analytics script and its beacon) only on a deployment: served
 // locally it is missing by design; on a deployment (--base) it must load.
 const INTENDED = (u) => u.endsWith("/nope.html") || u.includes("/__mock/") || /^http:\/\/localhost:\d+\/v1\//.test(u)
@@ -156,6 +160,27 @@ if (probe) {
   }
   chrome.kill(); srv.close();
   console.log(JSON.stringify(report.probe, null, 1)); process.exit(0);
+}
+// --analytics: every page once, then what Vercel Web Analytics loaded and sent, and the CSP. Vercel's
+// script sends nothing when navigator.webdriver is set or the user agent says "Headless", so on a
+// deployment run this with --headed (Chrome without automation flags) to see the page-view beacons.
+if (process.argv.includes("--analytics")) {
+  try {
+    await viewport(1440, 900);
+    const pages = ["/", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html", "/terms.html", "/share.html", "/result.html?ex=" + example];
+    for (const p of pages) { await go(p); await sleep(1500); }
+    report.visitor = await evaluate(`({ webdriver: navigator.webdriver, headless_ua: navigator.userAgent.includes("Headless"), storage_keys: Object.keys(localStorage).concat(Object.keys(sessionStorage)), cookies: document.cookie })`);
+    await sleep(1500);
+  } catch (e) { report.error = String(e.message ?? e); }
+  const exited = new Promise((r) => chrome.once("exit", r));
+  chrome.kill(); srv.close();
+  await Promise.race([exited, sleep(5000)]);
+  report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to/i.test(i.text) && !INTENDED_REFUSAL(i.text)).length;
+  report.issues = issues.slice(0, 10);
+  report.missing = missing();
+  report.analytics = analytics();
+  console.log(JSON.stringify(report, null, 1));
+  process.exit(report.error || report.csp_violations || report.missing.length || analyticsFails(report.analytics) ? 1 : 0);
 }
 // The frame profile: what Chrome's performance panel records (devtools.timeline plus the frame
 // category), over one transition, saved as a trace the panel can open. Frames are the compositor's

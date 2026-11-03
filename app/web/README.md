@@ -22,7 +22,7 @@ Node 22.12 or later (pinned in development: 24.21.0).
 | `scripts/make_licenses.py` | `public/licenses.txt`, from the components themselves |
 | `scripts/check_dist.mjs` (`--update`) | no inline script or style, nothing from another origin, every pinned file matches `ASSETS.lock.json` |
 | `scripts/equivalence.mjs` | the browser build against the CLI on every example (below) |
-| `scripts/browser_check.mjs` | the built site in headless Chrome under the production headers: CSP violations, errors, timings, screenshots |
+| `scripts/browser_check.mjs` | the built site in headless Chrome under the production headers: CSP violations, errors, timings, screenshots; `--base URL --headed --analytics` visits every page as a plain visitor and reports the Vercel Web Analytics script and its `/_vercel/insights/view` beacons (the script sends nothing to a headless or automated browser) |
 | `scripts/mock_anthropic.mjs`, `mock_providers.mjs` | stand-ins for the providers' APIs (Anthropic's Messages API, OpenAI's Responses API, chat completions as OpenRouter and a local server speak it), for tests only: each checks every request the run page sends; `--run-page` runs the page against all four |
 
 ## Why Vite
