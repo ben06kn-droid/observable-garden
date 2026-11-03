@@ -1,6 +1,13 @@
 // What every page shares: the fonts and styles, the header's colour over paper or night, and the
 // two sentences on result pages.
 import "./styles.css";
+import { inject } from "@vercel/analytics";
+
+// Vercel Web Analytics: page views only, no cookies. The script and its beacon are this site's own
+// /_vercel/insights/ route, so the CSP's script-src and connect-src stay 'self'. The mode is fixed
+// because the package's "auto" mode, under a development build, loads a debug script from
+// va.vercel-scripts.com instead.
+inject({ mode: "production" });
 
 export const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
