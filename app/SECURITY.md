@@ -8,7 +8,7 @@ https://github.com/ben06kn-droid/observable-garden/security/advisories/new
 
 A static site. There is no server-side code, no database, no account and no API of ours: the host
 serves files, and the gate runs in the visitor's browser, in a Web Worker, under Pyodide. Nothing a
-visitor does is sent to us.
+visitor loads or types is sent to us; Vercel Web Analytics counts page visits without cookies or identifiers.
 
 ## What it does not do
 
