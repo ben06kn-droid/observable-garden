@@ -1,0 +1,13 @@
+#!/bin/sh
+# Journal this commit in the Gen vault (CLAUDE.md, "The vault"), however it was made. Never fails a
+# commit and prints nothing: where the vault isn't (the box's clones), it does nothing.
+# Enable once per clone: git config core.hooksPath .githooks
+V="${GEN_VAULT:-/Users/benk/Downloads/Obsidian/Gen}"
+PY="$(command -v python3)"
+if [ -f "$V/.scripts/vault_ctx.py" ] && [ -n "$PY" ]; then
+    GEN_VAULT="$V" "$PY" "$V/.scripts/vault_ctx.py" commit </dev/null >/dev/null 2>&1
+fi
+# core.hooksPath makes git skip .git/hooks: a post-commit hook there still runs.
+OLD="$(git rev-parse --git-common-dir)/hooks/post-commit"
+[ -x "$OLD" ] && "$OLD" "$@"
+exit 0

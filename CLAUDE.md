@@ -55,6 +55,17 @@ There is one note per day, `06 Journal/YYYY-MM-DD.md`. Obsidian's Daily notes wr
 Journal template, and the commit hook writes there too: an existing note is the day's note, repaired
 (frontmatter added if missing, placeholders filled, linked from MOC Journal) and never duplicated.
 
+## The commit hook
+Git journals every commit itself, however it is made (by Ben, an agent or a script):
+`.githooks/post-commit` calls the vault's `vault_ctx.py commit`, which writes one line per hash and
+does nothing, silently, where the vault isn't (the box's clones). Git config isn't committed, so turn it
+on once in each clone, on any machine:
+
+    git config core.hooksPath .githooks
+
+That setting makes git skip `.git/hooks`; `.githooks/post-commit` still runs a `.git/hooks/post-commit`,
+and any other hook kept there needs its own one-line wrapper in `.githooks`.
+
 ## Never
 - Copy a plan, spec or result into the vault. Summarise and link to `path@commit`.
 - Put credentials, organisation ids or key paths anywhere in the vault.
