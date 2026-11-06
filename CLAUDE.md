@@ -37,23 +37,23 @@ The SessionStart hook prints this in order; here is why:
 - When you're blocked on Ben, write the Open item, say so in one line, and stop.
 - When Ben asks a question about the project, answer from the vault and name the note.
 
+## Writing notes
+- One note per concept, holding summaries and links only. Every note has frontmatter (type, status,
+  date, source), links its MOC and at least two related notes, and the MOC links every note in its area.
+- Keep a note under 60 lines. A one-off fact goes in the note that owns it, not in a new note.
+
 ## Write back
 - A decision made: one line in `05 Cross-cutting/Decisions log.md`.
 - A result or negative result: one line in `05 Cross-cutting/Findings log.md`.
 - Anything waiting on Ben or on an agent: a line in `05 Cross-cutting/Open items.md`; close it when done.
-- Journal: a hook writes one line per commit to today's `06 Journal/` note. When you finish, add
-  links to the vault notes you touched to that note's `Related:` line.
 - Formats: the `vault-log` skill (`/vault-log`).
 
-The Stop hook blocks the end of a turn once if a commit is missing from the journal, if commits
-touched results, checks or records and the Findings log didn't change, if commits touched plans or
-prereg and the Decisions log didn't change, or if the vault has an unresolved link or a note without
-frontmatter. Do what its reason says, or say why nothing applies.
-
-## The day's journal note
-There is one note per day, `06 Journal/YYYY-MM-DD.md`. Obsidian's Daily notes write there from the
-Journal template, and the commit hook writes there too: an existing note is the day's note, repaired
-(frontmatter added if missing, placeholders filled, linked from MOC Journal) and never duplicated.
+## Journal
+- One note per day, `06 Journal/YYYY-MM-DD.md`. Obsidian's Daily notes write there from the Journal
+  template; the commit hook writes there too. An existing note is the day's note, repaired (frontmatter
+  added if missing, placeholders filled, linked from MOC Journal) and never duplicated.
+- The hook writes a line per commit. At the end of each block of work, add one to three lines of why,
+  linking the notes touched. No narration.
 
 ## The commit hook
 Git journals every commit itself, however it is made (by Ben, an agent or a script):
@@ -66,9 +66,18 @@ on once in each clone, on any machine:
 That setting makes git skip `.git/hooks`; `.githooks/post-commit` still runs a `.git/hooks/post-commit`,
 and any other hook kept there needs its own one-line wrapper in `.githooks`.
 
+## Ending
+The Stop hook checks links and the logs. It blocks the end of a turn once if a commit is missing from
+the journal, if commits touched results, checks or records and the Findings log didn't change, if
+commits touched plans or prereg and the Decisions log didn't change, or if the vault has an unresolved
+link or a note without frontmatter. Do what its reason says, or say why nothing applies. Before you
+stop, make sure every note you touched still has a valid source commit, and that today's journal lines
+link something.
+
 ## Never
-- Copy a plan, spec or result into the vault. Summarise and link to `path@commit`.
+- Paste a plan, spec, log or result into the vault. Summarise and link it at `path@commit`.
 - Put credentials, organisation ids or key paths anywhere in the vault.
+- Rename or move a note other than through Obsidian (below).
 
 ## Renaming vault notes
 On Nov 3 a MOC was renamed with "Automatically update internal links" off, and 33 links broke

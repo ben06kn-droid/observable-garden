@@ -19,8 +19,16 @@ at a commit, never copies. Write to the files directly; Obsidian is only the vie
    line with the record path; anything waiting on Ben or an agent means an Open item with owner and
    owning note. Close items when they're done.
 5. **Blocked on Ben:** write the Open item, say so in one line, and stop.
-6. **Finishing:** add the notes you touched to the day's journal `Related:` line, then run
-   `vault_check.py`.
+6. **After each block of work:** one to three journal lines of why, linking the notes touched (no
+   narration); the notes touched also go on the day's `Related:` line.
+7. **Before stopping:** every note you touched still has a valid source commit; today's journal lines
+   link something; `vault_check.py` passes (the Stop hook checks links and the logs).
+
+## A note
+- One note per concept, holding summaries and links only, under 60 lines.
+- A one-off fact goes in the note that owns it, never in a new note.
+- Frontmatter on every note (below). Each note links its MOC and at least two related notes, and the
+  MOC links every note in its area.
 
 ## Where recorded: `path@commit`
 Every log line points at the repo file that holds the evidence, at the commit that holds it:
@@ -45,8 +53,11 @@ Closing: move the row to `## Closed` (create it at the end if missing) and prefi
 `YYYY-MM-DD done:`; add the commit or note that closed it.
 
 ## Journal (`06 Journal/YYYY-MM-DD.md`)
-The commit hook writes one line per commit under `## <repo>`:
+Git's post-commit hook (`.githooks/post-commit`, which calls `vault_ctx.py commit`) writes one line per
+commit under `## <repo>`, whoever made it, once per hash:
 `- HH:MM · <repo> · \`<short>\` · <subject> · <up to five paths>`
+After each block of work, add one to three lines of why under the commit lines, linking the notes:
+`- Why: <one line> · [[<note>]]`
 At the end of a session, add the vault notes you touched to the day's `Related:` line as wikilinks.
 A new day starts from `Templates/Journal template.md` and is added to the top of `06 Journal/MOC Journal.md`
 (the hook does both). Obsidian's Daily notes also write to `06 Journal/` from that template. A day note
@@ -65,7 +76,7 @@ tags: [phase1 | phase2 | graph | sablier | decision | finding | open | registere
 ```
 
 ## Never
-- copy a plan, spec, result, prompt or record into the vault (a short quoted phrase is fine)
+- paste a plan, spec, log, result, prompt or record into the vault (a short quoted phrase is fine); link it at `path@commit`
 - write credentials, organisation ids, account ids, host aliases, IPs or key paths
 - rename or move a vault note outside Obsidian, or with "Automatically update internal links" off
 - leave an unresolved `[[wikilink]]`: check with `python3 /Users/benk/Downloads/Obsidian/Gen/.scripts/vault_check.py`
