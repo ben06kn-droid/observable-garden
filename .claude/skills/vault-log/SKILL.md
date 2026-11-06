@@ -7,6 +7,21 @@ description: Exact formats for writing back to the Gen vault (Decisions log, Fin
 The vault (`/Users/benk/Downloads/Obsidian/Gen`) is the project's map: summaries and links to repo files
 at a commit, never copies. Write to the files directly; Obsidian is only the viewer.
 
+## The procedure (vault first; the rules are in CLAUDE.md)
+1. **Before the first edit:** read the area's MOC, the note that owns the component, and the Glossary
+   for any term you're unsure of. Check the Decisions log before proposing a choice and the Findings
+   log before re-running or re-deriving anything. Take the next task from Open items.
+2. **Before a repo file:** read its note. When the note is wrong or stale, fix it in the same turn:
+   summary, path, commit (the frontmatter `source` and `date` too).
+3. **A new row, spec, run or adapter:** make its note first from `Templates/Note template.md` (what it
+   is, what was built, results, hashes, deviations, status), placeholders included. Fill it as you go.
+4. **As things happen, not at the end:** a decision means a Decisions line; a result means a Findings
+   line with the record path; anything waiting on Ben or an agent means an Open item with owner and
+   owning note. Close items when they're done.
+5. **Blocked on Ben:** write the Open item, say so in one line, and stop.
+6. **Finishing:** add the notes you touched to the day's journal `Related:` line, then run
+   `vault_check.py`.
+
 ## Where recorded: `path@commit`
 Every log line points at the repo file that holds the evidence, at the commit that holds it:
 `[plans/row5-spec.md#L580-L602](https://github.com/ben06kn-droid/<repo>/blob/<full sha>/plans/row5-spec.md#L580-L602)`.
@@ -34,7 +49,9 @@ The commit hook writes one line per commit under `## <repo>`:
 `- HH:MM · <repo> · \`<short>\` · <subject> · <up to five paths>`
 At the end of a session, add the vault notes you touched to the day's `Related:` line as wikilinks.
 A new day starts from `Templates/Journal template.md` and is added to the top of `06 Journal/MOC Journal.md`
-(the hook does both).
+(the hook does both). Obsidian's Daily notes also write to `06 Journal/` from that template. A day note
+that already exists is the day's note: the hook adds missing frontmatter, fills `{{previous}}`, links it
+from MOC Journal, and never makes a second file. Don't create a day note anywhere else.
 
 ## Frontmatter (every note)
 ```
