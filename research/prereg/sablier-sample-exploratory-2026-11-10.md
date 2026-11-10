@@ -45,4 +45,7 @@ result, enters the record of any registered panel, or is reported to Sablier unt
   which model answered; the verdict is read from the audit, the stated forecast from the `predict` move.
 
 ## Results
-_To be filled after the session: the verdict, the log's moves, the agent's stated forecast._
+**The agent session was not run (the author's, 2026-11-10): a null world with a bar near 4.9 Sharpe gives no
+information.** The panel, the class and this note are kept for round 1. The scripted smoke ran (FAIL, replay p
+0.9825); its audit warned that the submitted and procedure statistics differ although a stop rule is declared,
+which is to be investigated before any phase-1 tool is used again.
