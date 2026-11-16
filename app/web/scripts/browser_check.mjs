@@ -479,10 +479,12 @@ try {
   // ---- the scroll chain (src/chain.ts, public/carry.js): home → run → docs → Sancho and back. Reading
   // scroll is native; a carry needs the page at its end, a quiet wheel there, then a deliberate push.
   const CHAIN = [...readFileSync(join(import.meta.dirname, "..", "src", "chain.ts"), "utf8").matchAll(/\{ path: "([^"]+)", name: "[^"]+", ground: "(#[0-9a-f]{6})" \}/g)].map((m) => ({ path: m[1], ground: m[2] }));
+  const step = (s) => process.stderr.write(`[chain] ${s}\n`);   // progress, on stderr
   const here = () => evaluate(`location.pathname === "/index.html" ? "/" : location.pathname`);
   const toEnd = () => evaluate(`window.scrollTo(0, document.documentElement.scrollHeight); true`);
-  const push = async (dy, n = 10) => { for (let i = 0; i < n; i++) { await wheel(dy / n); await sleep(16); } };
-  const arrive = async (path) => { const t0 = Date.now(); while (Date.now() - t0 < 8000) { try { if (await here() === path && await evaluate(`document.readyState === "complete"`)) return true; } catch {} await sleep(50); } return false; };
+  const within = (p, ms) => Promise.race([p.catch(() => null), sleep(ms).then(() => null)]);   // a page that navigated away never answers
+  const push = async (dy, n = 10) => { for (let i = 0; i < n; i++) { await within(wheel(dy / n), 250); await sleep(16); } };
+  const arrive = async (path) => { const t0 = Date.now(); while (Date.now() - t0 < 8000) { if (await within(here(), 400) === path && await within(evaluate(`document.readyState === "complete"`), 400)) return true; await sleep(50); } return false; };
   for (const [vw, vh, tag] of [[1440, 900, "desktop"], [1366, 768, "laptop"]]) {
     await viewport(vw, vh);
     await go("/");
@@ -491,30 +493,34 @@ try {
     if (tag === "desktop") report.shake_home = await evaluate(`(() => { const g = [...document.querySelectorAll('#bg-trees .real .stem')].find((e) => { const r = e.getBoundingClientRect(); return r.left > 800 && r.top < innerHeight; });
       if (!g) return 'no tree in view'; g.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return g.getAnimations().length > 0; })()`);
     const chain = report[`${tag}_chain`] = { grounds: {} };
+    step(`${tag}: grounds`);
     for (const c of CHAIN) { await go(c.path); chain.grounds[c.path] = (await evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--ground').trim()`)) === c.ground; }
     await go("/"); await sleep(400);
-    // a push mid-read never carries; nor does the scroll that reaches the end
+    step(`${tag}: mid-read and reaching the end`);
     await evaluate(`window.scrollTo(0, (document.documentElement.scrollHeight - innerHeight) / 2); true`); await sleep(500);
-    await push(vh * 0.6); await sleep(1200);
-    chain.mid_read_stays = (await here()) === "/";
+    step(`${tag}: push mid-read`); await push(vh * 0.6); step(`${tag}: pushed`); await sleep(1200);
+    chain.mid_read_stays = (await here()) === "/"; step(`${tag}: mid-read stays ${chain.mid_read_stays}`);
     await evaluate(`window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 150); true`); await sleep(500);
     await push(vh * 0.8, 24); await sleep(1200);
-    chain.reaching_end_stays = (await here()) === "/";
+    chain.reaching_end_stays = (await here()) === "/"; step(`${tag}: reaching the end stays ${chain.reaching_end_stays}`);
     // a small push at the end fills the cue's hairline a little and stays
     await sleep(400); await push(vh * 0.1, 4); await sleep(120);
     chain.cue_fills = Number(await evaluate(`getComputedStyle(document.querySelector('.carry-next')).getPropertyValue('--push')`)) > 0;
     await sleep(1200);
     chain.small_push_stays = (await here()) === "/";
     chain.down = [];
+    step(`${tag}: down`);
     for (let i = 0; i + 1 < CHAIN.length; i++) {
       const to = CHAIN[i + 1].path;
       await toEnd(); await sleep(600);
-      const prof = await frameProfile(`${tag}-carry-${i}`, async () => { await push(vh * 0.5, 12); }, 1400);
-      const ok = await arrive(to); await sleep(300);
-      chain.down.push({ to, arrived: ok, at_top: await evaluate(`scrollY < 3`), view_transition: await evaluate(`window.__carry?.viewTransition ?? null`), frames_over_20ms: prof.frames_over_20ms, longest_frame_ms: prof.longest_frame_ms });
+      step(`${tag}: carry to ${to}`);
+      await push(vh * 0.5, 12);
+      const ok = await arrive(to); await sleep(1300);   // the carry's frames are counted by the arriving page (carry.js)
+      chain.down.push({ to, arrived: ok, at_top: await evaluate(`scrollY < 3`), view_transition: await evaluate(`window.__carry?.viewTransition ?? null`), frames: await evaluate(`window.__carry?.frames ?? null`) });
     }
     await shot(`${tag}-2-arrived-sancho`);
     chain.up = [];
+    step(`${tag}: up`);
     for (let i = CHAIN.length - 1; i > 0; i--) {
       const to = CHAIN[i - 1].path;
       await evaluate(`window.scrollTo(0, 0); true`); await sleep(600);
@@ -522,7 +528,7 @@ try {
       const ok = await arrive(to); await sleep(1000);
       chain.up.push({ to, arrived: ok, at_end: await evaluate(`Math.abs(scrollY - (document.documentElement.scrollHeight - innerHeight)) < 4`) });
     }
-    // the cue is a link: Enter on it carries
+    step(`${tag}: Enter on the cue, header link`);
     await toEnd(); await sleep(300);
     await evaluate(`document.querySelector('.carry-next').focus(); true`);
     await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page);
@@ -595,7 +601,11 @@ try {
   await go(`/result.html?ex=${example}`);
   await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(1600);
   await shot("9-result", true);
-  for (const p of ["/", "/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html"]) { await go(p); }
+  report.header_opaque = {};   // nothing reads through the header: its ground is the page's, fully opaque
+  for (const p of ["/", "/demo.html", "/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html", `/result.html?ex=${example}`]) {
+    await go(p);
+    report.header_opaque[p] = await evaluate(`(() => { const c = getComputedStyle(document.querySelector('.top')).backgroundColor, m = c.match(/rgba?\\(([^)]+)\\)/); const a = m ? m[1].split(',').map(Number) : []; return a.length === 3 || a[3] === 1; })()`);
+  }
   await go("/nope.html");                                    // on purpose: the 404 page itself, under the CSP
   report.not_found_page = await evaluate(`document.title`);
   report.author = await evaluate(`({ email_not_shown: !document.querySelector('.top').textContent.includes('@'), name: document.querySelector('.top .who .name')?.textContent, contact: document.querySelector('.top .who a[href^="mailto:"]')?.textContent, linkedin: document.querySelector('.top .who a[href*="linkedin.com"]')?.href, safe: document.querySelector('.top .who a[href*="linkedin.com"]')?.rel })`);
@@ -617,6 +627,19 @@ try {
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
   await until(`document.getElementById('inside').hidden && !document.body.classList.contains('inside-open')`, 4000);
   report.reduced = await evaluate(`({ out: !document.getElementById('demo').classList.contains('in-run'), scene: getComputedStyle(document.getElementById('scene')).transform })`);
+  // reduced motion on the chain: the same gesture carries, as an immediate navigation (no view transition)
+  await go("/run.html"); await toEnd(); await sleep(600);
+  const vh0 = 900; await push(vh0 * 0.5, 12);
+  report.reduced.chain = { arrived: await arrive("/docs.html") };
+  await sleep(400);
+  report.reduced.chain.view_transition = await evaluate(`window.__carry?.viewTransition ?? null`);
+  report.reduced.chain.at_top = await evaluate(`scrollY < 3`);
+  report.reduced.still = {};
+  for (const p of ["/", "/run.html", "/docs.html", "/sancho.html", "/demo.html", "/viewer.html"]) {
+    await go(p); await sleep(600);
+    report.reduced.still[p] = await evaluate(`document.getAnimations().filter((a) => a.playState === 'running').length`);
+    await shot(`reduced-${p.replace(/\W+/g, "") || "home"}`);
+  }
   await send("Emulation.setEmulatedMedia", { features: [] }, page);
 } catch (e) {
   report.error = String(e.message ?? e);

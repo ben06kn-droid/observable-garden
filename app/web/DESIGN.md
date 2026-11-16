@@ -126,6 +126,8 @@ action and the run page's "Try it on three bundled searches"), **viewer** (`/vie
   flash. `?carry=fallback` on any chain page forces this path for testing.
 - Reduced motion: the same gesture, then an immediate navigation. Header links and Back are plain navigations
   with no transition.
+- The rest of the gesture that made a carry (a trackpad's momentum) must not scroll the page it lands on:
+  `carry.js` swallows wheel events while they keep coming, for at most 1.2 s; the first 220 ms pause ends it.
 - `CHAIN` in `src/chain.ts` lists the pages in order with each one's ground colour, which must equal that
   theme's `--ground` (the browser check holds them equal).
 
@@ -208,3 +210,13 @@ move to the footer (which carries the author's line on every page); Contact stay
 - Nothing neon outside the demo.
 - Every page meets the standard in section 1: few elements, generous space, one idea per screen, transform and
   opacity only, 60 fps, and any animation not as good as lukres.dev's is cut.
+
+## 7. Open items for the last session (before merge)
+
+- **One cross-browser pass, Firefox included.** Walk the chain both ways in Firefox (the fallback path: cover,
+  navigation, uncover) at 1440x900 and 390x844, with every page's shots, and again in Safari and Chrome.
+  Firefox is not yet installed on the development machine; drive it with geckodriver.
+- **Run the equivalence script**, `node scripts/equivalence.mjs --python python3`: the gate, worker, wheel and
+  examples were not touched by the revamp, and this confirms it.
+- The empty tree area on the run page and the viewer before a run is loaded: settled in those pages' sessions.
+- The run, docs, Sancho and viewer colours are interim until each page's session.
