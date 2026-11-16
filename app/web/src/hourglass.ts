@@ -29,6 +29,8 @@ export interface HourglassOptions {
 // the sand: one warm tone, four close shades; the glass's colours come from the page's tokens
 // (--hg-ground, --hg-line), so they follow the page's palette
 const SAND = ["#d6b27b", "#d1ab73", "#dbb883", "#cea86f"];
+const SAND_RGB = SAND.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+const SUB = 2;   // the sand's drawing: samples per grid cell, each way
 const rgb = (c: string): [number, number, number] => {
   const m = c.trim().match(/^#([0-9a-f]{6})$/i);
   if (m) return [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) as [number, number, number];
@@ -115,11 +117,16 @@ export class Hourglass {
   private arrived = false; private turned = false; private locked = false;
   // a run: the sand that may pass the neck is the share of the move budget spent
   private gate: { total: number; passed: number; share: number } | null = null;
+  // after a run's turn, the sand that fell to the far end spreads level (so the run's sand builds one
+  // clean cone on it); the neck stays shut until it has
+  private level = 0;
   private done: (() => void) | null = null;
   // sand
   private cs = 1.75; private gw = 0; private gh = 0; private mask!: Uint8Array; private cell!: Uint8Array; private stamp!: Uint16Array; private air!: Uint8Array; private drift: [number, number] = [0, 0]; private tick = 1;
   private order: Int32Array | null = null; private orderR: Int32Array | null = null; private orderG = [9, 9];
   private img!: ImageData; private sandCanvas!: HTMLCanvasElement;
+  // the sand is drawn smooth: its occupancy, softened, sampled at twice the grid, edged by a smoothstep
+  private dirty = true; private occ!: Float32Array; private soft!: Float32Array; private shadeOf!: Uint8Array;
   private stir: { x: number; y: number; vx: number; vy: number; t: number; used?: boolean } | null = null;
   private raf = 0; private last = 0; private running = false; private hint: HTMLElement;
 
@@ -133,7 +140,7 @@ export class Hourglass {
     this.back.className = "hg-back"; this.front.className = "hg-front";
     for (const c of [this.back, this.front]) c.setAttribute("aria-hidden", "true");
     // the hint, until the first turn of the visit
-    this.hint = document.createElement("p"); this.hint.className = "hg-hint"; this.hint.textContent = "Click to invert"; this.hint.setAttribute("aria-hidden", "true");
+    this.hint = document.createElement("p"); this.hint.className = "hg-hint"; this.hint.textContent = "Drag to turn"; this.hint.setAttribute("aria-hidden", "true");
     let seen = false; try { seen = sessionStorage.getItem("hg-turned") === "1"; } catch { /* no storage: show it */ }
     if (seen || this.reduce) this.hint.classList.add("gone");
     // what takes the pointer: the glass and its caps, not the whole (mostly clear) square it is drawn in,
@@ -159,6 +166,8 @@ export class Hourglass {
     const a = t.getBoundingClientRect(), b = this.back.getBoundingClientRect();
     return [a.left - b.left, a.top - b.top];
   }
+  /** the glass's own measures, in px: its height, the bulb's half width, the glass's half height */
+  measures() { return { H: this.H, R: PROFILE.bulb * this.H, gy: this.glass / 2, size: this.size }; }
   /** stop drawing and take the glass off the page (a layout change builds a new one) */
   destroy() { this.stop(); this.el.remove(); }
 
@@ -184,20 +193,22 @@ export class Hourglass {
   finish(): Promise<void> {
     if (!this.gate) return Promise.resolve();
     this.gate.share = 1;
-    if (this.reduce) { for (let s = 0; s < 3000 && !this.settledEmpty(); s++) this.stepSand(); this.render(); this.endRun(); return Promise.resolve(); }
+    if (this.reduce) { for (let s = 0; s < 8000 && !(this.moved === 0 && this.upperCount() === 0 && s > 10); s++) this.stepSand(); this.render(); this.endRun(); return Promise.resolve(); }
     return new Promise((res) => { this.done = res; window.setTimeout(() => { if (this.done) { this.endRun(); } }, 15000); });
   }
-  private endRun() { this.gate = null; this.locked = false; this.el.classList.remove("locked"); const d = this.done; this.done = null; d?.(); }
+  private endRun() { this.gate = null; this.level = 0; this.locked = false; this.el.classList.remove("locked"); const d = this.done; this.done = null; d?.(); }
   // once the glass has turned over for a run: the grains now above the neck are the whole budget
   private armGate() {
     if (!this.gate || this.gate.total) return;
     const g = this.gravity(), mid = this.gh / 2; let n = 0;
     for (let k = 0; k < this.cell.length; k++) if (this.cell[k] && ((Math.floor(k / this.gw) - mid) * g[1] + ((k % this.gw) - (this.gw - 1) / 2) * g[0]) < 0) n++;
-    this.gate.total = Math.max(1, n);
+    this.gate.total = Math.max(1, n); this.level = performance.now();
   }
+  private upper(k: number, g = this.gravity()) { return ((Math.floor(k / this.gw) - this.gh / 2) * g[1] + ((k % this.gw) - (this.gw - 1) / 2) * g[0]) < 0; }
+  private upperCount() { const g = this.gravity(); let n = 0; for (let k = 0; k < this.cell.length; k++) if (this.cell[k] && this.upper(k, g)) n++; return n; }
   // the last grain that will flow has landed: none has passed the neck for a moment and the sand is still
   // (a few may stay on the upper bulb's walls, as in a real glass)
-  private settledEmpty() { return performance.now() - this.lastPass > 400 && this.moved < 4; }
+  private settledEmpty() { return performance.now() - this.lastPass > 400 && this.moved === 0 && this.upperCount() === 0; }
   private moved = 0; private lastPass = 0;
 
   private layout() {
@@ -309,8 +320,9 @@ export class Hourglass {
     const shade = () => 1 + Math.floor(rnd() * SAND.length);
     for (let q = 0; q < inTop; q++) this.cell[top[q]] = shade();
     for (let q = 0; q < total - inTop; q++) this.cell[bot[q]] = shade();
-    this.img = new ImageData(this.gw, this.gh);
-    this.sandCanvas = document.createElement("canvas"); this.sandCanvas.width = this.gw; this.sandCanvas.height = this.gh;
+    this.img = new ImageData(this.gw * SUB, this.gh * SUB);
+    this.sandCanvas = document.createElement("canvas"); this.sandCanvas.width = this.gw * SUB; this.sandCanvas.height = this.gh * SUB;
+    this.occ = new Float32Array(n); this.soft = new Float32Array(n); this.shadeOf = new Uint8Array(n);
     for (let s = 0; s < 220; s++) this.stepSand(rnd);   // let it settle
   }
   private gravity(): [number, number] { return [Math.sin(this.angle), Math.cos(this.angle)]; }
@@ -352,7 +364,10 @@ export class Hourglass {
     // during a run the neck lets through only the spent share of the budget (and nothing until the glass
     // has turned over); the neck's middle row is where a grain counts as through
     const neckRow = Math.floor(Hh / 2), neckCol = (W - 1) / 2, gate = this.gate;
-    let moved = 0;
+    const ending = !!gate && gate.share >= 1, levelling = !!gate && this.level > 0;
+    const across = (sgn: number) => { const d = sgn < 0 ? dl : dr; return [d[0] - d0[0], d[1] - d0[1]]; };   // level, either way
+    const up = (i: number, j: number) => ((j - Hh / 2) * g[1] + (i - neckCol) * g[0]) < 0;
+    let moved = 0, movedLow = 0;
 
     for (const k of (t & 1 ? this.order : this.orderR!)) {
       const v = cell[k]; if (!v || st[k] === t) continue;
@@ -373,7 +388,7 @@ export class Hourglass {
         if (ok(i + d0[0], j + d0[1])) {
           if (falls >= 1) break;
           if (gate && j === neckRow && i === neckCol) {
-            if (!gate.total || gate.passed >= gate.share * gate.total) break;
+            if (!gate.total || this.level || gate.passed >= gate.share * gate.total) break;
             gate.passed++; this.lastPass = performance.now();
           }
           to = (j + d0[1]) * W + i + d0[0]; falls++;
@@ -382,7 +397,7 @@ export class Hourglass {
         // the glass less often still, so the top drains from its middle into a crater while the sand on
         // the walls holds; a grain already sliding keeps going
         // (a grain that fell this step is in the air, not resting: it does not slide until the next)
-        else if (falls === 0 && rnd() < (slides ? 0.9 : wallBy(i, j) ? 0.5 : 0.85)) {
+        else if (falls === 0 && rnd() < (ending ? 1 : slides ? 0.9 : wallBy(i, j) ? 0.5 : 0.85)) {
           // a grain slides only off an open edge (the cells beside it on that side are empty), so the gap
           // a falling grain leaves rises straight up and the sand beside it caves in along its slope: one
           // across and one down, or, a little less often, two across and one down, so it rests at about
@@ -398,11 +413,31 @@ export class Hourglass {
           }
           if (to >= 0) slides++;
         }
+        // a grain at rest, during a run: in the lower bulb while the bed levels, it moves one cell toward
+        // the nearest drop within reach, so the bed ends flat; in the upper bulb once the run is over, one
+        // cell toward the neck, so no grain stays on the glass
+        if (to < 0 && hop === 0 && falls === 0 && slides === 0 && (levelling || ending)) {
+          const top = up(i, j);
+          if (top && ending) {
+            for (const sgn of [-1, 1]) { const h = across(sgn); if (h[0] * (neckCol - i) + h[1] * (neckRow - j) > 0 && ok(i + h[0], j + h[1])) { to = (j + h[1]) * W + i + h[0]; break; } }
+          } else if (!top && levelling) {
+            const first = rnd() < 0.5 ? -1 : 1;
+            for (const sgn of [first, -first]) {
+              const h = across(sgn);
+              for (let q = 1; q <= 16; q++) { const pi = i + h[0] * q, pj = j + h[1] * q; if (!ok(pi, pj)) break; if (ok(pi + d0[0], pj + d0[1])) { to = (j + h[1]) * W + i + h[0]; break; } }
+              if (to >= 0) break;
+            }
+          }
+          if (to >= 0) slides++;
+        }
         if (to < 0) break;
+        if (!up(i, j)) movedLow++;
         cell[to] = v; cell[at] = 0; st[to] = t; at = to; i = to % W; j = (to / W) | 0; moved++;
       }
     }
-    this.moved = moved;
+    this.moved = moved; if (moved) this.dirty = true;
+    // the bed is level once nothing in the lower bulb moves (or after three seconds at most)
+    if (levelling && (movedLow === 0 || performance.now() - this.level > 3000)) this.level = 0;
 
     // the cursor is a wind over the sand (as it is over the home page's leaves): grains near it (within
     // about twenty pixels) are thrown up out of the sand and along its path, through open cells only,
@@ -436,16 +471,52 @@ export class Hourglass {
             if (!ok(ti, tj)) break;
             cell[tj * W + ti] = cell[aj * W + ai]; cell[aj * W + ai] = 0; st[tj * W + ti] = t; ai = ti; aj = tj;
           }
-          if (ai !== i || aj !== j) air[aj * W + ai] = 3 + Math.floor(rnd() * 5);   // in the air a few steps
+          if (ai !== i || aj !== j) { air[aj * W + ai] = 3 + Math.floor(rnd() * 5); this.dirty = true; }   // in the air a few steps
         }
       }
     }
   }
   private paintSand() {
-    const d = this.img.data, cell = this.cell, cols = SAND.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
-    for (let k = 0; k < cell.length; k++) {
-      const v = cell[k], o = k * 4;
-      if (v) { const c = cols[v - 1]; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255; } else d[o + 3] = 0;
+    if (!this.dirty) return; this.dirty = false;
+    const W = this.gw, Hh = this.gh, cell = this.cell, mask = this.mask, occ = this.occ, soft = this.soft, shade = this.shadeOf;
+    const at = (i: number, j: number) => (i >= 0 && j >= 0 && i < W && j < Hh ? cell[j * W + i] : 0);
+    const neck = Math.max(3, Math.round(Hh * 0.06));
+    // occupancy; a cell of glass next to a body of sand counts as sand, so the sand reaches the wall and
+    // the wall's smooth curve (the clip) is its edge, not the grid's steps; the neck's thread stays one wide
+    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
+      const k = j * W + i, v = cell[k];
+      if (v) { occ[k] = 1; shade[k] = v; continue; }
+      let n = 0, sh = 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const w = at(i + di, j + dj); if (w) { n++; sh = w; } }
+      shade[k] = sh;
+      occ[k] = !mask[k] && n >= 4 && Math.abs(j - Hh / 2) > neck ? 1 : 0;
+    }
+    // softened, 1-2-1 each way
+    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
+      const k = j * W + i, l = i > 0 ? occ[k - 1] : 0, r = i < W - 1 ? occ[k + 1] : 0;
+      soft[k] = (l + 2 * occ[k] + r) / 4;
+    }
+    for (let i = 0; i < W; i++) { let prev = 0; for (let j = 0; j < Hh; j++) { const k = j * W + i, cur = soft[k], next = j < Hh - 1 ? soft[k + W] : 0; occ[k] = (prev + 2 * cur + next) / 4; prev = cur; } }
+    // sampled at twice the grid between cell centres; the edge where the softened field crosses a half,
+    // over about a sample; a grain with few neighbours (the thread, a grain in the air) keeps its own cell
+    const d = this.img.data, cols = SAND_RGB, SW = W * SUB, SH = Hh * SUB;
+    for (let y = 0; y < SH; y++) {
+      const fy = (y + 0.5) / SUB - 0.5, j0 = Math.max(0, Math.min(Hh - 2, Math.floor(fy))), ty = Math.max(0, Math.min(1, fy - j0)), jc = Math.min(Hh - 1, (y / SUB) | 0);
+      for (let x = 0; x < SW; x++) {
+        const fx = (x + 0.5) / SUB - 0.5, i0 = Math.max(0, Math.min(W - 2, Math.floor(fx))), tx = Math.max(0, Math.min(1, fx - i0)), ic = Math.min(W - 1, (x / SUB) | 0);
+        const k0 = j0 * W + i0;
+        const v = (occ[k0] * (1 - tx) + occ[k0 + 1] * tx) * (1 - ty) + (occ[k0 + W] * (1 - tx) + occ[k0 + W + 1] * tx) * ty;
+        let a = v <= 0.36 ? 0 : v >= 0.64 ? 1 : ((v - 0.36) / 0.28) * ((v - 0.36) / 0.28) * (3 - 2 * ((v - 0.36) / 0.28));
+        const kc = jc * W + ic;
+        if (cell[kc] && a < 1) {
+          let n = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if ((di || dj) && at(ic + di, jc + dj)) n++;
+          if (n <= 3) a = 1;
+        }
+        const o = (y * SW + x) * 4;
+        if (a <= 0) { d[o + 3] = 0; continue; }
+        const c = cols[(shade[kc] || 1) - 1];
+        d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = Math.round(a * 255);
+      }
     }
     this.sandCanvas.getContext("2d")!.putImageData(this.img, 0, 0);
   }
@@ -455,10 +526,18 @@ export class Hourglass {
     const x = this.front.getContext("2d")!, k = this.dpr, c = this.size / 2, H = this.H, gy = this.glass / 2, R = PROFILE.bulb * H;
     x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, this.front.width, this.front.height);
     x.setTransform(k, 0, 0, k, 0, 0); x.translate(c, c); x.rotate(this.angle);
-    // the sand, cell by cell (crisp: no smoothing)
+    // the sand, smooth-edged, inside the glass's inner wall
     this.paintSand();
-    x.imageSmoothingEnabled = false;
+    x.save();
+    x.beginPath();
+    { const N = 160, ins = 2.3, lim = gy - 3;
+      for (let q = 0; q <= N; q++) { const v = -1 + (2 * q) / N, y = Math.max(-lim, Math.min(lim, v * gy)), r = Math.max(0.9, halfWidth(y / gy, H) - ins); q ? x.lineTo(r, y) : x.moveTo(r, y); }
+      for (let q = N; q >= 0; q--) { const v = -1 + (2 * q) / N, y = Math.max(-lim, Math.min(lim, v * gy)), r = Math.max(0.9, halfWidth(y / gy, H) - ins); x.lineTo(-r, y); }
+      x.closePath(); }
+    x.clip();
+    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high";
     x.drawImage(this.sandCanvas, -this.gw * this.cs / 2, -gy, this.gw * this.cs, this.gh * this.cs);
+    x.restore();
     const line = (a: number) => `rgba(${this.line.join(",")},${a})`;
     // the glass: outer wall, and an inner wall line a little inside it
     const outline = (inset: number) => {
@@ -509,15 +588,17 @@ export class Hourglass {
       press = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false };
       this.dragging = true; this.grab = Math.atan2(py, px) - this.angle; this.target = this.angle;
       el.setPointerCapture(e.pointerId); el.classList.add("dragging");
-      if (!this.turned) {   // the first turn of the visit: the hint goes for good
-        this.turned = true; this.hint.classList.add("gone");
-        try { sessionStorage.setItem("hg-turned", "1"); } catch { /* no storage */ }
-        this.o.onFirstTurn?.();
-      }
     });
+    // the first drag of the visit: the caption fades for good (a click turns the glass but is not a drag)
+    const firstDrag = () => {
+      if (this.turned) return;
+      this.turned = true; this.hint.classList.add("gone");
+      try { sessionStorage.setItem("hg-turned", "1"); } catch { /* no storage */ }
+      this.o.onFirstTurn?.();
+    };
     el.addEventListener("pointermove", (e) => {
       const [px, py] = this.local(e);
-      if (press && !press.moved && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) press.moved = true;
+      if (press && !press.moved && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) { press.moved = true; firstDrag(); }
       if (this.dragging) {
         if (press && !press.moved) return;   // not a drag yet
         let a = Math.atan2(py, px) - this.grab;
