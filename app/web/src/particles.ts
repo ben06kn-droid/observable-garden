@@ -18,7 +18,20 @@
 import { SHAPES } from "./leaves";
 
 export interface Source { x: number; y: number; vx: number; w: number }   // section pixels, drift, weight
-interface Piece { x: number; y: number; vx: number; vy: number; a: number; va: number; s: number; vt: number; ph: number; ph2: number; rest: boolean; bin: number; fade: number }
+interface Piece { x: number; y: number; vx: number; vy: number; a: number; va: number; s: number; vt: number; ph: number; ph2: number; rest: boolean; bin: number; fade: number; z: number; tone: number; shape: number }
+
+/** How a field's pieces look and move, when not the defaults (the demo's petals use the defaults). `z` is a
+ *  piece's depth, 0 far to 1 near: the near ones larger, more opaque and a little quicker. */
+export interface Look {
+  shapes: string[]; tones: string[];
+  size: [number, number];          // px, far to near
+  alpha: [number, number];         // far to near
+  fall: [number, number];          // seconds to fall the height of the viewport, near to far
+  sway: number;                    // px/s of sideways sway at the nearest
+  spin: number;                    // rad/s of turning, at most
+  wind: number;                    // the cursor's and the gusts' push, as a fraction of the default
+  rest: number;                    // how far a piece lying on the ground is foreshortened (1 = not at all)
+}
 
 const BIN = 8, THICK = 2.2, R = 90, PUFF_LIFE = 0.3, VX_MAX = 150, VY_UP = 110;
 const rnd = Math.random;
@@ -32,6 +45,7 @@ export interface FieldOptions {
   ground: (x: number) => number;    // the ground's y at x, section pixels
   cap: (x: number) => number;       // the pile's height limit at x
   avoid?: () => { x: number; y: number; w: number; h: number }[];   // labels the pieces fade behind
+  look?: Look;
 }
 
 export class Field {
@@ -39,15 +53,15 @@ export class Field {
   air: Piece[] = []; rest: Piece[] = []; bins: number[] = [];
   sources: Source[] = []; cum: number[] = [];
   pileDirty = true; visible = false;
-  private shape: Path2D;
-  constructor(o: FieldOptions) { this.o = o; this.shape = new Path2D(SHAPES[o.kind]); }
+  private shapes: Path2D[];
+  constructor(o: FieldOptions) { this.o = o; this.shapes = (o.look?.shapes ?? [SHAPES[o.kind]]).map((d) => new Path2D(d)); }
 
   resize() {
     const W = this.o.box.clientWidth, H = this.o.box.clientHeight;
     const k = W / Math.max(1, this.W);
     if (this.W) for (const p of [...this.air, ...this.rest]) p.x *= k;
     this.W = W; this.H = H;
-    this.dpr = Math.min(devicePixelRatio || 1, 2, Math.sqrt(5e6 / Math.max(1, W * H)));
+    this.dpr = Math.min(devicePixelRatio || 1, 2, Math.sqrt(9e6 / Math.max(1, W * H)));
     for (const c of [this.o.air, this.o.pile]) { c.width = Math.ceil(W * this.dpr); c.height = Math.ceil(H * this.dpr); c.style.setProperty("--w", `${W}px`); c.style.setProperty("--h", `${H}px`); }
     // rebuild the pile on its new ground
     const pieces = this.rest; this.rest = []; this.bins = [];
@@ -70,9 +84,13 @@ export class Field {
     return s[lo];
   }
   private piece(x: number, y: number, vx: number): Piece {
+    const L = this.o.look, z = rnd(), lerp = (r: [number, number], u: number) => r[0] + (r[1] - r[0]) * u;
+    if (L) return { x, y, vx, vy: 0, a: rnd() * 6.28, va: (rnd() < 0.5 ? -1 : 1) * L.spin * (0.3 + 0.7 * rnd()), s: lerp(L.size, z) * (0.85 + rnd() * 0.3),
+      vt: (innerHeight * 1.04) / lerp(L.fall, 1 - z), ph: rnd() * 6.28, ph2: rnd() * 6.28, rest: false, bin: -1, fade: 1, z,
+      tone: Math.floor(rnd() * L.tones.length), shape: Math.floor(rnd() * this.shapes.length) };
     const big = this.o.kind === "leaf";
     return { x, y, vx, vy: 0, a: rnd() * 6.28, va: (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd() * 1.4), s: big ? 11 + rnd() * 9 : 9 + rnd() * 8,
-      vt: (innerHeight * 1.04) / (16 + rnd() * 18), ph: rnd() * 6.28, ph2: rnd() * 6.28, rest: false, bin: -1, fade: 1 };
+      vt: (innerHeight * 1.04) / (16 + rnd() * 18), ph: rnd() * 6.28, ph2: rnd() * 6.28, rest: false, bin: -1, fade: 1, z, tone: 0, shape: 0 };
   }
   /** a piece released from a branch (or one of `from`), optionally anywhere along its fall already */
   release(from?: Source[], midway = false, kick = 0) {
@@ -80,7 +98,7 @@ export class Field {
     if (!s) return;
     const p = this.piece(s.x + (rnd() - 0.5) * 6, s.y + (rnd() - 0.5) * 6, s.vx);
     if (midway) p.y += rnd() * Math.max(0, this.o.ground(p.x) - p.y);
-    if (kick) { p.vx += (rnd() - 0.5) * kick; p.vy = -rnd() * kick * 0.4; }
+    if (kick) { const q = kick * (this.o.look?.wind ?? 1); p.vx += (rnd() - 0.5) * q; p.vy = -rnd() * q * 0.4; }
     this.air.push(p);
   }
   burst(from: Source[], n: number) { for (let i = 0; i < n; i++) this.release(from, false, 60); }
@@ -89,7 +107,8 @@ export class Field {
   settle(p: Piece, force = false): boolean {
     const bin = Math.max(0, Math.floor(p.x / BIN)), h = this.bins[bin] ?? 0;
     if (!force && h >= this.o.cap(p.x)) return false;
-    p.rest = true; p.bin = bin; p.vx = p.vy = 0; p.y = this.o.ground(p.x) - h - 3;
+    p.rest = true; p.bin = bin; p.vx = p.vy = 0; p.y = this.o.ground(p.x) - h - (this.o.look ? 0.35 * p.s * this.o.look.rest : 3);   // a leaf's edge on the ground line
+    if (this.o.look) p.a = Math.PI / 2 + (rnd() < 0.5 ? 0 : Math.PI) + (rnd() - 0.5) * 0.5;   // lying along the ground
     this.bins[bin] = h + THICK;
     this.rest.push(p); this.pileDirty = true;
     return true;
@@ -97,21 +116,21 @@ export class Field {
   /** take a piece off the pile into the air with a velocity */
   lift(p: Piece, vx: number, vy: number) {
     p.rest = false; this.bins[p.bin] = Math.max(0, (this.bins[p.bin] ?? 0) - THICK); p.bin = -1;
-    p.vx = vx; p.vy = vy; p.va = (rnd() < 0.5 ? -1 : 1) * (2 + rnd() * 4);
+    p.vx = vx; p.vy = vy; p.va = (rnd() < 0.5 ? -1 : 1) * (this.o.look ? this.o.look.spin * 2 : 2 + rnd() * 4);
     this.rest.splice(this.rest.indexOf(p), 1); this.air.push(p); this.pileDirty = true;
   }
 
   seed() {   // the pile the page opens with, and the pieces already in the air
-    for (let i = 0; i < this.o.start; i++) { const p = this.piece(this.W * (0.02 + 0.96 * rnd()), 0, 0); p.a = rnd() * 6.28; this.settle(p); }
+    for (let i = 0; i < this.o.start; i++) { const p = this.piece(this.W * (0.02 + 0.96 * rnd()), 0, 0); if (!this.o.look) p.a = rnd() * 6.28; this.settle(p); }
     for (let i = 0; i < this.o.count; i++) this.release(undefined, true);
   }
 
   step(dt: number, t: number, wind: Wind) {
-    const g = wind.gust(t);
+    const L = this.o.look, gain = L?.wind ?? 1, g = wind.gust(t) * gain;
     const out: Piece[] = [];
     for (const p of this.air) {
-      const [ax, ay] = wind.at(p.x, p.y, this.o.box);
-      const sway = 22 * Math.cos(p.ph + t * 0.9);
+      let [ax, ay] = wind.at(p.x, p.y, this.o.box); ax *= gain; ay *= gain;
+      const sway = L ? L.sway * (0.55 + 0.45 * p.z) * Math.cos(p.ph + t * (0.45 + 0.25 * p.z)) : 22 * Math.cos(p.ph + t * 0.9);
       const k = 1 - Math.exp(-1.3 * dt);
       const pushed = Math.abs(p.vx - sway - g) > 30;       // a push is damped fast; the branch's drift slowly
       p.vx += ((sway + g) - p.vx) * (pushed ? 1 - Math.exp(-3 * dt) : k * 0.35) + ax * dt;
@@ -120,7 +139,7 @@ export class Field {
       p.x += p.vx * dt; p.y += p.vy * dt;
       if (ax && (p.x < 8 || p.x > this.W - 8)) { p.x = Math.max(8, Math.min(this.W - 8, p.x)); p.vx = -p.vx * 0.3; }   // the wind never takes one off the page
       if (p.y < 4) { p.y = 4; p.vy = Math.max(0, p.vy); }
-      p.a += p.va * dt; p.va += ((p.va > 0 ? 1 : -1) * 0.8 - p.va) * k * 0.3;
+      p.a += p.va * dt; p.va += ((p.va > 0 ? 1 : -1) * (L ? L.spin * 0.5 : 0.8) - p.va) * k * 0.3;
       if (p.x < -40 || p.x > this.W + 40) { out.push(p); continue; }
       if (p.fade < 1) { p.fade -= dt; if (p.fade <= 0) out.push(p); continue; }
       const floor = this.o.ground(p.x) - (this.bins[Math.max(0, Math.floor(p.x / BIN))] ?? 0) - 3;
@@ -129,7 +148,7 @@ export class Field {
     if (out.length) this.air = this.air.filter((p) => !out.includes(p));
     // the wind on the pile: a strong enough push lifts a piece
     if (wind.active()) for (const p of this.rest.slice()) {
-      const [ax, ay] = wind.at(p.x, p.y, this.o.box);
+      const [ax, ay] = wind.at(p.x, p.y, this.o.box).map((v) => v * gain);
       const dv = Math.hypot(ax, ay) * dt;
       if (dv > 9) this.lift(p, Math.max(-VX_MAX, Math.min(VX_MAX, ax * dt * 1.2)), Math.max(-VY_UP, -Math.abs(ay * dt) - dv * 0.6));
     }
@@ -157,12 +176,13 @@ export class Field {
     }
   }
   private paint(c: CanvasRenderingContext2D, p: Piece, m = 1) {
-    const k = (this.dpr * p.s) / 20, ca = Math.cos(p.a) * k, sa = Math.sin(p.a) * k;
-    const sy = p.rest ? 0.62 : 0.35 + 0.65 * Math.abs(Math.cos(p.ph2 + p.y * 0.02));   // flat on the ground; tumbling in the air
-    c.globalAlpha = (p.fade < 1 ? Math.max(0, p.fade) : 1) * m;
+    const k = (this.dpr * p.s) / 20, ca = Math.cos(p.a) * k, sa = Math.sin(p.a) * k, L = this.o.look;
+    const sy = p.rest ? (L ? L.rest : 0.62) : 0.35 + 0.65 * Math.abs(Math.cos(p.ph2 + p.y * (L ? 0.009 : 0.02)));   // flat on the ground; tumbling in the air
+    c.globalAlpha = (p.fade < 1 ? Math.max(0, p.fade) : 1) * m * (L ? L.alpha[0] + (L.alpha[1] - L.alpha[0]) * p.z : 1);
     c.setTransform(ca, sa * sy, -sa, ca * sy, p.x * this.dpr, p.y * this.dpr);
-    if (this.o.kind === "leaf") { c.fillStyle = "#e2b33a"; c.strokeStyle = "#8a6a12"; c.lineWidth = 0.8; c.fill(this.shape); c.stroke(this.shape); }
-    else { c.fillStyle = "#ffb3d1"; c.fill(this.shape); }
+    if (L) { c.fillStyle = L.tones[p.tone]; c.fill(this.shapes[p.shape]); }
+    else if (this.o.kind === "leaf") { c.fillStyle = "#e2b33a"; c.strokeStyle = "#8a6a12"; c.lineWidth = 0.8; c.fill(this.shapes[0]); c.stroke(this.shapes[0]); }
+    else { c.fillStyle = "#ffb3d1"; c.fill(this.shapes[0]); }
   }
 }
 
