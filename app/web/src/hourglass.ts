@@ -69,7 +69,7 @@ void main() {
     float a = q.x / r;
     if (abs(a) < 1.0) {
       // a thick cylinder: magnified behind the middle, pulled outward and bent toward the edges
-      float m = sign(a) * pow(abs(a), 1.65);
+      float m = sign(a) * pow(abs(a), 1.5);
       s = vec2(m * r * 0.98, q.y * (1.0 - 0.035 * (1.0 - a * a)));
       px *= 0.6;                                                             // lines seen magnified: keep them fine
     }
@@ -95,10 +95,10 @@ export class Hourglass {
   // turning
   angle = 0; private vel = 0; private target = 0; private dragging = false; private grab = 0;
   // sand
-  private cs = 1.75; private gw = 0; private gh = 0; private mask!: Uint8Array; private cell!: Uint8Array; private stamp!: Uint16Array; private tick = 1;
+  private cs = 1.75; private gw = 0; private gh = 0; private mask!: Uint8Array; private cell!: Uint8Array; private stamp!: Uint16Array; private air!: Uint8Array; private drift: [number, number] = [0, 0]; private tick = 1;
   private order: Int32Array | null = null; private orderR: Int32Array | null = null; private orderG = [9, 9];
   private img!: ImageData; private sandCanvas!: HTMLCanvasElement;
-  private stir: { x: number; y: number; vx: number; vy: number; t: number } | null = null;
+  private stir: { x: number; y: number; vx: number; vy: number; t: number; used?: boolean } | null = null;
   private raf = 0; private last = 0; private running = false;
 
   constructor(host: HTMLElement, o: HourglassOptions) {
@@ -143,7 +143,7 @@ export class Hourglass {
     for (const n of ["uSize", "uDpr", "uAngle", "uH", "uGlass", "uPostX", "uPostW", "uRules", "uGround", "uLine", "uRule"]) this.u[n] = gl.getUniformLocation(p, n);
     this.gl = gl;
   }
-  private postX() { return PROFILE.bulb * this.H * 0.62; }
+  private postX() { return PROFILE.bulb * this.H * 0.38; }   // seen through the bulbs, a straight rod bows
   private drawBack() {
     const gl = this.gl;
     if (gl) {
@@ -169,11 +169,13 @@ export class Hourglass {
   // ---------- the sand
   private initSand() {
     const cs = this.cs, R = PROFILE.bulb * this.H, gy = this.glass / 2;
-    this.gw = Math.ceil((2 * R) / cs); this.gh = Math.ceil(this.glass / cs);
-    const n = this.gw * this.gh; this.mask = new Uint8Array(n); this.cell = new Uint8Array(n); this.stamp = new Uint16Array(n);
+    // an odd number of columns, one of them on the axis, so the neck is exactly one cell wide and the
+    // stream a single thread (one cell a step through it: the glass runs through in about 25 s)
+    this.gw = 2 * Math.ceil(R / cs) + 1; this.gh = Math.ceil(this.glass / cs);
+    const n = this.gw * this.gh; this.mask = new Uint8Array(n); this.cell = new Uint8Array(n); this.stamp = new Uint16Array(n); this.air = new Uint8Array(n);
     const wall = 2.6;
     for (let j = 0; j < this.gh; j++) for (let i = 0; i < this.gw; i++) {
-      const x = (i + 0.5) * cs - R, y = (j + 0.5) * cs - gy;
+      const x = (i - (this.gw - 1) / 2) * cs, y = (j + 0.5) * cs - gy;
       if (Math.abs(y) < gy - 3 && Math.abs(x) < halfWidth(y / gy, this.H) - wall - cs * 0.3) this.mask[j * this.gw + i] = 1;
     }
     // about two thirds of the top bulb's volume: most in the top, a pile already in the bottom
@@ -200,51 +202,114 @@ export class Hourglass {
     // process cells from the bottom (along gravity) up, so each grain moves once; across each level,
     // alternately from one side and the other, so the sand favours neither
     if (!this.order || Math.abs(g[0] - this.orderG[0]) + Math.abs(g[1] - this.orderG[1]) > 0.03) {
-      const idx: number[] = []; for (let k = 0; k < W * Hh; k++) if (mask[k]) idx.push(k);
-      const key = (k: number) => Math.round(((k % W) * g[0] + Math.floor(k / W) * g[1]) * 2);
-      const side = (k: number) => (k % W) * g[1] - Math.floor(k / W) * g[0];
-      idx.sort((a, b) => key(b) - key(a) || side(a) - side(b));
-      this.order = Int32Array.from(idx);
-      idx.sort((a, b) => key(b) - key(a) || side(b) - side(a));
-      this.orderR = Int32Array.from(idx); this.orderG = g;
+      // a bucket sort (linear time, so turning the glass never costs a frame): by level along gravity,
+      // and within a level by position across it, one way and the other
+      const lvl = (k: number) => Math.round(((k % W) * g[0] + Math.floor(k / W) * g[1]) * 2);
+      const across = (k: number) => Math.round(((k % W) * g[1] - Math.floor(k / W) * g[0]) * 2);
+      let lo = Infinity, hi = -Infinity, alo = Infinity, ahi = -Infinity;
+      const cells: number[] = [];
+      for (let k = 0; k < W * Hh; k++) if (mask[k]) { cells.push(k); const l = lvl(k), x = across(k); lo = Math.min(lo, l); hi = Math.max(hi, l); alo = Math.min(alo, x); ahi = Math.max(ahi, x); }
+      const sortBy = (key: (k: number) => number, from: number, to: number, list: number[], desc: boolean) => {
+        const n = to - from + 1, count = new Int32Array(n + 1);
+        for (const k of list) count[(desc ? to - key(k) : key(k) - from) + 1]++;
+        for (let q = 0; q < n; q++) count[q + 1] += count[q];
+        const out = new Array<number>(list.length);
+        for (const k of list) out[count[desc ? to - key(k) : key(k) - from]++] = k;
+        return out;
+      };
+      // stable: sort by the secondary key first, then by the primary
+      this.order = Int32Array.from(sortBy(lvl, lo, hi, sortBy(across, alo, ahi, cells, false), true));
+      this.orderR = Int32Array.from(sortBy(lvl, lo, hi, sortBy(across, alo, ahi, cells, true), true));
+      this.orderG = g;
     }
     // the eight directions; the primary is the one nearest gravity, then its neighbours either side
     const ang = Math.atan2(g[1], g[0]), oct = Math.round(ang / (Math.PI / 4));
     const dir = (o: number) => { const a = o * Math.PI / 4; return [Math.round(Math.cos(a)), Math.round(Math.sin(a))]; };
-    const d0 = dir(oct), dl = dir(oct - 1), dr = dir(oct + 1), sl = dir(oct - 2), sr = dir(oct + 2);
+    const d0 = dir(oct), dl = dir(oct - 1), dr = dir(oct + 1);
     const t = (this.tick = (this.tick + 1) & 0xffff) || (this.tick = 1);
+    const air = this.air;
     const ok = (i: number, j: number) => i >= 0 && j >= 0 && i < W && j < Hh && mask[j * W + i] === 1 && cell[j * W + i] === 0;
     const inside = (i: number, j: number) => i >= 0 && j >= 0 && i < W && j < Hh && mask[j * W + i] === 1;
     const wallBy = (i: number, j: number) => !inside(i - 1, j) || !inside(i + 1, j);
+
     for (const k of (t & 1 ? this.order : this.orderR!)) {
       const v = cell[k]; if (!v || st[k] === t) continue;
-      const i = k % W, j = (k / W) | 0;
-      let to = -1;
-      if (ok(i + d0[0], j + d0[1])) to = (j + d0[1]) * W + i + d0[0];
-      // friction: a grain falls whenever it can, but slides only some of the time, and against the glass
-      // less often still, so the top drains from its middle into a crater while the sand on the walls holds
-      else if (rnd() < (wallBy(i, j) ? 0.18 : 0.5)) {
-        const first = rnd() < 0.5 ? dl : dr, second = first === dl ? dr : dl;
-        if (ok(i + first[0], j + first[1])) to = (j + first[1]) * W + i + first[0];
-        else if (ok(i + second[0], j + second[1])) to = (j + second[1]) * W + i + second[0];
-        else if (rnd() < 0.06) {   // a little slide along the surface: a gentler angle of repose
-          const side = rnd() < 0.5 ? sl : sr, below = side === sl ? dl : dr;
-          if (ok(i + side[0], j + side[1]) && ok(i + side[0] + below[0] - d0[0], j + side[1] + below[1] - d0[1])) to = (j + side[1]) * W + i + side[0];
-        }
+      // a grain the cursor threw is in the air for a few steps: it drifts with the throw instead of falling
+      if (air[k]) {
+        const left = air[k] - 1; air[k] = 0;
+        const i0 = k % W, j0 = (k / W) | 0, ti = i0 + Math.round(this.drift[0] * rnd() * 1.4), tj = j0 + Math.round(this.drift[1] * rnd() * 1.4);
+        const to = ok(ti, tj) ? tj * W + ti : k;
+        if (to !== k) { cell[to] = v; cell[k] = 0; }
+        air[to] = left; st[to] = t; continue;
       }
-      if (to >= 0) { cell[to] = v; cell[k] = 0; st[to] = t; }
+      let i = k % W, j = (k / W) | 0, at = k, falls = 0, slides = 0;
+      // momentum: within one step a grain falls one cell (so the stream stays a continuous thread), but
+      // once it has started to slide it may keep going (up to four moves in all), so a steep face
+      // avalanches as a layer instead of creeping
+      for (let hop = 0; hop < 4; hop++) {
+        let to = -1;
+        if (ok(i + d0[0], j + d0[1])) {
+          if (falls >= 1) break;
+          to = (j + d0[1]) * W + i + d0[0]; falls++;
+        }
+        // friction: a grain falls whenever it can, but starts to slide only some of the time, against
+        // the glass less often still, so the top drains from its middle into a crater while the sand on
+        // the walls holds; a grain already sliding keeps going
+        // (a grain that fell this step is in the air, not resting: it does not slide until the next)
+        else if (falls === 0 && rnd() < (slides ? 0.9 : wallBy(i, j) ? 0.5 : 0.85)) {
+          // a grain slides only off an open edge (the cells beside it on that side are empty), so the gap
+          // a falling grain leaves rises straight up and the sand beside it caves in along its slope: one
+          // across and one down, or, a little less often, two across and one down, so it rests at about
+          // the angle real sand does rather than 45 degrees
+          const first = rnd() < 0.5 ? -1 : 1;
+          for (const sgn of [first, -first]) {
+            const d = sgn < 0 ? dl : dr, s1 = [d[0] - d0[0], d[1] - d0[1]];
+            if (!ok(i + s1[0], j + s1[1])) continue;
+            if (ok(i + d[0], j + d[1])) {
+              if (rnd() < 0.4 && ok(i + 2 * s1[0], j + 2 * s1[1]) && ok(i + 2 * s1[0] + d0[0], j + 2 * s1[1] + d0[1])) { to = (j + 2 * s1[1] + d0[1]) * W + i + 2 * s1[0] + d0[0]; break; }
+              to = (j + d[1]) * W + i + d[0]; break;
+            }
+          }
+          if (to >= 0) slides++;
+        }
+        if (to < 0) break;
+        cell[to] = v; cell[at] = 0; st[to] = t; at = to; i = to % W; j = (to / W) | 0;
+      }
     }
-    // the cursor stirs grains near it, in the direction it moves
+
+    // the cursor is a wind over the sand (as it is over the home page's leaves): grains near it (within
+    // about twenty pixels) are thrown up out of the sand and along its path, through open cells only,
+    // more of them the faster it moves and the nearer they are; they hang in the air a few steps,
+    // drifting, then fall and slump back by the same rules as all the sand
     const s = this.stir;
-    if (s && performance.now() - s.t < 120) {
-      const sp = Math.hypot(s.vx, s.vy); if (sp > 1) {
-        const ux = s.vx / sp, uy = s.vy / sp, rad = 7, p = Math.min(0.9, sp / 900);
+    if (s && !s.used && performance.now() - s.t < 140) {
+      s.used = true;                                   // each movement of the cursor stirs once
+      const sp = Math.hypot(s.vx, s.vy);
+      if (sp > 30) {
+        // its reach grows with its speed, up to about twenty pixels
+        const ux = s.vx / sp, uy = s.vy / sp, rad = 3 + 8 * Math.min(1, sp / 500);
         const ci = Math.round(s.x), cj = Math.round(s.y);
-        for (let j = cj - rad; j <= cj + rad; j++) for (let i = ci - rad; i <= ci + rad; i++) {
-          if (i < 0 || j < 0 || i >= W || j >= Hh || (i - ci) ** 2 + (j - cj) ** 2 > rad * rad) continue;
-          const k = j * W + i; if (!cell[k] || rnd() > p) continue;
-          const ti = i + Math.round(ux * 2), tj = j + Math.round(uy * 2) - (rnd() < 0.5 ? 1 : 0);
-          if (ok(ti, tj)) { cell[tj * W + ti] = cell[k]; cell[k] = 0; }
+        // the throw: up out of the sand (against gravity) and along the cursor's path
+        let px = ux * 0.6 - g[0] * 0.8, py = uy * 0.6 - g[1] * 0.8; const pl = Math.hypot(px, py) || 1; px /= pl; py /= pl;
+        this.drift = [ux * 0.5 - g[0] * 0.15, uy * 0.5 - g[1] * 0.15];
+        // the grains in reach, the uppermost first, so each one lifted leaves room for the one beneath it
+        const near: number[] = [];
+        const R = Math.ceil(rad);                          // whole cells: the reach itself may be fractional
+        for (let j = cj - R; j <= cj + R; j++) for (let i = ci - R; i <= ci + R; i++) {
+          if (i < 0 || j < 0 || i >= W || j >= Hh || Math.hypot(i - ci, j - cj) > rad) continue;
+          const k = j * W + i; if (cell[k] && st[k] !== t) near.push(k);
+        }
+        near.sort((a, b) => ((b % W) * px + ((b / W) | 0) * py) - ((a % W) * px + ((a / W) | 0) * py));
+        for (const k of near) {
+          const i = k % W, j = (k / W) | 0, d = Math.hypot(i - ci, j - cj);
+          let ai = i, aj = j;
+          // nearer grains are thrown further
+          for (let hop = 0, hops = 1 + Math.round((1 - d / rad) * (2 + rnd() * 4)); hop < hops; hop++) {
+            const ti = Math.round(ai + px + (rnd() - 0.5) * 0.8), tj = Math.round(aj + py + (rnd() - 0.5) * 0.8);
+            if (!ok(ti, tj)) break;
+            cell[tj * W + ti] = cell[aj * W + ai]; cell[aj * W + ai] = 0; st[tj * W + ti] = t; ai = ti; aj = tj;
+          }
+          if (ai !== i || aj !== j) air[aj * W + ai] = 3 + Math.floor(rnd() * 5);   // in the air a few steps
         }
       }
     }
@@ -266,7 +331,7 @@ export class Hourglass {
     // the sand, cell by cell (crisp: no smoothing)
     this.paintSand();
     x.imageSmoothingEnabled = false;
-    x.drawImage(this.sandCanvas, -R, -gy, this.gw * this.cs, this.gh * this.cs);
+    x.drawImage(this.sandCanvas, -this.gw * this.cs / 2, -gy, this.gw * this.cs, this.gh * this.cs);
     const line = (a: number) => `rgba(${C.line.join(",")},${a})`;
     // the glass: outer wall, and an inner wall line a little inside it
     const outline = (inset: number) => {
@@ -323,7 +388,7 @@ export class Hourglass {
       // the cursor over the glass stirs the sand: its position and velocity in the grid's frame
       const now = performance.now();
       const ca = Math.cos(-this.angle), sa = Math.sin(-this.angle), lx = ca * px - sa * py, ly = sa * px + ca * py;
-      const gi = (lx + PROFILE.bulb * this.H) / this.cs, gj = (ly + this.glass / 2) / this.cs;
+      const gi = lx / this.cs + (this.gw - 1) / 2, gj = (ly + this.glass / 2) / this.cs - 0.5;
       if (lastP) { const dt = Math.max(8, now - lastP[2]) / 1000; this.stir = { x: gi, y: gj, vx: (gi - lastP[0]) / dt * this.cs, vy: (gj - lastP[1]) / dt * this.cs, t: now }; }
       lastP = [gi, gj, now];
     });
@@ -354,7 +419,7 @@ export class Hourglass {
       const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
       const moving = this.dragging || this.vel !== 0 || this.angle !== this.target;
       if (moving) this.physics(dt);
-      for (let s = 0; s < 3; s++) this.stepSand();
+      for (let s = 0; s < (moving ? 6 : 3); s++) this.stepSand();   // while it turns, the sand settles faster
       if (moving || this.gl === null) this.drawBack();
       this.drawFront();
     };
