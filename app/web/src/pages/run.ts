@@ -32,8 +32,8 @@ let panel: ArrayBuffer | null = null, cls = "", panelName = "", className = "", 
 let schemas: Record<string, unknown> = {}, defaultPrompt = "";
 let key = "", running = false;
 
-// ---- the scene: the demo's page two (src/scene.ts), the petals slowed while a run computes
-const scene = makeScene(() => running);
+// ---- the scene (src/scene.ts): the run's tree alone, in this page's tokens
+const scene = makeScene({ throttled: () => running });
 const { two, svg, seed, bed, notes, idleBox, draw } = scene;
 notes.entered();                                             // no "click a tree" here: the record is below
 let shownSteps = 0;
