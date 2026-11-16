@@ -25,6 +25,10 @@
   --tree: #f0f1fa;
   --tree-path: var(--sand);
   --tree-bar: #a7a9b4;
+  --tree-leaf: #8b8e9a;            /* the leaves: quieter than the wood */
+  --trunk: #e3e5ee;                /* a birch's pale bark, its dark marks in the ground's colour */
+  --trunk-line: #e3e5ee;
+  --bark: #121416;
   --hg-ground: var(--ground);      /* the hourglass reads its colours from these */
   --hg-line: var(--ink);
 }
@@ -41,6 +45,10 @@ html[data-theme="run"][data-hg="light"] {
   --tree: #121416;
   --tree-path: #7d5a1e;
   --tree-bar: #4e5058;
+  --tree-leaf: #6b6e78;
+  --trunk: #f0f1fa;
+  --trunk-line: #121416;
+  --bark: #121416;
 }
 
 /* ---------- the grid: hero and form in 1–8, the hourglass in 9–12 ---------- */
@@ -53,12 +61,12 @@ html[data-theme="run"][data-hg="light"] {
 /* the glass rides beside the hero, the form, the run's tree and its moves; above the headline it bends */
 .run-grid > .glass-col { grid-column: 9 / -1; grid-row: 1 / 5; position: relative; z-index: 2; }
 /* the glass rides beside the form while it is read and while a run goes */
-.glass-stick { position: sticky; top: calc(var(--head) + 8px); height: calc(100vh - var(--head) - 16px); max-height: 720px; display: flex; justify-content: center; align-items: center; }
+.glass-stick { position: sticky; top: calc(var(--head) + 8px); height: calc(100vh - var(--head) - 16px); display: flex; justify-content: center; align-items: center; }
 
 /* ---------- the hero ---------- */
 .hero { padding: calc(var(--pad-y) * 0.6) 0 var(--s8); }
 .hero .label { margin: 0 0 var(--s4); }
-.hero h1 { font: 400 clamp(3.25rem, 7.2vw, 7.5rem)/0.98 var(--sans); letter-spacing: -0.03em; margin: 0; white-space: nowrap; }
+.hero h1 { font: 400 clamp(3.25rem, 7.2vw, 10rem)/0.98 var(--sans); letter-spacing: -0.03em; margin: 0; white-space: nowrap; }
 .hero .lead { font: 400 var(--t-lead)/1.4 var(--sans); color: var(--ink); max-width: 30em; margin: var(--s6) 0 0; }
 .hero .about { margin: var(--s5) 0 0; max-width: 40em; }
 .hero .about summary { cursor: pointer; font: 500 var(--t-micro)/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); list-style: none; display: inline-flex; gap: 0.8em; align-items: center; }
@@ -133,17 +141,58 @@ html[data-theme="run"][data-hg="light"] {
 [data-theme="run"] #cancel { font: 500 var(--t-label)/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); background: none;
   border: 1px solid var(--rule-strong); border-radius: 999px; padding: 15px 26px; }
 
-/* ---------- the run's tree: before a run, the ground it will grow from and a line saying so ---------- */
-[data-theme="run"] .stage { height: clamp(440px, 74vh, 760px); border-top: 1px solid var(--rule); margin: 0; }
-[data-theme="run"] .stage .spot { inset: var(--pad-y) 150px var(--pad-y) 0; }   /* the verdict word sits right of the drawing: keep it inside the eight columns */
-.stage-empty { position: absolute; left: 0; right: 0; bottom: var(--pad-y); margin: 0; padding-top: 14px; border-top: 1px solid var(--rule-strong);
+/* ---------- the run's tree: a birch in columns 1–4 of the stage, the gate's gauge in 5–8 ----------
+   Before a run: the ground it will grow from and a line saying so. */
+[data-theme="run"] .stage { height: clamp(500px, 76vh, 780px); border-top: 1px solid var(--rule); margin: 0; scroll-margin-top: calc(var(--head) + 8px); }
+[data-theme="run"] .stage .spot { inset: var(--s7) 0 var(--s6) 0; }
+.stage-empty { position: absolute; left: 0; right: 0; bottom: var(--s6); margin: 0; padding-top: 14px; border-top: 1px solid var(--rule-strong);
   font: 500 var(--t-micro)/1.6 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
 .stage.has-run .stage-empty { display: none; }
+#garden.runtree { overflow: visible; }
+#garden.runtree .branch, #garden.runtree .twig { fill: var(--tree); }
+#garden.runtree .leaf { fill: var(--tree-leaf); }
+#garden.runtree .path { fill: var(--tree-path); }
+#garden.runtree .trunk { fill: var(--trunk); stroke: var(--trunk-line); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+#garden.runtree .bark { fill: var(--bark); }
+#garden.runtree [data-step]:not(.on) { opacity: 0; }
+#garden.runtree.growing [data-step] { transition: opacity 360ms linear; }
+#garden.runtree .ground { stroke: var(--rule-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+#garden.runtree .axis { stroke: var(--rule-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+#garden.runtree .bar { stroke: var(--tree-bar); stroke-width: 1; stroke-dasharray: 2 4; vector-effect: non-scaling-stroke; }
+#garden.runtree text { font: 400 11px var(--mono); fill: var(--faint); }
+/* the verdict word: the stage's one large type, at the top of the gauge's columns */
+[data-theme="run"] #spot #verdict-word { transform: none !important; left: var(--word-x, 0px); top: var(--word-y, 0px);
+  font: 400 clamp(3.6rem, 6.4vw, 8.5rem)/0.92 var(--sans); letter-spacing: -0.04em; color: var(--ink); }
+[data-theme="run"] #spot #verdict-word.lit { color: var(--sand-ink); }
+[data-theme="run"] #spot #verdict-word.dim { color: var(--ink); }
 
 /* ---------- the moves, the record, the notes ---------- */
 [data-theme="run"] .below { border-top: 1px solid var(--rule); margin: 0 var(--pad-x); padding: var(--s8) 0; }
 .run-grid > .below { margin: 0; }
 [data-theme="run"] .below h2 { font: 400 var(--t-small)/1.15 var(--sans); }
+/* the moves: one block per move, its result under it; a refused one marked by a rule and a word */
+[data-theme="run"] .run-log { max-height: min(70vh, 720px); padding: 0; border-top: 1px solid var(--rule); font: 400 13px/1.65 var(--mono); }
+[data-theme="run"] .run-log li { margin: 0; overflow-wrap: anywhere; max-width: 78ch; }
+[data-theme="run"] .run-log li.move { padding: var(--s4) 0 var(--s2); border-top: 1px solid var(--rule); color: var(--muted); }
+[data-theme="run"] .run-log li.move:first-child { border-top: 0; }
+[data-theme="run"] .run-log li.move b { color: var(--ink); font-weight: 500; margin-right: 0.6em; }
+[data-theme="run"] .run-log li.result, [data-theme="run"] .run-log li.refused { padding: 0 0 var(--s4) var(--s4); border-left: 1px solid var(--rule-strong); margin-left: 2px; }
+[data-theme="run"] .run-log li.result { color: var(--muted); }
+[data-theme="run"] .run-log li.refused { color: var(--ink); border-left: 2px solid var(--problem); }
+[data-theme="run"] .run-log .tag { display: inline-block; margin-right: 0.8em; padding: 0 6px; border: 1px solid var(--problem); color: var(--problem);
+  font: 500 10.5px/1.6 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; vertical-align: 1px; }
+[data-theme="run"] .run-log .say { color: var(--faint); }
+/* the verdict: its one line large, the reasons as reading text in a disclosure */
+[data-theme="run"] #record .meaning { font: 400 clamp(1.35rem, 1.9vw, 1.75rem)/1.4 var(--sans); color: var(--ink); max-width: 36em; margin: 0 0 var(--s6); }
+[data-theme="run"] #record .reasons-d { max-width: 70ch; border-top: 1px solid var(--rule); }
+[data-theme="run"] #record .reasons-d summary { cursor: pointer; list-style: none; padding: var(--s4) 0; display: flex; gap: 0.8em; align-items: center;
+  font: 500 var(--t-micro)/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+[data-theme="run"] #record .reasons-d summary::-webkit-details-marker { display: none; }
+[data-theme="run"] #record .reasons-d summary::before { content: "+"; font: 400 14px/1 var(--mono); transition: transform var(--dur-ui) var(--ease-ui); }
+[data-theme="run"] #record .reasons-d[open] summary::before { transform: rotate(45deg); }
+[data-theme="run"] #record .reasons { list-style: none; padding: 0; margin: 0 0 var(--s4); font: 400 var(--t-body)/1.65 var(--sans); color: var(--ink); }
+[data-theme="run"] #record .reasons li { padding: 0 0 var(--s4) var(--s5); position: relative; }
+[data-theme="run"] #record .reasons li::before { content: ""; position: absolute; left: 0; top: 0.8em; width: 8px; height: 1px; background: var(--muted); }
 .run-notes { margin: 0 var(--pad-x); padding: var(--s7) 0 var(--s8); border-top: 1px solid var(--rule);
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: var(--gap); row-gap: var(--s5); }
 .run-notes p { margin: 0; font: 400 13px/1.6 var(--sans); color: var(--muted); }
@@ -151,7 +200,8 @@ html[data-theme="run"][data-hg="light"] {
 .run-notes a { color: var(--ink); }
 
 /* ---------- the hourglass ---------- */
-.hourglass { position: relative; width: var(--hg); height: var(--hg); flex: none; outline: none; pointer-events: none; touch-action: none; }
+.hourglass { position: relative; width: var(--hg); height: var(--hg); flex: none; outline: none; pointer-events: none; touch-action: none;
+  translate: var(--hg-dx, 0px) var(--hg-dy, 0px); }   /* placed by run.ts so the headline crosses the upper bulb */
 .hourglass canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .hg-hit { position: absolute; left: 50%; top: 50%; width: var(--hg-hit-w); height: var(--hg-hit-h); transform: translate(-50%, -50%); pointer-events: auto; cursor: grab; }
 .hourglass.dragging .hg-hit { cursor: grabbing; }
@@ -192,7 +242,7 @@ html[data-hg-swap]::view-transition-new(root) { animation: hg-reveal 1000ms cubi
   .run-go > * { grid-column: 1; }
   [data-theme="run"] .run-go .actions { flex-direction: column; align-items: stretch; }
   .run-notes { grid-template-columns: minmax(0, 1fr); }
-  [data-theme="run"] .stage { height: clamp(360px, 62vh, 520px); }
-  [data-theme="run"] .stage .spot { inset: var(--s6) 80px var(--s6) 0; }
+  [data-theme="run"] .stage { height: clamp(600px, 90vh, 760px); }
+  [data-theme="run"] .stage .spot { inset: var(--s6) 0 var(--s5) 0; }
   [data-theme="run"] .notes-host .note-line { font-size: 10px; letter-spacing: 0; }   /* the replay line fits left of the word */
 }

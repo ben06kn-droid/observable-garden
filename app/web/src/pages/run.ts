@@ -12,6 +12,8 @@ import "../chain";
 import { auditId, h, MEANING, reduceMotion, sha256Hex, word } from "../common";
 import { cancelGate, loadGate, type RunOutcome } from "../gate";
 import { makeScene } from "../scene";
+import { drawRunTree } from "../runtree";
+import type { GardenHandle } from "../garden";
 import { Hourglass } from "../hourglass";
 import { FALLBACK_MODELS, localEndpoint, NOT_SENT, OPENROUTER_MODELS, PROVIDERS, routerModels, type RouterModel } from "../providers";
 import type { AuditResult, InputsInfo, ProviderId, RunEvent, RunUsage, SearchTree } from "../types";
@@ -38,7 +40,24 @@ let key = "", running = false;
 
 // ---- the scene (src/scene.ts): the run's tree alone, in this page's tokens
 const scene = makeScene({ throttled: () => running });
-const { two, svg, seed, bed, notes, idleBox, draw } = scene;
+const { two, svg, seed, bed, notes, idleBox, spot } = scene;
+// the run's tree as a birch with the gate's numbers on a gauge beside it (src/runtree.ts); redrawn when
+// the tree area changes size
+let current: GardenHandle | null = null, lastDraw: { t: SearchTree; r: AuditResult | null; step: number } | null = null;
+function draw(t: SearchTree, r: AuditResult | null, _runId: string, attempts = 4): GardenHandle {
+  const gap = parseFloat(getComputedStyle(document.querySelector(".run-grid") ?? document.body).columnGap) || 24;
+  const wordH = parseFloat(getComputedStyle($("verdict-word")).fontSize) * 0.92 || 90;
+  current = drawRunTree(svg, spot, t, r, { gap, wordH, attempts });
+  lastDraw = { t, r, step: 0 };
+  return current;
+}
+let treeT = 0;
+window.addEventListener("resize", () => { window.clearTimeout(treeT); treeT = window.setTimeout(() => {
+  if (!lastDraw) return;
+  const { t, r } = lastDraw, k = shownSteps;
+  const g = draw(t, r, "", r ? 12 : 4); g.setStep(r ? Number.MAX_SAFE_INTEGER : k);
+  notes.place();
+}, 250); });
 notes.entered();                                             // no "click a tree" here: the record is below
 let shownSteps = 0;
 /** the tree as the search so far, its new evaluations growing in one by one */
@@ -49,7 +68,7 @@ function grow(t: SearchTree, runId: string, move: string, moves: number) {
   else {
     g.grow(); g.setStep(shownSteps);
     const from = shownSteps, to = g.total, t0 = performance.now();
-    const tick = (now: number) => { const k = Math.min(to, from + Math.ceil(((now - t0) / 40))); g.setStep(k); if (k < to && scene.current() === g) requestAnimationFrame(tick); };
+    const tick = (now: number) => { const k = Math.min(to, from + Math.ceil(((now - t0) / 40))); g.setStep(k); if (k < to && current === g) requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
     shownSteps = to;
   }
@@ -66,7 +85,8 @@ function buildGlass() {
   if (hgPhone === phone() && hg) return;
   hg?.destroy(); hgPhone = phone();
   const head = parseFloat(getComputedStyle(root).getPropertyValue("--head")) || 76;
-  const height = hgPhone ? 340 : Math.round(Math.max(380, Math.min(560, innerHeight - head - 150)));
+  // on a desktop it grows with the width, as the headline does, so the letters cross the same part of the bulb
+  const height = hgPhone ? 340 : Math.round(Math.max(380, Math.min(innerWidth * 0.39, innerHeight - head - 120)));
   hg = new Hourglass($("hg-host"), { height, reduce: reduceMotion,
     behind: hgPhone || reduceMotion ? [] : [$("run-h")],
     onFlip: (flipped, neck) => {
@@ -78,9 +98,31 @@ function buildGlass() {
       d.startViewTransition(swap).finished.finally(() => { delete root.dataset.hgSwap; });
     } });
 }
-void document.fonts.ready.then(buildGlass);
+/** on a desktop, with the lens: the glass where the headline's letters pass through its upper bulb, at
+ *  its widest, the last letters inside the glass and the rest clear of it; never over the form's
+ *  columns, and, once it sticks, never under the header */
+function placeGlass() {
+  const el = hg?.el; if (!el || !hg) return;
+  el.style.setProperty("--hg-dx", "0px"); el.style.setProperty("--hg-dy", "0px");
+  if (hgPhone || reduceMotion) { hg.paintText(); return; }
+  const range = document.createRange(); range.selectNodeContents($("run-h"));
+  const m = hg.measures(), h1 = range.getBoundingClientRect(), box = el.getBoundingClientRect();   // the text's extent, not its box
+  const form = $("run-form").getBoundingClientRect(), stick = $("hg-host").getBoundingClientRect();
+  // from the column it is centred in (the glass itself may be mid-arrival, offset by its animation)
+  const cx0 = stick.left + stick.width / 2, cy0 = stick.top + stick.height / 2; void box;
+  const cx = Math.max(form.right + m.R + 15 + 12, h1.right - m.R * 0.55);
+  let dy = h1.top + h1.height * 0.5 + 0.76 * m.gy - cy0;                // the letters in the bulb's empty upper part
+  dy = Math.max(m.H / 2 - stick.height / 2 + 4, Math.min(stick.height / 2 - m.H / 2 - 4, dy));
+  el.style.setProperty("--hg-dx", `${(cx - cx0).toFixed(1)}px`); el.style.setProperty("--hg-dy", `${dy.toFixed(1)}px`);
+  hg.paintText();
+}
+void document.fonts.ready.then(() => { buildGlass(); placeGlass(); });
 let glassT = 0;
-window.addEventListener("resize", () => { window.clearTimeout(glassT); glassT = window.setTimeout(() => { if (hgPhone !== phone()) buildGlass(); else hg?.paintText(); }, 200); });
+let glassW = innerWidth;
+window.addEventListener("resize", () => { window.clearTimeout(glassT); glassT = window.setTimeout(() => {
+  if (hgPhone !== phone() || (!hgPhone && Math.abs(innerWidth - glassW) > 40)) { glassW = innerWidth; hgPhone = null; buildGlass(); }
+  placeGlass();
+}, 200); });
 
 // ---- inputs: the bundled pair to start, or the visitor's files; checked by the package's loaders
 async function useBundled() {
@@ -207,7 +249,8 @@ function refresh() {
 }
 
 // ---- the run
-const logLine = (cls: string, parts: (string | Node)[]) => { const li = h("li", cls, null, logList); li.append(...parts); li.scrollIntoView?.({ block: "nearest" }); return li; };
+// the list follows its newest line by scrolling itself only, so the page stays where the visitor put it
+const logLine = (cls: string, parts: (string | Node)[]) => { const li = h("li", cls, null, logList); li.append(...parts); logList.scrollTop = logList.scrollHeight; return li; };
 const fmtUsage = (u: RunUsage) => `${u.requests} model calls · ${u.input_tokens.toLocaleString("en")} input tokens (${u.cache_read_input_tokens.toLocaleString("en")} from cache) · ${u.output_tokens.toLocaleString("en")} output tokens`;
 function endKey() { key = ""; fKey.value = ""; }
 window.addEventListener("pagehide", () => { endKey(); if (running) cancelGate(); });
@@ -233,7 +276,7 @@ async function start() {
   hg?.beginRun();
   $("record").hidden = true; logList.replaceChildren(); tokens.textContent = "Starting…";
   runId = `run-${Date.now().toString(36)}`; shownSteps = 0;
-  svg.replaceChildren(); idleBox(); notes.clear(); notes.entered(); seed.classList.remove("spent");
+  svg.replaceChildren(); idleBox(); lastDraw = null; current = null; notes.clear(); notes.entered(); seed.classList.remove("spent");
   bed.reset(runId); bed.start();
   two.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
   const moves = Math.max(1, Math.min(60, Math.round(Number(fMoves.value) || 20)));
@@ -254,7 +297,7 @@ async function start() {
           if (ev.tool) { lastMove = ev.tool; nMoves++; hg?.setShare(0.8 * Math.min(1, nMoves / moves)); }
           logLine("move", [h("b", null, ev.tool ?? "(no move)"), " ", Object.keys(ev.args).length ? JSON.stringify(ev.args) : "", ev.text ? h("span", "say", ` ${ev.text}`) : ""]);
         } else if (ev.type === "result") {
-          logLine(ev.last.refused ? "refused" : "result", [ev.last.refused ? `refused: ${ev.last.refused}` : (ev.last.text ?? "")]);
+          logLine(ev.last.refused ? "refused" : "result", ev.last.refused ? [h("span", "tag", "refused"), ev.last.refused] : [ev.last.text ?? ""]);
         } else if (ev.type === "usage") {
           if (ev.model) served = ev.model;
           tokens.textContent = fmtUsage(ev.usage);
@@ -280,7 +323,7 @@ async function start() {
   const r = out.result, t = out.tree;
   await hg?.finish();                                         // the verdict appears as the last grain lands
   bed.finish();
-  if (t) { draw(t, r, runId).setStep(Number.MAX_SAFE_INTEGER); notes.verdict(scene.current()!, r, t.evaluations, SEED); }
+  if (t) { const g = draw(t, r, runId, 12); g.setStep(Number.MAX_SAFE_INTEGER); notes.verdict(g, r, t.evaluations, SEED); }
   // the prompt actually sent: the adapter's own, or the visitor's edit (a different search)
   const prompt = { edited: opts.system !== undefined, sha256: await sha256Hex(opts.system ?? defaultPrompt) };
   await showRecord(r, out.log as Record<string, unknown>, model, served, moves, prompt, run);
@@ -292,7 +335,7 @@ function finish(message: string, usage?: RunUsage | null) {
   running = false; refresh();
   if (usage) tokens.textContent = fmtUsage(usage);
   errorBox.textContent = message;
-  logLine("refused", [message]);
+  logLine("refused", [h("span", "tag", "stopped"), message]);
   bed.finish();
 }
 
@@ -310,6 +353,7 @@ async function showRecord(r: AuditResult, log: Record<string, unknown>, model: s
   lastResult = JSON.stringify({ format: "quixote-browser-result/1", result: r, record }, null, 1);
   $("rec-meaning").textContent = `${word(r.status)}: ${MEANING[word(r.status)] ?? ""}`;
   const ul = $("rec-reasons"); ul.replaceChildren(); for (const x of r.reasons) h("li", null, x, ul);
+  ($("rec-reasons-d") as HTMLDetailsElement).open = !phone();          // open on a desktop, closed on a phone
   const kv = $("rec-kv"); kv.replaceChildren();
   const rows: [string, string][] = [["Panel", `${panelName} · ${record.panel_sha256}`], ["Class", `${className} · ${record.class_sha256}`],
     ["Provider", `${run.label} · ${run.host}`],
