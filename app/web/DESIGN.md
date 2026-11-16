@@ -182,7 +182,18 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     the replay (the last fifth), and the verdict appears as the last grain lands.
   - **Reduced motion**: no WebGL, so the headline wraps beside the glass and nothing passes behind it.
   - **Empty tree area**: before a run, it shows the ground line and one line saying what will grow there.
-    The run's tree is drawn flat in --tree (ink), --tree-path (sand) and --tree-bar (muted).
+  - **The run's tree** (src/runtree.ts): the home page's birch (src/birch.ts), one per restart, in columns
+    1–4 of the stage, filling its height. It keeps the home page's rules: a weight hierarchy and no
+    crossings. The submitted evaluation's twig, leaves and branch are in sand. The tree's height is not a
+    Sharpe: the numbers are on a gauge in columns 5–8, scaled from zero. The gauge carries the bar (dotted),
+    the submitted or best-so-far level, and the verdict word large at its top. On a phone the gauge sits
+    above the tree.
+  - **Headline**: run.ts places the glass so the headline's last letters pass through the upper bulb's
+    empty part. The glass grows with the width, as the headline does.
+  - **Sand**: drawn smooth-edged and clipped to the inner wall. During a run, the bed levels after the turn;
+    at the end the top bulb empties fully and the pile relaxes into one cone.
+  - **Verdict and moves**: the verdict line is large. The reasons are reading text in a disclosure, open on
+    a desktop and closed on a phone. Each move is a block; a refused one has a red rule and a "refused" tag.
 - **docs**: ink on a cool light ground, one ink-blue accent: a page for reading. Privacy, terms, 404 and a
   shared verdict use it too.
 - **Sancho**: sand, umber type, a terracotta accent; the desert is its motif. Its session may propose a
