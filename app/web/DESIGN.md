@@ -138,18 +138,30 @@ components read only semantic tokens (`--ground`, `--ink`, `--muted`, `--faint`,
 `--accent`, `--focus`, `--field`, `--field-line`, `--problem`, `--tree`, `--tree-path`, `--tree-bar`). Each page's
 session restyles its own theme; the run, docs, Sancho and viewer tokens set here are interim.
 
-- **home**: paper and dark green; the search drawn as a grove beside the overview, yellow leaves falling.
-  The headline and the brand mark are Bricolage Grotesque at its heavy weight, and nothing else is.
-  One complete screen at every size: the copy in columns 1–6 (read as one block from the top; the open
-  paper under it is where the leaves land), the grove in 7–12, a hairline ground across the grid with ticks on the edges
-  and the centre line, and a mono legend under it; the cue to the run page starts at the fold. Below 813 px
-  the same parts stack: headline, reading, grove, ground. No tree is drawn behind text; every tree is inside
-  its box with its foot on the ground line (`drawGrove` in `src/woods.ts`, one svg per tree at 1:1). Every
-  stroke is one evaluation: a kept rule is a segment of the tree's axis (the first is the trunk), every other
-  rule a tapered twig whose reach and angle are its in-sample Sharpe within the tree; a tree's height is its
-  best Sharpe; the back row is smaller, finer and a lighter green. Leaves (`look` in `src/particles.ts`): few
-  and small, three outlines in three ochres, depth from size and opacity, a slow fall, a light cursor wind;
-  they lie along the ground line, one deep, and fade where they fall past its ends.
+- **home**: paper and dark green; the search drawn as a grove of birches beside the overview, their turned
+  leaves falling. The headline and the brand mark are Bricolage Grotesque at its heavy weight, and nothing
+  else is. One complete screen at every size: the copy in columns 1–6, read as one block from the top (the
+  open paper under it is where the leaves land); the grove in 7–12; a hairline ground across the grid with
+  ticks on the edges and the centre line; a mono legend under it. All the copy has arrived within a second;
+  the cue to the run page starts at the fold. Below 813 px the same parts stack: headline, reading, grove,
+  ground. No tree is drawn behind text; every tree is inside its box with its foot on the ground line.
+  - **The birches** (`src/birch.ts`): one per restart, its height its best in-sample Sharpe; one branch per
+    move and feature family, in search order from the crown's top, spaced by the twigs they carry; one twig
+    per evaluation; 1 to 3 leaves on a twig by its rule's Sharpe. A pale trunk with dark bark marks,
+    narrowing into the leader, which ends inside a narrow oval crown; steep branches whose tips turn out;
+    short sprigs that droop at the tip. Weight falls from trunk to branch to twig to leaf. No stroke crosses
+    another within a tree. Bark, jitter and leaf placement are decoration and claim nothing.
+  - **Placed at build time**: `scripts/make_grove.mjs` runs the placement search and writes
+    `public/examples/grove.json` (checked in the build with `--check`); the page only scales and positions
+    the drawings (`drawGrove` in `src/woods.ts`). Nothing searches in the visitor's browser.
+  - **Desktop grove**: every restart, in search order; the even ones in front, spaced so no two front crowns
+    meet; the odd ones a row behind, smaller, finer and lighter, standing between the front trunks; a 3 px
+    knockout in the paper's colour under every front stroke keeps the front trees clean. **Phone grove**:
+    its own two trees (the best restarts), larger and wider-crowned; the legend says "2 of 8 restarts".
+  - **Colour**: leaves on the trees are three greens (lighter in the back row); the falling and fallen leaves
+    are the same birch leaf in three ochres, the page's only warm accent. Few and small, depth from size and
+    opacity, a slow fall, a light cursor wind; they leave from the trees' leaves, lie along the ground line
+    one deep and fade where they fall past its ends.
 - **run**: a dark graphite working surface (not night, not neon), pale steel accent. The run's tree drawn flat
   in the page's tokens.
 - **docs**: ink on a cool light ground, one ink-blue accent: a page for reading. Privacy, terms, 404 and a

@@ -11,13 +11,6 @@ export const SHAPES = {
   // five-notched cherry petal: rounded, with the notch at its tip
   petal: "M0 9 C-6 6 -8 -2 -4 -7 C-2.5 -9 -1 -9 0 -6.5 C1 -9 2.5 -9 4 -7 C8 -2 6 6 0 9 Z",
 };
-/** The home page's leaves: three outlines, no stroke (a slender lance, an oval, a sickle like a
- *  eucalyptus leaf), each with a short stalk, in the same box as SHAPES (long axis on y). */
-export const LEAVES = [
-  "M0 -9.5 C3.1 -6 3.5 1.5 0.35 8.6 L0.35 10 L-0.35 10 L-0.35 8.6 C-3.5 1.5 -3.1 -6 0 -9.5 Z",
-  "M0 -8.5 C5.4 -5.6 5.6 3 0.35 8 L0.35 9.6 L-0.35 9.6 L-0.35 8 C-5.6 3 -5.4 -5.6 0 -8.5 Z",
-  "M-1.6 -9.6 C3.4 -6.4 4.2 1.8 0.6 8.4 L0.8 9.8 L0.1 9.9 L-0.1 8.6 C-2 3.8 -3.6 -3.4 -1.6 -9.6 Z",
-];
 
 export interface FallOptions {
   n: number;

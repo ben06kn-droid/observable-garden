@@ -24,145 +24,87 @@ export function subTree(tree: SearchTree, stems: number[]): SearchTree {
 const aspect = (svg: SVGSVGElement) => { const r = svg.getBoundingClientRect(); return r.width && r.height ? r.width / r.height : 1.6; };
 
 // ---------- the home page's grove ----------
-// The restart example's logged search as eight trees standing on one ground line, drawn at 1:1 in CSS
-// pixels (one <svg> per tree, so a tree's entrance and sway are composited). Every stroke is one
-// evaluation that happened: each move's kept rule is a segment of the tree's axis (the first move's is
-// the trunk), and every other rule the move scored is a twig off that segment. A twig's reach and angle
-// are its in-sample Sharpe within the tree: the best reach long and nearly upright, the worst are short
-// and droop. A tree's height is its best Sharpe (the tallest tree is the best restart). Line weight falls
-// with depth in the tree (trunk, limbs, twigs) and with depth in the scene (the back row is smaller,
-// finer and a lighter green). Buds are small solid points; a kept rule's point is a little larger.
-type P = [number, number];
-interface Built { d: string[]; buds: { x: number; y: number; r: number }[]; tips: { x: number; y: number; w: number }[]; l: number; r: number; top: number }
+// The restart example's logged search as birches standing on one ground line (src/birch.ts). Every twig
+// and leaf was placed at build time (scripts/make_grove.mjs, public/examples/grove.json); here the page
+// only scales and positions the finished drawings, one <svg> per tree so a tree's entrance and sway are
+// composited. Desktop: every restart in search order, the even ones in front, spaced so no two front
+// crowns touch, the odd ones a row behind (smaller, finer, lighter), each midway between its
+// neighbours; a 3 px knockout in the paper's colour under every front stroke keeps the front trees
+// reading cleanly where a back tree passes behind. Phone: its own grove of two larger trees.
+import { renderPrims, type Prims } from "./birch";
 
-const hash = (i: number) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
-const n2 = (v: number) => (Math.round(v * 100) / 100).toString();
+export interface GroveTree { stem: number; back: boolean; height: number; l: number; r: number; top: number; trunk: string; bark: string; prims: Prims }
+export interface GroveData { restarts: number; evaluations: number; phone_evaluations: number; desktop: GroveTree[]; phone: GroveTree[] }
+export interface Grove { stems: SVGSVGElement[]; sources: (stem?: number) => Source[]; restarts: number; evaluations: number; shown: number }
 
-// a quadratic from a through c to b, sampled
-function quad(a: P, c: P, b: P, n = 10): P[] {
-  const out: P[] = [];
-  for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t; out.push([u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]); }
-  return out;
-}
-// a filled stroke along `pts`, its width easing from w0 to w1 (a tapered line); a flat end at the start
-function taper(pts: P[], w: (t: number) => number, flat = false): string {
-  const L: P[] = [], R: P[] = [], n = pts.length - 1;
-  for (let i = 0; i <= n; i++) {
-    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
-    const h = w(i / n) / 2, nx = -dy / len * h, ny = dx / len * h;
-    L.push([pts[i][0] + nx, pts[i][1] + ny]); R.push([pts[i][0] - nx, pts[i][1] - ny]);
-  }
-  if (flat) { const s = L[1][0] > pts[1][0] ? 1 : -1; L[0] = [pts[0][0] + s * w(0) / 2, pts[0][1]]; R[0] = [pts[0][0] - s * w(0) / 2, pts[0][1]]; }   // a level foot, on the ground
-  const tip = pts[n];
-  return "M" + L.map((p) => `${n2(p[0])} ${n2(p[1])}`).join("L") + `L${n2(tip[0])} ${n2(tip[1])}L` + R.reverse().map((p) => `${n2(p[0])} ${n2(p[1])}`).join("L") + "Z";
-}
+const PAD = 4;   // around each tree's drawing, in its own units
+const END = 0.36; // the last back tree's trunk, past the last front one, in front spacings
 
-/** One restart drawn as a tree, its foot at (0, 0) and growing up (negative y), `ht` px tall. */
-function buildTree(moves: SearchTree["moves"], ht: number, back: boolean, seed: number): Built {
-  const all = moves.flatMap((m) => m.candidates.map((c) => c.sharpe)), lo = Math.min(...all), hi = Math.max(...all);
-  const s01 = (s: number) => (s - lo) / Math.max(1e-9, hi - lo);
-  const k = back ? 0.8 : 1;
-  const wBase = Math.max(2.2, Math.min(7, ht * 0.0105)) * k, wTwig = Math.max(0.55, Math.min(1.1, ht * 0.0017)) * k, rBud = Math.max(0.85, Math.min(1.6, ht * 0.0023)) * k;
-  const out: Built = { d: [], buds: [], tips: [], l: 0, r: 0, top: 0 };
-  const keptMoves = moves.filter((m) => !m.from_ground && m.kept).length;
-  const crownBase = 0.4 * ht, crownLen = ht - crownBase;
-  let node: P = [0, 0], width = wBase, kept = 0, sid = seed * 1000;
-  const grow = (p: P) => { out.l = Math.min(out.l, p[0]); out.r = Math.max(out.r, p[0]); out.top = Math.min(out.top, p[1]); };
-  for (const m of moves) {
-    // the move's own segment of the axis: the trunk for the first, a limb for each kept rule after it
-    let a = node, b = node, seg: P[] | null = null;
-    if (m.from_ground) {
-      b = [(hash(sid++) - 0.5) * ht * 0.02, -crownBase];
-      seg = quad(a, [(hash(sid++) - 0.5) * ht * 0.03, -crownBase * 0.5], b, 14);
-      const w0 = width, w1 = width * 0.5;
-      out.d.push(taper(seg, (t) => (w0 + (w1 - w0) * t) * (1 + 0.55 * Math.pow(1 - t, 10)), true));   // a slight flare at the foot
-      width = w1;
-    } else if (m.kept) {
-      const share = keptMoves > 1 ? [0.46, 0.34, 0.2, 0.12][Math.min(3, kept)] : 1, len = crownLen * share;
-      const lean = ((kept % 2 ? 1 : -1) * (seed % 2 ? 1 : -1)) * (4 + hash(sid++) * 6) * Math.PI / 180;
-      b = [a[0] + Math.sin(lean) * len, a[1] - Math.cos(lean) * len];
-      seg = quad(a, [(a[0] + b[0]) / 2 + Math.cos(lean) * len * 0.05, (a[1] + b[1]) / 2], b, 10);
-      const w0 = width, w1 = Math.max(0.7 * k, width * 0.55);
-      out.d.push(taper(seg, (t) => w0 + (w1 - w0) * t));
-      width = w1; kept++;
-    }
-    for (const p of seg ?? []) grow(p);
-    // every other rule the move scored: a twig off the segment (or off the node, for a move that kept nothing)
-    const others = m.candidates.map((_, i) => i).filter((i) => !(seg && i === m.chosen));
-    const t0 = m.from_ground ? 0.74 : 0.18;
-    others.forEach((ci, j) => {
-      const v = s01(m.candidates[ci].sharpe), t = seg ? Math.min(1, t0 + (1 - t0) * ((j + 1) / (others.length + 1) + (hash(sid++) - 0.5) * 0.05)) : 1;
-      const at: P = seg ? seg[Math.round(t * (seg.length - 1))] : node;
-      const side = (j + seed) % 2 ? 1 : -1;
-      const ang = (16 + (1 - v) * 84 + (hash(sid++) - 0.5) * 10) * Math.PI / 180;
-      const L = ht * (0.045 + 0.13 * v) * (0.88 + hash(sid++) * 0.24);
-      const tip: P = [at[0] + side * Math.sin(ang) * L, at[1] - Math.cos(ang) * L];
-      const pts = quad(at, [(at[0] + tip[0]) / 2, (at[1] + tip[1]) / 2 - L * 0.16], tip, 8);
-      out.d.push(taper(pts, (u) => wTwig * (1 - 0.65 * u)));
-      out.buds.push({ x: tip[0], y: tip[1], r: rBud });
-      out.tips.push({ x: tip[0], y: tip[1], w: 0.4 + v });
-      grow([tip[0] - rBud, tip[1] - rBud]); grow([tip[0] + rBud, tip[1] + rBud]);
-    });
-    if (seg) { out.buds.push({ x: b[0], y: b[1], r: rBud * (m.from_ground ? 1.2 : 1.45) }); node = b; }
-  }
-  return out;
+function treeSvg(t: GroveTree, s: number, left: number): SVGSVGElement {
+  const svg = document.createElementNS(NS, "svg");
+  const vx = t.l - PAD, vw = t.r - t.l + 2 * PAD, vy = t.top - PAD, vh = -t.top + PAD;
+  svg.setAttribute("class", "stem" + (t.back ? " back" : ""));
+  svg.setAttribute("viewBox", `${vx} ${vy} ${vw} ${vh}`);
+  svg.dataset.stem = String(t.stem);
+  for (const [k, v] of [["--l", `${left.toFixed(2)}px`], ["--w", `${(vw * s).toFixed(2)}px`], ["--h", `${(vh * s).toFixed(2)}px`], ["--ox", `${((0 - vx) * s).toFixed(2)}px`], ["--i", String(t.stem)]] as const) svg.style.setProperty(k, v);
+  const d = renderPrims(t.prims);
+  const add = (cls: string, path: string) => { if (!path) return; const e = document.createElementNS(NS, "path"); e.setAttribute("class", cls); e.setAttribute("d", path); e.setAttribute("vector-effect", "non-scaling-stroke"); svg.appendChild(e); };
+  // the knockout first (front trees only), then the tree: branches and twigs, the trunk over their
+  // feet, its bark, then the leaves
+  if (!t.back) for (const path of [d.branches, d.twigs, t.trunk, ...d.leaves]) add("ko", path);
+  add("br", d.branches); add("tw", d.twigs); add("tr", t.trunk); add("bk", t.bark);
+  d.leaves.forEach((path, k) => add(`lf l${k}`, path));
+  return svg;
 }
 
-export interface Grove { stems: SVGSVGElement[]; sources: (stem?: number) => Source[]; evaluations: number; restarts: number }
-
-/** Draw the search into `host` (a box whose bottom edge is the ground), each tree inside the box. */
-export function drawGrove(host: HTMLElement, tree: SearchTree, box: { w: number; h: number }, offset: { x: number; y: number }): Grove {
+/** Draw the grove into `host`, a box whose bottom edge is the ground; `offset` is the box in the section. */
+export function drawGrove(host: HTMLElement, data: GroveData, box: { w: number; h: number }, offset: { x: number; y: number }, phone: boolean): Grove {
   host.replaceChildren();
-  const byStem = new Map<number, SearchTree["moves"]>();
-  for (const m of tree.moves) { if (!byStem.has(m.stem)) byStem.set(m.stem, []); byStem.get(m.stem)!.push(m); }
-  const stems = [...byStem.keys()].sort((a, b) => a - b);
-  const best = new Map(stems.map((s) => [s, Math.max(...byStem.get(s)!.flatMap((m) => m.candidates.map((c) => c.sharpe)))]));
-  const top = Math.max(...best.values());
-  // heights in proportion to each restart's best Sharpe; the back row (every second restart) smaller
-  const want = (s: number, i: number) => (best.get(s)! / top) * (i % 2 ? 0.74 : 1);
-  let scale = box.h;
-  let built = stems.map((s, i) => buildTree(byStem.get(s)!, scale * want(s, i), i % 2 === 1, s + 1));
-  // fit: the tallest drawing (twigs included) exactly the box's height, and the row exactly its width
-  for (let pass = 0; pass < 3; pass++) {
-    const tall = Math.max(...built.map((b) => -b.top)), first = built[0], last = built[built.length - 1];
-    const span = (-first.l) + last.r, room = box.w - span, gap = room / Math.max(1, stems.length - 1);
-    const shrinkH = (box.h - 1) / tall, minGap = box.w * 0.06;
-    const shrinkW = gap < minGap ? (box.w - minGap * (stems.length - 1)) / span : 1;
-    const f = Math.min(shrinkH, shrinkW);
-    if (Math.abs(f - 1) < 0.002) break;
-    scale *= f;
-    built = stems.map((s, i) => buildTree(byStem.get(s)!, scale * want(s, i), i % 2 === 1, s + 1));
+  const trees = phone ? data.phone : data.desktop;
+  const tall = Math.max(...trees.map((t) => -t.top + PAD));
+  const wid = (t: GroveTree) => [(t.l - PAD), (t.r + PAD)] as const;
+  let s = (box.h - 1) / tall, xs: number[] = [];
+  if (phone) {
+    // two trees: as large as fits, spread evenly, crowns apart
+    const sumW = trees.reduce((n, t) => n + (t.r - t.l + 2 * PAD), 0), gap = 16;
+    s = Math.min(s, (box.w - gap * (trees.length - 1)) / sumW);
+    const room = box.w - sumW * s, g = room / (trees.length + 1);
+    let x = g; xs = trees.map((t) => { const at = x - wid(t)[0] * s; x += (t.r - t.l + 2 * PAD) * s + g; return at; });
+  } else {
+    // front trunks at x0 + i·d, every back trunk half a spacing after a front one (the last a third of a
+    // spacing past the last front tree, never beside its trunk); the largest scale at which no two front crowns come within
+    // `gap` of each other and every tree ends inside the box. A back crown may lie behind a front one (the
+    // knockout keeps the front tree clean); no two front crowns ever meet.
+    const F = trees.filter((t) => !t.back), lastBack = trees[trees.length - 1].back, gap = 18;
+    const lay = (sc: number) => {
+      let d = 0;
+      for (let k = 0; k + 1 < F.length; k++) d = Math.max(d, (wid(F[k])[1] - wid(F[k + 1])[0]) * sc + gap);
+      const x0 = -wid(F[0])[0] * sc, end = trees[trees.length - 1];
+      const right = lastBack ? x0 + (F.length - 1 + END) * d + wid(end)[1] * sc : x0 + (F.length - 1) * d + wid(end)[1] * sc;
+      return { d, x0, right };
+    };
+    let lo = 0, hi = s;
+    for (let it = 0; it < 32; it++) { const mid = (lo + hi) / 2; if (lay(mid).right <= box.w) lo = mid; else hi = mid; }
+    s = lo;
+    const L0 = lay(s), slack = box.w - L0.right, d = L0.d + slack / (F.length - 1 + (lastBack ? END : 0));
+    xs = trees.map((t, i) => L0.x0 + (i === trees.length - 1 && t.back ? (F.length - 1 + END) : i / 2) * d);
   }
-  const first = built[0], last = built[built.length - 1];
-  const x0 = Math.ceil(-first.l + 0.5), x1 = Math.floor(box.w - last.r - 0.5), pad = 3;
   const svgs: SVGSVGElement[] = [];
-  const xs = stems.map((_, i) => Math.round(x0 + (x1 - x0) * (stems.length > 1 ? i / (stems.length - 1) : 0.5)));   // whole pixels, inside the box
-  // the back row first, so the front row's trees overlap it
-  const order = stems.map((_, i) => i).sort((a, b) => (b % 2) - (a % 2) || a - b);
-  for (const i of order) {
-    const b = built[i], x = xs[i];
-    const left = Math.floor(x + b.l - pad), right = Math.ceil(x + b.r + pad), up = Math.ceil(-b.top + pad);
-    const svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("class", "stem" + (i % 2 ? " back" : ""));
-    svg.setAttribute("viewBox", `${left - x} ${-up} ${right - left} ${up}`);
-    svg.setAttribute("width", String(right - left)); svg.setAttribute("height", String(up));
-    svg.dataset.stem = String(stems[i]);
-    for (const [k, v] of [["--l", left], ["--w", right - left], ["--h", up], ["--ox", x - left], ["--i", stems[i]]] as const) svg.style.setProperty(k, `${v}${k === "--i" ? "" : "px"}`);
-    const g = document.createElementNS(NS, "path");
-    g.setAttribute("d", b.d.join("") + b.buds.map((p) => `M${n2(p.x - p.r)} ${n2(p.y)}a${n2(p.r)} ${n2(p.r)} 0 1 0 ${n2(2 * p.r)} 0a${n2(p.r)} ${n2(p.r)} 0 1 0 ${n2(-2 * p.r)} 0Z`).join(""));
-    svg.appendChild(g);
-    svgs[i] = svg;
-    host.appendChild(svg);
-  }
+  // back trees first, so the front ones (and their knockouts) lie over them
+  const order = trees.map((_, i) => i).sort((a, b) => Number(trees[b].back) - Number(trees[a].back) || a - b);
+  for (const i of order) { const t = trees[i], svg = treeSvg(t, s, xs[i] + (t.l - PAD) * s); svgs[i] = svg; host.appendChild(svg); }
   const sources = (stem?: number): Source[] => {
     const out: Source[] = [];
-    built.forEach((b, i) => {
-      if (stem !== undefined && stems[i] !== stem) return;
-      for (const t of b.tips) out.push({ x: offset.x + xs[i] + t.x, y: offset.y + box.h + t.y, vx: (t.x >= 0 ? 1 : -1) * (2 + hash(t.x * 7 + t.y) * 4), w: t.w * (0.4 + (-t.y / Math.max(1, -b.top))) });
+    trees.forEach((t, i) => {
+      if (stem !== undefined && t.stem !== stem) return;
+      for (const [x, y, a, sz] of t.prims.leaves) {
+        const lx = x + Math.cos(a) * sz * 0.5, ly = y + Math.sin(a) * sz * 0.5;
+        out.push({ x: offset.x + xs[i] + lx * s, y: offset.y + box.h + ly * s, vx: (lx >= 0 ? 1 : -1) * (2 + Math.abs(Math.sin(lx * 7 + ly)) * 4), w: 0.5 + Math.min(1, -ly / Math.max(1, -t.top)) });
+      }
     });
     return out;
   };
-  return { stems: svgs, sources, evaluations: tree.moves.reduce((n, m) => n + m.candidates.length, 0), restarts: stems.length };
+  return { stems: svgs, sources, restarts: data.restarts, evaluations: phone ? data.phone_evaluations : data.evaluations, shown: trees.length };
 }
 
 /** A tree's short damped sway about its foot, on the compositor; no sway under reduced motion. */

@@ -1,12 +1,13 @@
-/* The home page: the overview on paper, the search drawn in dark green standing on one ground line,
-   yellow leaves falling onto it. The headline and the brand mark are Bricolage Grotesque at its heavy
+/* The home page: the overview on paper, the search drawn as birches standing on one ground line (dark
+   green, pale bark, green leaves), their turned ochre leaves falling onto it. The headline and the brand mark are Bricolage Grotesque at its heavy
    weight; nothing else is.
 
    One screen, on the shared grid (DESIGN.md 4): the copy in columns 1–6, the grove in 7–12, a hairline
    ground across all twelve with a tick on the left edge, the centre line (where the header's links
    start) and the right edge, and a mono legend under it. Below 813 px the same parts stack: headline, reading, grove,
    ground. The copy reads as one block from the top; the open paper under it is where the leaves land.
-   No tree is drawn behind text, and every tree is inside its box (woods.ts drawGrove). */
+   No tree is drawn behind text, every tree is inside its box, and no crown touches a front tree's
+   (woods.ts drawGrove; the trees themselves are placed at build time, scripts/make_grove.mjs). */
 
 [data-theme="home"] {
   --paper: #efe6d2;
@@ -14,8 +15,15 @@
   --paper-muted: #4a4a3d;      /* 7.2:1 */
   --paper-tree: #1f3b2a;       /* the front row of trees: dark green */
   --paper-tree-far: #5b6e58;   /* the back row: the same green, further off */
-  --leaf-1: #c99a2e;           /* three ochres for the leaves */
-  --leaf-2: #b7832a;
+  --bark: #f7f2e7;             /* the birches' pale bark */
+  --green-1: #4f7d4c;          /* three greens for the leaves on the trees, light enough to read */
+  --green-2: #66905a;          /* against the branches and against the paper */
+  --green-3: #7fa466;
+  --green-far-1: #7d9a72;      /* the back row's, further off */
+  --green-far-2: #94ad86;
+  --green-far-3: #a8bf98;
+  --leaf-1: #c99a2e;           /* three ochres for the leaves that have turned and fall: the page's */
+  --leaf-2: #b7832a;           /* one warm accent */
   --leaf-3: #dcb24f;
 
   --ground: var(--paper);
@@ -77,31 +85,43 @@
 .one .legend { display: flex; justify-content: space-between; gap: var(--s5); margin: 0; padding-top: 14px;
   font: 400 var(--t-micro)/16px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-muted); }
 
-/* ---- the grove (woods.ts): one svg per tree at 1:1, its foot on the ground line */
+/* ---- the grove (woods.ts, birch.ts): one svg per tree, its foot on the ground line. Strokes keep their
+   pixel width at any scale (vector-effect); the front trees lie on a 3 px knockout in the paper's colour */
 .one .grove .real { position: absolute; inset: 0; }
 .one .grove .stem { position: absolute; left: var(--l); bottom: 0; width: var(--w); height: var(--h); overflow: visible;
-  fill: var(--paper-tree); transform-origin: var(--ox) 100%; cursor: pointer; outline: none; }
-.one .grove .stem.back { fill: var(--paper-tree-far); }
+  transform-origin: var(--ox) 100%; cursor: pointer; outline: none; }
+.one .grove .stem .ko { fill: var(--paper); stroke: var(--paper); stroke-width: 3px; stroke-linejoin: round; }
+.one .grove .stem .br, .one .grove .stem .tw, .one .grove .stem .bk { fill: var(--paper-tree); }
+.one .grove .stem .tr { fill: var(--bark); stroke: var(--paper-tree); stroke-width: 1px; stroke-linejoin: round; }
+.one .grove .stem .l0 { fill: var(--green-1); }
+.one .grove .stem .l1 { fill: var(--green-2); }
+.one .grove .stem .l2 { fill: var(--green-3); }
+.one .grove .stem.back .br, .one .grove .stem.back .tw, .one .grove .stem.back .bk { fill: var(--paper-tree-far); }
+.one .grove .stem.back .tr { stroke: var(--paper-tree-far); }
+.one .grove .stem.back .l0 { fill: var(--green-far-1); }
+.one .grove .stem.back .l1 { fill: var(--green-far-2); }
+.one .grove .stem.back .l2 { fill: var(--green-far-3); }
 .one .grove .stem:focus-visible { outline: 1px dashed var(--focus); outline-offset: 4px; }
 
 /* leaves (particles.ts) in front of the trees, behind the text */
 .one canvas.air, .one canvas.pile { z-index: 1; }
 
 /* ---- arrival, on lukres.dev's curve: the headline's words rise out of their masks, 50 ms apart; the
-   ground draws from the left, its ticks follow; the trees come in, restart by restart, in the search's
-   order; then the reading. Transform and opacity only. */
-.one h1 .w { animation: word-y var(--dur-page) var(--ease-travel) both, word-r 700ms var(--ease-travel) both; }
+   ground draws from the left, its ticks follow; the copy has fully arrived within a second; the trees
+   come in, restart by restart, in the search's order. Transform and opacity only. */
+.one h1 .w { animation: word-y 900ms var(--ease-travel) both, word-r 600ms var(--ease-travel) both; }
 .one h1 .ln:first-child .w:nth-child(2) { animation-delay: 50ms; }
 .one h1 .ln:last-child .w { animation-delay: 100ms; }
 @keyframes word-y { from { translate: 0 1.7em; } }
 @keyframes word-r { from { rotate: 15deg; } }
-.one .lead, .one .body > *, .one .legend { animation: fade-up var(--dur-enter) var(--ease-travel) both; }
-.one .lead { animation-delay: 350ms; }
-.one .body > :nth-child(1) { animation-delay: 450ms; }
-.one .body > :nth-child(2) { animation-delay: 550ms; }
-.one .body > :nth-child(3) { animation-delay: 650ms; }
-.one .body > :nth-child(4) { animation-delay: 750ms; }
-.one .legend { animation-delay: 900ms; }
+/* every word of the copy has fully arrived within one second */
+.one .lead, .one .body > *, .one .legend { animation: fade-up 600ms var(--ease-travel) both; }
+.one .lead { animation-delay: 150ms; }
+.one .body > :nth-child(1) { animation-delay: 220ms; }
+.one .body > :nth-child(2) { animation-delay: 290ms; }
+.one .body > :nth-child(3) { animation-delay: 360ms; }
+.one .body > :nth-child(4) { animation-delay: 400ms; }
+.one .legend { animation-delay: 400ms; }
 @keyframes fade-up { from { opacity: 0; transform: translate3d(0, 0.6em, 0); } }
 .one .horizon { transform-origin: 0 50%; animation: draw-x var(--dur-page) var(--ease-travel) 150ms both; }
 @keyframes draw-x { from { transform: scaleX(0); } }
