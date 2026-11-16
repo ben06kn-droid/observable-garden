@@ -1,6 +1,8 @@
 // The home page: the overview on paper, the search drawn behind it in dark green, yellow leaves falling.
 // The demo is its own page (demo.html, src/pages/demo.ts); the scroll chain (chain.ts) carries the
 // visitor on to the run page from the end of this one.
+import "../common";              // the shared stylesheet first, so the theme wins ties
+import "../styles/home.css";
 import { reduceMotion } from "../common";
 import { Field, startLife } from "../particles";
 import { branchSources, shakeable, woodOne } from "../woods";

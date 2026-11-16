@@ -6,6 +6,8 @@
 // message, and cleared (the variable and the field) when the run ends in any way or the page is left.
 // The panel and the class are read by the package's own loaders in the worker (np.load with
 // allow_pickle=False) and checked before the key is used; their errors are shown word for word.
+import "../common";              // the shared stylesheet first, so the theme wins ties
+import "../styles/run.css";
 import { auditId, h, MEANING, reduceMotion, sha256Hex, word } from "../common";
 import { cancelGate, loadGate, type RunOutcome } from "../gate";
 import { makeScene } from "../scene";

@@ -1,0 +1,71 @@
+/* The home page: the overview on paper, the search drawn behind it in dark green, yellow leaves falling.
+   The headline and the brand mark are Bricolage Grotesque at its heavy weight; nothing else is. */
+
+[data-theme="home"] {
+  --paper: #efe6d2;
+  --paper-ink: #1d1f17;        /* 13.4:1 on --paper */
+  --paper-muted: #4a4a3d;      /* 7.2:1 */
+  --paper-tree: #1f3b2a;       /* the trees behind the overview: opaque dark green */
+  --paper-wash: rgba(239, 230, 210, 0.9);   /* behind the text, over the trees */
+  --leaf: #e2b33a;             /* yellow leaves, falling */
+  --leaf-vein: #8a6a12;
+
+  --ground: var(--paper);
+  --ink: var(--paper-ink);
+  --muted: var(--paper-muted);
+  --faint: #6b6a58;
+  --rule: rgba(29, 31, 23, 0.18);
+  --header-bg: rgba(239, 230, 210, 0.92);
+  --accent: var(--paper-tree);
+  --focus: #1d5f8f;
+  --field: #f6f0e2;
+  --field-line: #b9b09a;
+  --problem: #8f1d2c;
+  --tree: var(--paper-tree);
+  --tree-path: var(--paper-tree);
+  --tree-bar: var(--paper-muted);
+}
+
+.page { position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; }
+
+.one { background: var(--paper); color: var(--paper-ink); }
+/* page one's trees (woods.ts): tall and short, a bare filled trunk and one crown of limbs, dark green */
+.one .bg-trees { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.one .bg-trees .real { filter: none; }
+.one .bg-trees .twig, .one .bg-trees .trunk, .one .bg-trees .bud { stroke: var(--paper-tree); stroke-width: 2; opacity: 1; fill: none; }
+.one .bg-trees .twig.down { opacity: 1; stroke-width: 1.4; }
+.one .bg-trees .trunk { fill: var(--paper-tree); fill-opacity: 1; stroke-width: 2.4; }
+.one .bg-trees .bud, .one .bg-trees .bud.kept, .one .bg-trees .bud.path { fill: none; }
+.one .wrap { position: relative; z-index: 2; margin: 0; padding: calc(var(--head) + var(--pad-y)) var(--pad-x) var(--s8) calc(var(--pad-x) - var(--s6)); }
+/* the copy's text, not its wash, sits on the grid's left edge, under the brand */
+.one .copy { max-width: 680px; background: var(--paper-wash); padding: var(--s6) var(--s6) var(--s5); }
+.one h1 { font: 800 clamp(2.4rem, 5.6vw, 4.6rem)/0.98 var(--display); letter-spacing: -0.03em; margin: 0 0 var(--s3); }
+.one .subhead { font: 800 clamp(1.15rem, 1.9vw, 1.5rem)/1.25 var(--display); letter-spacing: -0.01em; margin: 0 0 var(--s5); color: var(--paper-ink); }
+.one p { margin: 0 0 var(--s4); color: var(--paper-muted); }
+.one .copy a { color: var(--paper-ink); }
+.one ol.steps { list-style: none; padding: 0; margin: var(--s5) 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4) var(--s5); }
+.one ol.steps li { border-top: 2px solid var(--paper-ink); padding-top: var(--s3); font-size: 15px; color: var(--paper-muted); }
+.one ol.steps b { display: block; font: 800 14px/1.2 var(--display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--paper-ink); margin-bottom: var(--s2); }
+.one .soon { margin: var(--s5) 0 0; border-top: 2px solid var(--paper-ink); padding-top: var(--s3); font-size: 15px; color: var(--paper-muted); }
+.one .soon b { display: block; font: 800 14px/1.2 var(--display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--paper-ink); margin-bottom: var(--s2); }
+.one .cue { margin: var(--s5) 0 0; font: 12px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper-muted); }
+.one .cue a { text-decoration: none; }
+@media (max-width: 560px) { .one ol.steps { grid-template-columns: 1fr; } .one .copy { padding: var(--s5) var(--s4); } .one .wrap { padding-left: calc(var(--pad-x) - var(--s4)); padding-right: calc(var(--pad-x) - var(--s4)); } }
+
+/* yellow leaves from the crowns (particles.ts draws them on the canvases) */
+.falling { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.leaf { position: absolute; left: var(--x); top: var(--y0); width: var(--size); height: var(--size); will-change: transform; animation: drop var(--dur) linear var(--delay) infinite; }
+.leaf path { fill: var(--leaf); stroke: var(--leaf-vein); stroke-width: 0.8; }
+@keyframes drop {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+  25%  { transform: translate3d(var(--sway), calc(var(--fall) * 0.25), 0) rotate(calc(var(--spin) * 0.25)); }
+  50%  { transform: translate3d(0, calc(var(--fall) * 0.5), 0) rotate(calc(var(--spin) * 0.5)); }
+  75%  { transform: translate3d(calc(var(--sway) * -1), calc(var(--fall) * 0.75), 0) rotate(calc(var(--spin) * 0.75)); }
+  100% { transform: translate3d(0, var(--fall), 0) rotate(var(--spin)); }
+}
+/* every background tree can be shaken: a click or Enter (woods.ts); the crown sways from the trunk's foot */
+.bg-trees .real .stem { pointer-events: visiblePainted; cursor: pointer; outline: none; }
+.bg-trees .real .stem:focus-visible .hit { stroke: #1d5f8f; stroke-width: 2; stroke-dasharray: 6 5; }
+.bg-trees [data-stem] { transform-box: fill-box; transform-origin: 50% 100%; }
+.one .wrap { pointer-events: none; }
+.one .wrap .copy { pointer-events: auto; }

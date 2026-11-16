@@ -4,6 +4,8 @@
 // search_tree, which refuses a log that does not re-execute) and the scene draws the tree with the
 // verdict on it. Sancho: sancho.json (and its config, if given), drawn as the bonsai in its pot.
 // Files are read in the page; the panel and the class go through the package's loaders in the worker.
+import "../common";              // the shared stylesheet first, so the theme wins ties
+import "../styles/viewer.css";
 import { h, MEANING, reduceMotion, sha256Hex, word } from "../common";
 import { drawBonsai } from "../bonsai";
 import { loadGate } from "../gate";

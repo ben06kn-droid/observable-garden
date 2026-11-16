@@ -1,28 +1,8 @@
-/* Quixote, the site. Two pages and a hard cut between them: the overview on paper, with the search
-   drawn behind it in dark green and yellow leaves falling, then the demo at night in a city garden of
-   neon tubing. Page two's look switches on only when the carry onto it completes. On page two four
-   colour families, each with one job: magenta the trees, cyan the cables and the bar, white the type,
-   a narrow pastel range the flowers; blue is the run view's. Glow is decoration on strokes, and on the
-   one verdict word; every text colour is WCAG AA against the scene behind it. */
+/* The demo (demo.html, and the result page that replays a demo verdict): the city garden at night in neon
+   tubing. The only page with neon, glow or the night palette; nothing here is loaded by any other page.
+   Moved as it was from the old shared stylesheet; its own session restyles it. */
 
-@import "@fontsource-variable/bricolage-grotesque/wght.css";
-@import "@fontsource/ibm-plex-mono/latin-400.css";
-@import "@fontsource/ibm-plex-mono/latin-500.css";
-@import "@fontsource/ibm-plex-sans/latin-400.css";
-@import "@fontsource/ibm-plex-sans/latin-500.css";
-
-:root {
-  /* page one: day, paper */
-  --paper: #efe6d2;
-  --paper-ink: #1d1f17;        /* 13.4:1 on --paper */
-  --paper-muted: #4a4a3d;      /* 7.2:1 */
-  --paper-tree: #1f3b2a;       /* the trees behind the overview: opaque dark green */
-  --paper-wash: rgba(239, 230, 210, 0.9);   /* behind page one's text, over the trees */
-  --leaf: #e2b33a;             /* yellow leaves, falling */
-  --leaf-vein: #8a6a12;
-  --petal: #ffb3d1;            /* cherry petals: flat, pink always */
-
-  /* page two: night */
+[data-theme="demo"] {
   --night: #05040b;
   --night-2: #0d0a19;          /* the inside panel */
   --night-wash: rgba(9, 7, 20, 0.86);       /* behind text, over the trees */
@@ -30,83 +10,30 @@
   --muted: #b6afc9;            /* 9.7:1, 9.3:1 */
   --faint: #8f88a6;            /* 6.1:1, 5.8:1 */
   --rule: #2a2340;
-  --hair: #2c2442;             /* the hairline above each block of text on page two */
+  --hair: #2c2442;             /* the hairline above each block of text */
   --pink: #ff3fd2;             /* the run's tree */
   --pink-hot: #ffa6ee;         /* the submitted branch: brighter, heavier, same hue */
   --blue: #44b8ff;             /* a tree gone into */
   --amber: #f5b544;            /* the verdict only; 10.8:1 on --night */
-
-  --display: "Bricolage Grotesque Variable", "Arial Black", system-ui, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-
-  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
-  --page: 1240px;
-  --gutter: 16px;
+  --petal: #ffb3d1;            /* cherry petals: flat, pink always */
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* the semantic tokens the shared components read */
+  --ground: var(--night);
+  --header-bg: rgba(5, 4, 11, 0.86);
+  --accent: var(--pink);
+  --focus: var(--blue);
+  --field: #0b0916;
+  --field-line: #3a3352;
+  --problem: #ffb3c6;
+  --tree: var(--pink);
+  --tree-path: var(--pink-hot);
+  --tree-bar: #8ff3ff;
 }
 
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
-html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--night); color: var(--ink); font: 17px/1.6 var(--sans); overflow-x: hidden; }
-a { color: inherit; text-underline-offset: 3px; }
-:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
-.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.mono, code, pre, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.skip { position: absolute; left: -9999px; top: var(--s2); z-index: 30; background: var(--ink); color: var(--night); padding: var(--s2) var(--s3); font: 600 13px var(--mono); }
-.skip:focus { left: var(--gutter); }
-
-/* ---------- the header: a name and three links, nothing else ---------- */
-.top {
-  position: fixed; inset: 0 0 auto 0; z-index: 20; height: 52px;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 max(var(--gutter), calc((100vw - var(--page)) / 2));
-  font: 12px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--ink); background: rgba(5, 4, 11, 0.86);
-}
-body:not([data-page="two"]) .top { color: var(--paper-ink); background: rgba(239, 230, 210, 0.92); }
-.brand { font: 800 18px/1 var(--display); letter-spacing: 0; text-transform: none; text-decoration: none; }
-/* the author beside the name: name, email, LinkedIn, in the header's own small type */
-.who { display: flex; align-items: baseline; gap: var(--s4); min-width: 0; }
-.who .by { font: 11px/1 var(--mono); letter-spacing: 0.04em; text-transform: none; color: inherit; opacity: 0.85; text-decoration: none; white-space: nowrap; }
-.who a.by:hover, .who a.by:focus-visible { text-decoration: underline; }
-@media (max-width: 860px) { .who .by:nth-of-type(2) { display: none; } }   /* the email; name and LinkedIn stay */
-@media (max-width: 520px) { .who span.by { display: none; } .who { gap: var(--s3); } .top nav { gap: var(--s3); } }
-.top nav { display: flex; gap: var(--s5); }
-.top nav a { text-decoration: none; padding: var(--s2) 0; }
-.top nav a:hover, .top nav a[aria-current="page"] { text-decoration: underline; }
-
-/* ---------- page one: the overview, on paper, under the trees ---------- */
-.page { position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; }
-.one { background: var(--paper); color: var(--paper-ink); }
-/* page one's trees (woods.ts): tall and short, a bare filled trunk and one crown of limbs, dark green */
-.one .bg-trees { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.one .bg-trees .real { filter: none; }
-.one .bg-trees .twig, .one .bg-trees .trunk, .one .bg-trees .bud { stroke: var(--paper-tree); stroke-width: 2; opacity: 1; fill: none; }
-.one .bg-trees .twig.down { opacity: 1; stroke-width: 1.4; }
-.one .bg-trees .trunk { fill: var(--paper-tree); fill-opacity: 1; stroke-width: 2.4; }
-.one .bg-trees .bud, .one .bg-trees .bud.kept, .one .bg-trees .bud.path { fill: none; }
-.one .wrap { position: relative; z-index: 2; max-width: var(--page); margin: 0 auto; padding: 84px var(--gutter) 64px; }
-.one .copy { max-width: 680px; background: var(--paper-wash); padding: var(--s6) var(--s6) var(--s5); }
-.one h1 { font: 800 clamp(2.4rem, 5.6vw, 4.6rem)/0.98 var(--display); letter-spacing: -0.03em; margin: 0 0 var(--s3); }
-.one .subhead { font: 800 clamp(1.15rem, 1.9vw, 1.5rem)/1.25 var(--display); letter-spacing: -0.01em; margin: 0 0 var(--s5); color: var(--paper-ink); }
-.one p { margin: 0 0 var(--s4); color: var(--paper-muted); }
-.one .copy a { color: var(--paper-ink); }
-.one ol.steps { list-style: none; padding: 0; margin: var(--s5) 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4) var(--s5); }
-.one ol.steps li { border-top: 2px solid var(--paper-ink); padding-top: var(--s3); font-size: 15px; color: var(--paper-muted); }
-.one ol.steps b { display: block; font: 800 14px/1.2 var(--display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--paper-ink); margin-bottom: var(--s2); }
-.one .soon { margin: var(--s5) 0 0; border-top: 2px solid var(--paper-ink); padding-top: var(--s3); font-size: 15px; color: var(--paper-muted); }
-.one .soon b { display: block; font: 800 14px/1.2 var(--display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--paper-ink); margin-bottom: var(--s2); }
-.one .cue { margin: var(--s5) 0 0; font: 12px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper-muted); }
-.one .cue a { text-decoration: none; }
-@media (max-width: 560px) { .one ol.steps { grid-template-columns: 1fr; } .one .copy { padding: var(--s5) var(--s4); } }
-
-/* things falling: yellow leaves from page one's crowns, pink cherry petals on page two (pink always) */
+/* things falling: pink cherry petals */
 .falling { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
-.leaf, .petal { position: absolute; left: var(--x); top: var(--y0); width: var(--size); height: var(--size);
-  will-change: transform; animation: drop var(--dur) linear var(--delay) infinite; }
-.leaf path { fill: var(--leaf); stroke: var(--leaf-vein); stroke-width: 0.8; }
+.petal { position: absolute; left: var(--x); top: var(--y0); width: var(--size); height: var(--size); will-change: transform; animation: drop var(--dur) linear var(--delay) infinite; }
 .petal path { fill: var(--petal); }
 .leaves-blue .leaf path { fill: var(--blue); stroke: #1d5f8f; }
 @keyframes drop {
@@ -117,29 +44,20 @@ body:not([data-page="two"]) .top { color: var(--paper-ink); background: rgba(239
   100% { transform: translate3d(0, var(--fall), 0) rotate(var(--spin)); }
 }
 
-/* leaves and petals (particles.ts): per page, one canvas for what is in the air and one for the pile */
-canvas.air, canvas.pile, canvas.fx { position: absolute; left: 0; top: 0; width: var(--w, 0); height: var(--h, 0); pointer-events: none; z-index: 1; }
 .two canvas.pile { z-index: 4; }   /* over the bed's ground */
 .two canvas.fx { z-index: 5; }
 /* every background tree can be shaken: a click or Enter (woods.ts); the crown sways from the trunk's foot */
-.bg-trees .real .stem, .wood2 .real .stem { pointer-events: visiblePainted; cursor: pointer; outline: none; }
+.wood2 .real .stem { pointer-events: visiblePainted; cursor: pointer; outline: none; }
 .garden .hit { fill: transparent; stroke: none; }
 .bg-trees .real .stem:focus-visible .hit { stroke: #1d5f8f; stroke-width: 2; stroke-dasharray: 6 5; }
 .wood2 .real .stem:focus-visible .hit { stroke: var(--blue); stroke-width: 2; stroke-dasharray: 6 5; }
-.bg-trees [data-stem], .wood2 [data-stem], #garden [data-stem] { transform-box: fill-box; transform-origin: 50% 100%; }
-.one .wrap { pointer-events: none; }
-.one .wrap .copy { pointer-events: auto; }
+.wood2 [data-stem], #garden [data-stem] { transform-box: fill-box; transform-origin: 50% 100%; }
 
 /* ---------- page two: the demo, Night City ----------
    A city garden at night, sharp and clean: hairlines with a narrow glow, neon tubing, a lit ground
    line. Nothing blurred, no glitch, no scan lines, no gradient text; text sits straight on the dark. */
 .two { background: linear-gradient(to top, #1a0d24 0%, #0d0817 30%, #05040b 70%);
   --tube: var(--pink); --core: #fff0fb; --tube-dim: #b866d9; --wire: #8fe9ff; }
-/* the cut: page two is drawn all along under an opaque paper cover; its look switches on when the
-   carry onto it ends, as that cover's opacity going to 0 (a compositor change, no repaint) */
-.two .cover { position: absolute; inset: 0; z-index: 9; background: var(--paper); pointer-events: none; will-change: opacity; }
-body[data-page="two"] .two .cover { opacity: 0; }
-main { will-change: transform; }
 
 /* the city (city.ts): pylons, cables, a pulse, two dim signs */
 .two .city { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -268,6 +186,10 @@ main { will-change: transform; }
 .garden .twig.down { opacity: 0.45; stroke-width: 1.3; }
 .garden .trunk { fill: var(--pink); fill-opacity: 0.18; stroke-width: 2.6; }
 .garden .bud { fill: var(--night); }
+.garden .ground { display: inline; }
+.garden .axis { display: inline; }
+.garden .bar .cap { display: none; }
+.garden .halo, .garden .blossoms { display: inline; }
 .garden .bud.kept { fill: var(--pink); }
 .garden .canopy { fill: var(--pink); fill-opacity: 0.07; stroke-width: 1.6; opacity: 0.85; }
 /* the halo: a blurred, heavier copy of every stroke behind the tree (an svg filter, not text) */
@@ -429,101 +351,8 @@ main { will-change: transform; }
 .inside tr.chosen td:first-child::before { content: "> "; color: var(--blue); }
 body.inside-open { overflow: hidden; }
 
-/* ---------- below page two: free scrolling; the record straight on the dark ---------- */
-.below { background: var(--night); padding: var(--s8) max(var(--gutter), calc((100vw - var(--page)) / 2)) var(--s7); border-top: 1px solid var(--rule); }
-.below .verdict-text { max-width: 860px; margin: 0 0 var(--s7); }
-.below h2 { border-top: 1px solid var(--rule); padding-top: var(--s3); }
-.below h3 { font: 500 11px/1.4 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin: var(--s5) 0 var(--s2); }
-.below .meaning { color: var(--muted); margin: 0; }
-.reasons { margin: 0; padding-left: 1.2em; font: 13px/1.7 var(--mono); color: var(--muted); }
-.below h2, .doc h1, .doc h2 { font: 800 clamp(1.5rem, 2.6vw, 2.1rem)/1.1 var(--display); margin: 0 0 var(--s4); }
-.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--s2) var(--s5); margin: 0 0 var(--s5); border-top: 1px solid var(--rule); padding-top: var(--s3); }
-.kv dt { font: 12px/1.6 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-.kv dd { margin: 0; font: 13.5px/1.6 var(--mono); overflow-wrap: anywhere; }
-pre.cmd { margin: 0 0 var(--s4); padding: var(--s3) 0 0; border-top: 1px solid var(--rule); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.log { max-height: 340px; overflow: auto; border-top: 1px solid var(--rule); padding: var(--s3) 0 0; font: 12.5px/1.7 var(--mono); margin: 0 0 var(--s5); }
-.log p { margin: 0 0 var(--s2); overflow-wrap: anywhere; }
-.log b { color: var(--pink-hot); font-weight: 500; }
-.two-lines { font: 13px/1.7 var(--mono); color: var(--muted); border-left: 1px solid var(--rule); padding-left: var(--s4); margin: var(--s5) 0; }
-.two-lines p { margin: 0; }
-.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s7); }
-@media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
-.foot { border-top: 1px solid var(--rule); padding: var(--s5) max(var(--gutter), calc((100vw - var(--page)) / 2)); font: 12px/1.8 var(--mono); color: var(--muted); display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s4); }
-.foot nav { display: flex; flex-wrap: wrap; gap: var(--s4); }
-
-/* ---------- inner pages (result, paper, docs, legal, placeholders) ---------- */
-.doc { max-width: 860px; margin: 0 auto; padding: 96px var(--gutter) var(--s8); }
-.doc p, .doc li { color: var(--muted); }
-.doc strong { color: var(--ink); }
-.doc h2 { margin-top: var(--s7); font-size: 1.4rem; }
-.doc table { border-collapse: collapse; width: 100%; font-size: 15px; }
-.doc td, .doc th { text-align: left; vertical-align: top; padding: var(--s2) var(--s4) var(--s2) 0; border-top: 1px solid var(--rule); }
-.doc th { font: 600 13px var(--mono); color: var(--ink); }
-.label { font: 800 13px/1.2 var(--display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 var(--s4); }
-.result-stage { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--s6); align-items: start; }
-@media (max-width: 860px) { .result-stage { grid-template-columns: 1fr; } }
-.wide { max-width: var(--page); }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  .leaf, .petal { transform: translate3d(0, var(--hold), 0) rotate(var(--spin)); }
-}
-
-/* ---------- the run page: the visitor's inputs, then the run in the demo's scene, then its log ---------- */
-.run-form { display: grid; gap: var(--s5); margin-top: var(--s6); }
-.run-form fieldset { border: 0; border-top: 1px solid var(--rule); margin: 0; padding: var(--s4) 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--s4) var(--s5); }
-.run-form legend { font: 500 11px/1.4 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); padding: 0 var(--s2) 0 0; }
-.run-form label { display: grid; gap: var(--s2); font: 12px/1.4 var(--mono); color: var(--muted); }
-.run-form label.wide, .run-form fieldset > .fine, .run-form fieldset > .status, .run-form details { grid-column: 1 / -1; }
-.run-form input, .run-form select, .run-form textarea { font: 13px/1.5 var(--mono); color: var(--ink); background: #0b0916; border: 1px solid #3a3352; padding: 8px 10px; min-height: 40px; }
-.run-form input[type="file"] { padding: 6px; }
-.run-form textarea { resize: vertical; min-height: 140px; }
-.run-form input:focus-visible, .run-form select:focus-visible, .run-form textarea:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
-.run-form .fine, .run-form .status { margin: 0; font: 12px/1.6 var(--mono); color: var(--muted); }
-.run-form .fine.smaller { font-size: 11px; }
-.run-form .fine a { color: var(--ink); }
-.run-new { margin: 0 0 var(--s4); padding: 8px 12px; border-left: 2px solid var(--blue); font: 12px/1.6 var(--mono); color: var(--muted); }
-.run-new a { color: var(--ink); }
-.run-form .status.bad, .problem { color: #ffb3c6; }
-.run-form .estimate { margin: 0; font: 13px/1.6 var(--mono); color: var(--ink); }
-.run-form button.link { justify-self: start; align-self: end; font: 12px var(--mono); color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--pink); padding: 6px 0; cursor: pointer; }
-.run-form .actions, .below .actions { display: flex; flex-wrap: wrap; gap: var(--s5); align-items: center; }
-.run-main .page.two { min-height: 92vh; }
-.run-log { list-style: none; padding: var(--s3) 0 0; max-height: 420px; }
-.run-log li { margin: 0 0 var(--s2); overflow-wrap: anywhere; }
-.run-log li.move b { color: var(--pink-hot); }
-.run-log li.result { color: var(--muted); padding-left: var(--s4); }
-.run-log li.refused { color: #ffb3c6; padding-left: var(--s4); }
-.run-log .say { color: var(--faint); }
-.share-word { font: 800 2rem/1 var(--display); color: var(--ink); margin: var(--s5) 0 var(--s2); }
-
-/* two plain statements under a hairline rule (the run and Sancho pages) */
-.below.statements p { max-width: 860px; margin: 0 0 var(--s3); color: var(--ink); }
-.below.statements a { color: var(--ink); }
-
-/* the Sancho page: the registered result and the lever editor */
-.lede { color: var(--ink) !important; }
-.sancho-card { border-top: 1px solid var(--rule); padding-top: var(--s3); }
-.sancho-card .kv dt { text-transform: none; letter-spacing: 0; color: var(--ink); }
-.sancho-card .kv dd a { color: var(--ink); margin-left: var(--s2); }
-.levers { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-.levers .lever { display: grid; gap: var(--s2); align-content: start; border-top: 1px solid var(--rule); padding-top: var(--s3); }
-.levers .lever-name { color: var(--ink); }
-.levers .checks, .levers .grids { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); align-items: center; }
-.levers .check { display: inline-flex; align-items: center; gap: 4px; }
-.levers .check input { min-height: 0; }
-.levers .grid { display: grid; grid-template-columns: 1.5em 1fr; align-items: center; width: 100%; }
-.levers input[readonly] { color: var(--muted); }
-.config-out { margin-top: var(--s5); }
-
-/* Sancho as the bonsai in its pot (the viewer) */
-.garden .bonsai { filter: drop-shadow(0 0 3px rgba(255, 63, 210, 0.7)); }
-.garden .bonsai .bark { fill: var(--tube); fill-opacity: 0.92; stroke: var(--tube); stroke-width: 0.6; }
-.garden .bonsai .pad { fill: var(--tube); fill-opacity: 0.12; stroke: var(--tube); stroke-width: 2.2; }
-.garden .bonsai .dot { fill: var(--core); }
-.garden .bonsai .pot, .garden .bonsai .pot-foot { fill: var(--tube-dim); fill-opacity: 0.18; stroke: var(--tube-dim); stroke-width: 2.4; }
-.garden .bonsai .bonsai-label { fill: var(--ink); font: 14px var(--mono); filter: none; }
-/* the viewer's drop zone */
-.run-form .drop { border: 1px dashed #3a3352; padding: var(--s4); }
-.run-form .drop.over { border-color: var(--pink); }
-.v-files { margin: 0; padding-left: 1.2em; font: 12px/1.6 var(--mono); color: var(--muted); grid-column: 1 / -1; }
+/* the record below the demo: free scrolling, straight on the dark */
+.below { background: var(--night); }
+.verdict .word, .verdict dd { font-family: var(--display); }
+.page { position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; }
+.demo-main .page.two { padding-top: 0; }

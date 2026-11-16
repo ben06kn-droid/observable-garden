@@ -1,6 +1,6 @@
 // What every page shares: the fonts and styles, the header's colour over paper or night, and the
 // two sentences on result pages.
-import "./styles.css";
+import "./styles/base.css";
 import { inject } from "@vercel/analytics";
 
 // Vercel Web Analytics: page views only, no cookies. The script and its beacon are this site's own

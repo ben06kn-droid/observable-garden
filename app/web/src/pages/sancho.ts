@@ -1,6 +1,8 @@
 // The Sancho page: the lever editor. A form over sancho/config.json's levers (src/levers.ts); every
 // change rewrites the config the page would download and its hash, the one `quixote sancho` records.
 // It runs entirely in the page: nothing is sent or stored.
+import "../common";              // the shared stylesheet first, so the theme wins ties
+import "../styles/sancho.css";
 import { h } from "../common";
 import { INSTALL } from "../install";
 import { BLOCKS, configSha256, DEFAULT, fileText, firstScored, LEVERS, MEMORY_ROWS, numberList, problems, REGIMES, type Values } from "../levers";
