@@ -8,6 +8,7 @@
 // allow_pickle=False) and checked before the key is used; their errors are shown word for word.
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/run.css";
+import "../chain";
 import { auditId, h, MEANING, reduceMotion, sha256Hex, word } from "../common";
 import { cancelGate, loadGate, type RunOutcome } from "../gate";
 import { makeScene } from "../scene";

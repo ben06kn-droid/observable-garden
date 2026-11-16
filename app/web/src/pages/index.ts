@@ -3,6 +3,7 @@
 // visitor on to the run page from the end of this one.
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/home.css";
+import "../chain";
 import { reduceMotion } from "../common";
 import { Field, startLife } from "../particles";
 import { branchSources, shakeable, woodOne } from "../woods";

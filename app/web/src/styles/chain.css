@@ -1,0 +1,56 @@
+/* The scroll chain's carry (src/chain.ts, public/carry.js). Loaded only by the chain's pages (home,
+   run, docs, Sancho), so only they opt in to cross-document view transitions. Transform and opacity
+   only; lukres.dev's curve; 1.0 s. Colours come from the page's tokens. */
+
+@view-transition { navigation: auto; }
+@media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+
+/* the header stays put across a carry; only its colours cross-fade */
+.top { view-transition-name: top; }
+::view-transition-group(top) { animation-duration: var(--dur-page); animation-timing-function: var(--ease-travel); }
+
+/* down: this page's snapshot rises off the top as the next rises in from below, as one scroll */
+html[data-carry="down"]::view-transition-old(root) { animation: carry-off-up var(--dur-page) var(--ease-travel) both; }
+html[data-carry="down"]::view-transition-new(root) { animation: carry-on-up var(--dur-page) var(--ease-travel) both; }
+/* up: the reverse, landing at the previous page's end */
+html[data-carry="up"]::view-transition-old(root) { animation: carry-off-down var(--dur-page) var(--ease-travel) both; }
+html[data-carry="up"]::view-transition-new(root) { animation: carry-on-down var(--dur-page) var(--ease-travel) both; }
+::view-transition-old(root), ::view-transition-new(root) { mix-blend-mode: normal; }
+@keyframes carry-off-up { to { transform: translate3d(0, -100%, 0); } }
+@keyframes carry-on-up { from { transform: translate3d(0, 100%, 0); } }
+@keyframes carry-off-down { to { transform: translate3d(0, 100%, 0); } }
+@keyframes carry-on-down { from { transform: translate3d(0, -100%, 0); } }
+
+/* the fallback: a cover in the next page's ground slides over this page (chain.ts), and the next
+   page starts under its own ground and uncovers */
+.carry-cover { position: fixed; inset: 0; z-index: 100; background: var(--carry-ground); pointer-events: none; will-change: transform; }
+html[data-carry-cover]::after { content: ""; position: fixed; inset: 0; z-index: 100; background: var(--ground); pointer-events: none;
+  animation: uncover 520ms var(--ease-travel) 80ms both; }
+@keyframes uncover { to { opacity: 0; } }
+
+/* ---------- the cue at a page's end: the next page's name, and a hairline that fills with the push */
+.carry-next { display: grid; align-content: end; gap: var(--s4); min-height: 46vh; padding: var(--s9) var(--pad-x) var(--pad-y);
+  border-top: 1px solid var(--rule); color: var(--ink); text-decoration: none; --push: 0; }
+.carry-next .k { font: 500 var(--t-micro)/1.3 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.carry-next .to { font: 400 var(--t-large)/1 var(--sans); letter-spacing: -0.02em; display: flex; align-items: baseline; gap: 0.4em; }
+.carry-next .to .arrow { display: inline-block; transition: transform var(--dur-ui) var(--ease-ui); }
+.carry-next:hover .to .arrow, .carry-next:focus-visible .to .arrow { transform: translate3d(0, 0.12em, 0); }
+.carry-next .how { font: 400 var(--t-label)/1.4 var(--sans); color: var(--muted); }
+.carry-next .meter { position: relative; height: 1px; background: var(--rule); overflow: hidden; }
+.carry-next .meter i { position: absolute; inset: 0; background: var(--ink); transform-origin: 0 50%; transform: scaleX(var(--push)); transition: transform 140ms linear; }
+.carry-next:focus-visible { outline-offset: -6px; }
+
+/* the hint at a page's top: the previous page, shown while a push upward builds (or on focus) */
+.carry-prev { position: fixed; z-index: 45; top: calc(var(--head) + 8px); left: var(--pad-x); --push: 0;
+  font: 500 var(--t-micro)/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); text-decoration: none;
+  opacity: 0; transform: translate3d(0, -6px, 0); transition: opacity var(--dur-ui) var(--ease-ui), transform var(--dur-ui) var(--ease-ui); pointer-events: none; }
+.carry-prev.pulling { opacity: calc(0.35 + 0.65 * var(--push)); transform: translate3d(0, calc(var(--push) * 10px), 0); pointer-events: auto; }
+.carry-prev:focus-visible { opacity: 1; transform: none; pointer-events: auto; }
+
+/* a pull at the top must reach the page, not the browser's pull-to-refresh */
+html, body { overscroll-behavior-y: contain; }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-carry-cover]::after { display: none; }
+  .carry-next .meter i { transition: none; }
+}
