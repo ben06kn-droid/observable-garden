@@ -124,12 +124,12 @@ export class Hourglass {
     this.reduce = !!o.reduce;
     this.el = document.createElement("div"); this.el.className = "hourglass";
     this.el.tabIndex = 0; this.el.setAttribute("role", "button");
-    this.el.setAttribute("aria-label", "Hourglass: drag to turn it, or press Enter to turn it over");
+    this.el.setAttribute("aria-label", "Hourglass: click or press Enter to turn it over and invert the page; drag to turn it by hand");
     this.back = document.createElement("canvas"); this.front = document.createElement("canvas");
     this.back.className = "hg-back"; this.front.className = "hg-front";
     for (const c of [this.back, this.front]) c.setAttribute("aria-hidden", "true");
     // the hint, until the first turn of the visit
-    this.hint = document.createElement("p"); this.hint.className = "hg-hint"; this.hint.textContent = "Drag to turn"; this.hint.setAttribute("aria-hidden", "true");
+    this.hint = document.createElement("p"); this.hint.className = "hg-hint"; this.hint.textContent = "Click to invert"; this.hint.setAttribute("aria-hidden", "true");
     let seen = false; try { seen = sessionStorage.getItem("hg-turned") === "1"; } catch { /* no storage: show it */ }
     if (seen || this.reduce) this.hint.classList.add("gone");
     this.el.append(this.back, this.front, this.hint);
@@ -481,9 +481,13 @@ export class Hourglass {
     const el = this.el;
     let lastP: [number, number, number] | null = null;
     const canTurn = () => !this.reduce && this.arrived && !this.locked;
+    // a press that barely moves and lets go quickly is a click: it turns the glass over (and the page
+    // inverts); anything else is a drag, as before
+    let press: { x: number; y: number; t: number; moved: boolean } | null = null;
     el.addEventListener("pointerdown", (e) => {
       if (!canTurn()) return;
       const [px, py] = this.local(e);
+      press = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false };
       this.dragging = true; this.grab = Math.atan2(py, px) - this.angle; this.target = this.angle;
       el.setPointerCapture(e.pointerId); el.classList.add("dragging");
       if (!this.turned) {   // the first turn of the visit: the hint goes for good
@@ -494,7 +498,9 @@ export class Hourglass {
     });
     el.addEventListener("pointermove", (e) => {
       const [px, py] = this.local(e);
+      if (press && !press.moved && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) press.moved = true;
       if (this.dragging) {
+        if (press && !press.moved) return;   // not a drag yet
         let a = Math.atan2(py, px) - this.grab;
         while (a - this.target > Math.PI) a -= 2 * Math.PI; while (a - this.target < -Math.PI) a += 2 * Math.PI;   // continuous
         this.target = a; return;
@@ -521,7 +527,13 @@ export class Hourglass {
       this.rest = rest; this.target = rest + this.lean;
       if (flipped !== was) { const b = el.getBoundingClientRect(); this.o.onFlip?.(flipped, { x: b.left + b.width / 2, y: b.top + b.height / 2 }); }
     };
-    const up = () => { if (!this.dragging) return; this.dragging = false; el.classList.remove("dragging"); this.lean = 0; settle(Math.round(this.angle / Math.PI) * Math.PI); };
+    const up = () => {
+      if (!this.dragging) return;
+      this.dragging = false; el.classList.remove("dragging"); this.lean = 0;
+      const click = press && !press.moved && performance.now() - press.t < 350;
+      press = null;
+      settle(click ? this.rest + Math.PI : Math.round(this.angle / Math.PI) * Math.PI);
+    };
     el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
     el.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
