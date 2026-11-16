@@ -165,8 +165,24 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     are the same birch leaf in three ochres, the page's only warm accent. Few and small, depth from size and
     opacity, a slow fall, a light cursor wind; they leave from the trees' leaves, lie along the ground line
     one deep and fade where they fall past its ends.
-- **run**: a dark graphite working surface (not night, not neon), pale steel accent. The run's tree drawn flat
-  in the page's tokens.
+- **run**: lukres.dev's near-black (#121416) and off-white (#f0f1fa), hairline rules, and one warm sand
+  (#d6b27b) for the hourglass's sand and the one accent (Start, the submitted branch, focus). No glows,
+  halos or gradients. Only two things are on the page: the hourglass (src/hourglass.ts) and the form.
+  - **Desktop**: on the 12-column grid. The hero, the form, the run's tree and the moves sit in columns 1–8;
+    each form section (01 Data, 02 Model, 03 Key, 04 Budget) has its name in 1–2 and its fields in 3–8.
+    The hourglass is sticky in 9–12, beside the form and the run. The headline runs past column 8 behind
+    the glass, which bends it (it stays real text). No form text ever sits behind the glass.
+  - **Phone**: composed for itself. Headline, lead, glass, then the sections stacked; nothing is behind the glass.
+  - **Form**: a short lead, with the long paragraph word for word in a details disclosure. File pickers keep
+    the native input (unseen, focusable) under a label showing the loaded file's name. Errors appear inline
+    above Start. The disclaimers are one row of four notes at the end.
+  - **Inversion**: turning the glass over (a click, or a drag past 90°) inverts the palette from the neck
+    (html[data-hg="light"]); both palettes meet AA.
+  - **Runs**: a run turns the glass over and locks it. The sand follows the moves spent (four fifths) and then
+    the replay (the last fifth), and the verdict appears as the last grain lands.
+  - **Reduced motion**: no WebGL, so the headline wraps beside the glass and nothing passes behind it.
+  - **Empty tree area**: before a run, it shows the ground line and one line saying what will grow there.
+    The run's tree is drawn flat in --tree (ink), --tree-path (sand) and --tree-bar (muted).
 - **docs**: ink on a cool light ground, one ink-blue accent: a page for reading. Privacy, terms, 404 and a
   shared verdict use it too.
 - **Sancho**: sand, umber type, a terracotta accent; the desert is its motif. Its session may propose a
@@ -245,5 +261,5 @@ moves to the footer (which carries the author's line on every page); Contact sta
   Firefox is not yet installed on the development machine; drive it with geckodriver.
 - **Run the equivalence script**, `node scripts/equivalence.mjs --python python3`: the gate, worker, wheel and
   examples were not touched by the revamp, and this confirms it.
-- The empty tree area on the run page and the viewer before a run is loaded: settled in those pages' sessions.
-- The run, docs, Sancho and viewer colours are interim until each page's session.
+- The empty tree area on the viewer before a run is loaded: settled in its session (the run page's is settled).
+- The docs, Sancho and viewer colours are interim until each page's session.
