@@ -30,11 +30,12 @@ const aspect = (svg: SVGSVGElement) => { const r = svg.getBoundingClientRect(); 
 // composited. Desktop: every restart in search order, the even ones in front, spaced so no two front
 // crowns touch, the odd ones a row behind (smaller, finer, lighter), each midway between its
 // neighbours; a 3 px knockout in the paper's colour under every front stroke keeps the front trees
-// reading cleanly where a back tree passes behind. Phone: its own grove of two larger trees.
+// reading cleanly where a back tree passes behind. Phone: three of the same trees (two in front, one
+// behind), laid out the same way in a taller grove that may run past the first screen.
 import { renderPrims, type Prims } from "./birch";
 
 export interface GroveTree { stem: number; back: boolean; height: number; l: number; r: number; top: number; trunk: string; bark: string; prims: Prims }
-export interface GroveData { restarts: number; evaluations: number; phone_evaluations: number; desktop: GroveTree[]; phone: GroveTree[] }
+export interface GroveData { restarts: number; evaluations: number; phone_evaluations: number; phone_stems: number[]; desktop: GroveTree[] }
 export interface Grove { stems: SVGSVGElement[]; sources: (stem?: number) => Source[]; restarts: number; evaluations: number; shown: number }
 
 const PAD = 4;   // around each tree's drawing, in its own units
@@ -60,17 +61,12 @@ function treeSvg(t: GroveTree, s: number, left: number): SVGSVGElement {
 /** Draw the grove into `host`, a box whose bottom edge is the ground; `offset` is the box in the section. */
 export function drawGrove(host: HTMLElement, data: GroveData, box: { w: number; h: number }, offset: { x: number; y: number }, phone: boolean): Grove {
   host.replaceChildren();
-  const trees = phone ? data.phone : data.desktop;
+  // the phone shows some of the same trees, laid out the same way in its own (taller) box
+  const trees = phone ? data.desktop.filter((t) => data.phone_stems.includes(t.stem)) : data.desktop;
   const tall = Math.max(...trees.map((t) => -t.top + PAD));
   const wid = (t: GroveTree) => [(t.l - PAD), (t.r + PAD)] as const;
   let s = (box.h - 1) / tall, xs: number[] = [];
-  if (phone) {
-    // two trees: as large as fits, spread evenly, crowns apart
-    const sumW = trees.reduce((n, t) => n + (t.r - t.l + 2 * PAD), 0), gap = 16;
-    s = Math.min(s, (box.w - gap * (trees.length - 1)) / sumW);
-    const room = box.w - sumW * s, g = room / (trees.length + 1);
-    let x = g; xs = trees.map((t) => { const at = x - wid(t)[0] * s; x += (t.r - t.l + 2 * PAD) * s + g; return at; });
-  } else {
+  {
     // front trunks at x0 + i·d, every back trunk half a spacing after a front one (the last a third of a
     // spacing past the last front tree, never beside its trunk); the largest scale at which no two front crowns come within
     // `gap` of each other and every tree ends inside the box. A back crown may lie behind a front one (the

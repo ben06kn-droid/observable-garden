@@ -144,7 +144,8 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   open paper under it is where the leaves land); the grove in 7–12; a hairline ground across the grid with
   ticks on the edges and the centre line; a mono legend under it. All the copy has arrived within a second;
   the cue to the run page starts at the fold. Below 813 px the same parts stack: headline, reading, grove,
-  ground. No tree is drawn behind text; every tree is inside its box with its foot on the ground line.
+  ground (on the phone the grove runs past the first screen). No tree is drawn behind text; every tree is
+  inside its box with its foot on the ground line.
   - **The birches** (`src/birch.ts`): one per restart, its height its best in-sample Sharpe; one branch per
     move and feature family, in search order from the crown's top, spaced by the twigs they carry; one twig
     per evaluation; 1 to 3 leaves on a twig by its rule's Sharpe. A pale trunk with dark bark marks,
@@ -157,7 +158,9 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   - **Desktop grove**: every restart, in search order; the even ones in front, spaced so no two front crowns
     meet; the odd ones a row behind, smaller, finer and lighter, standing between the front trunks; a 3 px
     knockout in the paper's colour under every front stroke keeps the front trees clean. **Phone grove**:
-    its own two trees (the best restarts), larger and wider-crowned; the legend says "2 of 8 restarts".
+    three of the same trees at the same proportions (the restarts with the best Sharpe: two in front, one
+    behind), laid out the same way in a taller grove; the headline, the copy and the tree tops are on the
+    first screen and the ground line may fall below the fold; the legend says "3 of 8 restarts".
   - **Colour**: leaves on the trees are three greens (lighter in the back row); the falling and fallen leaves
     are the same birch leaf in three ochres, the page's only warm accent. Few and small, depth from size and
     opacity, a slow fall, a light cursor wind; they leave from the trees' leaves, lie along the ground line
