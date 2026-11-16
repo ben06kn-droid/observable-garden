@@ -6,8 +6,8 @@
 //  - one main branch per (move, feature family): the rules a move tried, grouped by the family of the
 //    feature each one added (mom60, rev5, vol20, noise), in search order up the trunk;
 //  - one twig per evaluation, on its group's branch;
-//  - the leaves on a twig (2 to 5) are that rule's in-sample Sharpe within the tree, in four even steps
-//    from the tree's worst rule to its best.
+//  - the leaves on a twig (1, 2 or 3) are that rule's in-sample Sharpe within the tree, in three even
+//    steps from the tree's worst rule to its best.
 // The search reads from the crown's top down: the first move's groups nearest the leader, the last
 // move's (which tried the most rules) lowest, on the longest branches.
 // Branch lengths follow the crown's outline (a narrow oval), not the data, so the crown stays ordered.
@@ -37,7 +37,7 @@ const norm = (v: P): P => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] 
 /** A restart's moves as branch groups: per move, its rules grouped by the family of the feature each added. */
 export function birchGroups(moves: TreeMove[]): Group[] {
   const all = moves.flatMap((m) => m.candidates.map((c) => c.sharpe)), lo = Math.min(...all), hi = Math.max(...all);
-  const leaves = (s: number) => 2 + Math.round(3 * (s - lo) / Math.max(1e-9, hi - lo));   // 2 to 5
+  const leaves = (s: number) => 1 + Math.round(2 * (s - lo) / Math.max(1e-9, hi - lo));   // 1, 2 or 3
   const family = (tok: string) => tok.replace(/^[+-]/, "").split("_")[0];
   const out: Group[] = [];
   let parent = new Set<string>();
@@ -80,6 +80,12 @@ function segX(a: P, b: P, c: P, d: P): boolean {
 }
 /** whether two polylines cross (or come within `gap` px of each other), ignoring the first `skip` px of `a` */
 function near(a: P[], b: P[], gap: number, skip = 0): boolean {
+  if (skip === 0) {   // far apart: no segment can come within `gap`
+    let ax0 = Infinity, ax1 = -Infinity, ay0 = Infinity, ay1 = -Infinity, bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
+    for (const p of a) { if (p[0] < ax0) ax0 = p[0]; if (p[0] > ax1) ax1 = p[0]; if (p[1] < ay0) ay0 = p[1]; if (p[1] > ay1) ay1 = p[1]; }
+    for (const p of b) { if (p[0] < bx0) bx0 = p[0]; if (p[0] > bx1) bx1 = p[0]; if (p[1] < by0) by0 = p[1]; if (p[1] > by1) by1 = p[1]; }
+    if (ax0 > bx1 + gap || bx0 > ax1 + gap || ay0 > by1 + gap || by0 > ay1 + gap) return false;
+  }
   let run = 0;
   for (let i = 1; i < a.length; i++) {
     run += Math.hypot(a[i][0] - a[i - 1][0], a[i][1] - a[i - 1][1]);
@@ -116,20 +122,34 @@ function leafPath(at: P, dir: P, s: number): string {
 
 export interface BirchOptions { height: number; groups: Group[]; seed: number; back?: boolean }
 
-/** One birch, its foot at (0, 0), growing up (negative y). */
+/** One birch, its foot at (0, 0), growing up (negative y), with no stroke crossing another: built with
+ *  the seed's own jitter, and rebuilt with other jitter (bark, spacing, twig lengths and angles; never
+ *  anything the log sets) until it is clean, at most six times; the cleanest is kept. */
 export function buildBirch(o: BirchOptions): Birch {
+  let best: Birch | null = null, bestN = Infinity;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const b = buildOnce(o, attempt), c = crossings(b).total;
+    if (c < bestN) { best = b; bestN = c; }
+    if (c === 0) break;
+  }
+  return best!;
+}
+
+function buildOnce(o: BirchOptions, attempt: number): Birch {
   const H = o.height, seed = o.seed, n = o.groups.length;
-  let sid = seed * 7919;
+  let sid = seed * 7919 + attempt * 104729;
   const rnd = () => hash(sid++);
   const k = o.back ? 0.82 : 1;                          // the back row: finer throughout
   const lines: Birch["lines"] = [];
-  const leafS = Math.max(3.2, Math.min(9, H * 0.0105)) * k;
-  // ---- the trunk: slender, gently tapering, running on as a fine leader to the top
-  const wb = Math.max(3.2, H * 0.021) * k;
-  const lean = (rnd() - 0.5) * H * 0.012, ph = rnd() * 6;
-  const cx = (t: number) => lean * t * t + H * 0.004 * (Math.sin(ph + 2.4 * t) - Math.sin(ph));
-  const w = (t: number) => Math.max(0.7 * k, wb * Math.pow(1 - t, 0.85) * (1 + 0.18 * Math.pow(1 - t, 14)));
-  const axis: P[] = []; for (let i = 0; i <= 48; i++) { const t = i / 48; axis.push([cx(t), -t * H]); }
+  // leaves large enough to read as leaves at 1x: at least 7.5 px, 1.35% of the tree's height
+  const leafS = Math.max(7.5, Math.min(12, H * 0.0135) * k);   // the floor holds in the back row too
+  // ---- the trunk: slender, gently tapering, with a very slight lean and curve, running on as a fine
+  // leader that ends inside the crown (the top twigs reach a little above it)
+  const wb = Math.max(3.2, H * 0.021) * k, tLead = 0.95;
+  const lean = (seed % 2 ? 1 : -1) * H * (0.012 + rnd() * 0.01), ph = rnd() * 6;
+  const cx = (t: number) => lean * Math.pow(t, 1.6) + H * 0.005 * (Math.sin(ph + 3.1 * t) - Math.sin(ph));
+  const w = (t: number) => Math.max(0.6 * k, wb * Math.pow(Math.max(0, 1 - t / tLead), 0.85) * (1 + 0.18 * Math.pow(1 - t, 14)));
+  const axis: P[] = []; for (let i = 0; i <= 48; i++) { const t = (i / 48) * tLead; axis.push([cx(t), -t * H]); }
   const trunk = taper(axis, w, true);
   lines.push({ kind: "trunk", pts: axis, parent: -1 });
 
@@ -162,35 +182,41 @@ export function buildBirch(o: BirchOptions): Birch {
     }
   }
 
-  // ---- the crown: a narrow oval; main branches alternate up the trunk at steep angles, shorter
-  // toward the top, arching out at their ends
-  const cb = 0.27, top = 1.0, Wmax = H * 0.115 * k;
-  // a narrow egg: widest a fifth of the way up the crown, rounding off at its base, full through the
-  // middle and closing in a round shoulder to the leader
-  const env = (t: number) => { const u = Math.max(0, Math.min(1, (t - cb) / (top - cb))); return Wmax * (u < 0.2 ? Math.sqrt(Math.max(0, 1 - Math.pow((0.2 - u) / 0.42, 2))) : Math.pow(Math.max(0, 1 - Math.pow((u - 0.2) / 0.84, 1.8)), 0.6)); };
+  // ---- the crown: a narrow oval, widest near its middle. Main branches alternate up the trunk at
+  // irregular heights (never mirrored), climb steeply, and only their last fifth turns outward and
+  // down; their reach follows the oval with some irregularity, and each is long enough to carry its
+  // own twigs (a long branch for a small reach climbs more steeply)
+  const cb = 0.25, top = tLead + 0.035, Wmax = H * 0.095 * k;
+  const env = (t: number) => { const u = Math.max(0, Math.min(1, (t - cb) / (top - cb))); return Wmax * Math.max(0.3, Math.pow(Math.sin(Math.PI * u), 0.75)); };
   let branches = "";
-  const brs: { pts: P[]; side: number; tAt: number; wa: number; we: number }[] = [];
+  // a branch and the twigs it carries
+  const brs: { pts: P[]; side: number; tAt: number; wa: number; we: number; twigs: Twig[]; id: number }[] = [];
   const side0 = seed % 2 ? 1 : -1;
+  // attachment heights: the space between two branches in proportion to the twigs they carry, so a
+  // large group has the room it needs (irregular spacing that comes from the data), each moved a little
+  const lo = cb + 0.01, hi = tLead - 0.05;
+  const need = o.groups.map((g) => Math.sqrt(g.twigs.length));
+  const steps = need.slice(1).map((v, i) => (v + need[i]) / 2), total = steps.reduce((a, v) => a + v, 0) || 1;
+  const heights: number[] = [hi];
+  steps.forEach((v, i) => heights.push(heights[i] - (hi - lo) * v / total));
+  for (let i = 1; i < n - 1; i++) heights[i] += (rnd() - 0.5) * 0.5 * (hi - lo) * Math.min(steps[i - 1], steps[i]) / total;
   for (let i = 0; i < n; i++) {
     const f = n > 1 ? 1 - i / (n - 1) : 0.5;              // i = 0 (the first group) nearest the top
-    const tAt = cb + (0.9 - cb) * Math.pow(f, 0.95);
+    const tAt = heights[i];
     const side = i % 2 ? -side0 : side0;
-    const theta = lerp(46, 20, f) * Math.PI / 180, chord = theta + lerp(18, 10, f) * Math.PI / 180;
+    const m = o.groups[i].twigs.length;
+    const X = Math.max(H * 0.02, env(tAt + 0.08) * (0.72 + rnd() * 0.28));
+    const L = Math.max(X / (Math.sin(lerp(30, 18, f) * Math.PI / 180) * 0.8 + 0.2), m * leafS * (m > 5 ? 1.4 : 1.15));
+    const theta = Math.asin(Math.max(Math.sin(8 * Math.PI / 180), Math.min(Math.sin(40 * Math.PI / 180), (X / L - 0.2) / 0.8))) + (rnd() - 0.5) * 0.06;
     const A: P = [cx(tAt) + side * w(tAt) * 0.25, -tAt * H];
-    let tipT = tAt + 0.06, L = 0, T: P = A;
-    for (let it = 0; it < 4; it++) {
-      // long enough to space its own twigs, else the crown's outline decides
-      const X = Math.max(H * 0.018, env(tipT) * 0.8, o.groups[i].twigs.length * leafS * (o.groups[i].twigs.length > 5 ? 1.65 : 1.3));
-      L = X / Math.sin(chord);
-      // no branch reaches above the leader's last few per cent
-      L = Math.min(L, Math.max(H * 0.02, (0.965 * H + A[1]) / Math.cos(chord)));
-      T = [A[0] + side * Math.sin(chord) * L, A[1] - Math.cos(chord) * L];
-      tipT = -T[1] / H;
-    }
-    const C: P = [A[0] + side * Math.sin(theta) * L * 0.66, A[1] - Math.cos(theta) * L * 0.66];   // steep out of the trunk, arching at the end
-    const pts = quad(A, C, T, 16);
-    const wa = Math.max(1.0, Math.min(3.0, w(tAt) * 0.5)) * k, we = 0.55 * k;
-    brs.push({ pts, side, tAt, wa, we });
+    const dU: P = [side * Math.sin(theta), -Math.cos(theta)];
+    // climbing steeply, then the last fifth turns gently outward, its fine tip just level
+    const T: P = [A[0] + dU[0] * L * 0.82 + side * L * 0.17, A[1] + dU[1] * L * 0.82 + L * 0.01];
+    const C1: P = [A[0] + dU[0] * L * 0.45, A[1] + dU[1] * L * 0.45], C2: P = [A[0] + dU[0] * L * 0.78, A[1] + dU[1] * L * 0.78];
+    const pts: P[] = [];
+    for (let q = 0; q <= 20; q++) { const t = q / 20, u = 1 - t; pts.push([u * u * u * A[0] + 3 * u * u * t * C1[0] + 3 * u * t * t * C2[0] + t * t * t * T[0], u * u * u * A[1] + 3 * u * u * t * C1[1] + 3 * u * t * t * C2[1] + t * t * t * T[1]]); }
+    const wa = Math.max(0.9, Math.min(2.6, w(tAt) * 0.45)) * k, we = 0.45 * k;
+    brs.push({ pts, side, tAt, wa, we, twigs: o.groups[i].twigs, id: i });
     lines.push({ kind: "branch", pts, parent: -1, id: i });
   }
 
@@ -202,44 +228,58 @@ export function buildBirch(o: BirchOptions): Birch {
   const leaves: Leaf[] = [];
   const placed: { pts: P[]; leaf: boolean }[] = [];      // every twig and leaf so far
   const forced: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const b = brs[i], g = o.groups[i], m = g.twigs.length;
+  for (let i = 0; i < brs.length; i++) {
+    const b = brs[i], g = { twigs: b.twigs }, m = g.twigs.length;
     // the branch may run on a little past its planned tip, along its own curve, when its last twigs
     // need the room; it is drawn to the furthest twig it carries
     const B0 = b.pts, nB = B0.length - 1, ext: P[] = [...B0];
-    { const a = B0[nB - 1], z = B0[nB]; for (let e = 1; e <= 3; e++) { const d = norm([z[0] - a[0], z[1] - a[1]]), st = Math.hypot(z[0] - a[0], z[1] - a[1]), prev = ext[ext.length - 1], dd = rot(d, b.side * 0.05 * e); ext.push([prev[0] + dd[0] * st, prev[1] + dd[1] * st]); } }
+    { const a = B0[nB - 1], z = B0[nB]; for (let e = 1; e <= 7; e++) { const d = norm([z[0] - a[0], z[1] - a[1]]), st = Math.hypot(z[0] - a[0], z[1] - a[1]), prev = ext[ext.length - 1], dd = rot(d, b.side * 0.03 * e); ext.push([prev[0] + dd[0] * st, prev[1] + dd[1] * st]); } }
     let used = nB;
     const hard = [...brs.filter((_, q) => q !== i).map((x) => x.pts), axis];
     for (let j = 0; j < m; j++) {
-      const nl = g.twigs[j].leaves, lean = (0.24 + (rnd() - 0.5) * 0.08) * b.side;
+      // alternately on the branch's outer and inner side, each its own length and angle
+      const nl = g.twigs[j].leaves, outer0 = (j + i) % 2 === 0, lenF = rnd(), tilt = (50 + rnd() * 18) * Math.PI / 180, droop = 0.28 + rnd() * 0.2;
       let best: { tw: P[]; lv: { at: P; dir: P }[]; ls: number; idx: number } | null = null, okAny = false;
       // leaf size is decoration: a twig that cannot be placed clear with full-size leaves tries smaller ones
-      for (const ls of [leafS, leafS * 0.85, leafS * 0.7]) {
-        const u0 = m === 1 ? 0.75 : 0.2 + 0.76 * (j / (m - 1));
-        for (const du of [0, 0.03, -0.03, 0.06, -0.06, 0.09, -0.09, 0.13, -0.13, 0.18, 0.24]) {
-          const u = Math.min(1.18, Math.max(0.14, u0 + du));
+      // full size on its own side, then the other side, then smaller leaves; last, half the clearance
+      // (strokes may come close, never cross)
+      for (const [ls, outer, cf] of [[leafS, outer0, 1], [leafS, !outer0, 1], [leafS * 0.85, outer0, 1], [leafS * 0.85, !outer0, 1], [leafS * 0.75, outer0, 1], [leafS * 0.75, !outer0, 1], [leafS * 0.75, outer0, 0.45], [leafS * 0.75, !outer0, 0.45], [leafS * 0.65, outer0, 0.35], [leafS * 0.65, !outer0, 0.35]] as [number, boolean, number][]) {
+        const u0 = m === 1 ? 0.8 : 0.22 + 0.76 * ((j + (rnd() - 0.5) * 0.6) / (m - 1));
+        // the planned place first, then outward along the whole branch in both directions
+        const tries: number[] = [u0];
+        for (let e = 1; e <= 34; e++) { const v = u0 + Math.ceil(e / 2) * 0.035 * (e % 2 ? 1 : -1); if (v >= 0.15 && v <= 1.32) tries.push(v); }
+        for (const u of tries) {
           const idx = Math.min(ext.length - 2, Math.round(u * nB)), O = ext[idx], B = ext.slice(0, Math.max(nB, idx + 1) + 1);
-          // longer toward the branch's end (the inner twigs short, so none hangs across the gap by the
-          // trunk), in three lengths in turn
-          let L = H * 0.08 * [1, 0.6, 0.8][j % 3] * (0.45 + 0.55 * u) * (0.95 + rnd() * 0.1) * k;
-          const minL = ls * (1 + 0.55 * nl);
-          L = Math.max(L, minL);
-          for (; L >= minL * 0.999; L *= 0.88) {
-            const C: P = [O[0] + b.side * ls * 0.3, O[1] + L * 0.2], E: P = [O[0] + b.side * ls * 0.3 + lean * L * 0.8, O[1] + L];
+          const d = norm([ext[idx + 1][0] - O[0], ext[idx + 1][1] - O[1]]);
+          // the normal on this twig's side of the branch: the outer side faces away from the trunk
+          const nA: P = [-d[1], d[0]], nOut = Math.sign(nA[0]) === b.side ? nA : [d[1], -d[0]] as P, nrm = outer ? nOut : [-nOut[0], -nOut[1]] as P;
+          // a short sprig: out from the branch, leaning along it, its tip hanging a little
+          const dir = norm([nrm[0] * Math.cos(tilt) + d[0] * Math.sin(tilt), nrm[1] * Math.cos(tilt) + d[1] * Math.sin(tilt)]);
+          let L = ls * (1.6 + 2.2 * lenF) * (0.75 + 0.25 * Math.min(1, u));
+          const minL = ls * (0.7 + 0.42 * nl);
+          L = Math.max(L, minL) * (cf < 1 ? 1.6 : 1);           // the last resort may also reach further
+          for (; L >= minL * 0.999; L *= 0.9) {
+            const C: P = [O[0] + dir[0] * L * 0.6, O[1] + dir[1] * L * 0.6], E: P = [O[0] + dir[0] * L, O[1] + dir[1] * L + droop * L];
             const tw = quad(O, C, E, 16);
+            // leaves along the hanging end: one at the tip, the rest back along the twig, alternating
+            // sides, each leaning toward the ground
             const lv: { at: P; dir: P }[] = [];
-            const tipDir = norm([E[0] - tw[15][0], E[1] - tw[15][1]]);
+            const tipDir = norm([E[0] - tw[15][0], E[1] - tw[15][1] + 0.3]);
             lv.push({ at: E, dir: tipDir });
             for (let q = 1; q < nl; q++) {
-              const pi = Math.max(3, Math.round(16 - q * ls * 0.62 / L * 16)), at = tw[pi];
+              const pi = Math.max(3, Math.round(16 - q * ls * 0.6 / L * 16)), at = tw[pi];
               const tan = norm([tw[Math.min(16, pi + 1)][0] - tw[pi - 1][0], tw[Math.min(16, pi + 1)][1] - tw[pi - 1][1]]);
-              lv.push({ at, dir: rot(tan, (q % 2 ? 1 : -1) * 32 * Math.PI / 180) });
+              lv.push({ at, dir: norm([...rot(tan, (q % 2 ? 1 : -1) * 50 * Math.PI / 180)].map((v, c) => v + (c === 1 ? 0.45 : 0)) as P) });
             }
             const axes = lv.map((l) => [l.at, [l.at[0] + l.dir[0] * ls, l.at[1] + l.dir[1] * ls]] as P[]);
-            const clash = near(tw, B, 0, 2)
-              || hard.some((q) => near(tw, q, 1.5) || axes.some((x) => near(x, q, ls * 0.32 + 1)))
-              || placed.some((q) => near(tw, q.pts, q.leaf ? ls * 0.32 + 1 : 1.5) || axes.some((x) => near(x, q.pts, q.leaf ? ls * 0.6 : ls * 0.32 + 1)))
-              || axes.some((x) => near(x, B, ls * 0.32 + 1));
+            // the branch's run-on to reach this twig, if any, must clear everything already drawn too
+            const run = idx + 1 > used ? ext.slice(used, idx + 2) : null;
+            const ownLeaves = axes.some((x, a) => axes.some((y, c) => c > a && (x[0][0] !== y[0][0] || x[0][1] !== y[0][1]) && near(x, y, cf * ls * 0.45)));
+            const clash = near(tw, B, 0, 2) || near(tw, axis, 1) || ownLeaves
+              || (run !== null && (placed.some((q) => near(run, q.pts, q.leaf ? cf * (ls * 0.32 + 1) : cf * 1.5)) || hard.some((q) => near(run, q, cf * 1.5))))
+              || hard.some((q) => near(tw, q, cf * 1.5) || axes.some((x) => near(x, q, cf * (ls * 0.32 + 1))))
+              || placed.some((q) => near(tw, q.pts, q.leaf ? cf * (ls * 0.32 + 1) : cf * 1.5) || axes.some((x) => near(x, q.pts, q.leaf ? cf * ls * 0.6 : cf * (ls * 0.32 + 1))))
+              || axes.some((x) => near(x, B, cf * (ls * 0.32 + 1)));
             if (!best) best = { tw, lv, ls, idx };
             if (!clash) { best = { tw, lv, ls, idx }; okAny = true; break; }
           }
@@ -253,7 +293,7 @@ export function buildBirch(o: BirchOptions): Birch {
       twigs += taper(tw, (t) => lerp(0.7 * k, 0.32 * k, t));
       placed.push({ pts: tw, leaf: false });
       const twigId = lines.length;
-      lines.push({ kind: "twig", pts: tw, parent: i, id: twigId });
+      lines.push({ kind: "twig", pts: tw, parent: b.id, id: twigId });
       for (const l of lv) {
         leaves.push({ d: leafPath(l.at, l.dir, ls * (0.9 + rnd() * 0.2)), tone: Math.floor(rnd() * 3) });
         const ax: P[] = [l.at, [l.at[0] + l.dir[0] * ls, l.at[1] + l.dir[1] * ls]];
@@ -264,7 +304,7 @@ export function buildBirch(o: BirchOptions): Birch {
     const fin = ext.slice(0, used + 1);
     branches += taper(fin, (t) => lerp(b.wa, b.we, Math.pow(t, 0.8)));
     b.pts = fin;
-    const ln = lines.find((x) => x.kind === "branch" && x.id === i); if (ln) ln.pts = fin;
+    const ln = lines.find((x) => x.kind === "branch" && x.id === b.id); if (ln) ln.pts = fin;
   }
   // extent
   let l = 0, r = 0, tp = 0;
@@ -277,7 +317,7 @@ export function buildBirch(o: BirchOptions): Birch {
  *  parent (a branch on the trunk, a twig on its branch, a leaf's stalk on its twig). */
 export function crossings(b: Birch): { total: number; kinds: Record<string, number> } {
   const L = b.lines, kinds: Record<string, number> = {};
-  const parentOf = (x: Birch["lines"][number]) => x.kind === "branch" ? L[0] : x.kind === "twig" ? L.find((y) => y.kind === "branch" && y.id === x.parent) : x.kind === "leaf" ? L[x.parent] : undefined;
+  const parentOf = (x: Birch["lines"][number]) => x.kind === "branch" ? (x.parent >= 0 ? L.find((y) => y.kind === "branch" && y.id === x.parent) : L[0]) : x.kind === "twig" ? L.find((y) => y.kind === "branch" && y.id === x.parent) : x.kind === "leaf" ? L[x.parent] : undefined;
   for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
     const a = L[i], q = L[j];
     if (parentOf(a) === q || parentOf(q) === a) continue;
