@@ -181,8 +181,8 @@ No bold except the home headline and the brand mark; emphasis is weight 500.
 **Header**: the same markup on every page, coloured only by tokens. The brand on the grid's left edge (columns
 1–3), Run · Docs · Sancho · Paper (columns 5–8), the author, Contact (a mailto link; the address is never
 printed) and LinkedIn on the right edge (columns 9–12). Links roll on hover (the label out of its mask, a copy
-in after it: `--dur-ui`, `--ease-ui`); the current page is underlined. Below 812 px the author's line and Paper
-move to the footer, which carries the author's line on every page.
+in after it: `--dur-ui`, `--ease-ui`); the current page is underlined. Below 812 px the name, LinkedIn and Paper
+move to the footer (which carries the author's line on every page); Contact stays in the header at every width.
 
 ## 5. Where things live
 
