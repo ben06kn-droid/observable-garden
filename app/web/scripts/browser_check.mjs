@@ -167,7 +167,7 @@ if (probe) {
 if (process.argv.includes("--analytics")) {
   try {
     await viewport(1440, 900);
-    const pages = ["/", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html", "/terms.html", "/share.html", "/result.html?ex=" + example];
+    const pages = ["/", "/demo.html", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html", "/terms.html", "/share.html", "/result.html?ex=" + example];
     for (const p of pages) { await go(p); await sleep(1500); }
     report.visitor = await evaluate(`({ webdriver: navigator.webdriver, headless_ua: navigator.userAgent.includes("Headless"), storage_keys: Object.keys(localStorage).concat(Object.keys(sessionStorage)), cookies: document.cookie })`);
     await sleep(1500);
@@ -324,7 +324,7 @@ if (process.argv.includes("--pages")) {
     // every page at phone width (375 px): no horizontal scroll, and the header's links inside the header
     await viewport(375, 740);
     report.phone = {};
-    for (const pg of ["/", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html"]) {
+    for (const pg of ["/", "/demo.html", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html"]) {
       await go(pg); await sleep(400);
       report.phone[pg] = await evaluate(`(() => { const t = document.querySelector('.top').getBoundingClientRect(), n = document.querySelector('.top nav').getBoundingClientRect();
         return { page_scrolls_sideways: document.documentElement.scrollWidth > innerWidth, nav_inside: n.right <= innerWidth + 0.5 && n.left >= 0, header_height: Math.round(t.height) }; })()`);
@@ -476,63 +476,65 @@ if (runPage) {
 }
 
 try {
+  // ---- the scroll chain (src/chain.ts, public/carry.js): home → run → docs → Sancho and back. Reading
+  // scroll is native; a carry needs the page at its end, a quiet wheel there, then a deliberate push.
+  const CHAIN = [...readFileSync(join(import.meta.dirname, "..", "src", "chain.ts"), "utf8").matchAll(/\{ path: "([^"]+)", name: "[^"]+", ground: "(#[0-9a-f]{6})" \}/g)].map((m) => ({ path: m[1], ground: m[2] }));
+  const here = () => evaluate(`location.pathname === "/index.html" ? "/" : location.pathname`);
+  const toEnd = () => evaluate(`window.scrollTo(0, document.documentElement.scrollHeight); true`);
+  const push = async (dy, n = 10) => { for (let i = 0; i < n; i++) { await wheel(dy / n); await sleep(16); } };
+  const arrive = async (path) => { const t0 = Date.now(); while (Date.now() - t0 < 8000) { try { if (await here() === path && await evaluate(`document.readyState === "complete"`)) return true; } catch {} await sleep(50); } return false; };
   for (const [vw, vh, tag] of [[1440, 900, "desktop"], [1366, 768, "laptop"]]) {
     await viewport(vw, vh);
     await go("/");
     await sleep(700);
-    await shot(`${tag}-1-overview-top`);
-    if (tag === "desktop") report.shake_page_one = await evaluate(`(() => { const g = [...document.querySelectorAll('#bg-trees .real .stem')].find((e) => { const r = e.getBoundingClientRect(); return r.left > 800 && r.top < innerHeight; });
+    await shot(`${tag}-1-home`);
+    if (tag === "desktop") report.shake_home = await evaluate(`(() => { const g = [...document.querySelectorAll('#bg-trees .real .stem')].find((e) => { const r = e.getBoundingClientRect(); return r.left > 800 && r.top < innerHeight; });
       if (!g) return 'no tree in view'; g.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return g.getAnimations().length > 0; })()`);
-    // page one scrolls freely by wheel to its last line; page two stays paper meanwhile
-    const oneEnd = await evaluate(`document.getElementById('demo').offsetTop - innerHeight`);
-    for (let left = oneEnd - 1; left > 0; left -= 100) { await wheel(Math.min(100, left)); await sleep(30); }
-    await sleep(900);
-    report[`${tag}_page_one_scrolls_freely`] = await evaluate(`Math.abs(scrollY - ${Math.max(0, oneEnd)}) < 4`);
-    report[`${tag}_paper_until_snap`] = await evaluate(`document.body.dataset.page === 'one'`);
-    await shot(`${tag}-2-overview-end`);
-    // one more notch carries onto page two; paper until the carry arrives
-    await wheel(100); await sleep(120);
-    report[`${tag}_still_paper_mid_carry`] = await evaluate(`document.body.dataset.page === 'one' && document.getAnimations().some((a) => a.effect?.target?.tagName === 'MAIN')`);
-    // reversing mid-carry is obeyed at once (the wheel is never trapped)
-    await wheel(-100); await sleep(900);
-    report[`${tag}_reverses_mid_carry`] = await evaluate(`Math.abs(scrollY - ${Math.max(0, oneEnd)}) < 4 && document.body.dataset.page === 'one'`);
-    report[`${tag}_carry_profile`] = await frameProfile(`${tag}-carry`, async () => {
-      await wheel(100); await sleep(60);
-      report[`${tag}_carry_is`] = await evaluate(`document.getAnimations().filter((a) => a.effect?.target?.tagName === 'MAIN').map((a) => ({ props: [...new Set(a.effect.getKeyframes().flatMap((k) => Object.keys(k).filter((x) => !['offset', 'easing', 'composite', 'computedOffset'].includes(x))))], duration: a.effect.getTiming().duration, easing: a.effect.getTiming().easing }))`);
-    }, 1300);
-    await until(`document.body.dataset.page === 'two'`, 5000);
-    await sleep(200);
-    report[`${tag}_snapped`] = await evaluate(`Math.abs(scrollY - document.getElementById('demo').offsetTop) < 3`);
-    // the header's name from page two: the carry back to the top of page one, no reload
-    if (tag === "desktop") {
-      await evaluate(`window.__noReload = 1; document.querySelector('.top .brand').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); true`);
-      await sleep(80);
-      const carrying = await evaluate(`document.getAnimations().some((a) => a.effect?.target?.tagName === 'MAIN')`);
-      await until(`document.body.dataset.page === 'one' && scrollY < 2`, 5000);
-      report.home_link = { carried: carrying, no_reload: await evaluate(`window.__noReload === 1`), at_top: await evaluate(`scrollY < 2`) };
-      for (let left = oneEnd - 1; left > 0; left -= 100) { await wheel(Math.min(100, left)); await sleep(30); }   // down page one again,
-      await sleep(900); await wheel(100); await until(`document.body.dataset.page === 'two'`, 5000); await sleep(400);   // and on to page two
+    const chain = report[`${tag}_chain`] = { grounds: {} };
+    for (const c of CHAIN) { await go(c.path); chain.grounds[c.path] = (await evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--ground').trim()`)) === c.ground; }
+    await go("/"); await sleep(400);
+    // a push mid-read never carries; nor does the scroll that reaches the end
+    await evaluate(`window.scrollTo(0, (document.documentElement.scrollHeight - innerHeight) / 2); true`); await sleep(500);
+    await push(vh * 0.6); await sleep(1200);
+    chain.mid_read_stays = (await here()) === "/";
+    await evaluate(`window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 150); true`); await sleep(500);
+    await push(vh * 0.8, 24); await sleep(1200);
+    chain.reaching_end_stays = (await here()) === "/";
+    // a small push at the end fills the cue's hairline a little and stays
+    await sleep(400); await push(vh * 0.1, 4); await sleep(120);
+    chain.cue_fills = Number(await evaluate(`getComputedStyle(document.querySelector('.carry-next')).getPropertyValue('--push')`)) > 0;
+    await sleep(1200);
+    chain.small_push_stays = (await here()) === "/";
+    chain.down = [];
+    for (let i = 0; i + 1 < CHAIN.length; i++) {
+      const to = CHAIN[i + 1].path;
+      await toEnd(); await sleep(600);
+      const prof = await frameProfile(`${tag}-carry-${i}`, async () => { await push(vh * 0.5, 12); }, 1400);
+      const ok = await arrive(to); await sleep(300);
+      chain.down.push({ to, arrived: ok, at_top: await evaluate(`scrollY < 3`), view_transition: await evaluate(`window.__carry?.viewTransition ?? null`), frames_over_20ms: prof.frames_over_20ms, longest_frame_ms: prof.longest_frame_ms });
     }
-    // the leeway: a small nudge up stays on page two; a nudge, a pause and another goes back; so does
-    // one gesture of 40% of the viewport
-    const onTwo = `document.body.dataset.page === 'two' && Math.abs(scrollY - document.getElementById('demo').offsetTop) < 3`;
-    const onOne = `document.body.dataset.page === 'one' && Math.abs(scrollY - ${Math.max(0, oneEnd)}) < 4`;
-    await sleep(500); await wheel(-60); await sleep(60); await wheel(-60); await sleep(900);
-    report[`${tag}_small_up_stays`] = await evaluate(onTwo);
-    await wheel(-60); await sleep(1500);
-    report[`${tag}_nudge_pause_nudge_leaves`] = await evaluate(onOne);
-    await wheel(100); await until(`document.body.dataset.page === 'two'`, 5000); await sleep(800);
-    for (let left = Math.ceil(vh * 0.42); left > 0; left -= 80) { await wheel(-Math.min(80, left)); await sleep(30); }
-    await sleep(1500);
-    report[`${tag}_big_gesture_leaves`] = await evaluate(onOne);
-    await wheel(100); await until(`document.body.dataset.page === 'two'`, 5000); await sleep(800);
-    await sleep(500);
-    await shot(`${tag}-3-demo-ready`);
-    if (tag === "desktop") report.contrast_ready = await contrast("#chips .chip, #run");
+    await shot(`${tag}-2-arrived-sancho`);
+    chain.up = [];
+    for (let i = CHAIN.length - 1; i > 0; i--) {
+      const to = CHAIN[i - 1].path;
+      await evaluate(`window.scrollTo(0, 0); true`); await sleep(600);
+      await push(-vh * 0.5, 12);
+      const ok = await arrive(to); await sleep(1000);
+      chain.up.push({ to, arrived: ok, at_end: await evaluate(`Math.abs(scrollY - (document.documentElement.scrollHeight - innerHeight)) < 4`) });
+    }
+    // the cue is a link: Enter on it carries
+    await toEnd(); await sleep(300);
+    await evaluate(`document.querySelector('.carry-next').focus(); true`);
+    await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page);
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page);
+    chain.enter_on_cue = await arrive(CHAIN[1].path);
+    // a header link plays no carry
+    await evaluate(`document.querySelector('.top nav a[href="/docs.html"]').click(); true`); await arrive("/docs.html");
+    chain.header_link_plain = await evaluate(`!window.__carry`);
   }
   await viewport(1440, 900);
-  await go("/");
-  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop)`); await sleep(500);
+  await go("/demo.html"); await sleep(500);
+  report.contrast_ready = await contrast("#chips .chip, #run");
   const idx = { nothing: 0, planted: 1, restart: 2 }[example];
   await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
   await evaluate(`document.querySelectorAll('#chips .chip')[${idx}].click(); document.getElementById('run').click(); true`);
@@ -583,7 +585,7 @@ try {
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
   await until(`document.getElementById('inside').hidden && !document.getElementById('demo').classList.contains('tiding') && !document.body.classList.contains('inside-open')`, 8000); await sleep(200);
   report.trees.undimmed_after = await evaluate(`document.querySelectorAll('#garden .dimmed').length === 0`);
-  report.inside.closed_by_esc = await evaluate(`document.body.dataset.page === 'two' && location.hash === '' && !document.getElementById('demo').classList.contains('in-run')`);
+  report.inside.closed_by_esc = await evaluate(`location.hash === '' && !document.getElementById('demo').classList.contains('in-run')`);
   await evaluate(`document.getElementById('bed').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
   await until(`!document.getElementById('inside').hidden && !document.getElementById('scene').getAnimations().length`, 8000); await sleep(400);
   await evaluate(`history.back(); true`);
@@ -593,20 +595,19 @@ try {
   await go(`/result.html?ex=${example}`);
   await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(1600);
   await shot("9-result", true);
-  for (const p of ["/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html"]) { await go(p); }
+  for (const p of ["/", "/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html"]) { await go(p); }
   await go("/nope.html");                                    // on purpose: the 404 page itself, under the CSP
   report.not_found_page = await evaluate(`document.title`);
-  report.author = await evaluate(`({ name: document.querySelector('.who span.by')?.textContent, mail: document.querySelector('.who a[href^="mailto:"]')?.getAttribute('href'), linkedin: document.querySelector('.who a[href*="linkedin.com"]')?.href, safe: document.querySelector('.who a[href*="linkedin.com"]')?.rel })`);
+  report.author = await evaluate(`({ email_not_shown: !document.querySelector('.top').textContent.includes('@'), name: document.querySelector('.top .who .name')?.textContent, contact: document.querySelector('.top .who a[href^="mailto:"]')?.textContent, linkedin: document.querySelector('.top .who a[href*="linkedin.com"]')?.href, safe: document.querySelector('.top .who a[href*="linkedin.com"]')?.rel })`);
   report.paper_link = await evaluate(`[...document.querySelectorAll('a')].filter(a => a.textContent === 'Paper').every(a => a.href.startsWith('https://papers.ssrn.com/') && a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer'))`);
   await go("/docs.html"); await shot("10-docs");
-  await viewport(390, 844); await go("/"); await shot("11-phone-overview");
-  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop)`); await sleep(900); await shot("12-phone-demo");
+  await viewport(390, 844); await go("/"); await shot("11-phone-home");
+  await go("/demo.html"); await sleep(900); await shot("12-phone-demo");
   report.phone_overflow = await evaluate(`document.documentElement.scrollWidth > innerWidth`);
   // reduced motion: still pieces, the run entered and left as a cross-fade, a strike without travel
   await viewport(1440, 900);
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, page);
-  await go("/");
-  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); document.body.dataset.page = 'two'; true`); await sleep(500);
+  await go("/demo.html"); await sleep(500);
   await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
   await evaluate(`document.getElementById('run').click(); true`);
   await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(400);
