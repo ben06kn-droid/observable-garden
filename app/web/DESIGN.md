@@ -121,7 +121,7 @@ action and the run page's "Try it on three bundled searches"), **viewer** (`/vie
   compositor. The header holds still and cross-fades its colours. `carry.js` (classic, render-blocking in each
   chain page's `<head>`) reads the direction before the first frame. A `<link rel="expect" href="#chain-end"
   blocking="render">` holds that frame until the page is parsed, so a carry upward can land at the end.
-- Without them (the fallback; Firefox today): a cover in the next page's ground slides over this page (0.6 s,
+- Without them (the fallback, in any browser that lacks them): a cover in the next page's ground slides over this page (0.6 s,
   same curve), the browser navigates, and the next page starts under its own ground and fades it off. No white
   flash. `?carry=fallback` on any chain page forces this path for testing.
 - Reduced motion: the same gesture, then an immediate navigation. Header links and Back are plain navigations
