@@ -1,7 +1,8 @@
 # The site's design
 
-Read this before restyling any page. It records the reference the whole site is held to, then (once the
-structure lands) the page order, each page's theme, the shared grid and type scale, and the standing rules.
+Read this before restyling any page. It records the reference the whole site is held to (section 1), the
+page order and how one page carries to the next (2), each page's theme (3), the shared grid, type scale and
+header (4), where things live in the code (5), and the standing rules (6).
 
 ## 1. The reference: lukres.dev, measured
 
@@ -93,3 +94,117 @@ pair of cards**. At 390 each screen holds one of those things, never two. One id
   the durations above. Transform and opacity only. Hold 60 fps. An animation that is not as good as his is cut,
   not kept.
 - Each page keeps its own palette and motif; the restraint and the motion quality are shared.
+
+## 2. The pages, in order
+
+The site reads as four pages in sequence, each its own HTML document and URL:
+
+**home** (`/`) → **run** (`/run.html`) → **docs** (`/docs.html`) → **Sancho** (`/sancho.html`)
+
+Scrolling past the end of one carries the visitor to the next; scrolling up from the top goes back and lands
+at the previous page's end. Outside the chain, reached by links: **demo** (`/demo.html`, from home's call to
+action and the run page's "Try it on three bundled searches"), **viewer** (`/viewer.html`, from Sancho),
+**result** (a demo verdict on its own page), **share**, **privacy**, **terms**, **404**.
+
+### The carry (src/chain.ts, public/carry.js, src/styles/chain.css)
+
+- Reading scroll is the browser's own on every page. Nothing intercepts the wheel within a page.
+- A carry fires only at the very end of a page (or the very top, going back). It arms once the page is there
+  **and** the wheel has gone quiet for 220 ms, so the momentum of the scroll that reached the end never counts.
+  Then it takes one gesture of 40% of the viewport, or a nudge, a pause (250 ms) and another. Touch: a pull of
+  30% of the viewport that starts at the edge, carried on release. Keys at the edge: two presses with a pause.
+- Each end carries a cue: "Next", "Continue to docs ↓" at the large step, and a hairline that fills with the
+  push. It is a plain link (keyboard, no script). At the top, "↑ Back to run" appears while a pull builds,
+  and on focus.
+- With cross-document view transitions (Chrome, Edge, Safari 18.2+): a navigation that opts in. The old page
+  rises off and the new rises in as one scroll, 1.0 s on `cubic-bezier(.35, 0, 0, 1)`, transform only, on the
+  compositor. The header holds still and cross-fades its colours. `carry.js` (classic, render-blocking in each
+  chain page's `<head>`) reads the direction before the first frame. A `<link rel="expect" href="#chain-end"
+  blocking="render">` holds that frame until the page is parsed, so a carry upward can land at the end.
+- Without them (the fallback; Firefox today): a cover in the next page's ground slides over this page (0.6 s,
+  same curve), the browser navigates, and the next page starts under its own ground and fades it off. No white
+  flash. `?carry=fallback` on any chain page forces this path for testing.
+- Reduced motion: the same gesture, then an immediate navigation. Header links and Back are plain navigations
+  with no transition.
+- `CHAIN` in `src/chain.ts` lists the pages in order with each one's ground colour, which must equal that
+  theme's `--ground` (the browser check holds them equal).
+
+## 3. One look per page
+
+Every page sets `<html data-theme="…">` and imports one token block from `src/styles/<theme>.css`. Shared
+components read only semantic tokens (`--ground`, `--ink`, `--muted`, `--faint`, `--rule`, `--header-bg`,
+`--accent`, `--focus`, `--field`, `--field-line`, `--problem`, `--tree`, `--tree-path`, `--tree-bar`). Each page's
+session restyles its own theme; the run, docs, Sancho and viewer tokens set here are interim.
+
+- **home**: paper and dark green; the search drawn behind the overview as trees, yellow leaves falling.
+  The headline and the brand mark are Bricolage Grotesque at its heavy weight, and nothing else is.
+- **run**: a dark graphite working surface (not night, not neon), pale steel accent. The run's tree drawn flat
+  in the page's tokens.
+- **docs**: ink on a cool light ground, one ink-blue accent: a page for reading. Privacy, terms, 404 and a
+  shared verdict use it too.
+- **Sancho**: sand, umber type, a terracotta accent; the desert is its motif. Its session may propose a
+  storybook serif for its headings.
+- **demo**: the city garden at night in neon tubing (also the result page, which replays a demo verdict). The
+  only page with neon, glow or the night palette; `demo.css` is loaded by no other page.
+- **viewer**: a light counterpart to the run page: cool off-white, graphite type, hairlines, one muted
+  oxidized-copper green. No illustration, no glow. Reached from Sancho; outside the chain.
+
+The run page and the viewer draw a run's tree without the demo's decoration: `makeScene()` without `decor`
+draws the tree, its bar and the verdict written on it, flat, in `--tree`, `--tree-path` and `--tree-bar`.
+
+## 4. The grid, the type scale, the header
+
+**Grid** (`src/styles/base.css`, `:root`): side padding `--pad-x` = `max(5vw, 40px)` (72 px at 1440), 25 px up to
+812 px wide, 15 px up to 400 px; vertical padding `--pad-y` = `clamp(30px, 4vw, 50px)`; 12 columns with gap
+`--gap` = 2vw (4vw up to 812 px). Everything hangs off the same left edge as the brand mark: the header, every
+page's label and headline, the cue, the footer. The reading measure is `--measure` = 44rem.
+
+**Type scale** (tokens; IBM Plex Sans 400/500 for headings and text, IBM Plex Mono for labels, figures and code):
+
+| token | value | use |
+|---|---|---|
+| `--t-hero` | `clamp(3.25rem, 10vw, 10rem)` | one word or name per screen |
+| `--t-section` | `clamp(2.6rem, 8vw, 8rem)` | a section's name |
+| `--t-large` | `clamp(2rem, 4vw, 4.5rem)` | a page's headline; the cue; a big number |
+| `--t-medium` | `clamp(1.6rem, 3vw, 3.25rem)` | the verdict word on a drawing |
+| `--t-small` | `clamp(1.3rem, 2vw, 2.25rem)` | a section heading in a long page |
+| `--t-lead` | `clamp(1.125rem, 1.5vw, 1.6rem)` | the one paragraph that leads |
+| `--t-body` | `clamp(1rem, 1.2vw, 1.125rem)` | reading text, line-height 1.5 |
+| `--t-label` | `clamp(0.75rem, 0.9vw, 0.875rem)` | header links, captions, uppercase |
+| `--t-micro` | `0.6875rem` | mono labels, uppercase, tracked 0.14em |
+
+No bold except the home headline and the brand mark; emphasis is weight 500.
+
+**Motion tokens**: `--ease-travel` = `cubic-bezier(.35, 0, 0, 1)`, `--ease-ui` = `cubic-bezier(.4, 0, .1, 1)`,
+`--dur-page` 1000 ms, `--dur-enter` 700 ms, `--dur-ui` 350 ms, `--dur-colour` 450 ms.
+
+**Header**: the same markup on every page, coloured only by tokens. The brand on the grid's left edge (columns
+1–3), Run · Docs · Sancho · Paper (columns 5–8), the author, Contact (a mailto link; the address is never
+printed) and LinkedIn on the right edge (columns 9–12). Links roll on hover (the label out of its mask, a copy
+in after it: `--dur-ui`, `--ease-ui`); the current page is underlined. Below 812 px the author's line and Paper
+move to the footer, which carries the author's line on every page.
+
+## 5. Where things live
+
+| file | what |
+|---|---|
+| `src/styles/base.css` | fonts, grid, type and motion tokens, header, footer, shared components, the flat tree |
+| `src/styles/<theme>.css` | one token block per page, and that page's own rules |
+| `src/styles/chain.css` | the carry's transitions, cue and fallback cover (chain pages only) |
+| `src/chain.ts`, `public/carry.js` | the leaving and arriving halves of a carry |
+| `src/scene.ts` | a run's tree in a section; the demo's decoration only with `decor` |
+| `src/pages/<page>.ts` | each page's script; it imports `../common` first, then its theme |
+
+## 6. Standing rules
+
+- The CSP stays as strict as it is: no inline styles or scripts. Positions and per-element values go through
+  CSSOM custom properties (`el.style.setProperty`), as now. `scripts/check_dist.mjs` enforces it.
+- No new runtime dependency without asking; any package pinned to a version at least two weeks old.
+- Everything decorative is drawn in code and reads no number from the gate; anything that shows a number shows
+  the real one.
+- Reduced motion gets a still, complete page.
+- Don't touch the gate, the worker, the Python wheel, the examples or any verdict text.
+- Keyboard access and focus states survive every change.
+- Nothing neon outside the demo.
+- Every page meets the standard in section 1: few elements, generous space, one idea per screen, transform and
+  opacity only, 60 fps, and any animation not as good as lukres.dev's is cut.
