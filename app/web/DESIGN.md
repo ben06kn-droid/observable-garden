@@ -140,8 +140,8 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
 
 - **home**: paper and dark green; the search drawn as a grove beside the overview, yellow leaves falling.
   The headline and the brand mark are Bricolage Grotesque at its heavy weight, and nothing else is.
-  One complete screen at every size: the copy in columns 1–6 (the headline group hangs from the top, the
-  reading rests on the ground), the grove in 7–12, a hairline ground across the grid with ticks on the edges
+  One complete screen at every size: the copy in columns 1–6 (read as one block from the top; the open
+  paper under it is where the leaves land), the grove in 7–12, a hairline ground across the grid with ticks on the edges
   and the centre line, and a mono legend under it; the cue to the run page starts at the fold. Below 813 px
   the same parts stack: headline, reading, grove, ground. No tree is drawn behind text; every tree is inside
   its box with its foot on the ground line (`drawGrove` in `src/woods.ts`, one svg per tree at 1:1). Every
