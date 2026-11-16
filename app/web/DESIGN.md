@@ -138,8 +138,18 @@ components read only semantic tokens (`--ground`, `--ink`, `--muted`, `--faint`,
 `--accent`, `--focus`, `--field`, `--field-line`, `--problem`, `--tree`, `--tree-path`, `--tree-bar`). Each page's
 session restyles its own theme; the run, docs, Sancho and viewer tokens set here are interim.
 
-- **home**: paper and dark green; the search drawn behind the overview as trees, yellow leaves falling.
+- **home**: paper and dark green; the search drawn as a grove beside the overview, yellow leaves falling.
   The headline and the brand mark are Bricolage Grotesque at its heavy weight, and nothing else is.
+  One complete screen at every size: the copy in columns 1–6 (the headline group hangs from the top, the
+  reading rests on the ground), the grove in 7–12, a hairline ground across the grid with ticks on the edges
+  and the centre line, and a mono legend under it; the cue to the run page starts at the fold. Below 813 px
+  the same parts stack: headline, reading, grove, ground. No tree is drawn behind text; every tree is inside
+  its box with its foot on the ground line (`drawGrove` in `src/woods.ts`, one svg per tree at 1:1). Every
+  stroke is one evaluation: a kept rule is a segment of the tree's axis (the first is the trunk), every other
+  rule a tapered twig whose reach and angle are its in-sample Sharpe within the tree; a tree's height is its
+  best Sharpe; the back row is smaller, finer and a lighter green. Leaves (`look` in `src/particles.ts`): few
+  and small, three outlines in three ochres, depth from size and opacity, a slow fall, a light cursor wind;
+  they lie along the ground line, one deep, and fade where they fall past its ends.
 - **run**: a dark graphite working surface (not night, not neon), pale steel accent. The run's tree drawn flat
   in the page's tokens.
 - **docs**: ink on a cool light ground, one ink-blue accent: a page for reading. Privacy, terms, 404 and a
