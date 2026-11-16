@@ -12,6 +12,7 @@ import "../chain";
 import { auditId, h, MEANING, reduceMotion, sha256Hex, word } from "../common";
 import { cancelGate, loadGate, type RunOutcome } from "../gate";
 import { makeScene } from "../scene";
+import { Hourglass } from "../hourglass";
 import { FALLBACK_MODELS, localEndpoint, NOT_SENT, OPENROUTER_MODELS, PROVIDERS, routerModels, type RouterModel } from "../providers";
 import type { AuditResult, InputsInfo, ProviderId, RunEvent, RunUsage, SearchTree } from "../types";
 
@@ -55,6 +56,32 @@ function grow(t: SearchTree, runId: string, move: string, moves: number) {
   notes.search(g, g.total, move, `${moves} moves · ${t.evaluations} evaluations`);
 }
 
+// ---- the hourglass (src/hourglass.ts): beside the form on a desktop, the headline passing behind the glass;
+// under the headline on a phone. Turning it over inverts the page's palette, spreading from the neck.
+// During a run it turns over by itself and the sand shows the share of the move budget spent.
+const root = document.documentElement;
+const phone = () => matchMedia("(max-width: 812px)").matches;
+let hg: Hourglass | null = null, hgPhone: boolean | null = null;
+function buildGlass() {
+  if (hgPhone === phone() && hg) return;
+  hg?.destroy(); hgPhone = phone();
+  const head = parseFloat(getComputedStyle(root).getPropertyValue("--head")) || 76;
+  const height = hgPhone ? 340 : Math.round(Math.max(380, Math.min(560, innerHeight - head - 150)));
+  hg = new Hourglass($("hg-host"), { height, reduce: reduceMotion,
+    behind: hgPhone || reduceMotion ? [] : [$("run-h")],
+    onFlip: (flipped, neck) => {
+      const swap = () => { root.dataset.hg = flipped ? "light" : "dark"; hg?.refreshPalette(); };
+      const d = document as Document & { startViewTransition?: (f: () => void) => { finished: Promise<void> } };
+      if (reduceMotion || !d.startViewTransition) { swap(); return; }
+      root.style.setProperty("--vx", `${neck.x}px`); root.style.setProperty("--vy", `${neck.y}px`);
+      root.dataset.hgSwap = "";
+      d.startViewTransition(swap).finished.finally(() => { delete root.dataset.hgSwap; });
+    } });
+}
+void document.fonts.ready.then(buildGlass);
+let glassT = 0;
+window.addEventListener("resize", () => { window.clearTimeout(glassT); glassT = window.setTimeout(() => { if (hgPhone !== phone()) buildGlass(); else hg?.paintText(); }, 200); });
+
 // ---- inputs: the bundled pair to start, or the visitor's files; checked by the package's loaders
 async function useBundled() {
   const [p, c] = await Promise.all([fetch("/examples/tiny_panel.npz").then((r) => r.arrayBuffer()), fetch("/examples/class.json").then((r) => r.text())]);
@@ -64,6 +91,7 @@ async function useBundled() {
 }
 async function check() {
   info = null; refresh();
+  $("f-panel-name").textContent = panelName || "none"; $("f-class-name").textContent = className || "none";
   if (!panel || !cls) return;
   status.textContent = `Reading ${panelName} and ${className}…`;
   try {
@@ -201,6 +229,8 @@ async function start() {
   key = fKey.value.trim();
   if (!key && p.keyRequired) { errorBox.textContent = "Enter your API key to start."; fKey.focus(); return; }
   running = true; refresh();
+  two.classList.add("has-run");
+  hg?.beginRun();
   $("record").hidden = true; logList.replaceChildren(); tokens.textContent = "Starting…";
   runId = `run-${Date.now().toString(36)}`; shownSteps = 0;
   svg.replaceChildren(); idleBox(); notes.clear(); notes.entered(); seed.classList.remove("spent");
@@ -221,7 +251,7 @@ async function start() {
     out = await gate.run({ panel: panel.slice(0), cls, key: runKey, provider: p.id, url: where.url, opts, B, seed: SEED }, {
       onEvent: (ev: RunEvent) => {
         if (ev.type === "move") {
-          if (ev.tool) { lastMove = ev.tool; nMoves++; }
+          if (ev.tool) { lastMove = ev.tool; nMoves++; hg?.setShare(0.8 * Math.min(1, nMoves / moves)); }
           logLine("move", [h("b", null, ev.tool ?? "(no move)"), " ", Object.keys(ev.args).length ? JSON.stringify(ev.args) : "", ev.text ? h("span", "say", ` ${ev.text}`) : ""]);
         } else if (ev.type === "result") {
           logLine(ev.last.refused ? "refused" : "result", [ev.last.refused ? `refused: ${ev.last.refused}` : (ev.last.text ?? "")]);
@@ -230,7 +260,11 @@ async function start() {
           tokens.textContent = fmtUsage(ev.usage);
         } else if (ev.type === "tree") grow(ev.tree, runId, lastMove, nMoves);
       },
-      onProgress: (p) => { if (p.stage === "replay") notes.replay(`replay · ${p.done.toLocaleString("en")} of ${p.total.toLocaleString("en")}`); },
+      onProgress: (p) => {
+        if (p.stage !== "replay") return;
+        notes.replay(`replay · ${p.done.toLocaleString("en")} of ${p.total.toLocaleString("en")}`);
+        hg?.setShare(0.8 + 0.2 * (p.total ? p.done / p.total : 0));          // the last fifth of the sand runs with the replay
+      },
     });
   } catch (e) {
     const msg = String((e as Error).message ?? e);
@@ -244,6 +278,7 @@ async function start() {
   running = false; refresh();
   if (!out.result) { finish(`The gate refused the log: ${out.refused ?? "no reason given"}`); return; }
   const r = out.result, t = out.tree;
+  await hg?.finish();                                         // the verdict appears as the last grain lands
   bed.finish();
   if (t) { draw(t, r, runId).setStep(Number.MAX_SAFE_INTEGER); notes.verdict(scene.current()!, r, t.evaluations, SEED); }
   // the prompt actually sent: the adapter's own, or the visitor's edit (a different search)
@@ -253,6 +288,7 @@ async function start() {
 
 function finish(message: string, usage?: RunUsage | null) {
   endKey();
+  void hg?.finish();
   running = false; refresh();
   if (usage) tokens.textContent = fmtUsage(usage);
   errorBox.textContent = message;

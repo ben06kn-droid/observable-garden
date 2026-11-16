@@ -24,7 +24,7 @@ export interface ChainPage { path: string; name: string; ground: string }
 /** The chain, in order. `ground` must equal each theme's --ground (the browser check holds them equal). */
 export const CHAIN: ChainPage[] = [
   { path: "/", name: "home", ground: "#efe6d2" },
-  { path: "/run.html", name: "run", ground: "#111315" },
+  { path: "/run.html", name: "run", ground: "#121416" },
   { path: "/docs.html", name: "docs", ground: "#f6f6f3" },
   { path: "/sancho.html", name: "Sancho", ground: "#ece2cf" },
 ];
