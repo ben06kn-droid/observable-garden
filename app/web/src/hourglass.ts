@@ -62,6 +62,7 @@ uniform vec2 uSize;        // css px
 uniform float uDpr, uAngle, uH, uGlass, uPostX, uPostW;
 uniform vec3 uGround, uLine;
 uniform sampler2D uText;   // the page text behind the glass, drawn in the box's own page coordinates
+uniform vec2 uTextOff;     // how far that text has moved relative to the box since it was drawn
 out vec4 o;
 ${GLSL_PROFILE}
 vec2 rot(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
@@ -89,7 +90,7 @@ void main() {
   }
   vec3 col = uGround;
   vec2 sp = rot(s, uAngle) + c;                                             // back on the page
-  vec4 t = texture(uText, sp / uSize);
+  vec4 t = texture(uText, (sp - uTextOff) / uSize);
   col = mix(col, t.rgb / max(t.a, 1e-4), t.a);
   float postIn = abs(s.y) < gy ? max(cover(s.x - uPostX, uPostW, pin), cover(s.x + uPostX, uPostW, pin)) : 0.0;
   col = mix(col, uLine, postIn * 0.26);
@@ -106,6 +107,9 @@ export class Hourglass {
   private H: number; private glass: number; private capT: number; private reduce: boolean; private o: HourglassOptions;
   private ground: [number, number, number] = [0x12, 0x14, 0x16]; private line: [number, number, number] = [0xf0, 0xf1, 0xfa];
   private textCanvas: HTMLCanvasElement | null = null; private tex: WebGLTexture | null = null;
+  // the text behind the glass, relative to the box, when it was painted and now (a sticky glass over
+  // scrolling text): the shader shifts the drawing by the difference, so nothing is repainted on scroll
+  private paintedAt: [number, number] = [0, 0]; private textOff: [number, number] = [0, 0];
   // turning: the angle springs toward a target, the rest angle (0 or a multiple of pi) plus any lean
   angle = 0; private vel = 0; private target = 0; private rest = 0; private lean = 0; private dragging = false; private grab = 0;
   private arrived = false; private turned = false; private locked = false;
@@ -132,7 +136,10 @@ export class Hourglass {
     this.hint = document.createElement("p"); this.hint.className = "hg-hint"; this.hint.textContent = "Click to invert"; this.hint.setAttribute("aria-hidden", "true");
     let seen = false; try { seen = sessionStorage.getItem("hg-turned") === "1"; } catch { /* no storage: show it */ }
     if (seen || this.reduce) this.hint.classList.add("gone");
-    this.el.append(this.back, this.front, this.hint);
+    // what takes the pointer: the glass and its caps, not the whole (mostly clear) square it is drawn in,
+    // so the page beside it stays clickable
+    const hit = document.createElement("div"); hit.className = "hg-hit";
+    this.el.append(this.back, this.front, hit, this.hint);
     host.appendChild(this.el);
     this.layout();
     this.readPalette();
@@ -146,6 +153,14 @@ export class Hourglass {
     this.render();
     this.start();
   }
+
+  private relative(): [number, number] {
+    const t = this.o.behind?.[0]; if (!t) return [0, 0];
+    const a = t.getBoundingClientRect(), b = this.back.getBoundingClientRect();
+    return [a.left - b.left, a.top - b.top];
+  }
+  /** stop drawing and take the glass off the page (a layout change builds a new one) */
+  destroy() { this.stop(); this.el.remove(); }
 
   /** read the glass's colours from the page's tokens (after a palette swap, for one) and redraw */
   refreshPalette() { this.readPalette(); this.paintText(); this.render(); }
@@ -189,6 +204,8 @@ export class Hourglass {
     this.size = Math.ceil(Math.hypot(this.H, 2 * PROFILE.bulb * this.H + 40) + 24);
     this.dpr = Math.min(2, devicePixelRatio || 1);
     this.el.style.setProperty("--hg", `${this.size}px`);
+    this.el.style.setProperty("--hg-hit-w", `${Math.round(PROFILE.bulb * this.H * 2 + 30)}px`);
+    this.el.style.setProperty("--hg-hit-h", `${Math.round(this.H)}px`);
     for (const c of [this.back, this.front]) { c.width = Math.round(this.size * this.dpr); c.height = Math.round(this.size * this.dpr); }
   }
 
@@ -205,7 +222,7 @@ export class Hourglass {
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     const loc = gl.getAttribLocation(p, "p"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uAngle", "uH", "uGlass", "uPostX", "uPostW", "uGround", "uLine", "uText"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uSize", "uDpr", "uAngle", "uH", "uGlass", "uPostX", "uPostW", "uGround", "uLine", "uText", "uTextOff"]) this.u[n] = gl.getUniformLocation(p, n);
     this.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -223,6 +240,7 @@ export class Hourglass {
     c.width = this.back.width; c.height = this.back.height;
     const x = c.getContext("2d")!, k = this.dpr, box = this.back.getBoundingClientRect();
     x.setTransform(k, 0, 0, k, 0, 0); x.clearRect(0, 0, this.size, this.size);
+    this.paintedAt = this.relative(); this.textOff = [0, 0];
     for (const el of this.o.behind) {
       const cs = getComputedStyle(el);
       x.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
@@ -252,6 +270,7 @@ export class Hourglass {
       const f = (c: number[]) => c.map((x) => x / 255) as [number, number, number];
       gl.uniform3f(this.u.uGround, ...f(this.ground)); gl.uniform3f(this.u.uLine, ...f(this.line));
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex); gl.uniform1i(this.u.uText, 0);
+      gl.uniform2f(this.u.uTextOff, this.textOff[0], this.textOff[1]);
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       return;
@@ -577,7 +596,12 @@ export class Hourglass {
         if (this.gate && !this.gate.total && Math.abs(this.angle - this.rest) < 0.01 && Math.abs(this.vel) < 0.05) this.armGate();
         if (this.gate && this.done && this.gate.share >= 1 && this.settledEmpty()) this.endRun();
       }
-      if (moving || this.gl === null) this.drawBack();
+      let shifted = false;
+      if (this.o.behind?.length && this.gl) {
+        const now = this.relative(), off: [number, number] = [now[0] - this.paintedAt[0], now[1] - this.paintedAt[1]];
+        if (Math.abs(off[0] - this.textOff[0]) + Math.abs(off[1] - this.textOff[1]) > 0.25) { this.textOff = off; shifted = true; }
+      }
+      if (moving || shifted || this.gl === null) this.drawBack();
       this.drawFront();
     };
     this.raf = requestAnimationFrame(frame);
