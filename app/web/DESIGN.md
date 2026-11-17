@@ -187,8 +187,9 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     toward the middle and compressed toward the walls, with no change of height (the letters stay on their
     line), each colour channel bent a little differently; the glass's flow fades across the letters. The
     cursor's wake never moves the letters or the glass's outline: in the blank space around them it shows
-    faintly (a translucent cool trace with a fine red edge, drawn by the fan's pass so it runs the whole
-    page, never under a field), and inside the glass it bends the flow, which
+    as a glossy trace (a soft highlight toward an upper-left light, a faint shade, a hairline red rim;
+    drawn by the fan's pass so it runs the whole page, never under a field). It follows the cursor 70 ms
+    behind on purpose, and its strength rises steeply with the cursor's speed (a slow drift barely stirs it), and inside the glass it bends the flow, which
     stays within the outline (silver-white, fine red fringes). Phones and reduced motion keep the plain
     page text and a glass without the lens.
   - **Inversion**: a click on the glass (or Enter) inverts the palette from the click

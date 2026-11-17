@@ -80,14 +80,16 @@ interface Target { tex: WebGLTexture; fb: WebGLFramebuffer }
 interface Prog { p: WebGLProgram; u: Record<string, WebGLUniformLocation | null> }
 
 export const CELL = 8;          // css px per simulation texel
+const DELAY = 70;               // ms the wake follows the pointer by: a deliberate beat, not lag
 
 export class Wake {
   private gl: WebGL2RenderingContext; private w = 0; private h = 0; private ok = false;
   private vel: [Target, Target] | null = null; private pres: [Target, Target] | null = null; private div: Target | null = null; private curl: Target | null = null;
   private progs: Record<string, Prog> = {};
-  private from: [number, number] | null = null; private to: [number, number] | null = null; private moved = 0;
   /** seconds since the fluid last had anything pushed into it; it is still after about 0.6 s */
   idle = 99;
+  /** pointer movement still waiting to be pushed in (the wake's delay) */
+  get pending() { return this.queue.length > 0; }
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
@@ -131,13 +133,11 @@ export class Wake {
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) this.ok = false;
   }
 
-  /** the pointer moved to (x, y), viewport css px */
-  move(x: number, y: number) {
-    if (!this.from) this.from = [x, y];
-    this.to = [x, y]; this.moved += 1;
-  }
+  /** the pointer moved to (x, y), viewport css px: kept, and pushed into the fluid DELAY ms later */
+  move(x: number, y: number) { this.queue.push({ t: performance.now(), x, y }); if (this.queue.length > 240) this.queue.shift(); }
   /** the pointer left: the next movement starts a new stroke */
-  lift() { this.from = this.to = null; }
+  lift() { this.queue.push({ t: performance.now(), x: NaN, y: NaN }); }
+  private queue: { t: number; x: number; y: number }[] = []; private prev: { t: number; x: number; y: number } | null = null;
 
   private pass(name: string, out: Target, set: (u: Prog["u"]) => void) {
     const gl = this.gl, pr = this.progs[name];
@@ -154,21 +154,29 @@ export class Wake {
     const gl = this.gl, V = this.vel, P = this.pres;
     this.idle += dt;
     const swap = () => { const t = V[0]; V[0] = V[1]; V[1] = t; };
-    // the push: the pointer's path since the last frame, its velocity, along a capsule of about 40 px
-    if (this.from && this.to && this.moved) {
-      const [ax, ay] = this.from, [bx, by] = this.to, dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy);
-      if (d > 0.5) {
-        const sp = Math.min(4000, d / Math.max(dt, 1 / 240)), k = sp / d;
-        const toTex = (x: number, y: number): [number, number] => [x / CELL, (vh - y) / CELL];
-        const A = toTex(ax, ay), B = toTex(bx, by);
-        this.pass("splat", V[1], (u) => {
-          gl.uniform1i(u.uVel, this.bind(0, V[0]));
-          gl.uniform2f(u.uA, A[0], A[1]); gl.uniform2f(u.uB, B[0], B[1]);
-          gl.uniform2f(u.uForce, dx * k * 2.4, -dy * k * 2.4); gl.uniform1f(u.uR, 6.5);
-        });
-        swap(); this.idle = 0;
-      }
-      this.from = this.to; this.moved = 0;
+    // the push, a beat behind the pointer (DELAY ms, on purpose): each stretch of its path, along a capsule
+    // that widens with its speed, its strength rising steeply with speed (a slow drift barely stirs it, a
+    // quick flick throws a long, wide wake)
+    const toTex = (x: number, y: number): [number, number] => [x / CELL, (vh - y) / CELL];
+    const due = performance.now() - DELAY;
+    let pushes = 0;
+    while (this.queue.length && this.queue[0].t <= due) {
+      const q = this.queue.shift()!;
+      if (Number.isNaN(q.x)) { this.prev = null; continue; }
+      const a = this.prev; this.prev = q;
+      if (!a || pushes >= 8) continue;
+      const dx = q.x - a.x, dy = q.y - a.y, d = Math.hypot(dx, dy), ms = Math.max(4, q.t - a.t);
+      if (d < 0.5) continue;
+      const sp = Math.min(5000, (d / ms) * 1000);                        // px/s
+      const dose = Math.pow(Math.min(1, Math.max(0, (sp - 90) / 1400)), 1.6);   // slow: next to nothing
+      if (dose <= 0.002) continue;
+      const k = (sp / d) * 3.4 * dose, A = toTex(a.x, a.y), B = toTex(q.x, q.y);
+      this.pass("splat", V[1], (u) => {
+        gl.uniform1i(u.uVel, this.bind(0, V[0]));
+        gl.uniform2f(u.uA, A[0], A[1]); gl.uniform2f(u.uB, B[0], B[1]);
+        gl.uniform2f(u.uForce, dx * k, -dy * k); gl.uniform1f(u.uR, 4 + 6 * Math.sqrt(dose));
+      });
+      swap(); this.idle = 0; pushes++;
     }
     if (this.idle > 0.8) return;            // still: nothing to step
     // curls, kept alive

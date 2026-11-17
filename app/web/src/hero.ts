@@ -222,7 +222,7 @@ export class Hero {
     w?.step(dt, innerHeight);
     const waking = !!w?.ready && w.idle < 0.8;
     this.draw(false);
-    if (waking) this.kick();
+    if (waking || w?.pending) this.kick();             // and through the delay before a push lands
   };
   private draw(all: boolean) {
     const gl = this.gl; if (!gl || !this.prog) return;

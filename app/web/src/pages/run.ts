@@ -83,8 +83,11 @@ function invert(at: { x: number; y: number }) {
 }
 function buildGlass() {
   const ph = phone(), host = $("hg-host");
+  // measured as if the disclosure above were closed, so opening it never resizes or rebuilds the glass
+  const about = document.querySelector<HTMLDetailsElement>(".hero .about"), sum = about?.querySelector("summary");
+  const opened = about?.open && sum ? about.getBoundingClientRect().height - sum.getBoundingClientRect().height : 0;
   const H = ph ? Math.round(Math.max(420, Math.min(640, innerHeight * 0.76)))
-    : Math.round(keySect().getBoundingClientRect().top - host.getBoundingClientRect().top);
+    : Math.round(keySect().getBoundingClientRect().top - host.getBoundingClientRect().top - opened);
   if (glass && glassPhone === ph && Math.abs(H - glassH) < 24) { placeGlass(); hero?.layout(); return; }
   glass?.destroy(); hero?.destroy(); hero = null; $("main").querySelector(".hero")!.classList.remove("painted");
   glassPhone = ph; glassH = H;
@@ -101,7 +104,9 @@ function buildGlass() {
   }
 }
 let hero: Hero | null = null;
-document.querySelector(".hero .about")?.addEventListener("toggle", () => hero?.layout());
+// the hero layer follows any change to the page's layout in the same frame, before it is painted (a
+// ResizeObserver's callback runs after layout and before paint), so the drawn text never lags the page
+new ResizeObserver(() => hero?.layout()).observe(document.querySelector(".hero")!);
 /** across: on a desktop its bulbs clear the form's columns (and may be cropped by the page's right edge) */
 function placeGlass() {
   if (!glass) return;

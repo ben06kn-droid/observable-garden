@@ -51,7 +51,7 @@ const FRAG = `#version 300 es
 precision highp float;
 uniform vec2 uView; uniform float uDpr, uScroll; uniform vec2 uRegion;   // the canvas (css px); its page y; the fan's extent
 uniform vec2 uVp; uniform float uVpOff;            // the viewport, and the canvas's top in it
-uniform vec3 uGround, uLine, uSand, uSilver, uRed; uniform float uWA, uSA, uRedA;
+uniform vec3 uGround, uLine, uSand, uSilver, uRed, uHi, uShade; uniform float uWA, uSA, uRedA;
 uniform sampler2D uPaths; uniform float uFanW;
 uniform sampler2D uMask; uniform vec4 uMaskBox;
 uniform sampler2D uVel; uniform float uWake;
@@ -88,18 +88,22 @@ void main() {
     float fr = clamp(max(max(f0.x * 2.4, f0.y * 1.2), max(f1.x * 2.4, f1.y * 1.2)) - line, 0.0, 1.0) * s;
     col = mix(col, uRed, clamp(fr * 0.6 * uRedA, 0.0, 1.0));
     alpha = max(alpha, max(line * s, fr));
-    // the blank space: the wake itself, faintly, a translucent cool trace with a fine red edge (from the
-    // change of the flow across a whole cell of the fluid, so it is smooth); never under a field
+    // the blank space: the wake itself, glossy. Its strength is read as a surface: a bright highlight on the
+    // side that faces a light from the upper left, a soft shade on the other, a fine red line at its rim; no
+    // flat tint (which reads as dust). Never under a field.
     float blank = (1.0 - clamp(line, 0.0, 1.0)) * maskAt(pc).g;
-    float e = clamp(length(vec2(length(flowAt(pc + vec2(8.0, 0.0))) - length(flowAt(pc - vec2(8.0, 0.0))),
-                               length(flowAt(pc + vec2(0.0, 8.0))) - length(flowAt(pc - vec2(0.0, 8.0))))) * 0.06, 0.0, 1.0) * s;
-    e = smoothstep(0.25, 0.9, e) * (1.0 - smoothstep(0.9, 1.0, e));
-    float tr = 0.03 * s * blank, rr = clamp(0.16 * uRedA * e * blank, 0.0, 1.0);
+    vec2 gr = vec2(length(flowAt(pc + vec2(6.0, 0.0))) - length(flowAt(pc - vec2(6.0, 0.0))),
+                   length(flowAt(pc + vec2(0.0, 6.0))) - length(flowAt(pc - vec2(0.0, 6.0))));
+    float slope = smoothstep(0.6, 6.0, length(gr));
+    float face = dot(gr / (length(gr) + 1e-4), normalize(vec2(-0.6, -0.8)));
+    float spec = pow(max(face, 0.0), 2.0) * slope * s, shade = max(-face, 0.0) * slope * s;
+    float rim = smoothstep(0.82, 0.97, slope) * (1.0 - smoothstep(0.97, 1.0, slope)) * s;   // a hairline
     vec3 base = alpha > 0.0 ? col : uGround;
-    float ta = clamp(tr + rr, 0.0, 1.0);
-    vec3 trace = mix(mix(base, uSilver, tr / max(ta, 1e-3)), uRed, rr / max(ta, 1e-3));
-    col = mix(base, trace, ta);                       // faint over the ground or the line, never a fill
-    alpha = max(alpha, ta);
+    vec3 g = mix(base, uHi, clamp(0.22 * spec * blank, 0.0, 1.0));
+    g = mix(g, uShade, clamp(0.10 * shade * blank, 0.0, 1.0));
+    g = mix(g, uRed, clamp(0.08 * uRedA * rim * blank, 0.0, 1.0));
+    float ga = clamp((0.22 * spec + 0.10 * shade + 0.08 * rim) * blank, 0.0, 1.0);
+    col = g; alpha = max(alpha, ga);
   }
   o = vec4(col, alpha > 0.0 ? 1.0 : 0.0);
 }`;
@@ -126,6 +130,7 @@ export class Fan {
   private sand: [number, number, number] = [0.84, 0.7, 0.48]; private wa = 0.2;
   private silver: [number, number, number] = [0.86, 0.89, 0.94]; private red: [number, number, number] = [0.9, 0.28, 0.3];
   private prog: WebGLProgram | null = null; private wake: Wake | null = null;
+  private hi: [number, number, number] = [1, 1, 1]; private shade: [number, number, number] = [0, 0, 0];
   private onMove = (e: PointerEvent) => { if (e.pointerType !== "touch") this.wake?.move(e.clientX, e.clientY); };
   private onLeave = () => this.wake?.lift();
   private onScroll = () => {
@@ -161,6 +166,7 @@ export class Fan {
     this.sand = rgb(cs.getPropertyValue("--fan-sand") || "#d6b27b"); this.wa = Number(cs.getPropertyValue("--fan-alpha")) || 0.2;
     this.silver = rgb(cs.getPropertyValue("--wake-silver") || "#dce2ef"); this.red = rgb(cs.getPropertyValue("--wake-red") || "#e5484d");
     this.redA = Number(cs.getPropertyValue("--wake-red-alpha")) || 1;
+    this.hi = rgb(cs.getPropertyValue("--wake-hi") || "#ffffff"); this.shade = rgb(cs.getPropertyValue("--wake-shade") || "#000000");
   }
 
   /** sizes, the reach, the masks: call after a layout change */
@@ -212,7 +218,7 @@ export class Fan {
     gl.useProgram(p); this.prog = p;
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uView", "uDpr", "uScroll", "uRegion", "uVp", "uVpOff", "uRedA", "uGround", "uLine", "uSand", "uSilver", "uRed", "uWA", "uSA", "uPaths", "uFanW", "uMask", "uMaskBox", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uView", "uDpr", "uScroll", "uRegion", "uVp", "uVpOff", "uRedA", "uHi", "uShade", "uGround", "uLine", "uSand", "uSilver", "uRed", "uWA", "uSA", "uPaths", "uFanW", "uMask", "uMaskBox", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
@@ -301,7 +307,7 @@ export class Fan {
     gl.uniform2f(this.u.uRegion, r.top, r.bottom);
     gl.uniform3f(this.u.uGround, ...this.ground); gl.uniform3f(this.u.uLine, ...this.line); gl.uniform3f(this.u.uSand, ...this.sand);
     gl.uniform1f(this.u.uWA, this.wa); gl.uniform1f(this.u.uSA, 0.95);
-    gl.uniform3f(this.u.uSilver, ...this.silver); gl.uniform3f(this.u.uRed, ...this.red);
+    gl.uniform3f(this.u.uSilver, ...this.silver); gl.uniform3f(this.u.uRed, ...this.red); gl.uniform3f(this.u.uHi, ...this.hi); gl.uniform3f(this.u.uShade, ...this.shade);
     const w = this.wake, on = !!w?.ready && w.idle < 0.8;
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, on ? w!.texture : null); gl.uniform1i(this.u.uVel, 2); gl.uniform1f(this.u.uWake, on ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.texP);
