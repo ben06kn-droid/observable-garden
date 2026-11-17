@@ -65,7 +65,7 @@ const TRAVEL = 9;           // seconds from rim to rim (the profile below sets w
 export class Glass {
   readonly el: HTMLDivElement;
   private o: GlassOptions; private H: number; private gy: number; private R: number; private W: number; private dpr = 1;
-  private front: HTMLCanvasElement;
+  private front: HTMLCanvasElement; private edge: HTMLCanvasElement;   // the flow (each frame); the outline (once)
   private line: [number, number, number] = [240, 241, 250];
   private sand = "#d6b27b"; private lineA = 0.72;
   // the flow: a table of where an item is (v) after a given time since it entered, and the items
@@ -80,9 +80,10 @@ export class Glass {
     this.el.setAttribute("aria-label", "Hourglass: press to invert the page's colours");
     this.front = document.createElement("canvas"); this.front.className = "glass-front"; this.front.setAttribute("aria-hidden", "true");
     if (o.composited) this.el.classList.add("composited");
-    this.el.append(this.front);
+    this.edge = document.createElement("canvas"); this.edge.className = "glass-edge"; this.edge.setAttribute("aria-hidden", "true");
+    this.el.append(this.front, this.edge);
     host.append(this.el);
-    this.layout(); this.readPalette(); this.initFlow(); this.bind();
+    this.layout(); this.readPalette(); this.drawEdge(); this.initFlow(); this.bind();
     this.io = new IntersectionObserver((es) => { this.visible = es.some((e) => e.isIntersecting); if (this.visible) this.start(); });
     this.io.observe(this.el);
     this.render();
@@ -95,7 +96,7 @@ export class Glass {
   halfWidthAt(v: number) { return halfWidth(v, this.H); }
 
   /** read the colours from the page's tokens (after a palette swap) and redraw */
-  refreshPalette() { this.readPalette(); this.render(); }
+  refreshPalette() { this.readPalette(); this.drawEdge(); this.render(); }
   private readPalette() {
     const cs = getComputedStyle(this.el);
     const l = cs.getPropertyValue("--hg-line");
@@ -107,11 +108,24 @@ export class Glass {
   private layout() {
     this.dpr = Math.min(2, devicePixelRatio || 1);
     this.el.style.setProperty("--glass-w", `${this.W}px`); this.el.style.setProperty("--glass-h", `${this.H}px`);
-    this.front.width = Math.round(this.W * this.dpr); this.front.height = Math.round(this.H * this.dpr);
+    for (const c of [this.front, this.edge]) { c.width = Math.round(this.W * this.dpr); c.height = Math.round(this.H * this.dpr); }
   }
 
   /** the canvas the glass draws into (the hero layer's source when composited) */
   get canvas() { return this.front; }
+  /** the outline, drawn once (it does not move) */
+  get outline() { return this.edge; }
+  private drawEdge() {
+    const x = this.edge.getContext("2d")!, k = this.dpr, gy = this.gy;
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, this.edge.width, this.edge.height);
+    x.setTransform(k, 0, 0, k, 0, 0); x.translate(this.W / 2, this.H / 2);
+    x.strokeStyle = `rgba(${this.line.join(",")},0.85)`; x.lineWidth = 1; x.lineJoin = "round"; x.lineCap = "round";
+    for (const side of [-1, 1]) {
+      x.beginPath();
+      for (let q = 0; q <= 240; q++) { const v = -1 + (2 * q) / 240, r = halfWidth(v, this.H); q ? x.lineTo(side * r, v * gy) : x.moveTo(side * r, v * gy); }
+      x.stroke();
+    }
+  }
 
   // ---------- the flow
   /** where an item is after a time: a table built once from the speed profile. The speed is inverse to
@@ -205,13 +219,6 @@ export class Glass {
     }
     x.globalAlpha = 1;
     x.restore();
-    // the glass: its two curves, nothing else
-    x.strokeStyle = `rgba(${this.line.join(",")},0.85)`; x.lineWidth = 1;
-    for (const side of [-1, 1]) {
-      x.beginPath();
-      for (let q = 0; q <= 240; q++) { const v = -1 + (2 * q) / 240, r = halfWidth(v, this.H); q ? x.lineTo(side * r, v * gy) : x.moveTo(side * r, v * gy); }
-      x.stroke();
-    }
     this.o.onFrame?.();
   }
 

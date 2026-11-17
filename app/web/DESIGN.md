@@ -186,8 +186,10 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     for selection, search and screen readers. Through the glass the headline is seen gently magnified
     toward the middle and compressed toward the walls, with no change of height (the letters stay on their
     line), each colour channel bent a little differently; the glass's flow fades across the letters. The
-    cursor's wake bends the text and the glass as it bends the fan's paths (silver-white, fine red
-    fringes). Phones and reduced motion keep the plain page text and a glass without the lens.
+    cursor's wake never moves the letters or the glass's outline: in the blank space around them it shows
+    faintly (a translucent cool trace with a fine red edge), and inside the glass it bends the flow, which
+    stays within the outline (silver-white, fine red fringes). Phones and reduced motion keep the plain
+    page text and a glass without the lens.
   - **Inversion**: a click on the glass (or Enter) inverts the palette from the click
     (html[data-hg="light"]); both palettes meet AA.
   - **The fan** (src/fan.ts): random-walk hairlines down the whole left of the page, from the top to above

@@ -10,9 +10,9 @@
 // stay on their line), each colour channel bent a little differently toward the walls. The glass's flow
 // fades where it crosses the letters, so they stay legible.
 //
-// The wake (src/wake.ts): where the cursor's fluid flows, everything here is seen displaced along it, the
-// text and the glass turn silver-white and split into fine red fringes; as it fades they return to their
-// own colours. Only pointer movement drives it (not touch).
+// The wake (src/wake.ts): the letters and the glass's outline never move. In the blank space around them
+// the wake shows faintly, a translucent cool trace with a fine red edge; inside the glass it bends the flow
+// (which stays within the outline), silver-white with fine red fringes. Only pointer movement drives it.
 import { GLSL_PROFILE, type Glass } from "./glass";
 import { Wake } from "./wake";
 
@@ -24,64 +24,77 @@ uniform vec2 uSize; uniform float uDpr;            // the canvas, css px
 uniform vec2 uOrigin, uScroll, uView;              // its page position; the page's scroll; the viewport
 uniform vec3 uGround, uSilver, uRed;
 uniform sampler2D uText; uniform float uTextH;     // the text, painted in the canvas's coordinates, to uTextH
-uniform sampler2D uGlass; uniform vec4 uGlassBox;  // the glass's canvas and where it sits (css px, x y w h)
+uniform sampler2D uGlass, uEdge; uniform vec4 uGlassBox;   // the glass's flow and outline, and where it sits
 uniform float uH, uGy;
 uniform sampler2D uVel; uniform float uWake;
 out vec4 o;
 ${GLSL_PROFILE}
 vec4 text(vec2 p) { return (p.y < 0.0 || p.y > uTextH) ? vec4(0.0) : texture(uText, p / vec2(uSize.x, uTextH)); }
-// what is seen at p: (colour over the ground, how much of it is foreground)
-vec4 seen(vec2 p) {
-  vec2 c = uGlassBox.xy + uGlassBox.zw * 0.5, q = p - c;
-  float v = q.y / uGy, r = abs(v) < 1.0 ? halfWidth(v, uH) : 0.0;
-  bool inside = abs(v) < 1.0 && abs(q.x) < r;
-  vec3 col; float t;
-  if (inside) {
-    // through the cylinder: x magnified toward the middle, compressed toward the walls; y untouched
-    float a = clamp(q.x / r, -1.0, 1.0), e = a * a;
-    float sx = (a * 0.9 + 0.1 * a * a * a) * r;
-    float ta = 0.0;
-    for (int k = 0; k < 3; k++) {
-      float sk = q.x + (sx - q.x) * (1.0 + (float(k) - 1.0) * 0.05 * e);
-      vec4 tk = text(vec2(c.x + sk, p.y));
-      col[k] = mix(uGround[k], tk.rgb[k], tk.a); ta = max(ta, tk.a);
-    }
-    t = ta;
-  } else {
-    vec4 tk = text(p); col = mix(uGround, tk.rgb, tk.a); t = tk.a;
-  }
-  vec4 g = vec4(0.0);
+vec4 inGlass(sampler2D t, vec2 p) {
   vec2 gu = (p - uGlassBox.xy) / uGlassBox.zw;
-  if (gu.x >= 0.0 && gu.x <= 1.0 && gu.y >= 0.0 && gu.y <= 1.0) g = texture(uGlass, gu);
-  g.a *= 1.0 - 0.8 * t;                              // the flow fades across the letters
-  col = mix(col, g.rgb, g.a);
-  return vec4(col, max(max(t, g.a), inside ? 1.0 : 0.0));
+  return (gu.x >= 0.0 && gu.x <= 1.0 && gu.y >= 0.0 && gu.y <= 1.0) ? texture(t, gu) : vec4(0.0);
 }
-float ink(vec2 p) {                                  // how much foreground (text, flow, outline) there is at p
-  vec2 c = uGlassBox.xy + uGlassBox.zw * 0.5, q = p - c;
-  vec4 g = vec4(0.0); vec2 gu = (p - uGlassBox.xy) / uGlassBox.zw;
-  if (gu.x >= 0.0 && gu.x <= 1.0 && gu.y >= 0.0 && gu.y <= 1.0) g = texture(uGlass, gu);
-  return max(text(p).a, g.a);
+// the wake's displacement at a point of the canvas (css px)
+vec2 flowAt(vec2 p) {
+  vec2 vp = uOrigin + p - uScroll;
+  vec2 v = texture(uVel, vec2(vp.x, uView.y - vp.y) / uView).xy;
+  vec2 d = vec2(v.x, -v.y) * 0.016; float l = length(d);
+  return l > 26.0 ? d * 26.0 / l : d;
 }
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uSize.y * uDpr - gl_FragCoord.y) / uDpr;
-  vec2 d = vec2(0.0);
-  if (uWake > 0.0) {
-    vec2 vp = uOrigin + p - uScroll;                 // this point in the viewport
-    vec2 v = texture(uVel, vec2(vp.x, uView.y - vp.y) / uView).xy;
-    d = vec2(v.x, -v.y) * 0.016;
-    float l = length(d); if (l > 26.0) d *= 26.0 / l;
-  }
+  vec2 c = uGlassBox.xy + uGlassBox.zw * 0.5, q = p - c;
+  float v = q.y / uGy, r = abs(v) < 1.0 ? halfWidth(v, uH) : 0.0;
+  bool inside = abs(v) < 1.0 && abs(q.x) < r;
+  vec2 d = uWake > 0.0 ? flowAt(p) : vec2(0.0);
   float s = uWake * smoothstep(0.6, 7.0, length(d));
-  vec4 a = seen(p - d);
-  vec3 col = a.rgb; float alpha = a.a;
+
+  // the text, never moved: plain outside the glass; through it, seen through a thick cylinder (x magnified
+  // toward the middle, compressed toward the walls, y untouched), each channel bent a little differently
+  vec3 col = uGround; float t;
+  if (inside) {
+    float a = clamp(q.x / r, -1.0, 1.0), e = a * a, sx = (a * 0.9 + 0.1 * a * a * a) * r, ta = 0.0;
+    for (int k = 0; k < 3; k++) {
+      vec4 tk = text(vec2(c.x + q.x + (sx - q.x) * (1.0 + (float(k) - 1.0) * 0.05 * e), p.y));
+      col[k] = mix(uGround[k], tk.rgb[k], tk.a); ta = max(ta, tk.a);
+    }
+    t = ta;
+  } else { vec4 tk = text(p); col = mix(uGround, tk.rgb, tk.a); t = tk.a; }
+
+  // the flow inside the glass: the one thing here the wake moves; it stays within the outline, and where it
+  // flows it turns silver-white with fine red fringes
+  float fa = 0.0;
+  if (inside) {
+    vec4 f = inGlass(uGlass, p - d);
+    vec3 fc = f.rgb; fa = f.a;
+    if (s > 0.0) {
+      fc = mix(fc, uSilver, s);
+      vec2 n = normalize(d + 1e-5) * mix(0.7, 1.3, s);
+      float fr = clamp(max(inGlass(uGlass, p - d - n).a, inGlass(uGlass, p - d + n).a) - fa, 0.0, 1.0) * s;
+      fc = mix(fc, uRed, fr * 0.6 / max(fa + fr, 1e-3) * fr); fa = max(fa, fr * 0.6);
+    }
+    fa *= 1.0 - 0.8 * t;                           // the flow fades across the letters
+    col = mix(col, fc, fa);
+  }
+  // the outline, never moved
+  vec4 g = inGlass(uEdge, p);
+  col = mix(col, g.rgb, g.a);
+  float alpha = max(max(t, fa), max(g.a, inside ? 1.0 : 0.0));
+
+  // in the blank space, the wake itself, faintly: a translucent cool trace with a fine red edge where it
+  // ends; never on the letters or the outline
   if (s > 0.0) {
-    float line = ink(p - d);
-    col = mix(col, mix(uGround, uSilver, clamp(line, 0.0, 1.0)), s * line);
-    vec2 n = normalize(d) * mix(0.7, 1.3, s);
-    float fr = clamp(max(ink(p - d - n), ink(p - d + n)) - line, 0.0, 1.0) * s;
-    col = mix(col, uRed, fr * 0.6);
-    alpha = max(alpha, fr);
+    float blank = (1.0 - t) * (1.0 - g.a);
+    // the edge from the change of the flow across a whole cell of the fluid (8 px), so it is smooth
+    float e = clamp(length(vec2(length(flowAt(p + vec2(8.0, 0.0))) - length(flowAt(p - vec2(8.0, 0.0))),
+                               length(flowAt(p + vec2(0.0, 8.0))) - length(flowAt(p - vec2(0.0, 8.0))))) * 0.06, 0.0, 1.0) * s;
+    e = smoothstep(0.25, 0.9, e) * (1.0 - smoothstep(0.9, 1.0, e));
+    float tr = 0.03 * s * blank, rr = 0.16 * e * blank;
+    vec3 base = alpha > 0.0 ? col : uGround;
+    vec3 trace = mix(mix(base, uSilver, tr / max(tr + rr, 1e-3)), uRed, rr / max(tr + rr, 1e-3));
+    float ta2 = clamp(tr + rr, 0.0, 1.0);
+    col = mix(base, trace, alpha > 0.0 ? ta2 : 1.0);
+    alpha = max(alpha, ta2);
   }
   o = vec4(col * alpha, alpha);                      // premultiplied
 }`;
@@ -108,7 +121,7 @@ export class Hero {
   readonly canvas: HTMLCanvasElement;
   private o: HeroOptions; private gl: WebGL2RenderingContext | null = null; private prog: WebGLProgram | null = null;
   private u: Record<string, WebGLUniformLocation | null> = {};
-  private texT: WebGLTexture | null = null; private texG: WebGLTexture | null = null; private paintCv = document.createElement("canvas");
+  private texT: WebGLTexture | null = null; private texG: WebGLTexture | null = null; private texE: WebGLTexture | null = null; private paintCv = document.createElement("canvas");
   private wake: Wake | null = null; private dpr = 1; private w = 0; private h = 0; private textH = 0; private origin = [0, 0]; private glassBox = [0, 0, 1, 1];
   private ground: [number, number, number] = [0, 0, 0]; private silver: [number, number, number] = [1, 1, 1]; private red: [number, number, number] = [1, 0, 0];
   private raf = 0; private last = 0; private glassDirty = true; private visible = true; private io: IntersectionObserver;
@@ -143,11 +156,11 @@ export class Hero {
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uOrigin", "uScroll", "uView", "uGround", "uSilver", "uRed", "uText", "uTextH", "uGlass", "uGlassBox", "uH", "uGy", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uSize", "uDpr", "uOrigin", "uScroll", "uView", "uGround", "uSilver", "uRed", "uText", "uTextH", "uGlass", "uEdge", "uGlassBox", "uH", "uGy", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
-    this.texT = tex(); this.texG = tex();
+    this.texT = tex(); this.texG = tex(); this.texE = tex();
     this.gl = gl; this.prog = p;
     const w = new Wake(gl); this.wake = w;
   }
@@ -170,6 +183,8 @@ export class Hero {
     this.silver = rgb(cs.getPropertyValue("--wake-silver") || "#dde3f0"); this.red = rgb(cs.getPropertyValue("--wake-red") || "#ef4b55");
     this.wake?.resize(innerWidth, innerHeight);
     this.paint(host);
+    gl.bindTexture(gl.TEXTURE_2D, this.texE); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.o.glass.outline);
     this.glassDirty = true; this.draw(true);
   }
 
@@ -244,6 +259,7 @@ export class Hero {
     gl.uniform3f(this.u.uGround, ...this.ground); gl.uniform3f(this.u.uSilver, ...this.silver); gl.uniform3f(this.u.uRed, ...this.red);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.texT); gl.uniform1i(this.u.uText, 0); gl.uniform1f(this.u.uTextH, this.textH);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.texG); gl.uniform1i(this.u.uGlass, 1);
+    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.texE); gl.uniform1i(this.u.uEdge, 3);
     gl.uniform4f(this.u.uGlassBox, this.glassBox[0], this.glassBox[1], this.glassBox[2], this.glassBox[3]);
     gl.uniform1f(this.u.uH, m.H); gl.uniform1f(this.u.uGy, m.gy);
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, on ? w!.texture : null); gl.uniform1i(this.u.uVel, 2); gl.uniform1f(this.u.uWake, on ? 1 : 0);
