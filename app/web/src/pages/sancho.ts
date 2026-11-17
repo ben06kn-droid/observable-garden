@@ -2,10 +2,11 @@
 // change rewrites the config the page would download and its hash, the one `quixote sancho` records.
 // It runs entirely in the page: nothing is sent or stored.
 import "../common";              // the shared stylesheet first, so the theme wins ties
+import "../styles/docs.css";     // the docs page's structure: the sheet, the panels, the tables
 import "../styles/sancho.css";
 import "../chain";
 import { h, reduceMotion } from "../common";
-import { Desert } from "../desert";
+import { Dusk } from "../dusk";
 import { INSTALL } from "../install";
 import { BLOCKS, configSha256, DEFAULT, fileText, firstScored, LEVERS, MEMORY_ROWS, numberList, problems, REGIMES, type Values } from "../levers";
 
@@ -140,11 +141,48 @@ form.addEventListener("submit", (e) => e.preventDefault());
   await update();
 })();
 
-// ---- the desert behind the page (src/desert.ts): fixed to the viewport; on a phone a band under the header
+// ---- the code panel: the command on a flat panel with a copy button, as on the docs page (the command itself is
+// rewritten by update(), so the button copies whatever it says now)
+{
+  const pre = $<HTMLPreElement>("cfg-cmd");
+  const panel = document.createElement("div"); panel.className = "glass code";
+  pre.replaceWith(panel); panel.append(pre);
+  const b = document.createElement("button"); b.type = "button"; b.className = "copy"; b.textContent = "Copy";
+  b.setAttribute("aria-label", "Copy this command");
+  let t = 0;
+  b.addEventListener("click", async () => {
+    const done = (msg: string) => { b.textContent = msg; window.clearTimeout(t); t = window.setTimeout(() => { b.textContent = "Copy"; }, 1400); };
+    try { await navigator.clipboard.writeText(pre.textContent ?? ""); done("Copied"); }
+    catch { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s?.removeAllRanges(); s?.addRange(r); done("Selected"); }
+  });
+  panel.append(b);
+}
+// ---- the results table: its roles set explicitly, so a phone's card layout keeps it a table to a reader; each cell
+// carries its column's name for that layout
+for (const t of document.querySelectorAll<HTMLTableElement>(".docs-text table")) {
+  t.setAttribute("role", "table");
+  const names = [...t.querySelectorAll("thead th")].map((th) => th.textContent ?? "");
+  for (const tr of t.querySelectorAll("tr")) {
+    tr.setAttribute("role", "row");
+    [...tr.children].forEach((c, i) => {
+      c.setAttribute("role", c.tagName === "TH" ? (tr.parentElement?.tagName === "THEAD" ? "columnheader" : "rowheader") : "cell");
+      if (c.tagName === "TD" && names[i]) c.setAttribute("data-label", names[i]);
+    });
+  }
+}
+
+// ---- the dusk behind the page (src/dusk.ts); on a phone a band at the top, the contents folded
 const phone = matchMedia("(max-width: 812px)");
-const desert = new Desert(document.body, { reduce: reduceMotion, small: () => phone.matches });
-const placeDesert = () => { if (phone.matches) document.querySelector(".top")?.after(desert.canvas); else document.body.prepend(desert.canvas); };
-placeDesert();
+const contents = document.querySelector<HTMLDetailsElement>(".contents details");
+const fold = () => { if (contents) contents.open = !phone.matches; };
+fold(); phone.addEventListener("change", fold);
+const sheet = document.querySelector<HTMLElement>(".sheet")!;
+const dusk = new Dusk(document.body, {
+  reduce: reduceMotion,
+  small: () => phone.matches,
+  // the tail runs over the backdrop but never behind the text: the sheet less its padding
+  text: () => { const r = sheet.getBoundingClientRect(), pad = parseFloat(getComputedStyle(sheet).paddingLeft) || 0; return { x: r.left + pad, y: r.top + pad, w: r.width - 2 * pad, h: r.height - 2 * pad }; },
+});
 let resizeT = 0;
-addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => { placeDesert(); desert.layout(); }, 150); });
-void document.fonts.ready.then(() => desert.layout());
+addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => dusk.layout(), 150); });
+void document.fonts.ready.then(() => dusk.layout());
