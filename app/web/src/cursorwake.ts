@@ -102,15 +102,17 @@ void main() {
   vec2 p = gl_FragCoord.xy;
   vec2 ab = uB - uA; float t = clamp(dot(p - uA, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
   float d = length(p - (uA + ab * t));
-  o = vec4(max(texture(uVel, p * uTex).r, uForce.x * exp(-d * d / (uR * uR))), 0.0, 0.0, 1.0);
+  o = vec4(max(texture(uVel, p * uTex).rg, vec2(uForce.x * exp(-d * d / (uR * uR)))), 0.0, 1.0);
 }`;
 // the dye (a page that draws the wake as a trail): carried by the fluid, fading
 const DYE_ADVECT = HEAD + `
-uniform sampler2D uVel, uSrc; uniform float uDt, uFade; uniform vec2 uView;
+uniform sampler2D uVel, uSrc; uniform float uDt, uFade, uFade2; uniform vec2 uView;
+// r: the dye; g: a copy fading twice as fast, so g / r tells each point's age
 void main() {
   vec2 uv = gl_FragCoord.xy * uTex;
   vec2 v = texture(uVel, uv).xy;                     // px/s, GL frame
-  o = vec4(texture(uSrc, uv - uDt * v / uView).r * uFade, 0.0, 0.0, 1.0);
+  vec2 c = texture(uSrc, uv - uDt * v / uView).rg;
+  o = vec4(c.r * uFade, c.g * uFade2, 0.0, 1.0);
 }`;
 
 interface Target { tex: WebGLTexture; fb: WebGLFramebuffer }
@@ -167,7 +169,7 @@ export class Wake {
       const p = gl.createProgram()!; gl.attachShader(p, vs); gl.attachShader(p, fs); gl.bindAttribLocation(p, 0, "p"); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
       const u: Record<string, WebGLUniformLocation | null> = {};
-      for (const n of ["uTex", "uVel", "uDt", "uCell", "uFade", "uA", "uB", "uForce", "uR", "uCurl", "uEps", "uP", "uDiv", "uSrc", "uView"]) u[n] = gl.getUniformLocation(p, n);
+      for (const n of ["uTex", "uVel", "uDt", "uCell", "uFade", "uA", "uB", "uForce", "uR", "uCurl", "uEps", "uP", "uDiv", "uSrc", "uView", "uFade2"]) u[n] = gl.getUniformLocation(p, n);
       this.progs[name] = { p, u };
     }
     this.ok = true;
@@ -178,6 +180,8 @@ export class Wake {
   /** the velocity texture, for the composite */
   get texture() { return this.vel?.[0].tex ?? null; }
   /** s after the last push until the wake is still: longer while a slow dye is still fading */
+  /** the dye's fade (s), for reading its age */
+  get fadeTime() { return this.dyeFade; }
   get still() { return this.dye ? Math.max(STILL, this.dyeFade * 5) : STILL; }
   /** the dye texture (covers the viewport, GL frame), when the layer asked for one */
   get dyeTexture() { return this.dye?.[0].tex ?? null; }
@@ -204,7 +208,7 @@ export class Wake {
     this.div = target(gl.RED, gl.R16F); this.curl = target(gl.RED, gl.R16F);
     if (this.dyeCell) {
       this.dw = Math.max(8, Math.ceil(vw / this.dyeCell)); this.dh = Math.max(8, Math.ceil(vh / this.dyeCell));
-      this.dye = [target(gl.RED, gl.R16F, this.dw, this.dh), target(gl.RED, gl.R16F, this.dw, this.dh)];
+      this.dye = [target(gl.RG, gl.RG16F, this.dw, this.dh), target(gl.RG, gl.RG16F, this.dw, this.dh)];
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) this.ok = false;
@@ -289,7 +293,7 @@ export class Wake {
     // the dye, carried by the fluid (its wisps curl where the fluid curls) and fading
     const D = this.dye;
     if (D) {
-      this.pass("dyeAdvect", D[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uSrc, this.bind(1, D[0])); gl.uniform1f(u.uDt, dt * this.dyeFlow); gl.uniform1f(u.uFade, Math.exp(-dt / this.dyeFade)); gl.uniform2f(u.uView, this.vw, this.vh); }, this.dw, this.dh);
+      this.pass("dyeAdvect", D[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uSrc, this.bind(1, D[0])); gl.uniform1f(u.uDt, dt * this.dyeFlow); gl.uniform1f(u.uFade, Math.exp(-dt / this.dyeFade)); gl.uniform1f(u.uFade2, Math.exp(-2 * dt / this.dyeFade)); gl.uniform2f(u.uView, this.vw, this.vh); }, this.dw, this.dh);
       const t = D[0]; D[0] = D[1]; D[1] = t;
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -303,13 +307,13 @@ export function rgb(s: string): RGB {
   if (h) { if (h.length === 3) h = h.replace(/./g, "$&$&"); const n = parseInt(h, 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
   const r = s.match(/(\d+(\.\d+)?)/g); return r ? [Number(r[0]) / 255, Number(r[1]) / 255, Number(r[2]) / 255] : [0, 0, 0];
 }
-export interface WakeColours { tone: RGB; fringe: RGB; fringeA: number; toneMix: number; gloss: number; hi: RGB; shade: RGB; trail: number; refract: number }
+export interface WakeColours { tone: RGB; fringe: RGB; fringeA: number; toneMix: number; gloss: number; hi: RGB; shade: RGB; trail: number; refract: number; warp: number }
 /** the wake's colours, from the theme tokens in force at `el` */
 export function wakeColours(el: Element): WakeColours {
   const cs = getComputedStyle(el), v = (k: string) => cs.getPropertyValue(k).trim();
   const num = (k: string, d: number) => { const x = v(k); return x === "" || Number.isNaN(Number(x)) ? d : Number(x); };
   return { tone: rgb(v("--wake-tone") || "#dce2ef"), fringe: rgb(v("--wake-fringe") || "#e5484d"), fringeA: num("--wake-fringe-alpha", 1),
-    toneMix: num("--wake-tone-mix", 1), gloss: num("--wake-gloss", 1), hi: rgb(v("--wake-hi") || "#ffffff"), shade: rgb(v("--wake-shade") || "#000000"), trail: num("--wake-trail", 0), refract: num("--wake-refract", 0) };
+    toneMix: num("--wake-tone-mix", 1), gloss: num("--wake-gloss", 1), hi: rgb(v("--wake-hi") || "#ffffff"), shade: rgb(v("--wake-shade") || "#000000"), trail: num("--wake-trail", 0), refract: num("--wake-refract", 0), warp: num("--wake-warp", 0) };
 }
 
 // ---------- the shader's shared part: included by every layer's composite
@@ -416,7 +420,8 @@ uniform float uBend[${MAXL}];                     // 1: the wake bends that part
 uniform sampler2D uGround, uKeep;                 // the ground; where the wake may act (r)
 uniform vec3 uTone, uFringe, uHi, uShade; uniform float uFringeA, uToneMix, uGloss;
 uniform sampler2D uDye; uniform float uTrail;     // the trail's dye (viewport, GL frame) and its strength
-uniform float uRefract, uAnyBend;                 // how far the trail refracts (px per unit of slope); whether any part bends
+uniform float uRefract, uAnyBend;
+uniform float uTime, uWarp, uDyeFade;             // s; how far the trail's edges wander (px); the dye's fade (s)                 // how far the trail refracts (px per unit of slope); whether any part bends
 out vec4 o;
 ${WAKE_GLSL}
 // (a sampler array may only be indexed by a constant in GLSL ES 3.00, so the six are named)
@@ -438,7 +443,17 @@ float ink(vec2 p, vec2 d) { vec4 c = layer(p, d, true); vec3 g = groundAt(p); re
 // the fluid and its dye are kept in the host's own coordinates, so the wake stays where it is on the page
 // when the page scrolls
 vec2 flowAt(vec2 p) { return wakeFlow(uVel, p, uSize); }
-float dyeAt(vec2 p) { return texture(uDye, vec2(p.x, uSize.y - p.y) / uSize).r; }
+// a slowly drifting noise that warps where the dye is read: the trail's edges are irregular and contoured
+// from the moment it is drawn, before the fluid's own curls have formed
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
+vec2 warp(vec2 p) {
+  vec2 a = p / 22.0 + vec2(uTime * 0.35, -uTime * 0.27), b = p / 9.0 + vec2(-uTime * 0.6, uTime * 0.45);
+  return (vec2(vnoise(a), vnoise(a + 17.3)) - 0.5) * 2.0 * uWarp + (vec2(vnoise(b + 5.1), vnoise(b + 31.7)) - 0.5) * 0.9 * uWarp;
+}
+vec2 dye2(vec2 p) { p += warp(p); return texture(uDye, vec2(p.x, uSize.y - p.y) / uSize).rg; }
+float dyeAt(vec2 p) { return dye2(p).r; }
 vec2 dyeGrad(vec2 p, float e) { return vec2(dyeAt(p + vec2(e, 0.0)) - dyeAt(p - vec2(e, 0.0)), dyeAt(p + vec2(0.0, e)) - dyeAt(p - vec2(0.0, e))) / (2.0 * e); }
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uSize.y * uDpr - gl_FragCoord.y) / uDpr;
@@ -451,15 +466,18 @@ void main() {
   // other side and hairline ripples where it thins.
   vec3 tc = vec3(0.0); float ta = 0.0;
   if (uTrail > 0.0) {
-    float q = dyeAt(p);
+    vec2 qq = dye2(p); float q = qq.r;
     if (q > 0.02) {
+      // its age, from the fast copy's share of the dye: the colour comes in as the trail ages (0.2 to 0.5 s)
+      float age = -uDyeFade * log(clamp(qq.g / max(q, 1e-4), 1e-3, 1.0));
+      float chroma = smoothstep(0.2, 0.5, age);
       // its slope, over two widths (a smooth surface, not the dye's grain)
       vec2 gq = (dyeGrad(p, 2.5) + dyeGrad(p, 5.0)) * 0.5;
       float body = smoothstep(0.05, 0.5, q);
       vec2 r = -gq * uRefract; float rl = length(r); if (rl > 6.0) r *= 6.0 / rl;   // px, at most 6
       vec3 under;
       for (int k = 0; k < 3; k++) {
-        vec2 pk = p + r * (1.0 + (float(k) - 1.0) * 0.18);
+        vec2 pk = p + r * (1.0 + (float(k) - 1.0) * 0.18 * chroma);
         vec4 c = uN > 0 ? layer(pk, vec2(0.0), false) : vec4(0.0); vec3 gk = groundAt(pk);
         under[k] = (c.rgb + gk * (1.0 - c.a))[k];
       }
@@ -474,8 +492,8 @@ void main() {
       // at its outermost edge, always, a faint chromatic split: red just outside, cyan just inside
       float outer = smoothstep(0.02, 0.045, q) * (1.0 - smoothstep(0.045, 0.075, q));
       float inner = smoothstep(0.06, 0.09, q) * (1.0 - smoothstep(0.09, 0.13, q));
-      tc = mix(tc, vec3(1.0, 0.28, 0.42), 0.32 * outer);
-      tc = mix(tc, vec3(0.2, 0.78, 0.9), 0.26 * inner);
+      tc = mix(tc, vec3(1.0, 0.28, 0.42), 0.32 * outer * chroma);
+      tc = mix(tc, vec3(0.2, 0.78, 0.9), 0.26 * inner * chroma);
       // over text too: the overlay lies under the text, so the trail shows behind the letters and never moves them
       ta = smoothstep(0.02, 0.07, q) * uTrail;
     }
@@ -525,7 +543,7 @@ export class WakeLayer {
     gl.useProgram(p);
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uHostVp", "uView", "uVel", "uL0", "uL1", "uL2", "uL3", "uL4", "uL5", "uLB", "uBend", "uN", "uGround", "uKeep", "uTone", "uFringe", "uHi", "uShade", "uFringeA", "uToneMix", "uGloss", "uDye", "uTrail", "uRefract", "uAnyBend"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uSize", "uDpr", "uHostVp", "uView", "uVel", "uL0", "uL1", "uL2", "uL3", "uL4", "uL5", "uLB", "uBend", "uN", "uGround", "uKeep", "uTone", "uFringe", "uHi", "uShade", "uFringeA", "uToneMix", "uGloss", "uDye", "uTrail", "uRefract", "uAnyBend", "uTime", "uWarp", "uDyeFade"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture()!; gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
@@ -642,7 +660,8 @@ export class WakeLayer {
     gl.uniform2f(this.u.uHostVp, hb.left, hb.top); gl.uniform2f(this.u.uView, innerWidth, innerHeight);
     gl.uniform3f(this.u.uTone, ...col.tone); gl.uniform3f(this.u.uFringe, ...col.fringe); gl.uniform3f(this.u.uHi, ...col.hi); gl.uniform3f(this.u.uShade, ...col.shade);
     gl.uniform1f(this.u.uFringeA, col.fringeA); gl.uniform1f(this.u.uToneMix, col.toneMix); gl.uniform1f(this.u.uGloss, col.gloss); gl.uniform1f(this.u.uTrail, this.wake!.dyeTexture ? col.trail : 0);
-    gl.uniform1f(this.u.uRefract, col.refract); gl.uniform1f(this.u.uAnyBend, bend.some((b) => b > 0) ? 1 : 0);
+    gl.uniform1f(this.u.uRefract, col.refract); gl.uniform1f(this.u.uTime, performance.now() / 1000 % 1000);
+    gl.uniform1f(this.u.uWarp, col.warp); gl.uniform1f(this.u.uDyeFade, this.wake!.fadeTime); gl.uniform1f(this.u.uAnyBend, bend.some((b) => b > 0) ? 1 : 0);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     this.shown = true;

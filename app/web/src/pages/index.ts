@@ -80,8 +80,8 @@ const wake = new WakeLayer({ host: one,
   // a tree swaying or arriving now (finished animations that hold their last frame do not count)
   moving: () => !!grove?.stems.some((s) => s.getAnimations().some((a) => a.playState === "running")),
   keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *, .legend > span")].map(box),
-  // a wide trail drifting slowly, gone in about a second
-  scale: { cell: 5, flow: 0.3, curl: 45, dye: 1.5, dyeFlow: 0.12, dyeWidth: 1.225, dyeFade: 0.45 },
+  // a wide trail drifting slowly, gone in about a second, its curls strong
+  scale: { cell: 5, flow: 0.3, curl: 70, dye: 1.5, dyeFlow: 0.12, dyeWidth: 1.6, dyeFade: 0.45 },
   onPush: (x, y, vx, vy, dose) => { const k = 0.5 + 0.9 * Math.sqrt(dose); life.wind.add(x, y, vx * k, vy * k); } });
 
 one.addEventListener("animationend", () => wake.invalidate());   // a tree done arriving or swaying
