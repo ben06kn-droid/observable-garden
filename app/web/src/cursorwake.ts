@@ -1,11 +1,30 @@
-// The cursor's wake over the fan: a small fluid simulation, after lukres.dev's cursor effect. The
-// pointer's movement pushes velocity into the fluid along its path; small curls are kept alive
-// (vorticity confinement); the fluid is made incompressible (a few pressure iterations) and fades
-// slowly (gone about a second after the cursor stops). The fan's composite reads the
-// velocity to bend its paths along the wake and colour them silver-white with fine red fringes there.
+// The cursor's wake: the site's signature, the same on every page that has it, only its colours
+// changing with the page's theme (DESIGN.md 3, "The cursor's wake"). After lukres.dev's cursor effect.
 //
-// It runs at an eighth of the viewport's size, in the fan's own WebGL2 context, on half-float targets
-// (EXT_color_buffer_float). Without them there is no wake and the fan is drawn as before. Velocity is
+// What it is: a small fluid simulation (`Wake`). The pointer's movement pushes velocity into the fluid
+// along its path; small curls are kept alive (vorticity confinement); the fluid is made incompressible
+// (a few pressure iterations) and fades slowly (gone about a second and a half after the cursor stops).
+// A page's drawn layer reads the velocity to bend its strokes along the wake, turn them the page's
+// tone and split them into fine fringes in the page's fringe colour.
+//
+// How a page uses it, by one of two routes:
+//   - a layer that already composites its own pixels in WebGL (the run page's fan and hero layer) runs
+//     a `Wake` in its own context, follows the pointer with `followPointer`, includes `WAKE_GLSL` in its
+//     shader and reads its colours with `wakeColours`;
+//   - a layer drawn as SVG and 2D canvases (the home page's grove, the demo's scene) gets a `WakeLayer`:
+//     an overlay that repaints, only where the wake is, a picture of that layer, bent and fringed.
+// It acts on the drawn layer only: never on text, controls or the header.
+//
+// The two colours are theme tokens: `--wake-tone` (the tone the bent strokes turn) and `--wake-fringe`
+// (the fringes). Optional tuning tokens: `--wake-tone-mix` (0 keeps the strokes' own colours; 1 by
+// default), `--wake-fringe-alpha`, `--wake-gloss` (the glossy trace in the blank space, 0 for none),
+// `--wake-hi` and `--wake-shade` (that trace's highlight and shade).
+//
+// Rules on every page: only cursor movement drives it (pressing and dragging do nothing, touch does
+// nothing); nothing under reduced motion; asleep when its layer is off screen or the fluid is still.
+//
+// The simulation runs at an eighth of the viewport's size on half-float targets
+// (EXT_color_buffer_float). Without them there is no wake and the layer is drawn as before. Velocity is
 // stored in CSS px per second, in the GL frame (y up).
 
 const VERT = `#version 300 es
@@ -200,4 +219,76 @@ export class Wake {
     swap();
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
+}
+
+// ---------- colours: the page's theme tokens
+export type RGB = [number, number, number];
+export function rgb(s: string): RGB {
+  let h = s.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
+  if (h) { if (h.length === 3) h = h.replace(/./g, "$&$&"); const n = parseInt(h, 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
+  const r = s.match(/(\d+(\.\d+)?)/g); return r ? [Number(r[0]) / 255, Number(r[1]) / 255, Number(r[2]) / 255] : [0, 0, 0];
+}
+export interface WakeColours { tone: RGB; fringe: RGB; fringeA: number; toneMix: number; gloss: number; hi: RGB; shade: RGB }
+/** the wake's colours, from the theme tokens in force at `el` */
+export function wakeColours(el: Element): WakeColours {
+  const cs = getComputedStyle(el), v = (k: string) => cs.getPropertyValue(k).trim();
+  const num = (k: string, d: number) => { const x = v(k); return x === "" || Number.isNaN(Number(x)) ? d : Number(x); };
+  return { tone: rgb(v("--wake-tone") || "#dce2ef"), fringe: rgb(v("--wake-fringe") || "#e5484d"), fringeA: num("--wake-fringe-alpha", 1),
+    toneMix: num("--wake-tone-mix", 1), gloss: num("--wake-gloss", 1), hi: rgb(v("--wake-hi") || "#ffffff"), shade: rgb(v("--wake-shade") || "#000000") };
+}
+
+// ---------- the shader's shared part: included by every layer's composite
+export const WAKE_GLSL = `
+// the wake's displacement (css px, y down) at a viewport point vp (css px), from the fluid's velocity
+vec2 wakeFlow(sampler2D vel, vec2 vp, vec2 view) {
+  vec2 v = texture(vel, vec2(vp.x, view.y - vp.y) / view).xy;
+  vec2 d = vec2(v.x, -v.y) * 0.016; float l = length(d);
+  return l > 26.0 ? d * 26.0 / l : d;
+}
+// how strongly a point is in the wake (0 outside it)
+float wakeStrength(vec2 d) { return smoothstep(0.25, 5.0, length(d)); }
+// the fringes' offset: across the strokes, along the flow, about a pixel
+vec2 wakeAcross(vec2 d, float s) { return normalize(d) * mix(0.7, 1.3, s); }
+// the trace in the blank space, read as a surface from the gradient gr of the wake's strength: a highlight
+// on the side facing a light from the upper left, a soft shade on the other, a hairline of the fringe
+// colour at its rim; no flat tint (which reads as dust). blank: 1 where no stroke is. (colour, alpha)
+vec4 wakeTrace(vec3 base, vec2 gr, float s, float blank, vec3 hi, vec3 shade, vec3 fringe, float fringeA) {
+  float slope = smoothstep(0.6, 6.0, length(gr));
+  float face = dot(gr / (length(gr) + 1e-4), normalize(vec2(-0.6, -0.8)));
+  float spec = pow(max(face, 0.0), 2.0) * slope * s, sh = max(-face, 0.0) * slope * s;
+  float rim = smoothstep(0.82, 0.97, slope) * (1.0 - smoothstep(0.97, 1.0, slope)) * s;   // a hairline
+  vec3 g = mix(base, hi, clamp(0.22 * spec * blank, 0.0, 1.0));
+  g = mix(g, shade, clamp(0.10 * sh * blank, 0.0, 1.0));
+  g = mix(g, fringe, clamp(0.08 * fringeA * rim * blank, 0.0, 1.0));
+  return vec4(g, clamp((0.22 * spec + 0.10 * sh + 0.08 * rim) * blank, 0.0, 1.0));
+}
+`;
+
+// ---------- the rules: what drives it
+/** whether this visitor gets the wake: a fine pointer that hovers, and motion allowed */
+export function wakeWanted(): boolean {
+  return !matchMedia("(prefers-reduced-motion: reduce)").matches && matchMedia("(hover: hover) and (pointer: fine)").matches;
+}
+/** Follow the cursor: only its movement, never touch; a press ends the stroke and nothing moves the fluid
+ *  until the button is released (pressing and dragging do nothing). Returns the unsubscribe. */
+export function followPointer(move: (x: number, y: number) => void, lift: () => void, active: () => boolean = () => true): () => void {
+  let held = false;
+  const onMove = (e: PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    if (e.buttons !== 0) { if (!held) { held = true; lift(); } return; }
+    if (held) { held = false; lift(); }
+    if (active()) move(e.clientX, e.clientY);
+  };
+  const onDown = (e: PointerEvent) => { if (e.pointerType !== "touch") { held = true; lift(); } };
+  const onLeave = () => lift();
+  addEventListener("pointermove", onMove, { passive: true });
+  addEventListener("pointerdown", onDown, { passive: true });
+  document.documentElement.addEventListener("pointerleave", onLeave, { passive: true });
+  return () => { removeEventListener("pointermove", onMove); removeEventListener("pointerdown", onDown); document.documentElement.removeEventListener("pointerleave", onLeave); };
+}
+/** whether `el` is on screen now (kept by an IntersectionObserver; true until it first reports) */
+export function onScreen(el: Element, changed?: (on: boolean) => void): () => boolean {
+  let on = true;
+  new IntersectionObserver(([e]) => { on = e.isIntersecting; changed?.(on); }, { rootMargin: "64px" }).observe(el);
+  return () => on;
 }
