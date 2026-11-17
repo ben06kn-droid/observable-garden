@@ -14,7 +14,7 @@ import { cancelGate, loadGate, type RunOutcome } from "../gate";
 import { makeScene } from "../scene";
 import { drawRunTree } from "../runtree";
 import type { GardenHandle } from "../garden";
-import { Hourglass } from "../hourglass";
+import { Glass } from "../glass";
 import { Fan, type FanRect } from "../fan";
 import { FALLBACK_MODELS, localEndpoint, NOT_SENT, OPENROUTER_MODELS, PROVIDERS, routerModels, type RouterModel } from "../providers";
 import type { AuditResult, InputsInfo, ProviderId, RunEvent, RunUsage, SearchTree } from "../types";
@@ -77,124 +77,92 @@ function grow(t: SearchTree, runId: string, move: string, moves: number) {
   notes.search(g, g.total, move, `${moves} moves · ${t.evaluations} evaluations`);
 }
 
-// ---- the hourglass (src/hourglass.ts): beside the form on a desktop, the headline passing behind the glass;
-// under the headline on a phone. Turning it over inverts the page's palette, spreading from the neck.
-// During a run it turns over by itself and the sand shows the share of the move budget spent.
+// ---- the glass (src/glass.ts) and the fan of paths (src/fan.ts): two independent elements
+// The glass: a still hourglass in the right-hand columns from the opening screen down to the rule above
+// 03 Key, scrolling with the page; its sand drains as the reader comes down that stretch. A click on it
+// inverts the page's palette, spreading from where it was clicked. The headline's last letters pass
+// through its upper bulb, bent. On a phone it is a glass of its own size under the headline.
+// The fan: random paths down the whole left of the page, from the top to above "Continue to docs",
+// running right until the glass (beside it) or the page's right edge (below it); dimmed behind text,
+// never under a field; its last paths come to rest at the foot. On a phone: a band between sections.
 const root = document.documentElement;
 const phone = () => matchMedia("(max-width: 812px)").matches;
-let hg: Hourglass | null = null, hgPhone: boolean | null = null;
-function buildGlass() {
-  if (hgPhone === phone() && hg) return;
-  hg?.destroy(); hgPhone = phone();
-  const head = parseFloat(getComputedStyle(root).getPropertyValue("--head")) || 76;
-  // on a desktop it grows with the width, as the headline does, so the letters cross the same part of the bulb
-  const height = hgPhone ? 340 : Math.round(Math.max(380, Math.min(innerWidth * 0.39, innerHeight - head - 120)));
-  hg = new Hourglass($("hg-host"), { height, reduce: reduceMotion,
-    behind: hgPhone || reduceMotion ? [] : [$("run-h")],
-    onFlip: (flipped, neck) => {
-      const swap = () => { root.dataset.hg = flipped ? "light" : "dark"; hg?.refreshPalette(); fan?.refreshPalette(); };
-      const d = document as Document & { startViewTransition?: (f: () => void) => { finished: Promise<void> } };
-      if (reduceMotion || !d.startViewTransition) { swap(); return; }
-      root.style.setProperty("--vx", `${neck.x}px`); root.style.setProperty("--vy", `${neck.y}px`);
-      root.dataset.hgSwap = "";
-      d.startViewTransition(swap).finished.finally(() => { delete root.dataset.hgSwap; });
-    } });
-}
-/** on a desktop, with the lens: the glass where the headline's letters pass through its upper bulb, at
- *  its widest, the last letters inside the glass and the rest clear of it; never over the form's
- *  columns, and, once it sticks, never under the header */
-function placeGlass() {
-  const el = hg?.el; if (!el || !hg) return;
-  el.style.setProperty("--hg-dx", "0px"); el.style.setProperty("--hg-dy", "0px");
-  if (hgPhone || reduceMotion) { hg.paintText(); return; }
-  const range = document.createRange(); range.selectNodeContents($("run-h"));
-  const m = hg.measures(), h1 = range.getBoundingClientRect(), box = el.getBoundingClientRect();   // the text's extent, not its box
-  const form = $("run-form").getBoundingClientRect(), stick = $("hg-host").getBoundingClientRect();
-  // from the column it is centred in (the glass itself may be mid-arrival, offset by its animation)
-  const cx0 = stick.left + stick.width / 2, cy0 = stick.top + stick.height / 2; void box;
-  const cx = Math.max(form.right + m.R + 15 + 12, h1.right - m.R * 0.55);
-  let dy = h1.top + h1.height * 0.5 + 0.76 * m.gy - cy0;                // the letters in the bulb's empty upper part
-  dy = Math.max(m.H / 2 - stick.height / 2 + 4, Math.min(stick.height / 2 - m.H / 2 - 4, dy));
-  el.style.setProperty("--hg-dx", `${(cx - cx0).toFixed(1)}px`); el.style.setProperty("--hg-dy", `${dy.toFixed(1)}px`);
-  hg.paintText();
-}
-// ---- the glass's travel, and the fan of paths (src/fan.ts) that takes over below it
-// On a desktop the glass rides with the scroll from the opening screen down to the rule above 03 Key and
-// comes to rest with its base on it: its column ends there (by the glass's own offset in its sticky box).
-// As it arrives, a thin stream of sand leaves its base, runs along that rule to the left edge and becomes
-// the first sand-toned path of the fan, which fills the left of the page from that rule down to above
-// "Continue to docs", fading before the fields and the tree, dimmed behind text, its last paths resting.
-// On a phone the fan is its own band between the form and the tree, with no lens.
 const keySect = () => document.querySelectorAll<HTMLElement>(".run-form .sect")[2];
-function travel() {
-  const col = document.querySelector<HTMLElement>(".glass-col")!;
-  if (hgPhone || !hg) { col.style.removeProperty("--glass-h"); return; }
-  const m = hg.measures(), stick = $("hg-host").getBoundingClientRect();
-  const dy = parseFloat(hg.el.style.getPropertyValue("--hg-dy")) || 0;
-  const below = stick.height / 2 - dy - m.H / 2;                 // the sticky box's bottom, below the glass's base
-  col.style.setProperty("--glass-h", `${Math.round(keySect().getBoundingClientRect().top - col.getBoundingClientRect().top + below)}px`);
+let glass: Glass | null = null, glassPhone: boolean | null = null, glassH = 0;
+function invert(at: { x: number; y: number }) {
+  const swap = () => { root.dataset.hg = root.dataset.hg === "light" ? "dark" : "light"; glass?.refreshPalette(); fan?.refreshPalette(); };
+  const d = document as Document & { startViewTransition?: (f: () => void) => { finished: Promise<void> } };
+  if (reduceMotion || !d.startViewTransition) { swap(); return; }
+  root.style.setProperty("--vx", `${at.x}px`); root.style.setProperty("--vy", `${at.y}px`);
+  root.dataset.hgSwap = "";
+  d.startViewTransition(swap).finished.finally(() => { delete root.dataset.hgSwap; });
 }
-let fan: Fan | null = null, fanPhone: boolean | null = null, handed = false;
+function buildGlass() {
+  const ph = phone(), host = $("hg-host");
+  const H = ph ? Math.round(Math.max(420, Math.min(640, innerHeight * 0.76)))
+    : Math.round(keySect().getBoundingClientRect().top - host.getBoundingClientRect().top);
+  if (glass && glassPhone === ph && Math.abs(H - glassH) < 24) { placeGlass(); return; }
+  glass?.destroy(); glassPhone = ph; glassH = H;
+  glass = new Glass(host, { height: H, reduce: reduceMotion, behind: ph ? [] : [$("run-h")], onClick: invert });
+  placeGlass(); progress();
+}
+/** across: on a desktop its bulbs clear the form's columns (and may be cropped by the page's right edge) */
+function placeGlass() {
+  if (!glass) return;
+  const m = glass.measures(), host = $("hg-host").getBoundingClientRect();
+  const cx = glassPhone ? host.left + host.width / 2 : Math.max($("run-form").getBoundingClientRect().right + m.R + 20, host.left + host.width / 2);
+  glass.el.style.setProperty("--g-x", `${(cx - host.left - m.W / 2).toFixed(1)}px`);
+  glass.paintText();
+}
+function progress() { if (!glass) return; const key = keySect().getBoundingClientRect().top + scrollY; glass.setProgress(scrollY / Math.max(1, key - innerHeight * 0.5)); }
+addEventListener("scroll", progress, { passive: true });
+
+let fan: Fan | null = null, fanPhone: boolean | null = null;
 // the page's shape for the fan, taken once per layout (page px)
-let geom = { top: 0, bottom: 0, col3: 300, stage: [0, 0], tree: Infinity, masks: [] as FanRect[] };
-const TEXT = ".run-form .sect-h, .run-form .fine, .run-form label:not(.file), .run-form .status, .run-form .estimate, .run-form details, .run-go .run-error, "
+let geom = { bottom: 0, right: 0, glass: [0, 0, Infinity] as [number, number, number], masks: [] as FanRect[] };
+const TEXT = ".hero .label, .hero h1, .hero .lead, .hero .about, .hero .to-demo, "
+  + ".run-form .sect-h, .run-form .fine, .run-form label:not(.file), .run-form .status, .run-form .estimate, .run-form details, .run-go .run-error, "
   + ".stage-empty, #spot .note, #spot .note-word, .below h2, .below p, .run-log, #record .meaning, #record .reasons-d, #record h2, #record h3, #record .kv, #record pre, "
   + ".run-notes p, .carry-next .k, .carry-next .to";
 const FIELDS = ".run-form input:not([type=file]), .run-form select, .run-form textarea, .run-form label.file, .run-form button, #record button";
 function measure() {
-  const y = scrollY, rect = (e: Element) => e.getBoundingClientRect();
-  const key = rect(keySect()), next = document.querySelector(".carry-next .k"), stage = rect($("demo"));
-  geom.top = key.top + y - 3; geom.bottom = (next ? rect(next).top : document.documentElement.scrollHeight - y) + y - 32;
-  geom.col3 = rect(keySect().querySelector(".sect-b")!).left - 18;
-  geom.stage = [stage.top + y, stage.bottom + y];
-  const real = svg.querySelector(".real"), tr = real ? rect(real) : null;
-  geom.tree = tr && tr.width > 0 ? tr.left - 16 : Infinity;
-  const pad = 6, list: FanRect[] = [];
-  // behind text: the text's own extent (a grid cell may stretch an element far past its words)
-  const range = document.createRange();
+  const y = scrollY, rect = (e: Element) => e.getBoundingClientRect(), next = document.querySelector(".carry-next .k");
+  geom.bottom = (next ? rect(next).top : document.documentElement.scrollHeight - y) + y - 32;
+  geom.right = innerWidth - parseFloat(getComputedStyle($("main").querySelector(".run-grid")!).paddingRight || "72");
+  if (glass && !glassPhone) { const g = rect(glass.el), m = glass.measures(); geom.glass = [g.top + y, g.bottom + y, g.left + g.width / 2 - m.R - 28]; }
+  else geom.glass = [0, 0, Infinity];
+  const list: FanRect[] = [], range = document.createRange(), pad = 6;
+  // behind text: the text's own extent (a grid cell may stretch an element far past its words); AA holds
+  // at a tenth of the lines' strength, for the faintest text over a gold path, in both palettes
   for (const e of document.querySelectorAll(TEXT)) {
     range.selectNodeContents(e); const r = range.getBoundingClientRect();
-    if (r.width && r.height && r.left < geom.col3 + 40) list.push({ x: r.left - pad, y: r.top + y - pad, w: r.width + 2 * pad, h: r.height + 2 * pad, keep: 0.28 });
+    if (r.width && r.height) list.push({ x: r.left - pad, y: r.top + y - pad, w: r.width + 2 * pad, h: r.height + 2 * pad, keep: 0.1 });
   }
-  for (const e of document.querySelectorAll(FIELDS)) { const r = rect(e); if (r.width && r.height && r.left < geom.col3 + 40) list.push({ x: r.left - 4, y: r.top + y - 4, w: r.width + 8, h: r.height + 8, keep: 0 }); }
+  const tree = svg.querySelector(".real"); if (tree) { const r = rect(tree); if (r.width) list.push({ x: r.left - 10, y: r.top + y - 10, w: r.width + 20, h: r.height + 20, keep: 0.15 }); }
+  for (const e of document.querySelectorAll(FIELDS)) { const r = rect(e); if (r.width && r.height) list.push({ x: r.left - 6, y: r.top + y - 6, w: r.width + 12, h: r.height + 12, keep: 0 }); }
   geom.masks = list;
 }
 function buildFan() {
   const ph = phone();
-  if (fan && fanPhone === ph) { measure(); fan.layout(); checkHand(); return; }
-  fan?.destroy(); fan = null; fanPhone = ph; handed = false;
+  if (fan && fanPhone === ph) { measure(); fan.layout(); return; }
+  fan?.destroy(); fan = null; fanPhone = ph;
   if (ph) {
     const band = $("fan-band");
-    fan = new Fan(document.body, { reduce: reduceMotion, lens: false, seed: 7,
+    fan = new Fan(document.body, { reduce: reduceMotion, seed: 7,
       region: () => { const r = band.getBoundingClientRect(); return { top: r.top + scrollY + 1, bottom: r.bottom + scrollY }; },
       reach: () => innerWidth - 12 });
     return;
   }
   measure();
-  fan = new Fan(document.body, { reduce: reduceMotion, awaitHandover: !reduceMotion, foot: 280, seed: 5,
-    region: () => ({ top: geom.top, bottom: geom.bottom }),
-    reach: (y) => (y >= geom.stage[0] && y <= geom.stage[1] ? Math.max(48, Math.min(geom.col3, geom.tree)) : geom.col3),
+  fan = new Fan(document.body, { reduce: reduceMotion, foot: 280, seed: 5,
+    region: () => ({ top: 0, bottom: geom.bottom }),
+    reach: (y) => (y >= geom.glass[0] && y <= geom.glass[1] ? geom.glass[2] : geom.right),
     masks: () => geom.masks });
-  checkHand();
 }
-/** the glass has come to rest on the rule: the stream sets off (and is taken back if the visitor scrolls up) */
-function checkHand() {
-  if (!fan || fanPhone || !hg || reduceMotion) return;
-  const m = hg.measures(), b = hg.el.getBoundingClientRect(), base = b.top + b.height / 2 + m.H / 2, rule = keySect().getBoundingClientRect().top;
-  if (!handed && base >= rule - 2) { handed = true; void fan.handover({ x: b.left + b.width / 2, y: rule + scrollY }); }
-  else if (handed && base < rule - 60) { handed = false; fan.resetHandover(); }
-}
-addEventListener("scroll", checkHand, { passive: true });
 let relayT = 0;
-const relayout = () => { window.clearTimeout(relayT); relayT = window.setTimeout(() => { travel(); buildFan(); }, 150); };
+const relayout = () => { window.clearTimeout(relayT); relayT = window.setTimeout(() => { buildGlass(); buildFan(); }, 150); };
 new ResizeObserver(relayout).observe($("main"));
-void document.fonts.ready.then(() => { buildGlass(); placeGlass(); travel(); buildFan(); });
-let glassT = 0;
-let glassW = innerWidth;
-window.addEventListener("resize", () => { window.clearTimeout(glassT); glassT = window.setTimeout(() => {
-  if (hgPhone !== phone() || (!hgPhone && Math.abs(innerWidth - glassW) > 40)) { glassW = innerWidth; hgPhone = null; buildGlass(); }
-  placeGlass(); travel(); buildFan();
-}, 200); });
+void document.fonts.ready.then(() => { buildGlass(); buildFan(); });
 
 // ---- inputs: the bundled pair to start, or the visitor's files; checked by the package's loaders
 async function useBundled() {
@@ -345,7 +313,6 @@ async function start() {
   if (!key && p.keyRequired) { errorBox.textContent = "Enter your API key to start."; fKey.focus(); return; }
   running = true; refresh();
   two.classList.add("has-run");
-  hg?.beginRun();
   $("record").hidden = true; logList.replaceChildren(); tokens.textContent = "Starting…";
   runId = `run-${Date.now().toString(36)}`; shownSteps = 0;
   svg.replaceChildren(); idleBox(); lastDraw = null; current = null; notes.clear(); notes.entered(); seed.classList.remove("spent");
@@ -366,7 +333,7 @@ async function start() {
     out = await gate.run({ panel: panel.slice(0), cls, key: runKey, provider: p.id, url: where.url, opts, B, seed: SEED }, {
       onEvent: (ev: RunEvent) => {
         if (ev.type === "move") {
-          if (ev.tool) { lastMove = ev.tool; nMoves++; hg?.setShare(0.8 * Math.min(1, nMoves / moves)); }
+          if (ev.tool) { lastMove = ev.tool; nMoves++; }
           logLine("move", [h("b", null, ev.tool ?? "(no move)"), " ", Object.keys(ev.args).length ? JSON.stringify(ev.args) : "", ev.text ? h("span", "say", ` ${ev.text}`) : ""]);
         } else if (ev.type === "result") {
           logLine(ev.last.refused ? "refused" : "result", ev.last.refused ? [h("span", "tag", "refused"), ev.last.refused] : [ev.last.text ?? ""]);
@@ -375,11 +342,7 @@ async function start() {
           tokens.textContent = fmtUsage(ev.usage);
         } else if (ev.type === "tree") grow(ev.tree, runId, lastMove, nMoves);
       },
-      onProgress: (p) => {
-        if (p.stage !== "replay") return;
-        notes.replay(`replay · ${p.done.toLocaleString("en")} of ${p.total.toLocaleString("en")}`);
-        hg?.setShare(0.8 + 0.2 * (p.total ? p.done / p.total : 0));          // the last fifth of the sand runs with the replay
-      },
+      onProgress: (p) => { if (p.stage === "replay") notes.replay(`replay · ${p.done.toLocaleString("en")} of ${p.total.toLocaleString("en")}`); },
     });
   } catch (e) {
     const msg = String((e as Error).message ?? e);
@@ -393,7 +356,6 @@ async function start() {
   running = false; refresh();
   if (!out.result) { finish(`The gate refused the log: ${out.refused ?? "no reason given"}`); return; }
   const r = out.result, t = out.tree;
-  await hg?.finish();                                         // the verdict appears as the last grain lands
   bed.finish();
   if (t) { const g = draw(t, r, runId, 12); g.setStep(Number.MAX_SAFE_INTEGER); notes.verdict(g, r, t.evaluations, SEED); }
   // the prompt actually sent: the adapter's own, or the visitor's edit (a different search)
@@ -403,7 +365,6 @@ async function start() {
 
 function finish(message: string, usage?: RunUsage | null) {
   endKey();
-  void hg?.finish();
   running = false; refresh();
   if (usage) tokens.textContent = fmtUsage(usage);
   errorBox.textContent = message;
