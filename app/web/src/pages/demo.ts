@@ -10,6 +10,7 @@ import { loadGate } from "../gate";
 import { colourOf, kindOf } from "../heads";
 import { SHAPES } from "../leaves";
 import { Field, startLife } from "../particles";
+import { svgPart, WakeLayer } from "../cursorwake";
 import { makeRunView } from "../runView";
 import { makeNotes } from "../notes";
 import { branchSources, shakeable, woodTwo } from "../woods";
@@ -40,9 +41,47 @@ const notes = makeNotes(spot, two, () => bed.heads());
 let choiceBox = { x: 0, y: 0, w: 0, h: 0 };
 const petals = new Field({ box: two, air: $("air-two") as HTMLCanvasElement, pile: $("pile-two") as HTMLCanvasElement, kind: "petal", count: 80, start: 36,
   ground: (x) => { const W = two.clientWidth, u = (x - W / 2) / (W / 2); return two.clientHeight * (0.93 - 0.11 * u * u); },
-  cap: () => (innerWidth < 760 ? 0 : 12), avoid: () => [...notes.boxes(), choiceBox] });
+  cap: () => (innerWidth < 760 ? 0 : 12), avoid: () => [...notes.boxes(), choiceBox], kick: 1.3, lift: 240 });
 let busy = false;
-startLife({ fields: [petals], paused: () => inside.isOpen(), throttled: () => busy, reduce: reduceMotion });
+// the cursor's wind on the petals comes from the wake (below), not straight from the pointer
+const life = startLife({ fields: [petals], paused: () => inside.isOpen(), throttled: () => busy, reduce: reduceMotion, cursor: false });
+
+// ---- the cursor's wake (cursorwake.ts, the site's signature): the home page's trail, in neon blue with
+// pink edges. It bends nothing: the city, the background trees, the petals in the air and the run's tree
+// are seen refracted through it. It lies over the run's tree and under the verdict and stage notes, the
+// bed and the panels (its canvas sits in #spot, after the tree), so it never hides the text. The petals
+// feel it as wind. Paused inside a run.
+const scenery = svgPart(scene, () => [$("city") as unknown as SVGSVGElement, $("wood2") as unknown as SVGSVGElement]);
+const tree = svgPart(scene, () => [svg]);
+// the growing tree: its picture is refreshed at most four times a second while the trail shows it; if a
+// refresh costs more than 4 ms while it grows, the trail keeps clear of the tree until it has grown
+let slowGrowth = false;
+const treeBox = () => { const r = spot.getBoundingClientRect(), b = scene.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; };
+const groundOf = (c: CanvasRenderingContext2D, w: number, h: number) => {   // the section's own gradient
+  const bg = getComputedStyle(two).backgroundImage, m = bg.match(/linear-gradient\((to (?:top|bottom)),\s*(.*)\)$/);
+  if (!m) { c.fillStyle = getComputedStyle(two).backgroundColor || "#05040b"; c.fillRect(0, 0, w, h); return; }
+  const g = m[1] === "to top" ? c.createLinearGradient(0, h, 0, 0) : c.createLinearGradient(0, 0, 0, h);
+  for (const st of m[2].match(/rgba?\([^)]*\)\s*[\d.]+%/g) ?? []) { const [, col, pct] = st.match(/(rgba?\([^)]*\))\s*([\d.]+)%/)!; g.addColorStop(Number(pct) / 100, col); }
+  c.fillStyle = g; c.fillRect(0, 0, w, h);
+};
+const wake = new WakeLayer({ host: scene, ground: groundOf,
+  mount: { parent: spot, before: svg.nextElementSibling },
+  parts: () => slowGrowth ? [scenery, $("air-two") as HTMLCanvasElement] : [scenery, $("air-two") as HTMLCanvasElement, tree],
+  bends: () => false,
+  keep: () => slowGrowth ? [treeBox()] : [],
+  active: () => !inside.isOpen(),
+  moving: () => busy,
+  minRepaint: 250,
+  scale: { cell: 5, flow: 0.3, curl: 70, dye: 1.5, dyeFlow: 0.12, dyeWidth: 1.6, dyeFade: 0.45 },
+  onPush: (x, y, vx, vy, dose) => { const k = 0.5 + 0.9 * Math.sqrt(dose); life.wind.add(x, y, vx * k, vy * k); } });
+// a change to the drawings: painted again in idle time
+const mo = new MutationObserver(() => {
+  wake.invalidate();
+  if (busy && !slowGrowth && wake.paintMs > 4) { slowGrowth = true; wake.keepMask(); }
+});
+// only the drawings' structure (a tree drawn, a twig grown): the city's pulses and a blossom's light are
+// left as they were painted (the trail freezes them for its second; accepted)
+for (const el of [svg, $("wood2"), $("city")]) mo.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["d"] });
 
 // ---- the background trees (woods.ts): the restart example's search, from its log, six at the edges as
 // dim violet-pink neon. A click (or Enter) shakes one and sheds a burst from its branches.
@@ -150,6 +189,7 @@ async function run(demo: Demo) {
     notes.refused(garden, String((e as Error).message ?? e), 0, "ERROR");
   } finally {
     busy = false; runBtn.disabled = false;
+    if (slowGrowth) { slowGrowth = false; wake.keepMask(); wake.invalidate(); }   // grown: the trail passes over the tree again
   }
 }
 

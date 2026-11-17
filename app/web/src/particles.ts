@@ -48,6 +48,8 @@ export interface FieldOptions {
   cap: (x: number) => number;       // the pile's height limit at x
   avoid?: () => { x: number; y: number; w: number; h: number }[];   // labels the pieces fade behind
   look?: Look;
+  /** the cursor's push and lift, when not the look's (or the defaults) */
+  kick?: number; lift?: number;
 }
 
 export class Field {
@@ -128,7 +130,7 @@ export class Field {
   }
 
   step(dt: number, t: number, wind: Wind) {
-    const L = this.o.look, gain = L?.kick ?? L?.wind ?? 1, g = wind.gust(t) * (L?.wind ?? 1), up = L?.lift ?? VY_UP;
+    const L = this.o.look, gain = this.o.kick ?? L?.kick ?? L?.wind ?? 1, g = wind.gust(t) * (L?.wind ?? 1), lifts = this.o.lift ?? L?.lift, up = lifts ?? VY_UP;
     const out: Piece[] = [];
     for (const p of this.air) {
       let [ax, ay] = wind.at(p.x, p.y, this.o.box); ax *= gain; ay *= gain;
@@ -153,7 +155,7 @@ export class Field {
       const [ax, ay] = wind.at(p.x, p.y, this.o.box).map((v) => v * gain);
       const dv = Math.hypot(ax, ay) * dt;
       if (dv > 9) this.lift(p, Math.max(-VX_MAX, Math.min(VX_MAX, ax * dt * 1.2)),
-        L?.lift ? -Math.min(up, 70 + dv * 5) * (0.75 + 0.25 * rnd()) : Math.max(-VY_UP, -Math.abs(ay * dt) - dv * 0.6));   // with a lift: sent up into the air
+        lifts ? -Math.min(up, 70 + dv * 5) * (0.75 + 0.25 * rnd()) : Math.max(-VY_UP, -Math.abs(ay * dt) - dv * 0.6));   // with a lift: sent up into the air
     }
     if (g !== 0 && wind.gustKick() && this.rest.length) for (let i = 0; i < 2; i++) { const p = this.rest[Math.floor(rnd() * this.rest.length)]; this.lift(p, g * 1.5, -(40 + rnd() * 70)); }
     // keep the air full: new pieces leave the branches

@@ -229,6 +229,19 @@ export class Wake {
   }
   private bind(unit: number, t: Target) { const gl = this.gl; gl.activeTexture(gl.TEXTURE0 + 4 + unit); gl.bindTexture(gl.TEXTURE_2D, t.tex); return 4 + unit; }
 
+  /** run every pass once, changing nothing (a push of no force, a step of no time): the GPU compiles them
+   *  now, in idle time, not on the wake's first frame */
+  warm(vh: number) {
+    if (!this.ready || !this.vel) return;
+    const gl = this.gl, V = this.vel;
+    this.pass("splat", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform2f(u.uA, 0, 0); gl.uniform2f(u.uB, 1, 1); gl.uniform2f(u.uForce, 0, 0); gl.uniform1f(u.uR, 1); });
+    const t = V[0]; V[0] = V[1]; V[1] = t;
+    const D = this.dye;
+    if (D) { this.pass("dyeSplat", D[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, D[0])); gl.uniform2f(u.uA, 0, 0); gl.uniform2f(u.uB, 1, 1); gl.uniform2f(u.uForce, 0, 0); gl.uniform1f(u.uR, 1); }, this.dw, this.dh);
+      const d = D[0]; D[0] = D[1]; D[1] = d; }
+    const idle = this.idle; this.idle = -1; this.step(0, vh); this.idle = idle;
+  }
+
   /** one step of the fluid; vh is the viewport's height (css px), for the GL frame's flip */
   step(dt: number, vh: number) {
     if (!this.ready || !this.vel || !this.pres || !this.div || !this.curl) return;
@@ -307,13 +320,14 @@ export function rgb(s: string): RGB {
   if (h) { if (h.length === 3) h = h.replace(/./g, "$&$&"); const n = parseInt(h, 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
   const r = s.match(/(\d+(\.\d+)?)/g); return r ? [Number(r[0]) / 255, Number(r[1]) / 255, Number(r[2]) / 255] : [0, 0, 0];
 }
-export interface WakeColours { tone: RGB; fringe: RGB; fringeA: number; toneMix: number; gloss: number; hi: RGB; shade: RGB; trail: number; refract: number; warp: number }
+export interface WakeColours { tone: RGB; fringe: RGB; fringeA: number; toneMix: number; gloss: number; hi: RGB; shade: RGB; trail: number; refract: number; warp: number; tint: number; edgeOut: RGB; edgeIn: RGB }
 /** the wake's colours, from the theme tokens in force at `el` */
 export function wakeColours(el: Element): WakeColours {
   const cs = getComputedStyle(el), v = (k: string) => cs.getPropertyValue(k).trim();
   const num = (k: string, d: number) => { const x = v(k); return x === "" || Number.isNaN(Number(x)) ? d : Number(x); };
   return { tone: rgb(v("--wake-tone") || "#dce2ef"), fringe: rgb(v("--wake-fringe") || "#e5484d"), fringeA: num("--wake-fringe-alpha", 1),
-    toneMix: num("--wake-tone-mix", 1), gloss: num("--wake-gloss", 1), hi: rgb(v("--wake-hi") || "#ffffff"), shade: rgb(v("--wake-shade") || "#000000"), trail: num("--wake-trail", 0), refract: num("--wake-refract", 0), warp: num("--wake-warp", 0) };
+    toneMix: num("--wake-tone-mix", 1), gloss: num("--wake-gloss", 1), hi: rgb(v("--wake-hi") || "#ffffff"), shade: rgb(v("--wake-shade") || "#000000"), trail: num("--wake-trail", 0), refract: num("--wake-refract", 0), warp: num("--wake-warp", 0),
+    tint: num("--wake-tint", 0.16), edgeOut: rgb(v("--wake-edge-out") || "#ff4769"), edgeIn: rgb(v("--wake-edge-in") || "#33c7e6") };
 }
 
 // ---------- the shader's shared part: included by every layer's composite
@@ -397,6 +411,13 @@ export interface WakeLayerOptions {
   keep?: () => Box[];
   /** the overlay's place in the host: inserted before this child (else appended) */
   before?: () => Element | null;
+  /** or its place elsewhere inside the host (its stacking among the page's layers): inserted into
+   *  `parent` before `before`, and placed to cover the host's box all the same */
+  mount?: { parent: HTMLElement; before: Element | null };
+  /** the wake follows the cursor only while this holds (else it is cleared) */
+  active?: () => boolean;
+  /** ms between repaints of the still parts while the wake shows them and they keep changing (0) */
+  minRepaint?: number;
   /** redraw the still parts every frame while this holds (a tree swaying) */
   moving?: () => boolean;
   /** which parts the wake bends (and fringes); the others stay exactly where they are and the trace
@@ -421,7 +442,8 @@ uniform sampler2D uGround, uKeep;                 // the ground; where the wake 
 uniform vec3 uTone, uFringe, uHi, uShade; uniform float uFringeA, uToneMix, uGloss;
 uniform sampler2D uDye; uniform float uTrail;     // the trail's dye (viewport, GL frame) and its strength
 uniform float uRefract, uAnyBend;
-uniform float uTime, uWarp, uDyeFade;             // s; how far the trail's edges wander (px); the dye's fade (s)                 // how far the trail refracts (px per unit of slope); whether any part bends
+uniform float uTime, uWarp, uDyeFade;
+uniform float uTint; uniform vec3 uEdgeOut, uEdgeIn;   // the trail's tint; its chromatic edge, outside and inside             // s; how far the trail's edges wander (px); the dye's fade (s)                 // how far the trail refracts (px per unit of slope); whether any part bends
 out vec4 o;
 ${WAKE_GLSL}
 // (a sampler array may only be indexed by a constant in GLSL ES 3.00, so the six are named)
@@ -485,15 +507,15 @@ void main() {
       float face = dot(-gq / (length(gq) + 1e-5), normalize(vec2(-0.6, -0.8)));   // 1: facing the light
       float spec = pow(max(face, 0.0), 4.0) * slope, dark = max(-face, 0.0) * slope;
       float ripple = pow(abs(sin(q * 22.0)), 14.0) * (1.0 - body) * smoothstep(0.03, 0.08, q);
-      tc = mix(under, uFringe, 0.16 * body);
+      tc = mix(under, uFringe, uTint * body);
       tc = mix(tc, uShade, 0.25 * dark);
       tc = mix(tc, uFringe, 0.55 * ripple);
       tc = mix(tc, uHi, 0.75 * spec);
       // at its outermost edge, always, a faint chromatic split: red just outside, cyan just inside
       float outer = smoothstep(0.02, 0.045, q) * (1.0 - smoothstep(0.045, 0.075, q));
       float inner = smoothstep(0.06, 0.09, q) * (1.0 - smoothstep(0.09, 0.13, q));
-      tc = mix(tc, vec3(1.0, 0.28, 0.42), 0.32 * outer * chroma);
-      tc = mix(tc, vec3(0.2, 0.78, 0.9), 0.26 * inner * chroma);
+      tc = mix(tc, uEdgeOut, 0.32 * outer * chroma);
+      tc = mix(tc, uEdgeIn, 0.26 * inner * chroma);
       // over text too: the overlay lies under the text, so the trail shows behind the letters and never moves them
       ta = smoothstep(0.02, 0.07, q) * uTrail;
     }
@@ -524,7 +546,7 @@ export class WakeLayer {
   private texL: WebGLTexture[] = []; private texG: WebGLTexture | null = null; private texK: WebGLTexture | null = null;
   private w = 0; private h = 0; private dpr = 1; private col: WakeColours | null = null;
   private stills: HTMLCanvasElement[] = []; private dirty = true; private uploaded = new Set<number>();
-  private raf = 0; private last = 0; private shown = false; private visible: () => boolean = () => true; private idleT = 0;
+  private raf = 0; private last = 0; private shown = false; private lastPaint = -1e9; private warm = false; private visible: () => boolean = () => true; private idleT = 0;
   /** ms the last repaint of the still parts took (the demo's growing tree reads it) */
   paintMs = 0;
 
@@ -543,7 +565,7 @@ export class WakeLayer {
     gl.useProgram(p);
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uHostVp", "uView", "uVel", "uL0", "uL1", "uL2", "uL3", "uL4", "uL5", "uLB", "uBend", "uN", "uGround", "uKeep", "uTone", "uFringe", "uHi", "uShade", "uFringeA", "uToneMix", "uGloss", "uDye", "uTrail", "uRefract", "uAnyBend", "uTime", "uWarp", "uDyeFade"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uSize", "uDpr", "uHostVp", "uView", "uVel", "uL0", "uL1", "uL2", "uL3", "uL4", "uL5", "uLB", "uBend", "uN", "uGround", "uKeep", "uTone", "uFringe", "uHi", "uShade", "uFringeA", "uToneMix", "uGloss", "uDye", "uTrail", "uRefract", "uAnyBend", "uTime", "uWarp", "uDyeFade", "uTint", "uEdgeOut", "uEdgeIn"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture()!; gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
@@ -553,10 +575,11 @@ export class WakeLayer {
     gl.uniform1i(this.u.uGround, 6); gl.uniform1i(this.u.uKeep, 7); gl.uniform1i(this.u.uVel, 8); gl.uniform1i(this.u.uDye, 9);
     const push = o.onPush;   // handed on in viewport coordinates
     wake.onPush = push ? (x, y, vx, vy, dose) => { const r = o.host.getBoundingClientRect(); push(x + r.left, y + r.top, vx, vy, dose); } : null;
-    o.host.insertBefore(cv, o.before?.() ?? null);
+    if (o.mount) o.mount.parent.insertBefore(cv, o.mount.before); else o.host.insertBefore(cv, o.before?.() ?? null);
     this.visible = onScreen(o.host);
     // the cursor in the host's coordinates (as it moves), so the wake is fixed to the page, not the screen
-    followPointer((x, y) => { const r = o.host.getBoundingClientRect(); wake.move(x - r.left, y - r.top); this.kick(); }, () => wake.lift(), () => this.visible());
+    followPointer((x, y) => { const r = o.host.getBoundingClientRect(); wake.move(x - r.left, y - r.top); this.kick(); }, () => wake.lift(),
+      () => this.visible() && (o.active?.() ?? true));
     let t = 0; new ResizeObserver(() => { cancelAnimationFrame(t); t = requestAnimationFrame(() => this.layout()); }).observe(o.host);
     this.layout();
   }
@@ -565,7 +588,13 @@ export class WakeLayer {
    *  first frame never waits for it */
   invalidate() {
     this.dirty = true; if (!this.gl || this.idleT) return;
-    const go = () => { this.idleT = 0; if (this.dirty && !this.raf && !this.o.moving?.()) this.paintStills(this.o.parts()); };
+    const go = () => {
+      this.idleT = 0; if (!this.dirty || this.raf || this.o.moving?.()) return;
+      this.paintStills(this.o.parts());
+      // and one draw, cleared at once: the shader is compiled and the picture uploaded now, not on the
+      // wake's first frame
+      if (!this.warm && this.wake?.ready) { this.warm = true; this.wake.warm(this.h); this.draw(); this.shown = true; this.clear(); }
+    };
     this.idleT = typeof requestIdleCallback === "function" ? requestIdleCallback(go, { timeout: 1000 }) : setTimeout(go, 200);
   }
   /** the ground, the keep mask and the sizes: after a layout change (called on the host's resize) */
@@ -574,6 +603,10 @@ export class WakeLayer {
     this.dpr = Math.min(2, devicePixelRatio || 1); this.w = Math.max(1, this.o.host.clientWidth); this.h = Math.max(1, this.o.host.clientHeight);
     cv.width = Math.round(this.w * this.dpr); cv.height = Math.round(this.h * this.dpr);
     cv.style.setProperty("--w", `${this.w}px`); cv.style.setProperty("--h", `${this.h}px`);
+    if (this.o.mount) {   // mounted inside another element: placed back over the host's box
+      const hb = this.o.host.getBoundingClientRect(), pb = this.o.mount.parent.getBoundingClientRect();
+      cv.style.setProperty("--x", `${hb.left - pb.left}px`); cv.style.setProperty("--y", `${hb.top - pb.top}px`);
+    }
     this.wake?.resize(this.w, this.h);
     this.col = wakeColours(cv);
     // the ground, at a quarter of the size (it is smooth)
@@ -613,7 +646,7 @@ export class WakeLayer {
   private frame = (now: number) => {
     this.raf = 0;
     const w = this.wake!, dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
-    if (!this.visible()) { this.clear(); return; }
+    if (!this.visible() || !(this.o.active?.() ?? true)) { this.clear(); return; }
     w.step(dt, this.h);
     if (w.idle >= w.still && !w.pending) { this.clear(); return; }
     if (w.ready) this.draw();
@@ -627,7 +660,8 @@ export class WakeLayer {
   private draw() {
     const gl = this.gl!, cv = this.canvas!, col = this.col!, hb = this.o.host.getBoundingClientRect();
     const parts = this.o.parts();
-    if (this.dirty || this.o.moving?.()) this.paintStills(parts);
+    const gap = this.o.minRepaint ?? 0, now = performance.now();
+    if ((this.dirty || this.o.moving?.()) && now - this.lastPaint >= gap) { this.paintStills(parts); this.lastPaint = now; }
     // the parts, bottom to top: each still group's canvas (uploaded once after a repaint), each live canvas
     // (uploaded each frame, a copy on the GPU), with its box in the host
     const boxes: number[] = [], bend: number[] = []; let n = 0, si = 0, inStill = false;
@@ -661,7 +695,7 @@ export class WakeLayer {
     gl.uniform3f(this.u.uTone, ...col.tone); gl.uniform3f(this.u.uFringe, ...col.fringe); gl.uniform3f(this.u.uHi, ...col.hi); gl.uniform3f(this.u.uShade, ...col.shade);
     gl.uniform1f(this.u.uFringeA, col.fringeA); gl.uniform1f(this.u.uToneMix, col.toneMix); gl.uniform1f(this.u.uGloss, col.gloss); gl.uniform1f(this.u.uTrail, this.wake!.dyeTexture ? col.trail : 0);
     gl.uniform1f(this.u.uRefract, col.refract); gl.uniform1f(this.u.uTime, performance.now() / 1000 % 1000);
-    gl.uniform1f(this.u.uWarp, col.warp); gl.uniform1f(this.u.uDyeFade, this.wake!.fadeTime); gl.uniform1f(this.u.uAnyBend, bend.some((b) => b > 0) ? 1 : 0);
+    gl.uniform1f(this.u.uWarp, col.warp); gl.uniform1f(this.u.uTint, col.tint); gl.uniform3f(this.u.uEdgeOut, ...col.edgeOut); gl.uniform3f(this.u.uEdgeIn, ...col.edgeIn); gl.uniform1f(this.u.uDyeFade, this.wake!.fadeTime); gl.uniform1f(this.u.uAnyBend, bend.some((b) => b > 0) ? 1 : 0);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     this.shown = true;
@@ -699,11 +733,28 @@ function shapePath(el: SVGElement): Path2D | null {
   else p = new Path2D(key);
   paths.set(el, { key, p }); return p;
 }
-function paintOf(v: string, el: Element): string | null {
+// a fill or stroke for the canvas: a colour, or a linear gradient built from the SVG's own (its stops'
+// colours and opacities; in the shape's bounding box unless it says userSpaceOnUse)
+function paintOf(v: string, el: Element, c: CanvasRenderingContext2D): string | CanvasGradient | null {
   if (!v || v === "none") return null;
   const m = v.match(/url\(["']?#([^"')]+)["']?\)/);
-  if (m) { const stop = el.ownerDocument.getElementById(m[1])?.querySelector("stop"); return stop ? getComputedStyle(stop).stopColor : null; }
-  return v;
+  if (!m) return v;
+  const g = el.ownerDocument.getElementById(m[1]); if (!g) return null;
+  const stops = [...g.querySelectorAll("stop")]; if (!stops.length) return null;
+  if (g.tagName !== "linearGradient") return getComputedStyle(stops[0]).stopColor;
+  const num = (n: string, d: number) => { const a = g.getAttribute(n); if (a === null) return d; return a.endsWith("%") ? parseFloat(a) / 100 : Number(a); };
+  let [x1, y1, x2, y2] = [num("x1", 0), num("y1", 0), num("x2", 1), num("y2", 0)];
+  if (g.getAttribute("gradientUnits") !== "userSpaceOnUse") {
+    const b = (el as SVGGraphicsElement).getBBox();
+    [x1, y1, x2, y2] = [b.x + x1 * b.width, b.y + y1 * b.height, b.x + x2 * b.width, b.y + y2 * b.height];
+  }
+  const grad = c.createLinearGradient(x1, y1, x2, y2);
+  for (const st of stops) {
+    const o = st.getAttribute("offset") ?? "0", cs = getComputedStyle(st), off = Math.max(0, Math.min(1, o.endsWith("%") ? parseFloat(o) / 100 : Number(o)));
+    const [r, gg, bb] = rgb(cs.stopColor), a = Number(cs.stopOpacity || 1);
+    grad.addColorStop(off, `rgba(${Math.round(r * 255)},${Math.round(gg * 255)},${Math.round(bb * 255)},${a})`);
+  }
+  return grad;
 }
 // a CSS filter for the canvas: lengths scaled to the canvas's pixels; an SVG filter's blur as a blur
 function canvasFilter(f: string, scale: number, el: Element): string {
@@ -747,7 +798,7 @@ export function svgPart(host: HTMLElement, svgs: () => SVGSVGElement[]): Part {
           if (st.visibility === "hidden") return;
           const p = shapePath(el as SVGElement); if (!p) return;
           to.save(); to.globalAlpha *= op; if (filt && filt !== "none") to.filter = canvasFilter(filt, scale, el);
-          const fill = paintOf(st.fill, el), stroke = paintOf(st.stroke, el);
+          const fill = paintOf(st.fill, el, to), stroke = paintOf(st.stroke, el, to);
           if (fill) { to.setTransform(full); to.fillStyle = fill; const a = to.globalAlpha; to.globalAlpha = a * Number(st.fillOpacity); to.fill(p, st.fillRule === "evenodd" ? "evenodd" : "nonzero"); to.globalAlpha = a; }
           const sw = parseFloat(st.strokeWidth);
           if (stroke && sw > 0) {
