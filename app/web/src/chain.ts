@@ -25,7 +25,7 @@ export interface ChainPage { path: string; name: string; ground: string }
 export const CHAIN: ChainPage[] = [
   { path: "/", name: "home", ground: "#efe6d2" },
   { path: "/run.html", name: "run", ground: "#121416" },
-  { path: "/docs.html", name: "docs", ground: "#0852c0" },
+  { path: "/docs.html", name: "docs", ground: "#255ea4" },
   { path: "/sancho.html", name: "Sancho", ground: "#ece2cf" },
 ];
 export const CARRY_MS = 1000;
