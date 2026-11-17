@@ -231,6 +231,43 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
 - **viewer**: a light counterpart to the run page: cool off-white, graphite type, hairlines, one muted
   oxidized-copper green. No illustration, no glow. Reached from Sancho; outside the chain.
 
+### The cursor's wake (src/cursorwake.ts)
+
+The site's signature: the cursor stirs a small fluid, after lukres.dev's cursor effect. One module serves
+every page; a page gives it the drawn layer it acts on and its colours from its theme tokens.
+
+- **Rules everywhere**: only cursor movement drives it; pressing and dragging do nothing; no response to
+  touch; nothing on a phone or under reduced motion; asleep when its layer is off screen or the fluid is
+  still; never on text, controls or the header. Its push trails the cursor by 70 ms on purpose, and its
+  strength rises steeply with the cursor's speed (a slow drift barely stirs it): the same on every page.
+- **Tokens**: `--wake-tone` and `--wake-fringe` (the two colours every page sets), and as a page needs them
+  `--wake-hi`, `--wake-shade` (highlight and shade), `--wake-tone-mix`, `--wake-fringe-alpha`, `--wake-gloss`,
+  and for a trail `--wake-trail`, `--wake-tint`, `--wake-refract`, `--wake-warp`, `--wake-edge-out`,
+  `--wake-edge-in`.
+- **Two ways a page draws it**:
+  - *Bending* (the run page): a layer that composites its own pixels in WebGL runs the fluid in its own
+    context and bends its strokes along the flow, turning them the tone with fine fringes.
+  - *A trail* (home, demo): a `WakeLayer` overlay draws a dye laid thinly along the cursor's path and
+    carried by the fluid, kept in the page's coordinates (scrolling leaves it in place). It is contoured
+    from the moment it is drawn (a slow noise warps its edges before the fluid's curls form), drifts
+    slowly and is gone in about a second. It is read as a glossy liquid: what lies under it is seen
+    refracted along its slope, tinted, with a highlight toward an upper-left light, a soft shade and
+    hairline ripples where it thins; as it ages (0.2–0.5 s) a fine chromatic split comes in at its outer
+    edge. It bends nothing on the page: loose things (leaves, petals) feel it as wind instead, at the
+    moment the fluid takes each stretch of the cursor's path in, and are lifted off the ground. The
+    overlay repaints a picture of the layer from its SVG (replayed into a canvas) and its canvases.
+- **Per page**:
+  - run: unchanged; bending, silver-white with red fringes, on the fan and inside the glass.
+  - home: a trail, the grove's green with a pale green highlight, over the grove, the ground line and the
+    open paper, and behind the text (the overlay lies under it). The leaves are its wind.
+  - demo: a trail in neon blue with pink edges, a little more vivid; over the scenery and the run's tree,
+    under the verdict, the stage notes, the bed and the panels (its canvas sits in `#spot` after the
+    tree). The petals are its wind. Paused inside a run. While the tree grows its picture is refreshed at
+    most four times a second; if a refresh costs more than 4 ms the trail keeps clear of the tree until
+    it has grown.
+  - **docs, Sancho and the viewer: not yet.** Each gets the wake in its own session, with its colours
+    chosen then. Docs will be blue, white and green, in a soft, bubble-like form.
+
 The viewer draws a run's tree without the demo's decoration (the run page draws only the scale, src/runscale.ts): `makeScene()` without `decor`
 draws the tree, its bar and the verdict written on it, flat, in `--tree`, `--tree-path` and `--tree-bar`.
 
@@ -277,6 +314,7 @@ moves to the footer (which carries the author's line on every page); Contact sta
 | `src/styles/chain.css` | the carry's transitions, cue and fallback cover (chain pages only) |
 | `src/chain.ts`, `public/carry.js` | the leaving and arriving halves of a carry |
 | `src/scene.ts` | a run's tree in a section; the demo's decoration only with `decor` |
+| `src/cursorwake.ts` | the cursor's wake: the fluid, the shared shader, the pointer rules, the theme's colours, the trail overlay (`WakeLayer`) and its SVG painter |
 | `src/pages/<page>.ts` | each page's script; it imports `../common` first, then its theme |
 
 ## 6. Standing rules
@@ -302,3 +340,5 @@ moves to the footer (which carries the author's line on every page); Contact sta
   examples were not touched by the revamp, and this confirms it.
 - The empty tree area on the viewer before a run is loaded: settled in its session. (The run page has no tree area: its result is the scale alone.)
 - The docs, Sancho and viewer colours are interim until each page's session.
+- The cursor's wake on docs (blue, white and green, soft and bubble-like), Sancho and the viewer: each in its
+  own session.
