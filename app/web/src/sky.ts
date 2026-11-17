@@ -101,7 +101,7 @@ void main() {
     float th = atan(q.y, q.x);
     float rr = R * (1.0 + uW[i].x * cos(2.0 * (th - uW[i].y)) + uW[i].z * cos(3.0 * (th - uW[i].w)));
     float dd = L - rr;
-    float off = 1.3 * s;                                    // the fringes' split, where the cursor's wake runs
+    float off = 1.8 * s;                                    // the fringes' split, where the cursor's wake runs
     if (dd > 2.0 + off) continue;
     float u = clamp(L / rr, 0.0, 1.0);
     bool green = uT[i].x > 0.5;
@@ -128,11 +128,12 @@ void main() {
     // the rim: bright, tinted to the bubble
     g = mix(g, rimC, 0.9 * exp(-(dd + 0.9) * (dd + 0.9) / 0.9));
     float a = 1.0 - smoothstep(0.2, 1.2, dd);
-    // where the cursor passes over or near it: the rim framed with thin blue and green fringes
+    // where the cursor passes over or near it: an aura on the rim, the tone just outside and the fringe colour
+    // just inside (the first docs version's hover, in this page's colours)
     if (s > 0.0) {
-      float ro = exp(-(dd + 0.9 - off) * (dd + 0.9 - off) / 0.6), ri = exp(-(dd + 0.9 + off) * (dd + 0.9 + off) / 0.6);
-      g = mix(g, uTone, clamp(0.6 * ro * s, 0.0, 1.0)); g = mix(g, uFringe, clamp(0.55 * ri * s, 0.0, 1.0));
-      a = max(a, 0.6 * ro * s);
+      float ro = exp(-(dd + 0.9 - off) * (dd + 0.9 - off) / 1.1), ri = exp(-(dd + 0.9 + off) * (dd + 0.9 + off) / 1.1);
+      g = mix(g, uTone, clamp(0.8 * ro * s, 0.0, 1.0)); g = mix(g, uFringe, clamp(0.8 * ri * s, 0.0, 1.0));
+      a = max(a, 0.85 * ro * s);
     }
     col = mix(col, g, a * vis);
   }
