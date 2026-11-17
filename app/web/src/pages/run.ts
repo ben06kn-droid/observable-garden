@@ -152,7 +152,7 @@ function buildFan() {
     return;
   }
   measure();
-  fan = new Fan(document.body, { reduce: reduceMotion, foot: 280, seed: 5,
+  fan = new Fan(document.body, { reduce: reduceMotion, foot: 280, seed: 5, wake: true,
     region: () => ({ top: 0, bottom: geom.bottom }),
     reach: (y) => (y >= geom.glass[0] && y <= geom.glass[1] ? geom.glass[2] : geom.right),
     masks: () => geom.masks });

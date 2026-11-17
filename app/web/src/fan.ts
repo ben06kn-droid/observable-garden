@@ -13,7 +13,15 @@
 // fade before `reach` and the dimming behind text (and removal under fields) from a mask texture in page
 // coordinates. The canvas is fixed to the viewport, behind the page's content.
 //
-// Reduced motion: a still fan.
+// The cursor's wake (src/wake.ts, after lukres.dev): moving the pointer stirs a small fluid; where it
+// flows, the paths bend along it, turn a cool silver-white (a steel grey on the light ground) and split
+// into fine red fringes on either side, the split following the flow; as it fades (about a quarter of a
+// second) they return to their own white and gold. Only pointer movement drives it (not touch); it
+// touches the paths only (the fan is behind the page's text).
+//
+// Reduced motion: a still fan, no wake.
+
+import { Wake } from "./wake";
 
 export interface FanRect { x: number; y: number; w: number; h: number; keep: number }   // page px; keep 0 = no lines there
 export interface FanOptions {
@@ -25,6 +33,8 @@ export interface FanOptions {
   masks?: () => FanRect[];
   reduce?: boolean;
   seed?: number;
+  /** the cursor's wake (off on a phone) */
+  wake?: boolean;
   /** the last `foot` px of the region: paths that start there slow, stop, and stay */
   foot?: number;
 }
@@ -40,19 +50,45 @@ in vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }`;
 const FRAG = `#version 300 es
 precision highp float;
 uniform vec2 uView; uniform float uDpr, uScroll; uniform vec2 uRegion;
-uniform vec3 uGround, uLine, uSand; uniform float uWA, uSA;
+uniform vec3 uGround, uLine, uSand, uSilver, uRed; uniform float uWA, uSA;
 uniform sampler2D uPaths; uniform float uFanW;
 uniform sampler2D uMask; uniform vec4 uMaskBox;
+uniform sampler2D uVel; uniform float uWake;
 out vec4 o;
+// the lines' coverage at a viewport point: (white, gold), faded before the fields and dimmed behind text
+vec2 cov(vec2 p) {
+  if (p.x < 0.0 || p.x > uFanW || p.y < 0.0 || p.y > uView.y) return vec2(0.0);
+  vec4 t = texture(uPaths, vec2(p.x / uFanW, p.y / uView.y));
+  float m = texture(uMask, (vec2(p.x, p.y + uScroll) - uMaskBox.xy) / uMaskBox.zw).r;
+  return clamp(vec2(t.b * uWA, t.r * uSA) * m, 0.0, 1.0);
+}
 void main() {
   vec2 pc = vec2(gl_FragCoord.x, uView.y * uDpr - gl_FragCoord.y) / uDpr;
   float py = pc.y + uScroll;
-  if (py < uRegion.x || py > uRegion.y || pc.x > uFanW) { o = vec4(0.0); return; }
-  vec4 t = texture(uPaths, vec2(pc.x / uFanW, pc.y / uView.y));
-  float m = texture(uMask, (vec2(pc.x, py) - uMaskBox.xy) / uMaskBox.zw).r;
-  float aw = clamp(t.b * uWA * m, 0.0, 1.0), as = clamp(t.r * uSA * m, 0.0, 1.0);
-  vec3 col = mix(mix(uGround, uLine, aw), uSand, as);
-  o = vec4(col, max(aw, as) > 0.0 ? 1.0 : 0.0);
+  if (py < uRegion.x || py > uRegion.y || pc.x > uFanW + 30.0) { o = vec4(0.0); return; }
+  // the wake: the lines are seen displaced along the flow, by up to 26 px
+  vec2 d = vec2(0.0);
+  if (uWake > 0.0) {
+    vec2 v = texture(uVel, gl_FragCoord.xy / (uView * uDpr)).xy;
+    d = vec2(v.x, -v.y) * 0.016;
+    float l = length(d); if (l > 26.0) d *= 26.0 / l;
+  }
+  float s = uWake * smoothstep(0.6, 7.0, length(d));
+  vec2 a = cov(pc - d);
+  vec3 col = mix(mix(uGround, uLine, a.x), uSand, a.y);
+  float alpha = max(a.x, a.y);
+  if (s > 0.0) {
+    // silver-white where it flows; a thin red fringe each side of a line, across it along the flow
+    float line = max(a.x * 2.4, a.y * 1.2);
+    vec3 silver = mix(uGround, uSilver, clamp(line, 0.0, 1.0));
+    col = mix(col, silver, s);
+    vec2 n = normalize(d) * mix(0.7, 1.3, s);
+    vec2 f0 = cov(pc - d - n), f1 = cov(pc - d + n);
+    float fr = clamp(max(max(f0.x * 2.4, f0.y * 1.2), max(f1.x * 2.4, f1.y * 1.2)) - line, 0.0, 1.0) * s;
+    col = mix(col, uRed, fr * 0.6);
+    alpha = max(alpha, max(line * s, fr));
+  }
+  o = vec4(col, alpha > 0.0 ? 1.0 : 0.0);
 }`;
 
 function rgb(s: string): [number, number, number] {
@@ -72,11 +108,15 @@ export class Fan {
   private speed = 55; private scrollV = 0; private lastScroll = 0; private lastScrollT = 0; private sinceSpawn = 9;
   private ground: [number, number, number] = [0, 0, 0]; private line: [number, number, number] = [1, 1, 1];
   private sand: [number, number, number] = [0.84, 0.7, 0.48]; private wa = 0.2;
+  private silver: [number, number, number] = [0.86, 0.89, 0.94]; private red: [number, number, number] = [0.9, 0.28, 0.3];
+  private prog: WebGLProgram | null = null; private wake: Wake | null = null;
+  private onMove = (e: PointerEvent) => { if (e.pointerType !== "touch") this.wake?.move(e.clientX, e.clientY); };
+  private onLeave = () => this.wake?.lift();
   private onScroll = () => {
     const now = performance.now(), y = scrollY, dt = Math.max(8, now - this.lastScrollT);
     this.scrollV = 0.6 * this.scrollV + 0.4 * ((y - this.lastScroll) / dt) * 1000;
     this.lastScroll = y; this.lastScrollT = now;
-    if (this.o.reduce) this.render(); else this.wake();
+    if (this.o.reduce) this.render(); else this.wakeUp();
   };
   private onResize = () => { this.layout(); };
 
@@ -89,9 +129,13 @@ export class Fan {
     this.lastScroll = scrollY; this.lastScrollT = performance.now();
     addEventListener("scroll", this.onScroll, { passive: true });
     addEventListener("resize", this.onResize);
-    if (o.reduce) this.still(); else this.wake();
+    if (this.wake) { addEventListener("pointermove", this.onMove, { passive: true }); document.documentElement.addEventListener("pointerleave", this.onLeave, { passive: true }); }
+    if (o.reduce) this.still(); else this.wakeUp();
   }
-  destroy() { this.running = false; cancelAnimationFrame(this.raf); removeEventListener("scroll", this.onScroll); removeEventListener("resize", this.onResize); this.canvas.remove(); }
+  destroy() {
+    this.running = false; cancelAnimationFrame(this.raf); removeEventListener("scroll", this.onScroll); removeEventListener("resize", this.onResize);
+    removeEventListener("pointermove", this.onMove); document.documentElement.removeEventListener("pointerleave", this.onLeave); this.canvas.remove();
+  }
 
   /** read the colours from the page's tokens (after a palette swap, for one) */
   refreshPalette() { this.readPalette(); this.render(); }
@@ -99,6 +143,7 @@ export class Fan {
     const cs = getComputedStyle(this.canvas);
     this.ground = rgb(cs.getPropertyValue("--fan-ground") || "#121416"); this.line = rgb(cs.getPropertyValue("--fan-line") || "#f0f1fa");
     this.sand = rgb(cs.getPropertyValue("--fan-sand") || "#d6b27b"); this.wa = Number(cs.getPropertyValue("--fan-alpha")) || 0.2;
+    this.silver = rgb(cs.getPropertyValue("--wake-silver") || "#dce2ef"); this.red = rgb(cs.getPropertyValue("--wake-red") || "#e5484d");
   }
 
   /** sizes, the reach, the masks: call after a layout change */
@@ -108,6 +153,7 @@ export class Fan {
     let maxReach = 0; for (let y = r.top; y <= r.bottom; y += 40) maxReach = Math.max(maxReach, this.o.reach(y));
     this.fanW = Math.max(40, Math.min(this.vw, Math.ceil(maxReach + 8)));
     this.canvas.width = Math.round(this.vw * this.dpr); this.canvas.height = Math.round(this.vh * this.dpr);
+    this.wake?.resize(this.vw, this.vh);
     this.pcv.width = Math.round(this.fanW * this.dpr); this.pcv.height = Math.round(this.vh * this.dpr);
     this.buildMask();
     if (this.o.reduce) this.still(); else this.render();
@@ -142,17 +188,18 @@ export class Fan {
     if (!gl) return;
     const sh = (t: number, src: string) => { const s = gl.createShader(t)!; gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
     const vs = sh(gl.VERTEX_SHADER, VERT), fs = sh(gl.FRAGMENT_SHADER, FRAG); if (!vs || !fs) return;
-    const p = gl.createProgram()!; gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+    const p = gl.createProgram()!; gl.attachShader(p, vs); gl.attachShader(p, fs); gl.bindAttribLocation(p, 0, "p"); gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
-    gl.useProgram(p);
+    gl.useProgram(p); this.prog = p;
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const loc = gl.getAttribLocation(p, "p"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uView", "uDpr", "uScroll", "uRegion", "uGround", "uLine", "uSand", "uWA", "uSA", "uPaths", "uFanW", "uMask", "uMaskBox"]) this.u[n] = gl.getUniformLocation(p, n);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    for (const n of ["uView", "uDpr", "uScroll", "uRegion", "uGround", "uLine", "uSand", "uSilver", "uRed", "uWA", "uSA", "uPaths", "uFanW", "uMask", "uMaskBox", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
     this.texP = tex(); this.texM = tex();
     this.gl = gl;
+    if (this.o.wake && !this.o.reduce) { const w = new Wake(gl); if (w) this.wake = w; }
   }
 
   // ---------- the paths
@@ -221,14 +268,18 @@ export class Fan {
   }
 
   render() {
-    const gl = this.gl; if (!gl) return;
+    const gl = this.gl; if (!gl || !this.prog) return;
     this.drawPaths();
+    gl.useProgram(this.prog); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     const r = this.o.region();
     gl.uniform2f(this.u.uView, this.vw, this.vh); gl.uniform1f(this.u.uDpr, this.dpr); gl.uniform1f(this.u.uScroll, scrollY);
     gl.uniform2f(this.u.uRegion, r.top, r.bottom);
     gl.uniform3f(this.u.uGround, ...this.ground); gl.uniform3f(this.u.uLine, ...this.line); gl.uniform3f(this.u.uSand, ...this.sand);
     gl.uniform1f(this.u.uWA, this.wa); gl.uniform1f(this.u.uSA, 0.95);
+    gl.uniform3f(this.u.uSilver, ...this.silver); gl.uniform3f(this.u.uRed, ...this.red);
+    const w = this.wake, on = !!w?.ready && w.idle < 0.8;
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, on ? w!.texture : null); gl.uniform1i(this.u.uVel, 2); gl.uniform1f(this.u.uWake, on ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.texP);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.pcv); gl.uniform1i(this.u.uPaths, 0);
     gl.uniform1f(this.u.uFanW, this.fanW);
@@ -239,12 +290,12 @@ export class Fan {
   }
 
   // ---------- the loop: runs while the fan is in view, else sleeps until a scroll
-  private wake() { if (this.running || this.o.reduce) return; this.running = true; this.last = performance.now(); this.raf = requestAnimationFrame(this.frame); }
+  private wakeUp() { if (this.running || this.o.reduce) return; this.running = true; this.last = performance.now(); this.raf = requestAnimationFrame(this.frame); }
   private frame = (now: number) => {
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
     const r = this.o.region(), inView = r.bottom > scrollY && r.top < scrollY + this.vh;
     if (!inView) { this.render(); this.running = false; return; }
-    this.step(dt); this.render();
+    this.step(dt); this.wake?.step(dt, this.vh); this.render();
     this.raf = requestAnimationFrame(this.frame);
   };
 
