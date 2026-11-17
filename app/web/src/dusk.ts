@@ -11,10 +11,9 @@
 //   back over about 4 s.
 // - Heat, subtle: the horizon line, the glow and the windmill's lower half waver by 1.5px sideways, rising slowly (and
 //   0.6px up and down, without which a level line cannot be seen to waver). Nothing is drawn to show it.
-// - The cursor's tail (src/cursorwake.ts), in the run page's form with the docs page's toned-down fluid: the horizon, the
-//   glow and the windmill bend along it (the windmill's strokes turning --wake-tone with a thin --wake-fringe each side);
-//   over the blank sky a glossy trace (a --wake-core highlight, a --wake-shade shade, a --wake-fringe hairline rim). It
-//   fades out before the reading sheet's text.
+// - The cursor's tail (src/cursorwake.ts), in the run page's form with the docs page's toned-down fluid: a glossy trace
+//   (a --wake-core highlight, a --wake-shade shade, a --wake-fringe hairline rim) laid over the backdrop, the horizon and
+//   the windmill alike; it distorts none of them. It fades out before the reading sheet's text.
 // - Light and scroll: as the page scrolls the glow sinks by 6vh and the whole backdrop darkens by 15%. Nothing else.
 //
 // Phone: a band at the top of the page (the gradient, the glow, a small windmill), no tail. Reduced motion: drawn once,
@@ -121,22 +120,17 @@ void main() {
     vec3 n = vec3(p.x / 140.0 + 0.02 * t, (p.y + ${RISE.toFixed(1)} * t) / 50.0, t * 0.25);
     q += band * vec2(${HEAT.toFixed(1)} * (vnoise(n) * 2.0 - 1.0) * 1.6, 0.6 * (vnoise(n + 5.3) * 2.0 - 1.0) * 1.6);
   }
-  // the tail, in the run page's form: what lies under it bends along the flow (the windmill's strokes turning the tone,
-  // a thin fringe each side across them), and over the blank sky it is a glossy trace (a highlight toward an upper-left
-  // light, a soft shade, a hairline rim). Calm: no tinted contours, no painted core.
-  vec2 d = vec2(0.0); float s = 0.0;
-  vec2 tq = max(uText.xy - p, p - (uText.xy + uText.zw)); float away = smoothstep(0.0, 24.0, max(tq.x, tq.y));
-  if (uWake > 0.0 && away > 0.0) { d = flowAt(p) * away; s = wakeStrength(d); q -= d * 0.6; }
+  // the tail, in the run page's form: a glossy trace (a highlight toward an upper-left light, a soft shade, a hairline
+  // rim) laid over everything. It distorts nothing: the horizon and the windmill stay where they are, under it.
   vec3 col = backdrop(q);
-  if (s > 0.0) {
-    float line = ink(q);
-    col = mix(col, uTone, 0.3 * line * s);   // half the run page's turn: the silhouette stays a silhouette
-    vec2 n = wakeAcross(d + 1e-5, s);
-    float fr = clamp(max(ink(q - n), ink(q + n)) - line, 0.0, 1.0) * s;
-    col = mix(col, uFringe, 0.6 * fr);
-    vec2 gr = vec2(length(flowAt(p + vec2(6.0, 0.0))) - length(flowAt(p - vec2(6.0, 0.0))),
-                   length(flowAt(p + vec2(0.0, 6.0))) - length(flowAt(p - vec2(0.0, 6.0))));
-    col = wakeTrace(col, gr, s, 1.0 - line, uCore, uShade, uFringe, 1.0).rgb;
+  vec2 tq = max(uText.xy - p, p - (uText.xy + uText.zw)); float away = smoothstep(0.0, 24.0, max(tq.x, tq.y));
+  if (uWake > 0.0 && away > 0.0) {
+    vec2 d = flowAt(p) * away; float s = wakeStrength(d);
+    if (s > 0.0) {
+      vec2 gr = vec2(length(flowAt(p + vec2(6.0, 0.0))) - length(flowAt(p - vec2(6.0, 0.0))),
+                     length(flowAt(p + vec2(0.0, 6.0))) - length(flowAt(p - vec2(0.0, 6.0))));
+      col = wakeTrace(col, gr, s, 1.0, uCore, uShade, uFringe, 1.0).rgb;
+    }
   }
   o = vec4(col, 1.0);
 }`;
