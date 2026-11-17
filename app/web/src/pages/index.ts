@@ -60,8 +60,9 @@ const draw = () => {
   const shown = grove.shown < grove.restarts ? `${grove.shown} of ${grove.restarts} restarts` : `${grove.restarts} restarts`;
   $("grove-count").replaceChildren(`${shown} · ${grove.evaluations} evaluations`, each);
 };
-// ---- the cursor's wake (cursorwake.ts, the site's signature): over the grove, the ground line and the
-// leaves, never the text. The trees keep their own colours and bend; the fringes are the grove's green.
+// ---- the cursor's wake (cursorwake.ts, the site's signature). Here it moves only the falling leaves: the
+// trees and the ground line stay exactly where they are, and the wake passes over them as a trace, white
+// with fringes of the grove's green. Never over the text.
 const box = (e: Element) => { const r = e.getBoundingClientRect(), b = one.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; };
 const horizonPart = { paint(c: CanvasRenderingContext2D) {      // the ground line and its ticks (drawn by CSS, so drawn here too)
   const h = box(horizon); c.fillStyle = tone("--paper-tree"); c.fillRect(h.x, h.y, h.w, 1);
@@ -70,8 +71,10 @@ const horizonPart = { paint(c: CanvasRenderingContext2D) {      // the ground li
 const wake = new WakeLayer({ host: one,
   ground: (c, w, h) => { c.fillStyle = tone("--paper"); c.fillRect(0, 0, w, h); },
   parts: () => [grovePart, horizonPart, $("air-one") as HTMLCanvasElement, $("pile-one") as HTMLCanvasElement],
-  keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *, .legend")].map(box),
-  moving: () => !!grove?.stems.some((s) => s.getAnimations().length > 0) });
+  // the text's own boxes (the legend's spans, not its padded paragraph, which reaches up to the ground line)
+  keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *, .legend > span")].map(box),
+  moving: () => !!grove?.stems.some((s) => s.getAnimations().length > 0),
+  bends: (p) => p instanceof HTMLCanvasElement });           // the leaves, in the air and on the ground
 const grovePart = svgPart(one, () => grove?.stems ?? []);
 one.addEventListener("animationend", () => wake.invalidate());   // a tree done arriving or swaying
 

@@ -300,10 +300,11 @@ export function onScreen(el: Element, changed?: (on: boolean) => void): () => bo
 // The layer stays the page's own (its SVG keeps its clicks, focus and animation). Over it sits one WebGL
 // canvas, clear everywhere except in the wake: there it repaints the layer, bent along the flow, its
 // strokes turned toward the tone (by --wake-tone-mix) and split into fringes. The picture it repaints is
-// the layer's parts, bottom to top: canvases that other loops draw each frame (copied only where the wake
-// is), and still pictures (an SVG, replayed into a 2D canvas by `svgPart`), painted once and again only
-// after `invalidate()`. Under them, the page's ground. Asleep when the fluid is still or the layer is off
-// screen; nothing at all without a fine hovering pointer, or under reduced motion.
+// the layer's parts, bottom to top: canvases that other loops draw each frame (each copied to the GPU
+// whole, each frame the wake shows, a copy on the GPU), and still pictures (an SVG, replayed into a 2D
+// canvas by `svgPart`), painted in idle time and again only after `invalidate()`. Under them, the page's
+// ground. Asleep when the fluid is still or the layer is off screen; nothing at all without a fine
+// hovering pointer, or under reduced motion.
 
 export interface Box { x: number; y: number; w: number; h: number }
 /** a part of the layer: a canvas drawn by another loop, or a still picture painted in host px */
@@ -313,7 +314,7 @@ export interface WakeLayerOptions {
   host: HTMLElement;
   /** the ground under the layer, in host px (w x h) */
   ground: (c: CanvasRenderingContext2D, w: number, h: number) => void;
-  /** the layer's parts, bottom to top */
+  /** the layer's parts, bottom to top (at most six textures: consecutive still parts share one) */
   parts: () => Part[];
   /** boxes (host px) the wake must leave alone: text, controls */
   keep?: () => Box[];
@@ -321,36 +322,51 @@ export interface WakeLayerOptions {
   before?: () => Element | null;
   /** redraw the still parts every frame while this holds (a tree swaying) */
   moving?: () => boolean;
+  /** which parts the wake bends (and fringes); the others stay exactly where they are and the trace
+   *  passes over them. All of them by default. */
+  bends?: (p: Part) => boolean;
 }
 
+const MAXL = 6;
 const LAYER_FRAG = `#version 300 es
 precision highp float;
 uniform vec2 uSize; uniform float uDpr; uniform vec2 uHostVp, uView;   // the host (css px), its place in the viewport
 uniform sampler2D uVel;
-uniform sampler2D uLayer; uniform vec4 uBox;       // the layer's picture over uBox (host px), premultiplied
+uniform sampler2D uL0, uL1, uL2, uL3, uL4, uL5; uniform vec4 uLB[${MAXL}]; uniform int uN;   // the layer's parts, bottom to top, premultiplied, each over its box (host px)
+uniform float uBend[${MAXL}];                     // 1: the wake bends that part; 0: it stays put
 uniform sampler2D uGround, uKeep;                 // the ground; where the wake may act (r)
 uniform vec3 uTone, uFringe, uHi, uShade; uniform float uFringeA, uToneMix, uGloss;
 out vec4 o;
 ${WAKE_GLSL}
-vec4 layer(vec2 p) { vec2 u = (p - uBox.xy) / uBox.zw; return (u.x < 0.0 || u.x > 1.0 || u.y < 0.0 || u.y > 1.0) ? vec4(0.0) : texture(uLayer, u); }
+// (a sampler array may only be indexed by a constant in GLSL ES 3.00, so the six are named)
+vec4 part(sampler2D t, vec4 b, vec2 p, vec4 c) {
+  vec2 u = (p - b.xy) / b.zw;   // (p: where this part is read)
+  if (u.x < 0.0 || u.x > 1.0 || u.y < 0.0 || u.y > 1.0) return c;
+  vec4 s = texture(t, u); return s + c * (1.0 - s.a);
+}
+// the layer at p, the parts that bend read from p - d. only: just the parts that bend (for their strokes)
+vec4 layer(vec2 p, vec2 d, bool only) {
+  vec4 c = vec4(0.0);
+  #define PART(i, t) if (uN > i && (!only || uBend[i] > 0.0)) c = part(t, uLB[i], p - d * uBend[i], c);
+  PART(0, uL0) PART(1, uL1) PART(2, uL2) PART(3, uL3) PART(4, uL4) PART(5, uL5)
+  return c;
+}
 vec3 groundAt(vec2 p) { return texture(uGround, p / uSize).rgb; }
-// how much of a stroke is at p: the layer's difference from the ground there
-float ink(vec2 p) { vec4 c = layer(p); vec3 g = groundAt(p); return clamp(length(c.rgb + g * (1.0 - c.a) - g) * 3.0, 0.0, 1.0); }
+// how much of a bending stroke is at p (read from p - d): its difference from the ground there
+float ink(vec2 p, vec2 d) { vec4 c = layer(p, d, true); vec3 g = groundAt(p); return clamp(length(c.rgb + g * (1.0 - c.a) - g) * 3.0, 0.0, 1.0); }
 vec2 flowAt(vec2 p) { return wakeFlow(uVel, uHostVp + p, uView); }
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uSize.y * uDpr - gl_FragCoord.y) / uDpr;
   vec2 d = flowAt(p);
-  float keep = texture(uKeep, p / uSize).r;
-  vec2 bu = min(p - uBox.xy, uBox.xy + uBox.zw - p);               // inside the picture, away from its edge
-  float s = wakeStrength(d) * keep * smoothstep(0.0, 24.0, min(bu.x, bu.y));
+  float s = wakeStrength(d) * texture(uKeep, p / uSize).r;
   if (s <= 0.0) { o = vec4(0.0); return; }
   vec3 g = groundAt(p);
-  vec4 c = layer(p - d);
+  vec4 c = layer(p, d, false);
   vec3 col = c.rgb + g * (1.0 - c.a);
-  float line = ink(p - d);
+  float line = ink(p, d);
   col = mix(col, mix(g, uTone, line), s * uToneMix);
   vec2 n = wakeAcross(d, s);
-  float fr = clamp(max(ink(p - d - n), ink(p - d + n)) - line, 0.0, 1.0) * s;
+  float fr = clamp(max(ink(p, d + n), ink(p, d - n)) - line, 0.0, 1.0) * s;
   col = mix(col, uFringe, clamp(fr * 0.6 * uFringeA, 0.0, 1.0));
   if (uGloss > 0.0) {
     vec2 gr = vec2(length(flowAt(p + vec2(6.0, 0.0))) - length(flowAt(p - vec2(6.0, 0.0))),
@@ -365,12 +381,11 @@ export class WakeLayer {
   readonly canvas: HTMLCanvasElement | null = null;
   private o: WakeLayerOptions; private gl: WebGL2RenderingContext | null = null; private wake: Wake | null = null;
   private prog: WebGLProgram | null = null; private u: Record<string, WebGLUniformLocation | null> = {};
-  private texL: WebGLTexture | null = null; private texG: WebGLTexture | null = null; private texK: WebGLTexture | null = null;
+  private texL: WebGLTexture[] = []; private texG: WebGLTexture | null = null; private texK: WebGLTexture | null = null;
   private w = 0; private h = 0; private dpr = 1; private col: WakeColours | null = null;
-  private stills: { cv: HTMLCanvasElement; parts: Part[] }[] = []; private dirty = true;
-  private stage = document.createElement("canvas"); private pts: { t: number; x: number; y: number }[] = [];
-  private raf = 0; private last = 0; private shown = false; private visible: () => boolean = () => true;
-  /** ms the last still repaint took (the demo's growing tree reads it) */
+  private stills: HTMLCanvasElement[] = []; private dirty = true; private uploaded = new Set<number>();
+  private raf = 0; private last = 0; private shown = false; private visible: () => boolean = () => true; private idleT = 0;
+  /** ms the last repaint of the still parts took (the demo's growing tree reads it) */
   paintMs = 0;
 
   constructor(o: WakeLayerOptions) {
@@ -379,7 +394,8 @@ export class WakeLayer {
     const cv = document.createElement("canvas"); cv.className = "wake-layer"; cv.setAttribute("aria-hidden", "true");
     const gl = cv.getContext("webgl2", { antialias: false, alpha: true, premultipliedAlpha: true }); if (!gl) return;
     const sh = (t: number, src: string) => { const s = gl.createShader(t)!; gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
-    const vs = sh(gl.VERTEX_SHADER, VERT), fs = sh(gl.FRAGMENT_SHADER, LAYER_FRAG); if (!vs || !fs) return;
+    const vs = sh(gl.VERTEX_SHADER, VERT), fs = sh(gl.FRAGMENT_SHADER, LAYER_FRAG);
+    if (!vs || !fs) { if (import.meta.env.DEV) console.error("cursorwake: the layer's shader did not compile"); return; }
     const p = gl.createProgram()!; gl.attachShader(p, vs); gl.attachShader(p, fs); gl.bindAttribLocation(p, 0, "p"); gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
     const wake = new Wake(gl); if (!wake.supported) return;
@@ -387,15 +403,17 @@ export class WakeLayer {
     gl.useProgram(p);
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uHostVp", "uView", "uVel", "uLayer", "uBox", "uGround", "uKeep", "uTone", "uFringe", "uHi", "uShade", "uFringeA", "uToneMix", "uGloss"]) this.u[n] = gl.getUniformLocation(p, n);
-    const tex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    for (const n of ["uSize", "uDpr", "uHostVp", "uView", "uVel", "uL0", "uL1", "uL2", "uL3", "uL4", "uL5", "uLB", "uBend", "uN", "uGround", "uKeep", "uTone", "uFringe", "uHi", "uShade", "uFringeA", "uToneMix", "uGloss"]) this.u[n] = gl.getUniformLocation(p, n);
+    const tex = () => { const t = gl.createTexture()!; gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
-    this.texL = tex(); this.texG = tex(); this.texK = tex();
+    for (let i = 0; i < MAXL; i++) this.texL.push(tex());
+    this.texG = tex(); this.texK = tex();
+    for (let i = 0; i < MAXL; i++) gl.uniform1i(this.u[`uL${i}`], i);   // the parts on units 0-5
+    gl.uniform1i(this.u.uGround, 6); gl.uniform1i(this.u.uKeep, 7); gl.uniform1i(this.u.uVel, 8);
     o.host.insertBefore(cv, o.before?.() ?? null);
     this.visible = onScreen(o.host);
-    followPointer((x, y) => { this.pts.push({ t: performance.now(), x, y }); if (this.pts.length > 400) this.pts.shift(); wake.move(x, y); this.kick(); },
-      () => wake.lift(), () => this.visible());
+    followPointer((x, y) => { wake.move(x, y); this.kick(); }, () => wake.lift(), () => this.visible());
     let t = 0; new ResizeObserver(() => { cancelAnimationFrame(t); t = requestAnimationFrame(() => this.layout()); }).observe(o.host);
     addEventListener("resize", () => this.wake?.resize(innerWidth, innerHeight));
     this.layout();
@@ -408,7 +426,6 @@ export class WakeLayer {
     const go = () => { this.idleT = 0; if (this.dirty && !this.raf && !this.o.moving?.()) this.paintStills(this.o.parts()); };
     this.idleT = typeof requestIdleCallback === "function" ? requestIdleCallback(go, { timeout: 1000 }) : setTimeout(go, 200);
   }
-  private idleT = 0;
   /** the ground, the keep mask and the sizes: after a layout change (called on the host's resize) */
   layout() {
     const gl = this.gl, cv = this.canvas; if (!gl || !cv) return;
@@ -420,10 +437,10 @@ export class WakeLayer {
     // the ground, at a quarter of the size (it is smooth)
     const k = 0.25, gw = Math.ceil(this.w * k), gh = Math.ceil(this.h * k), gc = document.createElement("canvas"); gc.width = gw; gc.height = gh;
     const g = gc.getContext("2d")!; g.scale(k, k); this.o.ground(g, this.w, this.h);
-    gl.bindTexture(gl.TEXTURE_2D, this.texG); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, this.texG); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gc);
     this.keepMask();
-    this.dirty = true; this.shown = true; this.clear();
+    this.shown = true; this.clear(); this.invalidate();
   }
   /** the keep mask again (the text moved) */
   keepMask() {
@@ -431,7 +448,7 @@ export class WakeLayer {
     const k = 0.25, kw = Math.ceil(this.w * k), kh = Math.ceil(this.h * k), kc = document.createElement("canvas"); kc.width = kw; kc.height = kh;
     const c = kc.getContext("2d")!; c.fillStyle = "#fff"; c.fillRect(0, 0, kw, kh); c.fillStyle = "#000";
     for (const b of this.o.keep?.() ?? []) c.fillRect(Math.floor(b.x * k) - 1, Math.floor(b.y * k) - 1, Math.ceil(b.w * k) + 2, Math.ceil(b.h * k) + 2);
-    gl.bindTexture(gl.TEXTURE_2D, this.texK); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, this.texK); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, kc);
   }
 
@@ -440,15 +457,14 @@ export class WakeLayer {
     const t0 = performance.now(), W = Math.round(this.w * this.dpr), H = Math.round(this.h * this.dpr);
     const groups: Part[][] = []; let cur: Part[] | null = null;
     for (const p of parts) { if (p instanceof HTMLCanvasElement) cur = null; else { if (!cur) { cur = []; groups.push(cur); } cur.push(p); } }
-    while (this.stills.length < groups.length) this.stills.push({ cv: document.createElement("canvas"), parts: [] });
-    this.stills.length = groups.length;
+    while (this.stills.length < groups.length) this.stills.push(document.createElement("canvas"));
     groups.forEach((g, i) => {
-      const s = this.stills[i]; s.parts = g;
-      if (s.cv.width !== W || s.cv.height !== H) { s.cv.width = W; s.cv.height = H; }
-      const c = s.cv.getContext("2d")!; c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+      const cv = this.stills[i];
+      if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+      const c = cv.getContext("2d")!; c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
       for (const p of g) { c.save(); c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); (p as { paint: (c: CanvasRenderingContext2D) => void }).paint(c); c.restore(); }
     });
-    this.dirty = false; this.paintMs = performance.now() - t0;
+    this.dirty = false; this.uploaded.clear(); this.paintMs = performance.now() - t0;
   }
 
   private kick() { if (this.raf || !this.gl) return; this.last = performance.now(); this.raf = requestAnimationFrame(this.frame); }
@@ -458,7 +474,7 @@ export class WakeLayer {
     if (!this.visible()) { this.clear(); return; }
     w.step(dt, innerHeight);
     if (w.idle >= STILL && !w.pending) { this.clear(); return; }
-    if (w.ready) this.draw(now);
+    if (w.ready) this.draw();
     this.kick();
   };
   private clear() {
@@ -466,51 +482,43 @@ export class WakeLayer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, this.canvas!.width, this.canvas!.height);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); this.shown = false;
   }
-  private draw(now: number) {
+  private draw() {
     const gl = this.gl!, cv = this.canvas!, col = this.col!, hb = this.o.host.getBoundingClientRect();
-    // where the wake can be: the cursor's recent path, widened by what the fluid carries
-    const since = now - (STILL * 1000 + 200);
-    while (this.pts.length && this.pts[0].t < since) this.pts.shift();
-    if (!this.pts.length) { this.clear(); return; }
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const q of this.pts) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
-    const M = 220, bx = Math.max(0, Math.floor(x0 - M - hb.left)), by = Math.max(0, Math.floor(y0 - M - hb.top));
-    const bw = Math.min(this.w, Math.ceil(x1 + M - hb.left)) - bx, bh = Math.min(this.h, Math.ceil(y1 + M - hb.top)) - by;
-    if (bw <= 0 || bh <= 0) { this.clear(); return; }
-    // the picture under the wake: the still parts and the live canvases, bottom to top
     const parts = this.o.parts();
     if (this.dirty || this.o.moving?.()) this.paintStills(parts);
-    const k = this.dpr, st = this.stage, sw = Math.ceil(bw * k), sh = Math.ceil(bh * k);
-    if (st.width !== sw || st.height !== sh) { st.width = sw; st.height = sh; }
-    const c = st.getContext("2d")!; c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, sw, sh);
-    let si = 0, inStill = false;
+    // the parts, bottom to top: each still group's canvas (uploaded once after a repaint), each live canvas
+    // (uploaded each frame, a copy on the GPU), with its box in the host
+    const boxes: number[] = [], bend: number[] = []; let n = 0, si = 0, inStill = false;
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     for (const p of parts) {
+      if (n >= MAXL) break;
       if (p instanceof HTMLCanvasElement) {
         inStill = false;
         const r = p.getBoundingClientRect(); if (!r.width || !r.height || !p.width || !p.height) continue;
-        const kx = p.width / r.width, ky = p.height / r.height, ox = r.left - hb.left, oy = r.top - hb.top;
-        const sx = (bx - ox) * kx, sy = (by - oy) * ky;
-        c.drawImage(p, sx, sy, bw * kx, bh * ky, 0, 0, sw, sh);
+        gl.activeTexture(gl.TEXTURE0 + n); gl.bindTexture(gl.TEXTURE_2D, this.texL[n]);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, p);
+        boxes.push(r.left - hb.left, r.top - hb.top, r.width, r.height); bend.push(this.o.bends?.(p) ?? true ? 1 : 0); n++;
       } else if (!inStill) {
-        inStill = true; const s = this.stills[si++]; if (s) c.drawImage(s.cv, bx * k, by * k, sw, sh, 0, 0, sw, sh);
+        inStill = true; const s = this.stills[si++]; if (!s) continue;
+        gl.activeTexture(gl.TEXTURE0 + n); gl.bindTexture(gl.TEXTURE_2D, this.texL[n]);
+        if (!this.uploaded.has(n)) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, s); this.uploaded.add(n); }
+        boxes.push(0, 0, this.w, this.h); bend.push(this.o.bends?.(p) ?? true ? 1 : 0); n++;
       }
     }
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    while (boxes.length < MAXL * 4) boxes.push(0, 0, 1, 1);
+    while (bend.length < MAXL) bend.push(0);
     gl.useProgram(this.prog); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cv.width, cv.height);
-    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.texL); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, st); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.uniform1i(this.u.uLayer, 0);
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.texG); gl.uniform1i(this.u.uGround, 1);
-    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.texK); gl.uniform1i(this.u.uKeep, 3);
-    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.wake!.texture); gl.uniform1i(this.u.uVel, 2);
-    gl.uniform2f(this.u.uSize, this.w, this.h); gl.uniform1f(this.u.uDpr, k);
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, this.texG);
+    gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, this.texK);
+    gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, this.wake!.texture);
+    gl.uniform4fv(this.u.uLB, boxes); gl.uniform1fv(this.u.uBend, bend); gl.uniform1i(this.u.uN, n);
+    gl.uniform2f(this.u.uSize, this.w, this.h); gl.uniform1f(this.u.uDpr, this.dpr);
     gl.uniform2f(this.u.uHostVp, hb.left, hb.top); gl.uniform2f(this.u.uView, innerWidth, innerHeight);
-    gl.uniform4f(this.u.uBox, bx, by, bw, bh);
     gl.uniform3f(this.u.uTone, ...col.tone); gl.uniform3f(this.u.uFringe, ...col.fringe); gl.uniform3f(this.u.uHi, ...col.hi); gl.uniform3f(this.u.uShade, ...col.shade);
     gl.uniform1f(this.u.uFringeA, col.fringeA); gl.uniform1f(this.u.uToneMix, col.toneMix); gl.uniform1f(this.u.uGloss, col.gloss);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.enable(gl.SCISSOR_TEST); gl.scissor(Math.floor(bx * k), Math.floor((this.h - by - bh) * k), sw + 1, sh + 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.disable(gl.SCISSOR_TEST);
     this.shown = true;
   }
 }
