@@ -10,9 +10,9 @@
 // stay on their line), each colour channel bent a little differently toward the walls. The glass's flow
 // fades where it crosses the letters, so they stay legible.
 //
-// The wake (src/wake.ts): the letters and the glass's outline never move. In the blank space around them
-// the wake shows faintly, a translucent cool trace with a fine red edge; inside the glass it bends the flow
-// (which stays within the outline), silver-white with fine red fringes. Only pointer movement drives it.
+// The wake (src/wake.ts): the letters and the glass's outline never move; inside the glass it bends the
+// flow (which stays within the outline), silver-white with fine red fringes. In the blank space the wake
+// is the fan's (src/fan.ts), drawn under this layer, which is clear there. Only pointer movement drives it.
 import { GLSL_PROFILE, type Glass } from "./glass";
 import { Wake } from "./wake";
 
@@ -26,7 +26,7 @@ uniform vec3 uGround, uSilver, uRed;
 uniform sampler2D uText; uniform float uTextH;     // the text, painted in the canvas's coordinates, to uTextH
 uniform sampler2D uGlass, uEdge; uniform vec4 uGlassBox;   // the glass's flow and outline, and where it sits
 uniform float uH, uGy;
-uniform sampler2D uVel; uniform float uWake;
+uniform sampler2D uVel; uniform float uWake, uRedA;
 out vec4 o;
 ${GLSL_PROFILE}
 vec4 text(vec2 p) { return (p.y < 0.0 || p.y > uTextH) ? vec4(0.0) : texture(uText, p / vec2(uSize.x, uTextH)); }
@@ -71,7 +71,7 @@ void main() {
       fc = mix(fc, uSilver, s);
       vec2 n = normalize(d + 1e-5) * mix(0.7, 1.3, s);
       float fr = clamp(max(inGlass(uGlass, p - d - n).a, inGlass(uGlass, p - d + n).a) - fa, 0.0, 1.0) * s;
-      fc = mix(fc, uRed, fr * 0.6 / max(fa + fr, 1e-3) * fr); fa = max(fa, fr * 0.6);
+      fc = mix(fc, uRed, clamp(fr * 0.6 * uRedA / max(fa + fr, 1e-3) * fr, 0.0, 1.0)); fa = max(fa, clamp(fr * 0.6 * uRedA, 0.0, 1.0));
     }
     fa *= 1.0 - 0.8 * t;                           // the flow fades across the letters
     col = mix(col, fc, fa);
@@ -81,21 +81,7 @@ void main() {
   col = mix(col, g.rgb, g.a);
   float alpha = max(max(t, fa), max(g.a, inside ? 1.0 : 0.0));
 
-  // in the blank space, the wake itself, faintly: a translucent cool trace with a fine red edge where it
-  // ends; never on the letters or the outline
-  if (s > 0.0) {
-    float blank = (1.0 - t) * (1.0 - g.a);
-    // the edge from the change of the flow across a whole cell of the fluid (8 px), so it is smooth
-    float e = clamp(length(vec2(length(flowAt(p + vec2(8.0, 0.0))) - length(flowAt(p - vec2(8.0, 0.0))),
-                               length(flowAt(p + vec2(0.0, 8.0))) - length(flowAt(p - vec2(0.0, 8.0))))) * 0.06, 0.0, 1.0) * s;
-    e = smoothstep(0.25, 0.9, e) * (1.0 - smoothstep(0.9, 1.0, e));
-    float tr = 0.03 * s * blank, rr = 0.16 * e * blank;
-    vec3 base = alpha > 0.0 ? col : uGround;
-    vec3 trace = mix(mix(base, uSilver, tr / max(tr + rr, 1e-3)), uRed, rr / max(tr + rr, 1e-3));
-    float ta2 = clamp(tr + rr, 0.0, 1.0);
-    col = mix(base, trace, alpha > 0.0 ? ta2 : 1.0);
-    alpha = max(alpha, ta2);
-  }
+  // (the wake in the blank space is the fan's, drawn under this layer, which is clear there)
   o = vec4(col * alpha, alpha);                      // premultiplied
 }`;
 
@@ -156,7 +142,7 @@ export class Hero {
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uOrigin", "uScroll", "uView", "uGround", "uSilver", "uRed", "uText", "uTextH", "uGlass", "uEdge", "uGlassBox", "uH", "uGy", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uSize", "uDpr", "uOrigin", "uScroll", "uView", "uGround", "uSilver", "uRed", "uText", "uTextH", "uGlass", "uEdge", "uGlassBox", "uH", "uGy", "uVel", "uWake", "uRedA"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
@@ -262,7 +248,7 @@ export class Hero {
     gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.texE); gl.uniform1i(this.u.uEdge, 3);
     gl.uniform4f(this.u.uGlassBox, this.glassBox[0], this.glassBox[1], this.glassBox[2], this.glassBox[3]);
     gl.uniform1f(this.u.uH, m.H); gl.uniform1f(this.u.uGy, m.gy);
-    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, on ? w!.texture : null); gl.uniform1i(this.u.uVel, 2); gl.uniform1f(this.u.uWake, on ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, on ? w!.texture : null); gl.uniform1i(this.u.uVel, 2); gl.uniform1f(this.u.uWake, on ? 1 : 0); gl.uniform1f(this.u.uRedA, Number(getComputedStyle(this.canvas).getPropertyValue("--wake-red-alpha")) || 1);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disable(gl.SCISSOR_TEST);

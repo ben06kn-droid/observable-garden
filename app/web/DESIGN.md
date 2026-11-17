@@ -187,14 +187,16 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     toward the middle and compressed toward the walls, with no change of height (the letters stay on their
     line), each colour channel bent a little differently; the glass's flow fades across the letters. The
     cursor's wake never moves the letters or the glass's outline: in the blank space around them it shows
-    faintly (a translucent cool trace with a fine red edge), and inside the glass it bends the flow, which
+    faintly (a translucent cool trace with a fine red edge, drawn by the fan's pass so it runs the whole
+    page, never under a field), and inside the glass it bends the flow, which
     stays within the outline (silver-white, fine red fringes). Phones and reduced motion keep the plain
     page text and a glass without the lens.
   - **Inversion**: a click on the glass (or Enter) inverts the palette from the click
     (html[data-hg="light"]); both palettes meet AA.
   - **The fan** (src/fan.ts): random-walk hairlines down the whole left of the page, from the top to above
     "Continue to docs", behind everything. They run right until the glass (beside it) or the page's right
-    edge (below it), fading before it. Most are faint off-white; about one in six is gold. They draw left
+    edge (below it), fading before it. The fan's canvas sits in the page (the viewport and a margin above and
+    below, re-anchored to the scroll as it draws), so it scrolls with the text and never drifts from it. Most are faint off-white; about one in six is gold. They draw left
     to right at a pace that follows the scroll and eases to an idle; at the foot they slow and rest. Behind
     text they dim to 6% (7:1 holds for every text tone over a gold path, both palettes); under
     inputs, selects, text areas and buttons they are removed.
