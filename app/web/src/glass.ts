@@ -1,19 +1,21 @@
-// The run page's glass: a large, still hourglass drawn as nothing but its two outline curves and its
-// sand. It scrolls with the page like any other element. No frame, no caps, no posts, no turning.
+// The run page's glass: a large, still hourglass drawn as nothing but its two outline curves, with an
+// abstract flow pouring through it. It scrolls with the page like any other element.
 //
-// The sand is a falling-sand grid of large grains, few enough that each one can be seen falling and
-// landing. The pile's edges are smooth (an occupancy field, softened and edged by a smoothstep, clipped to
-// the glass's inner wall); grains in the air and the single thread through the neck are drawn as round
-// grains of their own. The cursor scatters the grains it passes through.
+// The outline: each bulb widens from the neck all the way to its rim (the distance from the centre line
+// never decreases away from the neck), so each bulb is widest at its open rim, top and bottom alike.
 //
-// The sand follows the page, not a clock: setProgress(p) says how far the reader has come (0 at the top of
-// the page, 1 at the rule above 03 Key), and the neck lets through that share of the grains, plus a small
-// lead, so a thin stream keeps falling while the reader lingers. Scrolling back up pours the sand back.
-// It is decoration and shows no number.
+// The flow: fine strokes of varying length, and a few small simple shapes among them, entering across the
+// full width of the top rim, drawn together as the glass narrows, through the neck, spreading again through
+// the lower bulb and leaving at the bottom rim. Each follows a streamline: its place across the glass is a
+// fixed fraction of the glass's half width at its height, so it follows the walls and never crosses them.
+// It moves faster where the glass is narrow, as a fluid would, by a fixed profile. Nothing collects: what
+// leaves at the bottom is gone, new strokes enter at the top at one steady rate, from the moment the page
+// loads (the glass starts already full of flow), and nothing about it changes with the scroll. White with
+// an occasional gold stroke, in the page's own tokens; no blur, glow or trails.
 //
 // A headline passing behind the upper bulb is drawn bent through the glass (WebGL), each colour channel
 // refracted a little differently toward the walls. A click (or Enter) on the glass calls onClick: the page
-// inverts its palette. Reduced motion: the glass is still and its sand settled.
+// inverts its palette. Reduced motion: one still frame of the flow.
 
 export interface GlassOptions {
   height: number;
@@ -24,23 +26,22 @@ export interface GlassOptions {
   onClick?: (at: { x: number; y: number }) => void;
 }
 
-const SAND = ["#d6b27b", "#d1ab73", "#dbb883", "#cea86f"];
-const FILL = -0.62;          // the top bulb is filled from the neck up to here (v, -1 at the top)
-const PROFILE = { neck: 0.0085, bulb: 0.205, aNeck: 0.035, rise: 0.56, shoulder: 0.3 };   // × height
+// the outline: the neck's half width, the rim's, and the short straight neck (× height, v from -1 to 1)
+const PROFILE = { neck: 0.011, rim: 0.215, soft: 0.07, pow: 1.32 };
+/** half width at v: from the neck, s rises from 0 to 1 and never falls, still widening at the rim, so no
+ *  wall turns back in. The waist is round, not a corner: the distance from the neck is softened near it
+ *  (sqrt(a² + e²) - e grows like a² there), so the curve passes through the neck smoothly. */
 function halfWidth(v: number, H: number): number {
-  const a = Math.abs(v), n = PROFILE.neck * H, R = PROFILE.bulb * H;
-  if (a <= PROFILE.aNeck) return n;
-  const u = (a - PROFILE.aNeck) / (1 - PROFILE.aNeck);
-  const s = u < PROFILE.rise ? 0.5 - 0.5 * Math.cos(Math.PI * u / PROFILE.rise) : 1 - PROFILE.shoulder * Math.pow((u - PROFILE.rise) / (1 - PROFILE.rise), 2);
+  const a = Math.min(1, Math.abs(v)), n = PROFILE.neck * H, R = PROFILE.rim * H, e = PROFILE.soft;
+  const u = (Math.sqrt(a * a + e * e) - e) / (Math.sqrt(1 + e * e) - e);
+  const s = Math.pow(u, PROFILE.pow);
   return n + (R - n) * s;
 }
 const GLSL_PROFILE = `
 float halfWidth(float v, float H) {
-  float a = abs(v), n = ${PROFILE.neck.toFixed(4)} * H, R = ${PROFILE.bulb.toFixed(4)} * H;
-  if (a <= ${PROFILE.aNeck.toFixed(4)}) return n;
-  float u = (a - ${PROFILE.aNeck.toFixed(4)}) / (1.0 - ${PROFILE.aNeck.toFixed(4)});
-  float s = u < ${PROFILE.rise.toFixed(4)} ? 0.5 - 0.5 * cos(3.14159265 * u / ${PROFILE.rise.toFixed(4)})
-                    : 1.0 - ${PROFILE.shoulder.toFixed(4)} * pow((u - ${PROFILE.rise.toFixed(4)}) / (1.0 - ${PROFILE.rise.toFixed(4)}), 2.0);
+  float a = min(1.0, abs(v)), n = ${PROFILE.neck.toFixed(4)} * H, R = ${PROFILE.rim.toFixed(4)} * H, e = ${PROFILE.soft.toFixed(4)};
+  float u = (sqrt(a * a + e * e) - e) / (sqrt(1.0 + e * e) - e);
+  float s = pow(u, ${PROFILE.pow.toFixed(4)});
   return n + (R - n) * s;
 }`;
 const VERT = `#version 300 es
@@ -79,24 +80,28 @@ function rgb(s: string): [number, number, number] {
 }
 function mulberry(a: number) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
+type Kind = 0 | 1 | 2 | 3 | 4;   // a stroke, or a small circle, square, triangle or cross
+interface Item { t0: number; lane: number; kind: Kind; tau: number; gold: boolean; size: number; spin: number }
+
+// the flow's constants: entering a little above the top rim and leaving a little below the bottom one
+const V0 = -1.06, V1 = 1.06;
+const RATE = 34;            // strokes entering per second
+const TRAVEL = 9;           // seconds from rim to rim (the profile below sets where it is quick or slow)
+
 export class Glass {
   readonly el: HTMLDivElement;
   private o: GlassOptions; private H: number; private gy: number; private R: number; private W: number; private dpr = 1;
   private back: HTMLCanvasElement | null = null; private front: HTMLCanvasElement;
   private gl: WebGL2RenderingContext | null = null; private u: Record<string, WebGLUniformLocation | null> = {}; private tex: WebGLTexture | null = null;
   private ground: [number, number, number] = [18, 20, 22]; private line: [number, number, number] = [240, 241, 250];
-  // the sand
-  private cs: number; private gw = 0; private gh = 0; private mask!: Uint8Array; private cell!: Uint8Array; private stamp!: Uint16Array; private air!: Uint8Array;
-  private order!: Int32Array; private orderR!: Int32Array; private tick = 1; private drift: [number, number] = [0, 0];
-  private occ!: Float32Array; private soft!: Float32Array; private shade!: Uint8Array;
-  private total = 0; private passed = 0; private progress = 0; private lead = 0; private moved = 0; private dirty = true;
-  private stir: { x: number; y: number; vx: number; vy: number; t: number; used?: boolean } | null = null;
+  private sand = "#d6b27b"; private lineA = 0.72;
+  // the flow: a table of where an item is (v) after a given time since it entered, and the items
+  private tv!: Float32Array; private tt!: Float32Array; private items: Item[] = []; private clock = 0; private owed = 0; private rnd = mulberry(29);
   private raf = 0; private last = 0; private running = false; private visible = true; private io: IntersectionObserver | null = null;
 
   constructor(host: HTMLElement, o: GlassOptions) {
-    this.o = o; this.H = o.height; this.gy = this.H / 2 - 1; this.R = PROFILE.bulb * this.H;
-    this.W = Math.ceil(2 * this.R + 24);
-    this.cs = Math.max(4, Math.min(7, this.H * 0.0056));
+    this.o = o; this.H = o.height; this.gy = this.H / 2; this.R = PROFILE.rim * this.H;
+    this.W = Math.ceil(2 * this.R + 8);
     this.el = document.createElement("div"); this.el.className = "glass";
     this.el.tabIndex = 0; this.el.setAttribute("role", "button");
     this.el.setAttribute("aria-label", "Hourglass: press to invert the page's colours");
@@ -104,23 +109,17 @@ export class Glass {
     if (o.behind?.length && !o.reduce) { this.back = document.createElement("canvas"); this.back.className = "glass-back"; this.back.setAttribute("aria-hidden", "true"); this.el.append(this.back); }
     this.el.append(this.front);
     host.append(this.el);
-    this.layout(); this.readPalette(); this.initGL(); this.initSand(); this.bind();
+    this.layout(); this.readPalette(); this.initGL(); this.initFlow(); this.bind();
     this.io = new IntersectionObserver((es) => { this.visible = es.some((e) => e.isIntersecting); if (this.visible) this.start(); });
     this.io.observe(this.el);
-    if (o.reduce) this.settle(); else this.start();
     this.render();
+    if (!o.reduce) this.start();
   }
   destroy() { this.running = false; cancelAnimationFrame(this.raf); this.io?.disconnect(); this.el.remove(); }
   /** the glass's own measures, css px */
   measures() { return { H: this.H, R: this.R, W: this.W, gy: this.gy }; }
-
-  /** how far the reader has come, 0 (top of the page) to 1 (the rule above 03 Key) */
-  setProgress(p: number) {
-    this.progress = Math.max(0, Math.min(1, p));
-    if (this.o.reduce) { window.clearTimeout(this.settleT); this.settleT = window.setTimeout(() => this.settle(), 120); }
-    else this.start();
-  }
-  private settleT = 0;
+  /** half width at a height within the glass (v from -1 at the top rim to 1 at the bottom) */
+  halfWidthAt(v: number) { return halfWidth(v, this.H); }
 
   /** read the colours from the page's tokens (after a palette swap) and redraw */
   refreshPalette() { this.readPalette(); this.paintText(); this.render(); }
@@ -128,6 +127,8 @@ export class Glass {
     const cs = getComputedStyle(this.el);
     const g = cs.getPropertyValue("--hg-ground"), l = cs.getPropertyValue("--hg-line");
     if (g) this.ground = rgb(g); if (l) this.line = rgb(l);
+    this.sand = cs.getPropertyValue("--fan-sand").trim() || "#d6b27b";
+    this.lineA = Number(cs.getPropertyValue("--flow-alpha")) || 0.72;
   }
 
   private layout() {
@@ -191,271 +192,137 @@ export class Glass {
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  // ---------- the sand
-  private initSand() {
-    const cs = this.cs, gy = this.gy;
-    // an odd number of columns, one on the axis: the neck is one grain wide, the stream a single thread
-    this.gw = 2 * Math.ceil(this.R / cs) + 1; this.gh = Math.ceil((2 * gy) / cs);
-    const n = this.gw * this.gh, W = this.gw, axis = (W - 1) / 2;
-    this.mask = new Uint8Array(n); this.cell = new Uint8Array(n); this.stamp = new Uint16Array(n); this.air = new Uint8Array(n);
-    this.occ = new Float32Array(n); this.soft = new Float32Array(n); this.shade = new Uint8Array(n);
-    const wall = 2;
-    for (let j = 0; j < this.gh; j++) for (let i = 0; i < W; i++) {
-      const x = (i - axis) * cs, y = (j + 0.5) * cs - gy;
-      if (Math.abs(y) < gy - cs * 0.6 && (Math.abs(x) < halfWidth(y / gy, this.H) - wall - cs * 0.35 || i === axis)) this.mask[j * W + i] = 1;
+  // ---------- the flow
+  /** where an item is after a time: a table built once from the speed profile. The speed is inverse to
+   *  the glass's width (as a fluid's through a nozzle), softened (to the 0.55 power) and capped, so the
+   *  neck runs quick but readable; scaled so a rim-to-rim trip takes TRAVEL seconds. */
+  private initFlow() {
+    const N = 1600, tv = new Float32Array(N + 1), tt = new Float32Array(N + 1), floor = 0.07 * this.R;
+    let t = 0;
+    for (let i = 0; i <= N; i++) {
+      const v = V0 + (V1 - V0) * (i / N);
+      tv[i] = v; tt[i] = t;
+      const w = Math.max(floor, halfWidth(v, this.H));
+      t += ((V1 - V0) / N) / Math.pow(this.R / w, 0.55);
     }
-    // the top bulb's sand lies level on the neck, up to FILL: all of it above the neck to begin with
-    const rnd = mulberry(7), mid = this.gh / 2;
-    for (let j = 0; j < this.gh; j++) {
-      const v = ((j + 0.5) * cs - gy) / gy;
-      if (j >= mid || v < FILL) continue;
-      for (let i = 0; i < W; i++) { const k = j * W + i; if (this.mask[k]) { this.cell[k] = 1 + Math.floor(rnd() * SAND.length); this.total++; } }
-    }
-    // the processing order: from the bottom up, each row one way and the other in turn
-    const rows: number[] = [], rowsR: number[] = [];
-    for (let j = this.gh - 1; j >= 0; j--) { for (let i = 0; i < W; i++) if (this.mask[j * W + i]) rows.push(j * W + i); for (let i = W - 1; i >= 0; i--) if (this.mask[j * W + i]) rowsR.push(j * W + i); }
-    this.order = Int32Array.from(rows); this.orderR = Int32Array.from(rowsR);
-    for (let s = 0; s < 60; s++) this.stepSand(rnd);
+    for (let i = 0; i <= N; i++) tt[i] *= TRAVEL / t;
+    this.tv = tv; this.tt = tt;
+    // the glass starts already full: items spread back over one whole trip, as if it had been running
+    const n = Math.round(RATE * TRAVEL * 1.1);
+    for (let q = 0; q < n; q++) this.items.push(this.item(-(q / RATE)));
   }
-  private allowed() { return Math.min(this.total, Math.floor(this.progress * this.total + this.lead)); }
-  private stepSand(rnd: () => number = Math.random) {
-    const W = this.gw, Hh = this.gh, cell = this.cell, mask = this.mask, st = this.stamp, air = this.air;
-    const t = (this.tick = (this.tick + 1) & 0xffff) || (this.tick = 1);
-    const ok = (i: number, j: number) => i >= 0 && j >= 0 && i < W && j < Hh && mask[j * W + i] === 1 && cell[j * W + i] === 0;
-    const inside = (i: number, j: number) => i >= 0 && j >= 0 && i < W && j < Hh && mask[j * W + i] === 1;
-    const neckRow = Math.floor(Hh / 2), axis = (W - 1) / 2, allowed = this.allowed();
-    let moved = 0;
-    for (const k of (t & 1 ? this.order : this.orderR)) {
-      const v = cell[k]; if (!v || st[k] === t) continue;
-      if (air[k]) {                                   // thrown by the cursor: drifting a few steps before it falls
-        const left = air[k] - 1; air[k] = 0;
-        const i0 = k % W, j0 = (k / W) | 0, ti = i0 + Math.round(this.drift[0] * rnd() * 1.4), tj = j0 + Math.round(this.drift[1] * rnd() * 1.4);
-        const to = ok(ti, tj) ? tj * W + ti : k;
-        if (to !== k) { cell[to] = v; cell[k] = 0; moved++; }
-        air[to] = left; st[to] = t; continue;
-      }
-      let i = k % W, j = (k / W) | 0, at = k, falls = 0, slides = 0;
-      for (let hop = 0; hop < 3; hop++) {
-        let to = -1;
-        if (ok(i, j + 1)) {
-          if (falls >= 1) break;                      // one grain a step through the air: the thread stays a thread
-          if (j === neckRow && i === axis) { if (this.passed >= allowed) break; this.passed++; }
-          to = (j + 1) * W + i; falls++;
-        } else if (falls === 0 && rnd() < (slides ? 0.9 : (!inside(i - 1, j) || !inside(i + 1, j)) ? 0.5 : 0.85)) {
-          const first = rnd() < 0.5 ? -1 : 1;
-          for (const s of [first, -first]) {
-            if (!ok(i + s, j)) continue;
-            if (ok(i + s, j + 1)) {
-              if (rnd() < 0.4 && ok(i + 2 * s, j) && ok(i + 2 * s, j + 1)) { to = (j + 1) * W + i + 2 * s; break; }
-              to = (j + 1) * W + i + s; break;
-            }
-          }
-          if (to >= 0) slides++;
-        }
-        if (to < 0) break;
-        cell[to] = v; cell[at] = 0; st[to] = t; at = to; i = to % W; j = (to / W) | 0; moved++;
-      }
-    }
-    this.moved = moved; if (moved) this.dirty = true;
-    // the cursor scatters the grains it passes through
-    const s = this.stir;
-    if (s && !s.used && performance.now() - s.t < 140) {
-      s.used = true;
-      const sp = Math.hypot(s.vx, s.vy);
-      if (sp > 30) {
-        const ux = s.vx / sp, uy = s.vy / sp, rad = 1.5 + 2.5 * Math.min(1, sp / 500), ci = Math.round(s.x), cj = Math.round(s.y), Rr = Math.ceil(rad);
-        let px = ux * 0.6, py = uy * 0.6 - 0.8; const pl = Math.hypot(px, py) || 1; px /= pl; py /= pl;
-        this.drift = [ux * 0.5, uy * 0.5 - 0.15];
-        const near: number[] = [];
-        for (let jj = cj - Rr; jj <= cj + Rr; jj++) for (let ii = ci - Rr; ii <= ci + Rr; ii++) {
-          if (ii < 0 || jj < 0 || ii >= W || jj >= Hh || Math.hypot(ii - ci, jj - cj) > rad) continue;
-          const kk = jj * W + ii; if (cell[kk] && st[kk] !== t) near.push(kk);
-        }
-        near.sort((a, b) => ((b % W) * px + ((b / W) | 0) * py) - ((a % W) * px + ((a / W) | 0) * py));
-        for (const kk of near) {
-          const i0 = kk % W, j0 = (kk / W) | 0, d = Math.hypot(i0 - ci, j0 - cj);
-          let ai = i0, aj = j0;
-          for (let hop = 0, hops = 1 + Math.round((1 - d / rad) * (2 + rnd() * 3)); hop < hops; hop++) {
-            const ti = Math.round(ai + px + (rnd() - 0.5) * 0.8), tj = Math.round(aj + py + (rnd() - 0.5) * 0.8);
-            if (!ok(ti, tj)) break;
-            cell[tj * W + ti] = cell[aj * W + ai]; cell[aj * W + ai] = 0; st[tj * W + ti] = t; ai = ti; aj = tj;
-          }
-          if (ai !== i0 || aj !== j0) { air[aj * W + ai] = 3 + Math.floor(rnd() * 4); this.dirty = true; }
-        }
-      }
-    }
+  private item(t0: number): Item {
+    const r = this.rnd, kind: Kind = r() < 0.08 ? (1 + Math.floor(r() * 4)) as Kind : 0;
+    // lanes across the whole rim; a little more often toward the middle, never on the wall
+    const u = r() * 2 - 1, lane = Math.sign(u) * Math.pow(Math.abs(u), 0.85) * 0.86;
+    return { t0, lane, kind, tau: kind ? 0 : 0.12 + Math.pow(r(), 1.6) * 0.75, gold: r() < 1 / 8, size: 2.2 + r() * 1.6, spin: r() * Math.PI * 2 };
   }
-  /** the reader scrolled back up: grains go back, from the top of the lower pile to the top of the upper */
-  private unpour(n: number) {
-    const W = this.gw, Hh = this.gh, cell = this.cell, mask = this.mask, mid = Math.floor(Hh / 2), rnd = Math.random;
-    for (let q = 0; q < n && this.passed > this.allowed(); q++) {
-      // the lower pile's surface: the top grain of each column
-      const tops: number[] = [], spots: number[] = [];
-      for (let i = 0; i < W; i++) {
-        for (let j = mid + 1; j < Hh; j++) { const k = j * W + i; if (cell[k] && !this.air[k]) { tops.push(k); break; } }
-        // the upper sand's surface: the lowest free cell above the sand (or the neck) in each column
-        for (let j = mid - 1; j >= 0; j--) {
-          const k = j * W + i; if (!mask[k]) continue;
-          if (cell[k]) continue;
-          const below = (j + 1) * W + i;
-          if (j + 1 >= mid || !mask[below] || cell[below]) { spots.push(k); break; }
-          break;
-        }
-      }
-      if (!tops.length || !spots.length) break;
-      const from = tops[Math.floor(rnd() * tops.length)], to = spots[Math.floor(rnd() * spots.length)];
-      cell[to] = cell[from]; cell[from] = 0; this.passed--; this.dirty = true;
-    }
+  /** v after `age` seconds in the glass (before it enters: V0; after it leaves: V1) */
+  private vAt(age: number) {
+    const tt = this.tt, N = tt.length - 1;
+    if (age <= 0) return V0; if (age >= tt[N]) return V1 + (age - tt[N]) * 0.5;
+    let lo = 0, hi = N;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (tt[m] <= age) lo = m; else hi = m; }
+    const f = (age - tt[lo]) / Math.max(1e-6, tt[hi] - tt[lo]);
+    return this.tv[lo] + (this.tv[hi] - this.tv[lo]) * f;
   }
-  /** reduced motion: the sand settled where the reader is, at once */
-  private settle() {
-    for (let s = 0; s < 6000; s++) { if (this.passed > this.allowed()) this.unpour(50); this.stepSand(); if (this.moved === 0 && this.passed <= this.allowed()) break; }
-    this.dirty = true; this.render();
+  /** a point on an item's streamline at v: its lane's share of the half width, kept off the wall */
+  private at(lane: number, v: number): [number, number] {
+    const hw = halfWidth(v, this.H), room = Math.max(0, hw - Math.min(3, hw * 0.4));
+    return [lane * room, v * this.gy];
+  }
+  private advance(dt: number) {
+    this.clock += dt; this.owed += dt * RATE;
+    while (this.owed >= 1) { this.owed -= 1; this.items.push(this.item(this.clock - this.owed / RATE)); }
+    const end = this.tt[this.tt.length - 1];
+    this.items = this.items.filter((it) => this.clock - it.t0 - it.tau < end + 0.2);
   }
 
-  private paintSand() {
-    if (!this.dirty) return; this.dirty = false;
-    const W = this.gw, Hh = this.gh, cell = this.cell, occ = this.occ, soft = this.soft, shade = this.shade;
-    const at = (i: number, j: number) => (i >= 0 && j >= 0 && i < W && j < Hh ? cell[j * W + i] : 0);
-    const nb = (i: number, j: number) => { let n = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if ((di || dj) && at(i + di, j + dj)) n++; return n; };
-    // the pile: grains with company; a grain on its own (falling, thrown, the thread) is drawn as a grain
-    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
-      const k = j * W + i, v = cell[k];
-      if (v && nb(i, j) > 2) { occ[k] = 1; shade[k] = v; continue; }
-      occ[k] = 0; let sh = 0;
-      for (let dj = -1; dj <= 1 && !sh; dj++) for (let di = -1; di <= 1; di++) { const w = at(i + di, j + dj); if (w) { sh = w; break; } }
-      shade[k] = sh;
-      // a cell of glass beside a body of sand counts as sand: the wall's curve (the clip) is the pile's edge
-      if (!this.mask[k] && Math.abs(j - Hh / 2) > 3 && (nb(i, j) >= 3 || at(i - 1, j) || at(i + 1, j))) occ[k] = 1;
-    }
-    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) { const k = j * W + i; soft[k] = ((i > 0 ? occ[k - 1] : 0) + 2 * occ[k] + (i < W - 1 ? occ[k + 1] : 0)) / 4; }
-    for (let i = 0; i < W; i++) { let prev = 0; for (let j = 0; j < Hh; j++) { const k = j * W + i, cur = soft[k], next = j < Hh - 1 ? soft[k + W] : 0; occ[k] = (prev + 2 * cur + next) / 4; prev = cur; } }
-  }
-  /** the pile as one vector shape: the softened field traced at a half (marching squares, each square's
-   *  part above the threshold as its own polygon, all filled together so they join without seams) */
-  private pilePath(x: CanvasRenderingContext2D) {
-    const W = this.gw, Hh = this.gh, f = this.occ, cs = this.cs, ox = -(W - 1) / 2 * cs, oy = -this.gy + cs / 2, T = 0.5;
-    x.beginPath();
-    for (let j = 0; j < Hh; j++) for (let i = 0; i < W - 1; i++) {
-      const k = j * W + i, last = j === Hh - 1, a = f[k], b = f[k + 1], c = last ? b : f[k + W + 1], d = last ? a : f[k + W];
-      if (a < T && b < T && c < T && d < T) continue;
-      const X = ox + i * cs, Y = oy + j * cs;
-      if (a >= T && b >= T && c >= T && d >= T) { x.rect(X, Y, cs, cs); continue; }
-      const P: [number, number, number][] = [[X, Y, a], [X + cs, Y, b], [X + cs, Y + cs, c], [X, Y + cs, d]];
-      let first = true;
-      for (let q = 0; q < 4; q++) {
-        const p0 = P[q], p1 = P[(q + 1) % 4];
-        if (p0[2] >= T) { first ? x.moveTo(p0[0], p0[1]) : x.lineTo(p0[0], p0[1]); first = false; }
-        if ((p0[2] >= T) !== (p1[2] >= T)) {
-          const t = (T - p0[2]) / (p1[2] - p0[2]);
-          const px = p0[0] + (p1[0] - p0[0]) * t, py = p0[1] + (p1[1] - p0[1]) * t;
-          first ? x.moveTo(px, py) : x.lineTo(px, py); first = false;
-        }
-      }
-      x.closePath();
-    }
-  }
-  /** the pile's fill: grains packed in rows, each its own shade, on a slightly darker sand */
-  private grainPattern(x: CanvasRenderingContext2D) {
-    if (this.pattern) return this.pattern;
-    const k = this.dpr, cs = this.cs, cols = 6, rows = 6;
-    const tw = Math.round(cols * cs * k), th = Math.round(rows * cs * 0.866 * k);
-    const c = document.createElement("canvas"); c.width = tw; c.height = th;
-    const g = c.getContext("2d")!, rnd = mulberry(3), sx = tw / cols, sy = th / rows, r = Math.min(sx, sy / 0.866) * 0.5;
-    g.fillStyle = "#cca56c"; g.fillRect(0, 0, tw, th);
-    for (let j = -1; j <= rows; j++) for (let i = -1; i <= cols; i++) {
-      const cx = (i + (j & 1 ? 0.5 : 0)) * sx, cy = (j + 0.5) * sy;
-      g.fillStyle = SAND[Math.floor(rnd() * SAND.length)];
-      for (const [dx, dy] of [[0, 0], [tw, 0], [-tw, 0], [0, th], [0, -th]]) { g.beginPath(); g.arc(cx + dx, cy + dy, r * 1.02, 0, Math.PI * 2); g.fill(); }
-    }
-    const pat = x.createPattern(c, "repeat")!;
-    pat.setTransform(new DOMMatrix().scale(1 / k));
-    return (this.pattern = pat);
-  }
-  private pattern: CanvasPattern | null = null;
-
-  private outline(x: CanvasRenderingContext2D, inset: number, side: number) {
-    const N = 220, gy = this.gy;
-    x.beginPath();
-    for (let q = 0; q <= N; q++) { const v = -1 + (2 * q) / N, r = halfWidth(v, this.H) - inset; q ? x.lineTo(side * r, v * gy) : x.moveTo(side * r, v * gy); }
-  }
   private render() {
     this.drawBack();
-    const x = this.front.getContext("2d")!, k = this.dpr, cs = this.cs, W = this.gw, Hh = this.gh, gy = this.gy;
+    const x = this.front.getContext("2d")!, k = this.dpr, gy = this.gy;
     x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, this.front.width, this.front.height);
     x.setTransform(k, 0, 0, k, 0, 0); x.translate(this.W / 2, this.H / 2);
-    // the pile, smooth-edged, inside the inner wall
-    this.paintSand();
-    x.save(); x.beginPath();
-    { const N = 220, ins = 1.6;
-      for (let q = 0; q <= N; q++) { const v = -1 + (2 * q) / N, r = Math.max(0.6, halfWidth(v, this.H) - ins); q ? x.lineTo(r, v * gy) : x.moveTo(r, v * gy); }
-      for (let q = N; q >= 0; q--) { const v = -1 + (2 * q) / N, r = Math.max(0.6, halfWidth(v, this.H) - ins); x.lineTo(-r, v * gy); }
-      x.closePath(); }
-    x.clip();
-    this.pilePath(x); x.fillStyle = this.grainPattern(x); x.fill();
-    x.restore();
-    // grains on their own: round, each one visible as it falls and lands
-    const cell = this.cell, at = (i: number, j: number) => (i >= 0 && j >= 0 && i < W && j < Hh ? cell[j * W + i] : 0);
-    const r = cs * 0.47;
-    for (let c = 0; c < SAND.length; c++) {
-      x.fillStyle = SAND[c]; x.beginPath();
-      for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
-        const v = cell[j * W + i]; if (v !== c + 1) continue;
-        let n = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if ((di || dj) && at(i + di, j + dj)) n++;
-        if (n > 2) continue;
-        const cx = (i - (W - 1) / 2) * cs, cy = (j + 0.5) * cs - gy;
-        x.moveTo(cx + r, cy); x.arc(cx, cy, r, 0, Math.PI * 2);
+    // the flow, inside the glass's height (it enters and leaves through the open rims)
+    x.save(); x.beginPath(); x.rect(-this.W / 2, -gy, this.W, 2 * gy); x.clip();
+    x.lineCap = "round"; x.lineJoin = "round";
+    // the lines crowd together where the glass narrows; each piece of a stroke is drawn as faint as the
+    // crowding there asks, so the neck stays a bundle of lines rather than a bar. Pieces go into a few
+    // opacity bins, one path each.
+    const BINS = 6, bins: Path2D[][] = [Array.from({ length: BINS }, () => new Path2D()), Array.from({ length: BINS }, () => new Path2D())];
+    const thin = (v: number) => Math.max(0.16, Math.min(1, (halfWidth(v, this.H) - 2) / (0.22 * this.R)));
+    const bin = (a: number) => Math.min(BINS - 1, Math.floor(a * BINS));
+    for (const it of this.items) {
+      const age = this.clock - it.t0, paths = bins[it.gold ? 1 : 0];
+      if (it.kind === 0) {
+        // a stroke: the stretch of its streamline covered in the last `tau` seconds, so it lengthens where
+        // the flow is quick and shortens where it is slow
+        const vh = this.vAt(age), vt = this.vAt(age - it.tau);
+        if (vh <= V0 || vt >= V1) continue;
+        const steps = Math.max(2, Math.min(16, Math.ceil(Math.abs(vh - vt) * 40)));
+        let prev = this.at(it.lane, vt);
+        for (let q = 1; q <= steps; q++) {
+          const v = vt + (vh - vt) * (q / steps), p = this.at(it.lane, v), path = paths[bin(thin(v - (vh - vt) / steps / 2))];
+          path.moveTo(prev[0], prev[1]); path.lineTo(p[0], p[1]); prev = p;
+        }
+      } else {
+        // a small shape at its place, turned to the flow; it fades out through the neck
+        const v = this.vAt(age); if (v <= V0 || v >= V1) continue;
+        const hw = halfWidth(v, this.H); if (hw < 16) continue;
+        const p = this.at(it.lane, v), q = this.at(it.lane, v + 0.004), ang = Math.atan2(q[1] - p[1], q[0] - p[0]) + it.spin;
+        const r = it.size, path = paths[bin(Math.min(1, (hw - 16) / 30))];
+        const c = Math.cos(ang), sn = Math.sin(ang), P = (dx: number, dy: number): [number, number] => [p[0] + dx * c - dy * sn, p[1] + dx * sn + dy * c];
+        if (it.kind === 1) { path.moveTo(p[0] + r, p[1]); path.arc(p[0], p[1], r, 0, Math.PI * 2); }
+        else if (it.kind === 2) { const a = P(-r, -r), b = P(r, -r), d = P(r, r), e = P(-r, r); path.moveTo(...a); path.lineTo(...b); path.lineTo(...d); path.lineTo(...e); path.closePath(); }
+        else if (it.kind === 3) { const a = P(r * 1.1, 0), b = P(-r * 0.6, r), d = P(-r * 0.6, -r); path.moveTo(...a); path.lineTo(...b); path.lineTo(...d); path.closePath(); }
+        else { const a = P(-r, 0), b = P(r, 0), d = P(0, -r), e = P(0, r); path.moveTo(...a); path.lineTo(...b); path.moveTo(...d); path.lineTo(...e); }
       }
-      x.fill();
     }
+    for (let g = 0; g < 2; g++) for (let b = 0; b < BINS; b++) {
+      const a = (b + 0.5) / BINS;
+      x.globalAlpha = (g ? 0.95 : this.lineA) * a; x.strokeStyle = g ? this.sand : `rgb(${this.line.join(",")})`; x.lineWidth = g ? 1.1 : 0.9;
+      x.stroke(bins[g][b]);
+    }
+    x.globalAlpha = 1;
+    x.restore();
     // the glass: its two curves, nothing else
-    x.strokeStyle = `rgba(${this.line.join(",")},0.82)`; x.lineWidth = 1; x.lineJoin = "round"; x.lineCap = "round";
-    for (const side of [-1, 1]) { this.outline(x, 0, side); x.stroke(); }
+    x.strokeStyle = `rgba(${this.line.join(",")},0.85)`; x.lineWidth = 1;
+    for (const side of [-1, 1]) {
+      x.beginPath();
+      for (let q = 0; q <= 240; q++) { const v = -1 + (2 * q) / 240, r = halfWidth(v, this.H); q ? x.lineTo(side * r, v * gy) : x.moveTo(side * r, v * gy); }
+      x.stroke();
+    }
   }
 
-  // ---------- the cursor and the click
+  // ---------- the click
   private inGlass(e: { clientX: number; clientY: number }) {
     const b = this.front.getBoundingClientRect(), lx = e.clientX - b.left - b.width / 2, ly = e.clientY - b.top - b.height / 2, v = ly / this.gy;
-    return Math.abs(v) < 1 && Math.abs(lx) < halfWidth(v, this.H) + 4 ? [lx, ly] : null;
+    return Math.abs(v) < 1 && Math.abs(lx) < halfWidth(v, this.H) + 4;
   }
   private bind() {
-    let last: [number, number, number] | null = null, down: { x: number; y: number } | null = null;
-    this.el.addEventListener("pointermove", (e) => {
-      const p = this.inGlass(e);
-      this.el.classList.toggle("over", !!p);
-      if (!p || e.pointerType === "touch" || this.o.reduce) { last = null; return; }
-      const gi = p[0] / this.cs + (this.gw - 1) / 2, gj = (p[1] + this.gy) / this.cs - 0.5, now = performance.now();
-      if (last) { const dt = Math.max(8, now - last[2]) / 1000; this.stir = { x: gi, y: gj, vx: (gi - last[0]) / dt * this.cs, vy: (gj - last[1]) / dt * this.cs, t: now }; this.start(); }
-      last = [gi, gj, now];
-    });
-    this.el.addEventListener("pointerleave", () => { last = null; this.el.classList.remove("over"); });
-    this.el.addEventListener("pointerdown", (e) => { down = this.inGlass(e) ? { x: e.clientX, y: e.clientY } : null; });
+    let down: { x: number; y: number } | null = null;
+    this.el.addEventListener("pointermove", (e) => { this.el.classList.toggle("over", this.inGlass(e)); }, { passive: true });
+    this.el.addEventListener("pointerleave", () => this.el.classList.remove("over"), { passive: true });
+    this.el.addEventListener("pointerdown", (e) => { down = this.inGlass(e) ? { x: e.clientX, y: e.clientY } : null; }, { passive: true });
     this.el.addEventListener("pointerup", (e) => {
       if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6 && this.inGlass(e)) this.o.onClick?.({ x: e.clientX, y: e.clientY });
       down = null;
-    });
+    }, { passive: true });
     this.el.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault(); const b = this.front.getBoundingClientRect(); this.o.onClick?.({ x: b.left + b.width / 2, y: b.top + b.height / 2 });
     });
   }
 
-  // ---------- the loop: runs while the glass is on screen and its sand has somewhere to go
+  // ---------- the loop: runs while the glass is on screen; its own clock pauses with it
   private start() {
     if (this.running || this.o.reduce || !this.visible) return;
     this.running = true; this.last = performance.now();
     const frame = (now: number) => {
       if (!this.running) return;
+      if (!this.visible) { this.running = false; return; }
       const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
-      // a slow drip ahead of the reader: a grain about every 0.4 s, at most 3.5% of the sand ahead
-      this.lead = Math.min(Math.max(3, this.total * 0.035), this.lead + dt * 2.5);
-      if (this.passed > this.allowed() + 2) this.unpour(4);
-      const behind = this.allowed() - this.passed;
-      const steps = behind > 40 ? 3 : 2;
-      for (let s = 0; s < steps; s++) this.stepSand();
-      if (this.dirty) this.render();
-      const idle = this.moved === 0 && this.passed >= this.allowed() && !(this.stir && performance.now() - this.stir.t < 300);
-      if (!this.visible || idle) { this.running = false; return; }
+      this.advance(dt); this.render();
       this.raf = requestAnimationFrame(frame);
     };
     this.raf = requestAnimationFrame(frame);
