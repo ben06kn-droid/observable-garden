@@ -224,8 +224,37 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     a desktop and closed on a phone. Each move is a block; a refused one has a red rule and a "refused" tag.
 - **docs**: ink on a cool light ground, one ink-blue accent: a page for reading. Privacy, terms, 404 and a
   shared verdict use it too.
-- **Sancho**: sand, umber type, a terracotta accent; the desert is its motif. Its session may propose a
-  storybook serif for its headings.
+- **Sancho** (approved 2026-11-17): the docs page's pattern at dusk. A plain, rich backdrop fixed to the viewport,
+  one object in the margin, the shared cursor tail, and clean content on a sheet. `docs.css` supplies the
+  structure (the grid, the title on the backdrop, the sheet, the panels, the tables, the copy button);
+  `sancho.css` holds only warm values.
+  - **The backdrop** (src/dusk.ts, one canvas): a deep red sunset as one vertical gradient (#1E0708 at 0%,
+    #4A1012 at 30%, #7E1D16 at 55%, #B23A1C at the horizon, 72%; #3A0F0E directly below it at 73% to #1C0606),
+    one soft glow where the sun has just set (#E8782E at 30%, about 60vh across, centred on the horizon at 70%
+    across; a third as strong below the horizon) and a hairline along the horizon (#E8782E at 35%). No other
+    shapes, no grain.
+  - **The windmill**, the page's one object: a loose ink drawing of a traditional four-sail mill, eleven brush
+    strokes (leaning strokes for the body, a cap, the ground, a door; four crossed strokes for the sails; the
+    hub), each thick to thin with dry-brush gaps and uneven ends, in #14070A, a silhouette against the glow.
+    About 16% of the viewport high, standing on the horizon in the right margin (84% across), clear of the
+    sheet. The sails turn as one: a turn in 14 s; in 3 s while the tail passes within 200px of the hub,
+    easing back over about 4 s.
+  - **Heat**, subtle: the horizon, the glow and the windmill's lower half waver by 1.5px sideways, rising
+    slowly (and 0.6px up and down, without which a level line cannot be seen to waver). Nothing is drawn to
+    show it.
+  - **Light and scroll**: the glow sinks 6vh over the page and the whole backdrop darkens by 15%. Nothing else
+    changes.
+  - **Content**: the label and title on the backdrop in #F4E8CF; from the first section down everything is on
+    one reading sheet (rgba(250,238,220,0.90), radius 16px, a 1px rgba(255,240,220,0.5) border), body text
+    #2A1A12, links #6E200F. The contents of the page, the results table, the command (with a copy button)
+    and the buttons on flat panels (rgba(120,40,20,0.06), border rgba(120,40,20,0.18)). The header and the
+    footer in the sheet's fill. Certified and refused are told apart by a word and a mark (✓ Certified,
+    ✕ Refused), never by colour. Long paragraphs are a short lead with the rest, word for word, in a
+    disclosure. Measured from screenshots at five scroll positions, 1440x900 and 390x844: body 7.29:1 at worst
+    (a link in the results panel), code 10.9:1, header and footer 12.1:1, the title 12.5:1.
+  - **Phone**: the backdrop as a band at the top (the gradient, the glow, a small windmill), then the sheet; no
+    tail. **Reduced motion**: drawn once, still. 60 fps while scrolling with the tail active (worst frame
+    16.8 ms); paused while hidden or off screen.
 - **demo**: the city garden at night in neon tubing (also the result page, which replays a demo verdict). The
   only page with neon, glow or the night palette; `demo.css` is loaded by no other page.
 - **viewer**: a light counterpart to the run page: cool off-white, graphite type, hairlines, one muted
@@ -265,7 +294,12 @@ every page; a page gives it the drawn layer it acts on and its colours from its 
     tree). The petals are its wind. Paused inside a run. While the tree grows its picture is refreshed at
     most four times a second; if a refresh costs more than 4 ms the trail keeps clear of the tree until
     it has grown.
-  - **docs, Sancho and the viewer: not yet.** Each gets the wake in its own session, with its colours
+  - Sancho: the run page's form over the docs page's toned-down fluid (force 60%, swirl 60%, its own motion
+    75%, life +20%): only the glossy trace (`wakeTrace`: a #F2D7A6 highlight, a #14070A shade, a #B5391C
+    hairline rim), laid over the backdrop, the horizon and the windmill alike. It distorts nothing: the
+    horizon and the windmill never bend or change colour under it. It fades out before the sheet's text. The
+    windmill's sails are its wind.
+  - **docs and the viewer: not yet.** Each gets the wake in its own session, with its colours
     chosen then. Docs will be blue, white and green, in a soft, bubble-like form.
 
 The viewer draws a run's tree without the demo's decoration (the run page draws only the scale, src/runscale.ts): `makeScene()` without `decor`
@@ -339,6 +373,6 @@ moves to the footer (which carries the author's line on every page); Contact sta
 - **Run the equivalence script**, `node scripts/equivalence.mjs --python python3`: the gate, worker, wheel and
   examples were not touched by the revamp, and this confirms it.
 - The empty tree area on the viewer before a run is loaded: settled in its session. (The run page has no tree area: its result is the scale alone.)
-- The docs, Sancho and viewer colours are interim until each page's session.
-- The cursor's wake on docs (blue, white and green, soft and bubble-like), Sancho and the viewer: each in its
-  own session.
+- The docs and viewer colours are interim until each page's session (Sancho's are settled).
+- The cursor's wake on docs (blue, white and green, soft and bubble-like) and the viewer: each in its own
+  session (Sancho's is settled).
