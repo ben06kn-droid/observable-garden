@@ -92,8 +92,6 @@
 .docs .toc a:hover { color: var(--ink); }
 .docs .toc a[aria-current="true"] { color: var(--ink); border-left-color: var(--aqua); }
 
-/* the bubbles' canvas: fixed over the lane, never taking a click */
-canvas.bubbles { position: fixed; top: 0; left: var(--x, 0); width: var(--w, 0); height: 100vh; height: 100lvh; pointer-events: none; z-index: 0; }
 
 @media (max-width: 1240px) {
   .docs .toc { grid-column: 1 / span 8; position: static; max-height: none; margin-bottom: var(--s6); }
@@ -118,5 +116,91 @@ canvas.bubbles { position: fixed; top: 0; left: var(--x, 0); width: var(--w, 0);
   .docs-text .glass.terms th + td { margin-top: 4px; }
   .docs-text .glass td:first-child { white-space: normal; overflow-wrap: anywhere; }
   /* on a phone a command keeps its lines whole and scrolls inside its own block; the page never does */
-  .docs-text .glass pre.cmd { font-size: 12.5px; white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+  .docs-text .glass pre.cmd { font-size: 12.5px; white-space: pre; overflow-wrap: normal; overflow-x: auto; padding: 46px var(--s4) var(--s4); }   /* the copy button on its own row above, so nothing scrolls under it */
+}
+
+/* =====================================================================================================
+   The docs page itself ([data-page="docs"]): a vivid sky fixed to the viewport, the title in white on it,
+   the reading on one sheet of frosted glass, dark glass for code, light glass for tables and contents,
+   a glass header. The sky, its light fields, its grain and pulse, the cursor's tail and the bubbles are
+   drawn by src/sky.ts on one canvas behind everything; the gradient here is its fallback (no WebGL).
+   ===================================================================================================== */
+[data-page="docs"] {
+  --g0: #0a5fd6; --g1: #1e9bf0; --g2: #4fd4e8; --g3: #9bf0c8; --g4: #e9fff4;
+  --ground: #0a5fd6;           /* = the sky's top: the carry's cover and the chain's ground */
+  --ink: #06203f;
+  --muted: #06203f;            /* body text on the sheet */
+  --faint: #24405f;
+  --accent: #064f9c;
+  --rule: rgba(6, 32, 63, 0.14);
+  --header-bg: rgba(255, 255, 255, 0.55);
+  --wake-tone: #3fe0ff;        /* the tail's fringes: cyan on one edge, green on the other */
+  --wake-fringe: #6bf29b;
+  background: linear-gradient(180deg, var(--g0) 0%, var(--g1) 35%, var(--g2) 65%, var(--g3) 88%, var(--g4) 100%) fixed var(--g0);
+}
+[data-page="docs"] body { background: transparent; }
+canvas.sky { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100lvh; pointer-events: none; z-index: -1; }
+
+/* the header: a glass bar (it is small, and the sky moves behind it, so it keeps its blur) */
+[data-page="docs"] .top { background: var(--header-bg); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.6); }
+[data-page="docs"] .carry-prev { color: #ffffff; }
+
+/* the title on the sky, in white; a soft deep-blue glow under it holds it at 4.5:1 over the bright sky (white
+   on the sky alone measured 2.9:1 there) */
+[data-page="docs"] .sky-title { position: relative; }
+/* and a soft cloud of deep azure in the sky behind it (no edge: it fades to nothing) */
+[data-page="docs"] .sky-title::before { content: ""; position: absolute; inset: -90px -160px -110px -120px; z-index: -1; pointer-events: none;
+  background: radial-gradient(farthest-side at 42% 58%, rgba(4, 38, 104, 0.58), rgba(4, 38, 104, 0.5) 45%, rgba(4, 38, 104, 0.24) 75%, rgba(4, 38, 104, 0)); }
+[data-page="docs"] .sky-title .label { margin-bottom: var(--s4); }
+[data-page="docs"] .sky-title h1 { margin: 0 0 var(--s7); }
+[data-page="docs"] .sky-title > .label, [data-page="docs"] .sky-title > h1 { color: #ffffff;
+  text-shadow: 0 0 2px rgba(3, 28, 84, 0.65), 0 0 16px rgba(3, 28, 84, 0.6), 0 0 38px rgba(3, 28, 84, 0.5); }
+
+/* the reading sheet: one pane of frosted glass from the first section down (no blur: what moves behind it is
+   only the sky, and a blur over this much of the screen costs frames) */
+[data-page="docs"] .sheet { max-width: calc(var(--measure) + 96px); padding: 48px; border-radius: 20px; background: rgba(255, 255, 255, 0.74);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7), 0 24px 60px rgba(6, 50, 120, 0.18); }
+[data-page="docs"] .sheet > * { max-width: var(--measure); }
+[data-page="docs"] .sheet > h2:first-child { margin-top: 0; }
+[data-page="docs"] .docs-text p, [data-page="docs"] .docs-text li, [data-page="docs"] .docs-text h2, [data-page="docs"] .docs-text h3, [data-page="docs"] .docs-text code { color: var(--ink); }
+[data-page="docs"] .docs-text a { color: var(--accent); text-decoration-color: rgba(6, 79, 156, 0.4); }
+
+/* code: dark glass, a gloss across its top, a glossy green copy pill */
+[data-page="docs"] .docs-text .glass.code { border: 0; background: rgba(6, 32, 63, 0.9);   /* 0.82 put the comments at 6.0:1 */ border-radius: 14px; -webkit-backdrop-filter: none; backdrop-filter: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3), 0 12px 28px rgba(6, 50, 120, 0.35); overflow: hidden; }
+[data-page="docs"] .docs-text .glass.code::before { content: ""; position: absolute; inset: 0 0 60% 0; border-radius: 14px 14px 0 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0)); }
+[data-page="docs"] .docs-text .glass.code pre.cmd { color: #eaf6ff; padding-right: 108px; }   /* clear of the copy pill */
+[data-page="docs"] .docs-text .glass.code pre.cmd .t { color: inherit; }
+[data-page="docs"] .docs-text .glass.code pre.cmd .c, [data-page="docs"] .docs-text .glass.code pre.cmd .c .t { color: #8fd3ff; }
+[data-page="docs"] .docs-text .copy { color: #04331b; border: 0; border-radius: 999px; padding: 7px 12px; z-index: 1;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 45%), linear-gradient(180deg, #5be38a, #1fbf6b);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35), 0 2px 6px rgba(4, 51, 27, 0.25); transition: transform var(--dur-ui) var(--ease-ui), box-shadow var(--dur-ui) var(--ease-ui); }
+[data-page="docs"] .docs-text .copy:hover { background: linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 45%), linear-gradient(180deg, #5be38a, #1fbf6b); }
+[data-page="docs"] .docs-text .copy:active { transform: translate3d(0, 1px, 0); box-shadow: inset 0 1px 3px rgba(4, 51, 27, 0.4), 0 1px 2px rgba(4, 51, 27, 0.2); }
+
+/* tables: light glass, a glossy header bar */
+[data-page="docs"] .docs-text .glass.table { padding: 0; border: 0; background: rgba(255, 255, 255, 0.6); border-radius: 14px; -webkit-backdrop-filter: none; backdrop-filter: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7), 0 10px 26px rgba(6, 50, 120, 0.14); overflow: hidden; }
+[data-page="docs"] .docs-text .glass table { margin: 0; }
+[data-page="docs"] .docs-text .glass td, [data-page="docs"] .docs-text .glass th { border-top: 1px solid rgba(6, 32, 63, 0.14); padding-left: 0; }
+[data-page="docs"] .docs-text .glass tr > :first-child { padding-left: 20px; }
+[data-page="docs"] .docs-text .glass tr > :last-child { padding-right: 20px; }
+[data-page="docs"] .docs-text .glass tr:has(> th + th) > th { color: #ffffff; border-top: 0; padding-top: 12px; padding-bottom: 12px;
+  /* a deeper blue than #19b5f1 → #0a84e0, where white measured 2.5:1 */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 50%), linear-gradient(180deg, #0758a6, #043f7c); }
+[data-page="docs"] .docs-text .glass.terms th { color: var(--ink); }
+
+/* contents: its own small panel of light glass, the current section a filled pill */
+[data-page="docs"] .docs .toc { padding: 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.6); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7), 0 10px 26px rgba(6, 50, 120, 0.14); }
+[data-page="docs"] .docs .toc details { background: none; border: 0; padding: 0; }
+[data-page="docs"] .docs .toc a { color: var(--ink); border-left: 0; border-radius: 999px; padding: 6px 12px; }
+[data-page="docs"] .docs .toc a[aria-current="true"] { color: #ffffff; background: #0a6cc2; }   /* white on #19b5f1 measured 2.4:1 */
+
+@media (max-width: 812px) {
+  [data-page="docs"] .sheet { padding: 24px; border-radius: 16px; }
+  [data-page="docs"] .docs-text .glass tr { padding: 12px 18px; }
+  [data-page="docs"] .docs-text .glass tr > * { padding: 0 !important; border: 0; }
+  /* the copy pill on its own row above a command, so nothing scrolls under it */
+  [data-page="docs"] .docs-text .glass pre.cmd { padding: 50px var(--s4) var(--s4); }
 }

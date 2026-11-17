@@ -1,12 +1,12 @@
 // The docs page: reading first, in clear sky and glass (src/styles/docs.css), a link in the scroll chain
 // (home → run → docs → Sancho). The contents sit beside the text on wide screens and fold above it on
-// narrow ones, the current section marked; each code block has a copy button; glass bubbles drift up the
-// margin (src/bubbles.ts) and wobble where the cursor passes.
+// narrow ones, the current section marked; each code block has a copy button. Behind everything, the sky
+// (src/sky.ts): a vivid ground with its light, the cursor's tail, and glass bubbles drifting up the margin.
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/docs.css";
 import "../chain";
 import { reduceMotion } from "../common";
-import { Bubbles } from "../bubbles";
+import { Sky } from "../sky";
 
 const text = document.querySelector<HTMLElement>(".docs-text")!;
 const wide = matchMedia("(min-width: 1241px)"), phone = matchMedia("(max-width: 812px)");
@@ -36,7 +36,14 @@ toc.addEventListener("click", (e) => { if (!wide.matches && (e.target as HTMLEle
 for (const pre of text.querySelectorAll<HTMLPreElement>("pre.cmd")) {
   // each word of the command kept whole when the line wraps (the text, and what is copied, unchanged)
   const src = pre.textContent ?? "";
-  pre.replaceChildren(...src.split(/(\s+)/).map((w) => { if (!w || /^\s+$/.test(w)) return document.createTextNode(w); const t = document.createElement("span"); t.className = "t"; t.textContent = w; return t; }));
+  // and a comment (from " #" to the end of its line) in its own colour
+  const words = (str: string) => str.split(/(\s+)/).map((w) => { if (!w || /^\s+$/.test(w)) return document.createTextNode(w); const t = document.createElement("span"); t.className = "t"; t.textContent = w; return t; });
+  pre.replaceChildren(...src.split(/(\n)/).flatMap((line) => {
+    const at = line.search(/(^|\s)#\s/);
+    if (at < 0) return words(line);
+    const c = document.createElement("span"); c.className = "c"; c.append(...words(line.slice(at)));
+    return [...words(line.slice(0, at)), c];
+  }));
   const panel = document.createElement("div"); panel.className = "glass code";
   pre.replaceWith(panel); panel.append(pre);
   const b = document.createElement("button"); b.type = "button"; b.className = "copy"; b.textContent = "Copy";
@@ -60,17 +67,19 @@ for (const t of text.querySelectorAll("table")) {
   }
 }
 
-// ---- the bubbles: in the lane right of the text, below the header; none on a phone
+// ---- the sky: the ground and its light, the tail, the bubbles in the lane right of the text (none on a phone)
 const head = document.querySelector<HTMLElement>(".top");
-const bubbles = new Bubbles(document.body, {
+const sheet = document.querySelector<HTMLElement>(".sheet") ?? text;
+const sky = new Sky(document.body, {
   reduce: reduceMotion,
+  small: () => phone.matches,
   lane: () => {
     if (phone.matches) return null;
-    const r = text.getBoundingClientRect(), gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gap")) || 24;
+    const r = sheet.getBoundingClientRect(), gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gap")) || 24;
     return { x0: Math.round(r.right + gap), x1: innerWidth, top: head?.getBoundingClientRect().bottom ?? 76, bottom: innerHeight };
   },
 });
-bubbles.watch(document.querySelector<HTMLElement>(".carry-next"), document.querySelector<HTMLElement>(".foot"));
+sky.watch(document.querySelector<HTMLElement>(".carry-next"), document.querySelector<HTMLElement>(".foot"));
 let resizeT = 0;
-addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => bubbles.layout(), 150); });
-void document.fonts.ready.then(() => bubbles.layout());
+addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => sky.layout(), 150); });
+void document.fonts.ready.then(() => sky.layout());
