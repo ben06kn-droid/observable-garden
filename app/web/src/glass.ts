@@ -13,66 +13,40 @@
 // loads (the glass starts already full of flow), and nothing about it changes with the scroll. White with
 // an occasional gold stroke, in the page's own tokens; no blur, glow or trails.
 //
-// A headline passing behind the upper bulb is drawn bent through the glass (WebGL), each colour channel
-// refracted a little differently toward the walls. A click (or Enter) on the glass calls onClick: the page
-// inverts its palette. Reduced motion: one still frame of the flow.
+// The glass draws into its own 2D canvas. With `composited`, that canvas is not shown: the page's hero
+// layer (src/hero.ts) draws it, together with the headline seen through the glass and the cursor's wake,
+// and is told after each frame (onFrame). A click (or Enter) on the glass calls onClick: the page inverts
+// its palette. Reduced motion: one still frame of the flow.
 
 export interface GlassOptions {
   height: number;
   reduce?: boolean;
-  /** page text that passes behind the glass, drawn bent through it */
-  behind?: HTMLElement[];
+  /** drawn by the page's hero layer, not shown itself (its canvas stays the source) */
+  composited?: boolean;
+  /** after each frame the glass draws */
+  onFrame?: () => void;
   /** a click on the glass (or Enter / Space while it has focus), at a viewport point */
   onClick?: (at: { x: number; y: number }) => void;
 }
 
 // the outline: the neck's half width, the rim's, and the short straight neck (× height, v from -1 to 1)
-const PROFILE = { neck: 0.011, rim: 0.215, soft: 0.07, pow: 1.32 };
+export const PROFILE = { neck: 0.011, rim: 0.215, soft: 0.07, pow: 1.32 };
 /** half width at v: from the neck, s rises from 0 to 1 and never falls, still widening at the rim, so no
  *  wall turns back in. The waist is round, not a corner: the distance from the neck is softened near it
  *  (sqrt(a² + e²) - e grows like a² there), so the curve passes through the neck smoothly. */
-function halfWidth(v: number, H: number): number {
+export function halfWidth(v: number, H: number): number {
   const a = Math.min(1, Math.abs(v)), n = PROFILE.neck * H, R = PROFILE.rim * H, e = PROFILE.soft;
   const u = (Math.sqrt(a * a + e * e) - e) / (Math.sqrt(1 + e * e) - e);
   const s = Math.pow(u, PROFILE.pow);
   return n + (R - n) * s;
 }
-const GLSL_PROFILE = `
+export const GLSL_PROFILE = `
 float halfWidth(float v, float H) {
   float a = min(1.0, abs(v)), n = ${PROFILE.neck.toFixed(4)} * H, R = ${PROFILE.rim.toFixed(4)} * H, e = ${PROFILE.soft.toFixed(4)};
   float u = (sqrt(a * a + e * e) - e) / (sqrt(1.0 + e * e) - e);
   float s = pow(u, ${PROFILE.pow.toFixed(4)});
   return n + (R - n) * s;
 }`;
-const VERT = `#version 300 es
-in vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }`;
-// behind the glass: the page's ground inside it, and the text behind it bent as through a thick cylinder,
-// each colour channel bent a little differently toward the walls; outside, clear
-const FRAG = `#version 300 es
-precision highp float;
-uniform vec2 uSize; uniform float uDpr, uH, uGy; uniform vec3 uGround; uniform sampler2D uText;
-out vec4 o;
-${GLSL_PROFILE}
-void main() {
-  vec2 pc = vec2(gl_FragCoord.x, uSize.y * uDpr - gl_FragCoord.y) / uDpr;
-  vec2 c = uSize * 0.5, q = pc - c;
-  float v = q.y / uGy, px = 1.0 / uDpr;
-  if (abs(v) >= 1.0) { o = vec4(0.0); return; }
-  float r = halfWidth(v, uH);
-  float inside = clamp((r - abs(q.x)) / px + 0.5, 0.0, 1.0);
-  if (inside <= 0.0) { o = vec4(0.0); return; }
-  float a = clamp(q.x / r, -1.0, 1.0);
-  vec2 s = vec2((a * 0.8 + 0.2 * a * a * a) * r, q.y * (1.0 - 0.03 * (1.0 - a * a)));
-  float edge = a * a;
-  vec3 col;
-  for (int k = 0; k < 3; k++) {
-    vec2 sk = q + (s - q) * (1.0 + (float(k) - 1.0) * 0.045 * edge);
-    vec4 t = texture(uText, (sk + c) / uSize);
-    col[k] = mix(uGround[k], (t.rgb / max(t.a, 1e-4))[k], t.a);
-  }
-  o = vec4(col, inside);
-}`;
-
 function rgb(s: string): [number, number, number] {
   let h = s.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
   if (h) { if (h.length === 3) h = h.replace(/./g, "$&$&"); const n = parseInt(h, 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
@@ -91,9 +65,8 @@ const TRAVEL = 9;           // seconds from rim to rim (the profile below sets w
 export class Glass {
   readonly el: HTMLDivElement;
   private o: GlassOptions; private H: number; private gy: number; private R: number; private W: number; private dpr = 1;
-  private back: HTMLCanvasElement | null = null; private front: HTMLCanvasElement;
-  private gl: WebGL2RenderingContext | null = null; private u: Record<string, WebGLUniformLocation | null> = {}; private tex: WebGLTexture | null = null;
-  private ground: [number, number, number] = [18, 20, 22]; private line: [number, number, number] = [240, 241, 250];
+  private front: HTMLCanvasElement;
+  private line: [number, number, number] = [240, 241, 250];
   private sand = "#d6b27b"; private lineA = 0.72;
   // the flow: a table of where an item is (v) after a given time since it entered, and the items
   private tv!: Float32Array; private tt!: Float32Array; private items: Item[] = []; private clock = 0; private owed = 0; private rnd = mulberry(29);
@@ -106,10 +79,10 @@ export class Glass {
     this.el.tabIndex = 0; this.el.setAttribute("role", "button");
     this.el.setAttribute("aria-label", "Hourglass: press to invert the page's colours");
     this.front = document.createElement("canvas"); this.front.className = "glass-front"; this.front.setAttribute("aria-hidden", "true");
-    if (o.behind?.length && !o.reduce) { this.back = document.createElement("canvas"); this.back.className = "glass-back"; this.back.setAttribute("aria-hidden", "true"); this.el.append(this.back); }
+    if (o.composited) this.el.classList.add("composited");
     this.el.append(this.front);
     host.append(this.el);
-    this.layout(); this.readPalette(); this.initGL(); this.initFlow(); this.bind();
+    this.layout(); this.readPalette(); this.initFlow(); this.bind();
     this.io = new IntersectionObserver((es) => { this.visible = es.some((e) => e.isIntersecting); if (this.visible) this.start(); });
     this.io.observe(this.el);
     this.render();
@@ -122,11 +95,11 @@ export class Glass {
   halfWidthAt(v: number) { return halfWidth(v, this.H); }
 
   /** read the colours from the page's tokens (after a palette swap) and redraw */
-  refreshPalette() { this.readPalette(); this.paintText(); this.render(); }
+  refreshPalette() { this.readPalette(); this.render(); }
   private readPalette() {
     const cs = getComputedStyle(this.el);
-    const g = cs.getPropertyValue("--hg-ground"), l = cs.getPropertyValue("--hg-line");
-    if (g) this.ground = rgb(g); if (l) this.line = rgb(l);
+    const l = cs.getPropertyValue("--hg-line");
+    if (l) this.line = rgb(l);
     this.sand = cs.getPropertyValue("--fan-sand").trim() || "#d6b27b";
     this.lineA = Number(cs.getPropertyValue("--flow-alpha")) || 0.72;
   }
@@ -134,63 +107,11 @@ export class Glass {
   private layout() {
     this.dpr = Math.min(2, devicePixelRatio || 1);
     this.el.style.setProperty("--glass-w", `${this.W}px`); this.el.style.setProperty("--glass-h", `${this.H}px`);
-    for (const c of [this.front, this.back]) if (c) { c.width = Math.round(this.W * this.dpr); c.height = Math.round(this.H * this.dpr); }
+    this.front.width = Math.round(this.W * this.dpr); this.front.height = Math.round(this.H * this.dpr);
   }
 
-  // ---------- behind the glass: the headline, bent
-  private initGL() {
-    if (!this.back) return;
-    const gl = this.back.getContext("webgl2", { antialias: false, premultipliedAlpha: false }); if (!gl) return;
-    const sh = (t: number, src: string) => { const s = gl.createShader(t)!; gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
-    const vs = sh(gl.VERTEX_SHADER, VERT), fs = sh(gl.FRAGMENT_SHADER, FRAG); if (!vs || !fs) return;
-    const p = gl.createProgram()!; gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
-    gl.useProgram(p);
-    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const loc = gl.getAttribLocation(p, "p"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uH", "uGy", "uGround", "uText"]) this.u[n] = gl.getUniformLocation(p, n);
-    this.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
-    this.gl = gl; this.paintText();
-  }
-  /** the text behind the glass, drawn word by word where it sits, into the glass's own coordinates.
-   *  The glass scrolls with the page, so this holds until the layout changes; call it again then. */
-  paintText() {
-    const gl = this.gl; if (!gl || !this.back || !this.o.behind?.length) return;
-    const c = document.createElement("canvas"); c.width = this.back.width; c.height = this.back.height;
-    const x = c.getContext("2d")!, k = this.dpr, box = this.back.getBoundingClientRect();
-    x.setTransform(k, 0, 0, k, 0, 0);
-    for (const el of this.o.behind) {
-      const cs = getComputedStyle(el);
-      x.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-      (x as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
-      x.fillStyle = cs.color; x.textBaseline = "alphabetic";
-      const m = x.measureText("Hg"), asc = m.fontBoundingBoxAscent, desc = m.fontBoundingBoxDescent;
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), range = document.createRange();
-      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        const text = n.textContent ?? "";
-        for (const w of text.matchAll(/\S+/g)) {
-          range.setStart(n, w.index!); range.setEnd(n, w.index! + w[0].length);
-          const r = range.getBoundingClientRect();
-          x.fillText(w[0], r.left - box.left, r.top - box.top + (r.height - asc - desc) / 2 + asc);
-        }
-      }
-    }
-    gl.bindTexture(gl.TEXTURE_2D, this.tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
-    this.drawBack();
-  }
-  private drawBack() {
-    const gl = this.gl; if (!gl || !this.back) return;
-    gl.viewport(0, 0, this.back.width, this.back.height);
-    gl.uniform2f(this.u.uSize, this.W, this.H); gl.uniform1f(this.u.uDpr, this.dpr); gl.uniform1f(this.u.uH, this.H); gl.uniform1f(this.u.uGy, this.gy);
-    gl.uniform3f(this.u.uGround, this.ground[0] / 255, this.ground[1] / 255, this.ground[2] / 255);
-    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex); gl.uniform1i(this.u.uText, 0);
-    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
-  }
+  /** the canvas the glass draws into (the hero layer's source when composited) */
+  get canvas() { return this.front; }
 
   // ---------- the flow
   /** where an item is after a time: a table built once from the speed profile. The speed is inverse to
@@ -239,7 +160,6 @@ export class Glass {
   }
 
   private render() {
-    this.drawBack();
     const x = this.front.getContext("2d")!, k = this.dpr, gy = this.gy;
     x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, this.front.width, this.front.height);
     x.setTransform(k, 0, 0, k, 0, 0); x.translate(this.W / 2, this.H / 2);
@@ -292,6 +212,7 @@ export class Glass {
       for (let q = 0; q <= 240; q++) { const v = -1 + (2 * q) / 240, r = halfWidth(v, this.H); q ? x.lineTo(side * r, v * gy) : x.moveTo(side * r, v * gy); }
       x.stroke();
     }
+    this.o.onFrame?.();
   }
 
   // ---------- the click

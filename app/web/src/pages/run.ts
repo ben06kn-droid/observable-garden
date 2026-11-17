@@ -15,6 +15,7 @@ import { makeScene } from "../scene";
 import { drawRunScale } from "../runscale";
 import type { GardenHandle } from "../garden";
 import { Glass } from "../glass";
+import { Hero } from "../hero";
 import { Fan, type FanRect } from "../fan";
 import { FALLBACK_MODELS, localEndpoint, NOT_SENT, OPENROUTER_MODELS, PROVIDERS, routerModels, type RouterModel } from "../providers";
 import type { AuditResult, InputsInfo, ProviderId, RunEvent, RunUsage, SearchTree } from "../types";
@@ -73,7 +74,7 @@ const phone = () => matchMedia("(max-width: 812px)").matches;
 const keySect = () => document.querySelectorAll<HTMLElement>(".run-form .sect")[2];
 let glass: Glass | null = null, glassPhone: boolean | null = null, glassH = 0;
 function invert(at: { x: number; y: number }) {
-  const swap = () => { root.dataset.hg = root.dataset.hg === "light" ? "dark" : "light"; glass?.refreshPalette(); fan?.refreshPalette(); };
+  const swap = () => { root.dataset.hg = root.dataset.hg === "light" ? "dark" : "light"; glass?.refreshPalette(); fan?.refreshPalette(); hero?.layout(); };
   const d = document as Document & { startViewTransition?: (f: () => void) => { finished: Promise<void> } };
   if (reduceMotion || !d.startViewTransition) { swap(); return; }
   root.style.setProperty("--vx", `${at.x}px`); root.style.setProperty("--vy", `${at.y}px`);
@@ -84,18 +85,29 @@ function buildGlass() {
   const ph = phone(), host = $("hg-host");
   const H = ph ? Math.round(Math.max(420, Math.min(640, innerHeight * 0.76)))
     : Math.round(keySect().getBoundingClientRect().top - host.getBoundingClientRect().top);
-  if (glass && glassPhone === ph && Math.abs(H - glassH) < 24) { placeGlass(); return; }
-  glass?.destroy(); glassPhone = ph; glassH = H;
-  glass = new Glass(host, { height: H, reduce: reduceMotion, behind: ph ? [] : [$("run-h")], onClick: invert });
+  if (glass && glassPhone === ph && Math.abs(H - glassH) < 24) { placeGlass(); hero?.layout(); return; }
+  glass?.destroy(); hero?.destroy(); hero = null; $("main").querySelector(".hero")!.classList.remove("painted");
+  glassPhone = ph; glassH = H;
+  // on a desktop with motion, the hero layer draws the glass and the opening text (the wake bends them)
+  const layered = !ph && !reduceMotion;
+  glass = new Glass(host, { height: H, reduce: reduceMotion, composited: layered, onClick: invert, onFrame: () => hero?.glassFrame() });
   placeGlass();
+  if (layered) {
+    const veil = $("main").querySelector<HTMLElement>(".hero")!;
+    const h = new Hero({ host: $("main"), glass, veil, textBottom: () => document.querySelector(".run-form .sect")!.getBoundingClientRect().top + scrollY,
+      text: () => [...veil.querySelectorAll<HTMLElement>(".label, h1, .lead, .about summary, .about[open] p, .to-demo a")] });
+    if (h.ok) { hero = h; veil.classList.add("painted"); hero.layout(); }
+    else { h.destroy(); glass.el.classList.remove("composited"); }
+  }
 }
+let hero: Hero | null = null;
+document.querySelector(".hero .about")?.addEventListener("toggle", () => hero?.layout());
 /** across: on a desktop its bulbs clear the form's columns (and may be cropped by the page's right edge) */
 function placeGlass() {
   if (!glass) return;
   const m = glass.measures(), host = $("hg-host").getBoundingClientRect();
   const cx = glassPhone ? host.left + host.width / 2 : Math.max($("run-form").getBoundingClientRect().right + m.R + 20, host.left + host.width / 2);
   glass.el.style.setProperty("--g-x", `${(cx - host.left - m.W / 2).toFixed(1)}px`);
-  glass.paintText();
 }
 
 let fan: Fan | null = null, fanPhone: boolean | null = null;

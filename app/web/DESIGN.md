@@ -180,7 +180,14 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     Nothing collects; it runs at one steady rate from the first frame, quicker where the glass is narrow,
     and nothing about it changes with the scroll. White with about one gold stroke in eight; where the
     strokes crowd into the neck each is drawn fainter, so it stays a bundle of lines. The headline's last
-    letters pass through the upper bulb, bent, each colour channel refracted a little differently.
+    letters pass through the upper bulb (drawn by the hero layer, below).
+  - **The hero layer** (src/hero.ts): on a desktop with motion, the opening text (down to 01 Data) and the
+    glass are drawn in one WebGL canvas that scrolls with the page; the page's own text stays, transparent,
+    for selection, search and screen readers. Through the glass the headline is seen gently magnified
+    toward the middle and compressed toward the walls, with no change of height (the letters stay on their
+    line), each colour channel bent a little differently; the glass's flow fades across the letters. The
+    cursor's wake bends the text and the glass as it bends the fan's paths (silver-white, fine red
+    fringes). Phones and reduced motion keep the plain page text and a glass without the lens.
   - **Inversion**: a click on the glass (or Enter) inverts the palette from the click
     (html[data-hg="light"]); both palettes meet AA.
   - **The fan** (src/fan.ts): random-walk hairlines down the whole left of the page, from the top to above
