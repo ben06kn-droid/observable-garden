@@ -11,9 +11,10 @@
 //   back over about 4 s.
 // - Heat, subtle: the horizon line, the glow and the windmill's lower half waver by 1.5px sideways, rising slowly (and
 //   0.6px up and down, without which a level line cannot be seen to waver). Nothing is drawn to show it.
-// - The cursor's tail (src/cursorwake.ts), with the docs page's toned-down settings, in this page's colours: a core of
-//   --wake-core at 85%, --wake-tone on one edge of the flow and --wake-fringe on the other. Where it crosses the horizon,
-//   the glow or the windmill they bend with it. It fades out before the reading sheet's text.
+// - The cursor's tail (src/cursorwake.ts), in the run page's form with the docs page's toned-down fluid: the horizon, the
+//   glow and the windmill bend along it (the windmill's strokes turning --wake-tone with a thin --wake-fringe each side);
+//   over the blank sky a glossy trace (a --wake-core highlight, a --wake-shade shade, a --wake-fringe hairline rim). It
+//   fades out before the reading sheet's text.
 // - Light and scroll: as the page scrolls the glow sinks by 6vh and the whole backdrop darkens by 15%. Nothing else.
 //
 // Phone: a band at the top of the page (the gradient, the glow, a small windmill), no tail. Reduced motion: drawn once,
@@ -28,8 +29,7 @@ const HUB = 0.56;                                                // the hub's he
 const TURN_REST = 14, TURN_WIND = 3, EASE_BACK = 4, NEAR_MILL = 200;
 const HEAT = 1.5, RISE = 10;                                     // px; px/s
 // the docs page's tail: the run page's, toned down (force 60%, swirl 60%, its own motion 75%, life +20%)
-// plus a dye laid thinly along the cursor's path for its pale core: on a dark ground the fluid's own broad core reads as cloud
-const TAIL = { force: 0.6, curl: 22 * 0.6, flow: 0.55 * 0.75, fade: 0.45 * 1.2, dye: 3, dyeWidth: 0.8, dyeFade: 0.45 };
+const TAIL = { force: 0.6, curl: 22 * 0.6, flow: 0.55 * 0.75, fade: 0.45 * 1.2 };
 
 // ---------- the windmill's strokes, in its own frame (units of its height, y up from its foot; sails about the hub)
 interface Stroke { a: [number, number]; c: [number, number]; b: [number, number]; w0: number; w1: number }
@@ -56,7 +56,7 @@ uniform float uLineA;
 uniform vec3 uMill; uniform vec3 uInk;            // foot x, foot y, height; ink
 uniform vec4 uS[${NS * (SEG + 1)}]; uniform vec4 uK[${NS}]; uniform vec4 uBox;
 uniform vec3 uTone, uFringe, uCore, uShade;
-uniform sampler2D uVel, uDye; uniform float uWake; uniform vec4 uText;
+uniform sampler2D uVel; uniform float uWake; uniform vec4 uText;
 out vec4 o;
 ${WAKE_GLSL}
 float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -121,22 +121,22 @@ void main() {
     vec3 n = vec3(p.x / 140.0 + 0.02 * t, (p.y + ${RISE.toFixed(1)} * t) / 50.0, t * 0.25);
     q += band * vec2(${HEAT.toFixed(1)} * (vnoise(n) * 2.0 - 1.0) * 1.6, 0.6 * (vnoise(n + 5.3) * 2.0 - 1.0) * 1.6);
   }
-  // the tail: the docs page's form, in this page's colours; what lies under it bends with it
+  // the tail, in the run page's form: what lies under it bends along the flow (the windmill's strokes turning the tone,
+  // a thin fringe each side across them), and over the blank sky it is a glossy trace (a highlight toward an upper-left
+  // light, a soft shade, a hairline rim). Calm: no tinted contours, no painted core.
   vec2 d = vec2(0.0); float s = 0.0;
   vec2 tq = max(uText.xy - p, p - (uText.xy + uText.zw)); float away = smoothstep(0.0, 24.0, max(tq.x, tq.y));
-  if (uWake > 0.0 && away > 0.0) { d = flowAt(p) * away; s = wakeStrength(d); q -= d * 0.25; }
+  if (uWake > 0.0 && away > 0.0) { d = flowAt(p) * away; s = wakeStrength(d); q -= d * 0.6; }
   vec3 col = backdrop(q);
   if (s > 0.0) {
+    float line = ink(q);
+    col = mix(col, uTone, 0.3 * line * s);   // half the run page's turn: the silhouette stays a silhouette
+    vec2 n = wakeAcross(d + 1e-5, s);
+    float fr = clamp(max(ink(q - n), ink(q + n)) - line, 0.0, 1.0) * s;
+    col = mix(col, uFringe, 0.6 * fr);
     vec2 gr = vec2(length(flowAt(p + vec2(6.0, 0.0))) - length(flowAt(p - vec2(6.0, 0.0))),
                    length(flowAt(p + vec2(0.0, 6.0))) - length(flowAt(p - vec2(0.0, 6.0))));
-    // on a dark ground the docs page's broad core reads as cloud: here only the quick centre of the flow is pale
-    float st = smoothstep(2.0, 20.0, length(d));
-    float core = clamp(texture(uDye, vec2(p.x, uSize.y - p.y) / uSize).r, 0.0, 1.0) * away;   // the thin pale line along the path
-    float slope = smoothstep(0.4, 5.0, length(gr)) * (1.0 - core);
-    float side = d.x * gr.y - d.y * gr.x;
-    col = mix(col, uCore, 0.85 * core);
-    col = mix(col, side > 0.0 ? uTone : uFringe, clamp(0.75 * slope * st * 1.6, 0.0, 0.5));
-    col = wakeTrace(col, gr, s, 1.0, uCore, uShade, uTone, 1.0).rgb;
+    col = wakeTrace(col, gr, s, 1.0 - line, uCore, uShade, uFringe, 1.0).rgb;
   }
   o = vec4(col, 1.0);
 }`;
@@ -172,7 +172,7 @@ export class Dusk {
     this.gl = gl; this.prog = p;
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uTime", "uDark", "uMove", "uG", "uGS", "uGlow", "uGlowP", "uLineA", "uMill", "uInk", "uS", "uK", "uBox", "uTone", "uFringe", "uCore", "uShade", "uVel", "uDye", "uWake", "uText"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uSize", "uDpr", "uTime", "uDark", "uMove", "uG", "uGS", "uGlow", "uGlowP", "uLineA", "uMill", "uInk", "uS", "uK", "uBox", "uTone", "uFringe", "uCore", "uShade", "uVel", "uWake", "uText"]) this.u[n] = gl.getUniformLocation(p, n);
     host.prepend(this.canvas);
     if (!o.reduce && wakeWanted() && !o.small()) {
       const w = new Wake(gl, TAIL);
@@ -266,7 +266,6 @@ export class Dusk {
     gl.uniform3f(u.uTone, ...pal.tone); gl.uniform3f(u.uFringe, ...pal.fringe); gl.uniform3f(u.uCore, ...pal["--wake-core"]); gl.uniform3f(u.uShade, ...pal["--wake-shade"]);
     const w = this.wake, on = !!w?.ready && w.idle < w.still;
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, on ? w!.texture : null); gl.uniform1i(u.uVel, 0); gl.uniform1f(u.uWake, on ? 1 : 0);
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, on ? w!.dyeTexture : null); gl.uniform1i(u.uDye, 1);
     const tx = on ? this.o.text?.() : null; gl.uniform4f(u.uText, tx?.x ?? -1e5, tx?.y ?? -1e5, tx?.w ?? 0, tx?.h ?? 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
