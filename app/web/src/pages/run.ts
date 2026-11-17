@@ -15,6 +15,7 @@ import { makeScene } from "../scene";
 import { drawRunTree } from "../runtree";
 import type { GardenHandle } from "../garden";
 import { Hourglass } from "../hourglass";
+import { Fan, type FanRect } from "../fan";
 import { FALLBACK_MODELS, localEndpoint, NOT_SENT, OPENROUTER_MODELS, PROVIDERS, routerModels, type RouterModel } from "../providers";
 import type { AuditResult, InputsInfo, ProviderId, RunEvent, RunUsage, SearchTree } from "../types";
 
@@ -49,6 +50,7 @@ function draw(t: SearchTree, r: AuditResult | null, _runId: string, attempts = 4
   const wordH = parseFloat(getComputedStyle($("verdict-word")).fontSize) * 0.92 || 90;
   current = drawRunTree(svg, spot, t, r, { gap, wordH, attempts });
   lastDraw = { t, r, step: 0 };
+  relayout();
   return current;
 }
 let treeT = 0;
@@ -90,7 +92,7 @@ function buildGlass() {
   hg = new Hourglass($("hg-host"), { height, reduce: reduceMotion,
     behind: hgPhone || reduceMotion ? [] : [$("run-h")],
     onFlip: (flipped, neck) => {
-      const swap = () => { root.dataset.hg = flipped ? "light" : "dark"; hg?.refreshPalette(); };
+      const swap = () => { root.dataset.hg = flipped ? "light" : "dark"; hg?.refreshPalette(); fan?.refreshPalette(); };
       const d = document as Document & { startViewTransition?: (f: () => void) => { finished: Promise<void> } };
       if (reduceMotion || !d.startViewTransition) { swap(); return; }
       root.style.setProperty("--vx", `${neck.x}px`); root.style.setProperty("--vy", `${neck.y}px`);
@@ -116,12 +118,82 @@ function placeGlass() {
   el.style.setProperty("--hg-dx", `${(cx - cx0).toFixed(1)}px`); el.style.setProperty("--hg-dy", `${dy.toFixed(1)}px`);
   hg.paintText();
 }
-void document.fonts.ready.then(() => { buildGlass(); placeGlass(); });
+// ---- the glass's travel, and the fan of paths (src/fan.ts) that takes over below it
+// On a desktop the glass rides with the scroll from the opening screen down to the rule above 03 Key and
+// comes to rest with its base on it: its column ends there (by the glass's own offset in its sticky box).
+// As it arrives, a thin stream of sand leaves its base, runs along that rule to the left edge and becomes
+// the first sand-toned path of the fan, which fills the left of the page from that rule down to above
+// "Continue to docs", fading before the fields and the tree, dimmed behind text, its last paths resting.
+// On a phone the fan is its own band between the form and the tree, with no lens.
+const keySect = () => document.querySelectorAll<HTMLElement>(".run-form .sect")[2];
+function travel() {
+  const col = document.querySelector<HTMLElement>(".glass-col")!;
+  if (hgPhone || !hg) { col.style.removeProperty("--glass-h"); return; }
+  const m = hg.measures(), stick = $("hg-host").getBoundingClientRect();
+  const dy = parseFloat(hg.el.style.getPropertyValue("--hg-dy")) || 0;
+  const below = stick.height / 2 - dy - m.H / 2;                 // the sticky box's bottom, below the glass's base
+  col.style.setProperty("--glass-h", `${Math.round(keySect().getBoundingClientRect().top - col.getBoundingClientRect().top + below)}px`);
+}
+let fan: Fan | null = null, fanPhone: boolean | null = null, handed = false;
+// the page's shape for the fan, taken once per layout (page px)
+let geom = { top: 0, bottom: 0, col3: 300, stage: [0, 0], tree: Infinity, masks: [] as FanRect[] };
+const TEXT = ".run-form .sect-h, .run-form .fine, .run-form label:not(.file), .run-form .status, .run-form .estimate, .run-form details, .run-go .run-error, "
+  + ".stage-empty, #spot .note, #spot .note-word, .below h2, .below p, .run-log, #record .meaning, #record .reasons-d, #record h2, #record h3, #record .kv, #record pre, "
+  + ".run-notes p, .carry-next .k, .carry-next .to";
+const FIELDS = ".run-form input:not([type=file]), .run-form select, .run-form textarea, .run-form label.file, .run-form button, #record button";
+function measure() {
+  const y = scrollY, rect = (e: Element) => e.getBoundingClientRect();
+  const key = rect(keySect()), next = document.querySelector(".carry-next .k"), stage = rect($("demo"));
+  geom.top = key.top + y - 3; geom.bottom = (next ? rect(next).top : document.documentElement.scrollHeight - y) + y - 32;
+  geom.col3 = rect(keySect().querySelector(".sect-b")!).left - 18;
+  geom.stage = [stage.top + y, stage.bottom + y];
+  const real = svg.querySelector(".real"), tr = real ? rect(real) : null;
+  geom.tree = tr && tr.width > 0 ? tr.left - 16 : Infinity;
+  const pad = 6, list: FanRect[] = [];
+  // behind text: the text's own extent (a grid cell may stretch an element far past its words)
+  const range = document.createRange();
+  for (const e of document.querySelectorAll(TEXT)) {
+    range.selectNodeContents(e); const r = range.getBoundingClientRect();
+    if (r.width && r.height && r.left < geom.col3 + 40) list.push({ x: r.left - pad, y: r.top + y - pad, w: r.width + 2 * pad, h: r.height + 2 * pad, keep: 0.28 });
+  }
+  for (const e of document.querySelectorAll(FIELDS)) { const r = rect(e); if (r.width && r.height && r.left < geom.col3 + 40) list.push({ x: r.left - 4, y: r.top + y - 4, w: r.width + 8, h: r.height + 8, keep: 0 }); }
+  geom.masks = list;
+}
+function buildFan() {
+  const ph = phone();
+  if (fan && fanPhone === ph) { measure(); fan.layout(); checkHand(); return; }
+  fan?.destroy(); fan = null; fanPhone = ph; handed = false;
+  if (ph) {
+    const band = $("fan-band");
+    fan = new Fan(document.body, { reduce: reduceMotion, lens: false, seed: 7,
+      region: () => { const r = band.getBoundingClientRect(); return { top: r.top + scrollY + 1, bottom: r.bottom + scrollY }; },
+      reach: () => innerWidth - 12 });
+    return;
+  }
+  measure();
+  fan = new Fan(document.body, { reduce: reduceMotion, awaitHandover: !reduceMotion, foot: 280, seed: 5,
+    region: () => ({ top: geom.top, bottom: geom.bottom }),
+    reach: (y) => (y >= geom.stage[0] && y <= geom.stage[1] ? Math.max(48, Math.min(geom.col3, geom.tree)) : geom.col3),
+    masks: () => geom.masks });
+  checkHand();
+}
+/** the glass has come to rest on the rule: the stream sets off (and is taken back if the visitor scrolls up) */
+function checkHand() {
+  if (!fan || fanPhone || !hg || reduceMotion) return;
+  const m = hg.measures(), b = hg.el.getBoundingClientRect(), base = b.top + b.height / 2 + m.H / 2, rule = keySect().getBoundingClientRect().top;
+  if (!handed && base >= rule - 2) { handed = true; void fan.handover({ x: b.left + b.width / 2, y: rule + scrollY }); }
+  else if (handed && base < rule - 60) { handed = false; fan.resetHandover(); }
+}
+addEventListener("scroll", checkHand, { passive: true });
+let relayT = 0;
+const relayout = () => { window.clearTimeout(relayT); relayT = window.setTimeout(() => { travel(); buildFan(); }, 150); };
+new ResizeObserver(relayout).observe($("main"));
+void document.fonts.ready.then(() => { buildGlass(); placeGlass(); travel(); buildFan(); });
 let glassT = 0;
 let glassW = innerWidth;
 window.addEventListener("resize", () => { window.clearTimeout(glassT); glassT = window.setTimeout(() => {
   if (hgPhone !== phone() || (!hgPhone && Math.abs(innerWidth - glassW) > 40)) { glassW = innerWidth; hgPhone = null; buildGlass(); }
-  placeGlass();
+  placeGlass(); travel(); buildFan();
 }, 200); });
 
 // ---- inputs: the bundled pair to start, or the visitor's files; checked by the package's loaders

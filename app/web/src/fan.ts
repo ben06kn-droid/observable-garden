@@ -34,11 +34,13 @@ export interface FanOptions {
   seed?: number;
   /** wait for handover() before any path starts: the stream from the hourglass is the fan's first sand */
   awaitHandover?: boolean;
+  /** the last `foot` px of the region: paths that start there slow, stop, and stay */
+  foot?: number;
 }
 
 interface Path {
   y0: number; ys: Float32Array; head: number; delay: number; speed: number;
-  life: number; dying: boolean; sand: number; sandTo: number; minY: number; maxY: number;
+  life: number; dying: boolean; sand: number; sandTo: number; minY: number; maxY: number; rest: boolean;
 }
 
 const DX = 3;                                  // the walk's step, css px
@@ -83,7 +85,7 @@ void main() {
   float keepText = texture(uMask, (vec2(pc.x, py) - uMaskBox.xy) / uMaskBox.zw).g;
   float edgePx = uLensR * (1.0 - u);                       // distance inside the rim, css px
   float disc = clamp(edgePx / 3.0, 0.0, 1.0) * inL;        // a soft edge three pixels wide, no halo outside
-  col = mix(col, uLine, uTintA * clamp(uLensS, 0.0, 1.0) * disc * keepText);
+  col = mix(col, uLine, uTintA * clamp(uLensS, 0.0, 1.0) * disc);   // faint enough to sit under text unnoticed
   float side = max(0.0, dot(normalize(d + 1e-5), normalize(vec2(-0.75, -1.0))));
   float rim = clamp(1.0 - abs(edgePx - 1.6) / 1.1, 0.0, 1.0) * side * side;   // a thin line just inside the rim
   // the glass's edge all round, a hairline, so it reads on either ground; then the bright side
@@ -193,18 +195,20 @@ export class Fan {
     const gl = this.gl; if (!gl) return;
     const r = this.o.region(), k = 0.25, W = Math.ceil(this.vw * k), H = Math.max(1, Math.ceil((r.bottom - r.top) * k));
     const data = new Uint8Array(W * H * 4);
-    const masks = this.o.masks?.() ?? [];
     for (let j = 0; j < H; j++) {
       const y = r.top + (j + 0.5) / k, reach = this.o.reach(y), fade0 = reach * 0.62;
       for (let i = 0; i < W; i++) {
         const x = (i + 0.5) / k;
         // fully drawn until a little over half way, then easing to nothing at the reach
         const t = Math.max(0, Math.min(1, (x - fade0) / Math.max(1, reach - fade0)));
-        let keep = 1 - t * t * (3 - 2 * t), glass = 1;
-        if (x < 6) keep *= x / 6;
-        for (const m of masks) if (x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h) { keep *= m.keep; glass = 0; }
-        const o = (j * W + i) * 4; data[o] = Math.round(keep * 255); data[o + 1] = glass * 255; data[o + 3] = 255;
+        let keep = 1 - t * t * (3 - 2 * t); if (x < 6) keep *= x / 6;
+        const o = (j * W + i) * 4; data[o] = Math.round(keep * 255); data[o + 1] = 255; data[o + 3] = 255;
       }
+    }
+    for (const m of this.o.masks?.() ?? []) {
+      const i0 = Math.max(0, Math.floor(m.x * k)), i1 = Math.min(W - 1, Math.ceil((m.x + m.w) * k));
+      const j0 = Math.max(0, Math.floor((m.y - r.top) * k)), j1 = Math.min(H - 1, Math.ceil((m.y + m.h - r.top) * k));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const o = (j * W + i) * 4; data[o] = Math.round(data[o] * m.keep); data[o + 1] = 0; }
     }
     gl.bindTexture(gl.TEXTURE_2D, this.texM);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
@@ -245,7 +249,8 @@ export class Fan {
         if (opts.down && y < y0 + 2) { y = y0 + 2 + (y0 + 2 - y) * 0.2; v = Math.abs(v) * 0.3; }   // kept below the rule, gently
         ys[i] = y; mn = Math.min(mn, y); mx = Math.max(mx, y);
       }
-      this.paths.push({ y0, ys, head: opts.t ?? 0, delay: opts.sand ? 0 : q * (0.08 + this.rnd() * 0.16), speed: 0.85 + this.rnd() * 0.3,
+      const r = this.o.region(), rest = !!this.o.foot && y0 > r.bottom - this.o.foot && !opts.sand;
+      this.paths.push({ rest, y0, ys, head: opts.t ?? 0, delay: opts.sand ? 0 : q * (0.08 + this.rnd() * 0.16), speed: 0.85 + this.rnd() * 0.3,
         life: 1, dying: false, sand: opts.sand ? 1 : 0, sandTo: opts.sand ? 1 : 0, minY: mn - 2, maxY: mx + 2 });
     }
   }
@@ -267,8 +272,11 @@ export class Fan {
     }
     for (const p of this.paths) {
       if (p.delay > 0) { p.delay -= dt; continue; }
-      p.head = Math.min(p.ys.length - 1, p.head + (this.speed * p.speed * dt) / DX);
-      if (p.head >= p.ys.length - 1 && p.sandTo !== 1) p.dying = true;   // the sand path stays until the tone moves on
+      const n = p.ys.length - 1;
+      // in the foot the paths slow as they go and come to rest, and stay
+      const pace = p.rest ? 0.4 * Math.pow(Math.max(0, 1 - p.head / (n * 0.8)), 0.7) : 1;
+      p.head = Math.min(p.rest ? n * 0.8 : n, p.head + (this.speed * p.speed * pace * dt) / DX);
+      if (!p.rest && p.head >= n && p.sandTo !== 1) p.dying = true;   // the sand path stays until the tone moves on
       if (p.dying) p.life -= dt / 2.4;
       p.sand += (p.sandTo - p.sand) * (1 - Math.exp(-dt / 0.5));
     }
@@ -277,7 +285,7 @@ export class Fan {
     this.nextSand -= dt;
     const sandNow = this.paths.find((p) => p.sandTo === 1);
     if (this.started && (!sandNow || this.nextSand <= 0 || sandNow.dying)) {
-      const cand = this.paths.filter((p) => p.sandTo === 0 && !p.dying && p.delay <= 0 && p.head > 6 && p.head < p.ys.length * 0.45 && p.y0 > b0 && p.y0 < b1);
+      const cand = this.paths.filter((p) => p.sandTo === 0 && !p.dying && !p.rest && p.delay <= 0 && p.head > 6 && p.head < p.ys.length * 0.45 && p.y0 > b0 && p.y0 < b1);
       if (cand.length) {
         if (sandNow) { sandNow.sandTo = 0; sandNow.dying = true; }
         cand[Math.floor(this.rnd() * cand.length)].sandTo = 1;
