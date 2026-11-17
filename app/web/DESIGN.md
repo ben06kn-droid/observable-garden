@@ -168,7 +168,7 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
 - **run**: lukres.dev's near-black (#121416) and off-white (#f0f1fa), hairline rules, and one warm sand
   (#d6b27b) for the glass's sand, the gold paths and the one accent (Start, the submitted branch, focus).
   No glows, halos or gradients. Three things are on the page: the glass, the fan of paths and the form.
-  - **Desktop**: on the 12-column grid. The hero, the form, the run's tree and the moves sit in columns 1–8;
+  - **Desktop**: on the 12-column grid. The hero, the form, the result's scale and the moves sit in columns 1–8;
     each form section (01 Data, 02 Model, 03 Key, 04 Budget) has its name in 1–2 and its fields in 3–8.
   - **The glass** (src/glass.ts): a still hourglass drawn as its two outline curves, no frame. Each wall
     widens from a round neck all the way to its rim (the half width never decreases away from the neck),
@@ -202,13 +202,12 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   - **Scrolling**: native only. Every scroll, wheel and touch listener is passive; the carry's one
     non-passive wheel listener (it swallows the gesture that made a carry) removes itself after 1.2 s.
     Animation runs from animation frames; the glass pauses off screen; nothing forces layout in a scroll.
-  - **Empty tree area**: before a run, it shows the ground line and one line saying what will grow there.
-  - **The run's tree** (src/runtree.ts): the home page's birch (src/birch.ts), one per restart, in columns
-    1–4 of the stage, filling its height. It keeps the home page's rules: a weight hierarchy and no
-    crossings. The submitted evaluation's twig, leaves and branch are in sand. The tree's height is not a
-    Sharpe: the numbers are on a gauge in columns 5–8, scaled from zero. The gauge carries the bar (dotted),
-    the submitted or best-so-far level, and the verdict word large at its top. On a phone the gauge sits
-    above the tree.
+  - **No tree on this page**: the run's tree is drawn on the home and demo pages only. Before a run nothing
+    sits between Start and the moves; during a run a counter above the moves says how far the search has
+    come ("move 5 of 12", then the replay's count); after it, the result area shows the gate's numbers on
+    a scale (src/runscale.ts), drawn large across columns 1–8: the bar (dotted), the submitted level, the
+    p-value line, and the verdict word large at its top. The scale runs from zero (or the lowest value
+    shown) to just above the highest, as before; no number or verdict text changed.
   - **Verdict and moves**: the verdict line is large. The reasons are reading text in a disclosure, open on
     a desktop and closed on a phone. Each move is a block; a refused one has a red rule and a "refused" tag.
 - **docs**: ink on a cool light ground, one ink-blue accent: a page for reading. Privacy, terms, 404 and a
@@ -220,7 +219,7 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
 - **viewer**: a light counterpart to the run page: cool off-white, graphite type, hairlines, one muted
   oxidized-copper green. No illustration, no glow. Reached from Sancho; outside the chain.
 
-The run page and the viewer draw a run's tree without the demo's decoration: `makeScene()` without `decor`
+The viewer draws a run's tree without the demo's decoration (the run page draws only the scale, src/runscale.ts): `makeScene()` without `decor`
 draws the tree, its bar and the verdict written on it, flat, in `--tree`, `--tree-path` and `--tree-bar`.
 
 ## 4. The grid, the type scale, the header
@@ -289,5 +288,5 @@ moves to the footer (which carries the author's line on every page); Contact sta
   Firefox is not yet installed on the development machine; drive it with geckodriver.
 - **Run the equivalence script**, `node scripts/equivalence.mjs --python python3`: the gate, worker, wheel and
   examples were not touched by the revamp, and this confirms it.
-- The empty tree area on the viewer before a run is loaded: settled in its session (the run page's is settled).
+- The empty tree area on the viewer before a run is loaded: settled in its session. (The run page has no tree area: its result is the scale alone.)
 - The docs, Sancho and viewer colours are interim until each page's session.

@@ -12,7 +12,7 @@ import "../chain";
 import { auditId, h, MEANING, reduceMotion, sha256Hex, word } from "../common";
 import { cancelGate, loadGate, type RunOutcome } from "../gate";
 import { makeScene } from "../scene";
-import { drawRunTree } from "../runtree";
+import { drawRunScale } from "../runscale";
 import type { GardenHandle } from "../garden";
 import { Glass } from "../glass";
 import { Fan, type FanRect } from "../fan";
@@ -39,43 +39,26 @@ let panel: ArrayBuffer | null = null, cls = "", panelName = "", className = "", 
 let schemas: Record<string, unknown> = {}, defaultPrompt = "";
 let key = "", running = false;
 
-// ---- the scene (src/scene.ts): the run's tree alone, in this page's tokens
+// ---- the result (src/scene.ts for the notes, src/runscale.ts for the scale): no tree on this page. Before
+// and during a run the result area is hidden; during a run a counter above the moves says how far the
+// search has come; after it, the gate's numbers on a scale, drawn large.
 const scene = makeScene({ throttled: () => running });
-const { two, svg, seed, bed, notes, idleBox, spot } = scene;
-// the run's tree as a birch with the gate's numbers on a gauge beside it (src/runtree.ts); redrawn when
-// the tree area changes size
-let current: GardenHandle | null = null, lastDraw: { t: SearchTree; r: AuditResult | null; step: number } | null = null;
-function draw(t: SearchTree, r: AuditResult | null, _runId: string, attempts = 4): GardenHandle {
-  const gap = parseFloat(getComputedStyle(document.querySelector(".run-grid") ?? document.body).columnGap) || 24;
+const { two, svg, bed, notes, idleBox, spot } = scene;
+let shown: { t: SearchTree; r: AuditResult } | null = null;
+function drawResult(t: SearchTree, r: AuditResult): GardenHandle {
   const wordH = parseFloat(getComputedStyle($("verdict-word")).fontSize) * 0.92 || 90;
-  current = drawRunTree(svg, spot, t, r, { gap, wordH, attempts });
-  lastDraw = { t, r, step: 0 };
+  const g = drawRunScale(svg, spot, t, r, { wordH });
+  shown = { t, r };
   relayout();
-  return current;
+  return g;
 }
-let treeT = 0;
-window.addEventListener("resize", () => { window.clearTimeout(treeT); treeT = window.setTimeout(() => {
-  if (!lastDraw) return;
-  const { t, r } = lastDraw, k = shownSteps;
-  const g = draw(t, r, "", r ? 12 : 4); g.setStep(r ? Number.MAX_SAFE_INTEGER : k);
-  notes.place();
+let scaleT = 0;
+window.addEventListener("resize", () => { window.clearTimeout(scaleT); scaleT = window.setTimeout(() => {
+  if (!shown || two.hidden) return;
+  drawResult(shown.t, shown.r); notes.place();
 }, 250); });
 notes.entered();                                             // no "click a tree" here: the record is below
-let shownSteps = 0;
-/** the tree as the search so far, its new evaluations growing in one by one */
-function grow(t: SearchTree, runId: string, move: string, moves: number) {
-  const g = draw(t, null, runId);
-  seed.classList.add("spent");
-  if (reduceMotion) { g.setStep(g.total); shownSteps = g.total; }
-  else {
-    g.grow(); g.setStep(shownSteps);
-    const from = shownSteps, to = g.total, t0 = performance.now();
-    const tick = (now: number) => { const k = Math.min(to, from + Math.ceil(((now - t0) / 40))); g.setStep(k); if (k < to && current === g) requestAnimationFrame(tick); };
-    requestAnimationFrame(tick);
-    shownSteps = to;
-  }
-  notes.search(g, g.total, move, `${moves} moves · ${t.evaluations} evaluations`);
-}
+const counter = $("move-count");
 
 // ---- the glass (src/glass.ts) and the fan of paths (src/fan.ts): two independent elements
 // The glass: a still hourglass in the right-hand columns from the opening screen down to the rule above
@@ -120,7 +103,7 @@ let fan: Fan | null = null, fanPhone: boolean | null = null;
 let geom = { bottom: 0, right: 0, glass: [0, 0, Infinity] as [number, number, number], masks: [] as FanRect[] };
 const TEXT = ".hero .label, .hero h1, .hero .lead, .hero .about, .hero .to-demo, "
   + ".run-form .sect-h, .run-form .fine, .run-form label:not(.file), .run-form .status, .run-form .estimate, .run-form details, .run-go .run-error, "
-  + ".stage-empty, #spot .note, #spot .note-word, .below h2, .below p, .run-log, #record .meaning, #record .reasons-d, #record h2, #record h3, #record .kv, #record pre, "
+  + ".move-count, #spot .note, #spot .note-word, .below h2, .below p, .run-log, #record .meaning, #record .reasons-d, #record h2, #record h3, #record .kv, #record pre, "
   + ".run-notes p, .carry-next .k, .carry-next .to";
 const FIELDS = ".run-form input:not([type=file]), .run-form select, .run-form textarea, .run-form label.file, .run-form button, #record button";
 function measure() {
@@ -310,13 +293,13 @@ async function start() {
   key = fKey.value.trim();
   if (!key && p.keyRequired) { errorBox.textContent = "Enter your API key to start."; fKey.focus(); return; }
   running = true; refresh();
-  two.classList.add("has-run");
   $("record").hidden = true; logList.replaceChildren(); tokens.textContent = "Starting…";
-  runId = `run-${Date.now().toString(36)}`; shownSteps = 0;
-  svg.replaceChildren(); idleBox(); lastDraw = null; current = null; notes.clear(); notes.entered(); seed.classList.remove("spent");
+  runId = `run-${Date.now().toString(36)}`;
+  two.hidden = true; svg.replaceChildren(); idleBox(); shown = null; notes.clear(); notes.entered();
   bed.reset(runId); bed.start();
-  two.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
   const moves = Math.max(1, Math.min(60, Math.round(Number(fMoves.value) || 20)));
+  counter.textContent = `move 0 of ${moves}`; counter.hidden = false;
+  $("log-h").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
   const B = Math.max(100, Math.min(10000, Math.round(Number(fB.value) || 2000)));
   const effort = fEffort.value === NOT_SENT ? undefined : fEffort.value;
   const maxOut = p.id === "openrouter" ? routed.find((m) => m.id === model)?.maxOut : undefined;
@@ -324,23 +307,23 @@ async function start() {
                  system: fPrompt.value.trim() && fPrompt.value !== defaultPrompt ? fPrompt.value : undefined,
                  max_tokens: maxOut ? Math.min(16000, maxOut) : undefined };
   const run = { provider: p.id, label: p.label, effort: effort ?? NOT_SENT, host: where.host };
-  let lastMove = "", nMoves = 0, served = model, out: RunOutcome;
+  let nMoves = 0, served = model, out: RunOutcome;
   try {
     const gate = await loadGate();
     const runKey = key;
     out = await gate.run({ panel: panel.slice(0), cls, key: runKey, provider: p.id, url: where.url, opts, B, seed: SEED }, {
       onEvent: (ev: RunEvent) => {
         if (ev.type === "move") {
-          if (ev.tool) { lastMove = ev.tool; nMoves++; }
+          if (ev.tool) { nMoves++; counter.textContent = `move ${nMoves} of ${moves}`; }
           logLine("move", [h("b", null, ev.tool ?? "(no move)"), " ", Object.keys(ev.args).length ? JSON.stringify(ev.args) : "", ev.text ? h("span", "say", ` ${ev.text}`) : ""]);
         } else if (ev.type === "result") {
           logLine(ev.last.refused ? "refused" : "result", ev.last.refused ? [h("span", "tag", "refused"), ev.last.refused] : [ev.last.text ?? ""]);
         } else if (ev.type === "usage") {
           if (ev.model) served = ev.model;
           tokens.textContent = fmtUsage(ev.usage);
-        } else if (ev.type === "tree") grow(ev.tree, runId, lastMove, nMoves);
+        }
       },
-      onProgress: (p) => { if (p.stage === "replay") notes.replay(`replay · ${p.done.toLocaleString("en")} of ${p.total.toLocaleString("en")}`); },
+      onProgress: (p) => { if (p.stage === "replay") counter.textContent = `replay · ${p.done.toLocaleString("en")} of ${p.total.toLocaleString("en")}`; },
     });
   } catch (e) {
     const msg = String((e as Error).message ?? e);
@@ -355,7 +338,8 @@ async function start() {
   if (!out.result) { finish(`The gate refused the log: ${out.refused ?? "no reason given"}`); return; }
   const r = out.result, t = out.tree;
   bed.finish();
-  if (t) { const g = draw(t, r, runId, 12); g.setStep(Number.MAX_SAFE_INTEGER); notes.verdict(g, r, t.evaluations, SEED); }
+  counter.hidden = true;
+  if (t) { two.hidden = false; const g = drawResult(t, r); notes.verdict(g, r, t.evaluations, SEED); }
   // the prompt actually sent: the adapter's own, or the visitor's edit (a different search)
   const prompt = { edited: opts.system !== undefined, sha256: await sha256Hex(opts.system ?? defaultPrompt) };
   await showRecord(r, out.log as Record<string, unknown>, model, served, moves, prompt, run);
@@ -367,7 +351,7 @@ function finish(message: string, usage?: RunUsage | null) {
   if (usage) tokens.textContent = fmtUsage(usage);
   errorBox.textContent = message;
   logLine("refused", [h("span", "tag", "stopped"), message]);
-  bed.finish();
+  bed.finish(); counter.hidden = true;
 }
 
 // ---- the result: the record, the CLI command, the downloads, the share link
