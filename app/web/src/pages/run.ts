@@ -79,7 +79,7 @@ function grow(t: SearchTree, runId: string, move: string, moves: number) {
 
 // ---- the glass (src/glass.ts) and the fan of paths (src/fan.ts): two independent elements
 // The glass: a still hourglass in the right-hand columns from the opening screen down to the rule above
-// 03 Key, scrolling with the page; its sand drains as the reader comes down that stretch. A click on it
+// 03 Key, scrolling with the page, an abstract flow pouring through it at one steady rate. A click on it
 // inverts the page's palette, spreading from where it was clicked. The headline's last letters pass
 // through its upper bulb, bent. On a phone it is a glass of its own size under the headline.
 // The fan: random paths down the whole left of the page, from the top to above "Continue to docs",
@@ -104,7 +104,7 @@ function buildGlass() {
   if (glass && glassPhone === ph && Math.abs(H - glassH) < 24) { placeGlass(); return; }
   glass?.destroy(); glassPhone = ph; glassH = H;
   glass = new Glass(host, { height: H, reduce: reduceMotion, behind: ph ? [] : [$("run-h")], onClick: invert });
-  placeGlass(); progress();
+  placeGlass();
 }
 /** across: on a desktop its bulbs clear the form's columns (and may be cropped by the page's right edge) */
 function placeGlass() {
@@ -114,8 +114,6 @@ function placeGlass() {
   glass.el.style.setProperty("--g-x", `${(cx - host.left - m.W / 2).toFixed(1)}px`);
   glass.paintText();
 }
-function progress() { if (!glass) return; const key = keySect().getBoundingClientRect().top + scrollY; glass.setProgress(scrollY / Math.max(1, key - innerHeight * 0.5)); }
-addEventListener("scroll", progress, { passive: true });
 
 let fan: Fan | null = null, fanPhone: boolean | null = null;
 // the page's shape for the fan, taken once per layout (page px)
@@ -132,11 +130,11 @@ function measure() {
   if (glass && !glassPhone) { const g = rect(glass.el), m = glass.measures(); geom.glass = [g.top + y, g.bottom + y, g.left + g.width / 2 - m.R - 28]; }
   else geom.glass = [0, 0, Infinity];
   const list: FanRect[] = [], range = document.createRange(), pad = 6;
-  // behind text: the text's own extent (a grid cell may stretch an element far past its words); AA holds
-  // at a tenth of the lines' strength, for the faintest text over a gold path, in both palettes
+  // behind text: the text's own extent (a grid cell may stretch an element far past its words). At 6% of
+  // the lines' strength, every text tone keeps 7.8:1 or more over a gold path, in both palettes
   for (const e of document.querySelectorAll(TEXT)) {
     range.selectNodeContents(e); const r = range.getBoundingClientRect();
-    if (r.width && r.height) list.push({ x: r.left - pad, y: r.top + y - pad, w: r.width + 2 * pad, h: r.height + 2 * pad, keep: 0.1 });
+    if (r.width && r.height) list.push({ x: r.left - pad, y: r.top + y - pad, w: r.width + 2 * pad, h: r.height + 2 * pad, keep: 0.06 });
   }
   const tree = svg.querySelector(".real"); if (tree) { const r = rect(tree); if (r.width) list.push({ x: r.left - 10, y: r.top + y - 10, w: r.width + 20, h: r.height + 20, keep: 0.15 }); }
   for (const e of document.querySelectorAll(FIELDS)) { const r = rect(e); if (r.width && r.height) list.push({ x: r.left - 6, y: r.top + y - 6, w: r.width + 12, h: r.height + 12, keep: 0 }); }
