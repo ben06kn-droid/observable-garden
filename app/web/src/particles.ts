@@ -31,6 +31,8 @@ export interface Look {
   spin: number;                    // rad/s of turning, at most
   wind: number;                    // the cursor's and the gusts' push, as a fraction of the default
   rest: number;                    // how far a piece lying on the ground is foreshortened (1 = not at all)
+  kick?: number;                   // the cursor's push alone, when not `wind`
+  lift?: number;                   // px/s: how fast the cursor can send a piece up (off the ground too), when not the default
 }
 
 const BIN = 8, THICK = 2.2, R = 90, PUFF_LIFE = 0.3, VX_MAX = 150, VY_UP = 110;
@@ -126,7 +128,7 @@ export class Field {
   }
 
   step(dt: number, t: number, wind: Wind) {
-    const L = this.o.look, gain = L?.wind ?? 1, g = wind.gust(t) * gain;
+    const L = this.o.look, gain = L?.kick ?? L?.wind ?? 1, g = wind.gust(t) * (L?.wind ?? 1), up = L?.lift ?? VY_UP;
     const out: Piece[] = [];
     for (const p of this.air) {
       let [ax, ay] = wind.at(p.x, p.y, this.o.box); ax *= gain; ay *= gain;
@@ -135,7 +137,7 @@ export class Field {
       const pushed = Math.abs(p.vx - sway - g) > 30;       // a push is damped fast; the branch's drift slowly
       p.vx += ((sway + g) - p.vx) * (pushed ? 1 - Math.exp(-3 * dt) : k * 0.35) + ax * dt;
       p.vy += (p.vt - p.vy) * k + ay * dt;
-      p.vx = Math.max(-VX_MAX, Math.min(VX_MAX, p.vx)); p.vy = Math.max(-VY_UP, p.vy);
+      p.vx = Math.max(-VX_MAX, Math.min(VX_MAX, p.vx)); p.vy = Math.max(-up, p.vy);
       p.x += p.vx * dt; p.y += p.vy * dt;
       if (ax && (p.x < 8 || p.x > this.W - 8)) { p.x = Math.max(8, Math.min(this.W - 8, p.x)); p.vx = -p.vx * 0.3; }   // the wind never takes one off the page
       if (p.y < 4) { p.y = 4; p.vy = Math.max(0, p.vy); }
@@ -150,7 +152,8 @@ export class Field {
     if (wind.active()) for (const p of this.rest.slice()) {
       const [ax, ay] = wind.at(p.x, p.y, this.o.box).map((v) => v * gain);
       const dv = Math.hypot(ax, ay) * dt;
-      if (dv > 9) this.lift(p, Math.max(-VX_MAX, Math.min(VX_MAX, ax * dt * 1.2)), Math.max(-VY_UP, -Math.abs(ay * dt) - dv * 0.6));
+      if (dv > 9) this.lift(p, Math.max(-VX_MAX, Math.min(VX_MAX, ax * dt * 1.2)),
+        L?.lift ? -Math.min(up, 70 + dv * 5) * (0.75 + 0.25 * rnd()) : Math.max(-VY_UP, -Math.abs(ay * dt) - dv * 0.6));   // with a lift: sent up into the air
     }
     if (g !== 0 && wind.gustKick() && this.rest.length) for (let i = 0; i < 2; i++) { const p = this.rest[Math.floor(rnd() * this.rest.length)]; this.lift(p, g * 1.5, -(40 + rnd() * 70)); }
     // keep the air full: new pieces leave the branches
@@ -221,7 +224,9 @@ export class Wind {
   gustKick() { return rnd() < 0.04; }
 }
 
-export interface LifeOptions { fields: Field[]; paused: () => boolean; throttled: () => boolean; reduce: boolean; overlay?: () => void }
+export interface LifeOptions { fields: Field[]; paused: () => boolean; throttled: () => boolean; reduce: boolean; overlay?: () => void;
+  /** false: the page feeds the wind itself (the home page, from the cursor's wake: its timing and dose) */
+  cursor?: boolean }
 
 /** One loop for both pages: input to wind, then each visible field steps and draws. */
 export function startLife(o: LifeOptions) {
@@ -239,9 +244,11 @@ export function startLife(o: LifeOptions) {
     if (lx >= 0 && t > lt) { const dt = Math.max(0.008, t - lt); wind.add(x, y, (x - lx) / dt, (y - ly) / dt); }
     lx = x; ly = y; lt = t;
   };
-  window.addEventListener("pointermove", (e) => { if (!o.paused()) move(e.clientX, e.clientY); }, { passive: true });
-  window.addEventListener("touchmove", (e) => { const t = e.touches[0]; if (t && !o.paused()) move(t.clientX, t.clientY); }, { passive: true });
-  window.addEventListener("touchend", () => { lx = -1; }, { passive: true });
+  if (o.cursor !== false) {
+    window.addEventListener("pointermove", (e) => { if (!o.paused()) move(e.clientX, e.clientY); }, { passive: true });
+    window.addEventListener("touchmove", (e) => { const t = e.touches[0]; if (t && !o.paused()) move(t.clientX, t.clientY); }, { passive: true });
+    window.addEventListener("touchend", () => { lx = -1; }, { passive: true });
+  }
 
   const gust = () => { if (!document.hidden) wind.startGust(performance.now() / 1000); window.setTimeout(gust, 30000 + rnd() * 30000); };
   window.setTimeout(gust, 30000 + rnd() * 30000);

@@ -95,6 +95,15 @@ void main() {
   o = vec4(texture(uVel, uv).xy - 0.5 * vec2(r - l, t - b), 0.0, 1.0);
 }`;
 
+// the dye (a page that draws the wake as a trail): carried by the fluid at its full speed, fading
+const DYE_ADVECT = HEAD + `
+uniform sampler2D uVel, uSrc; uniform float uDt, uFade; uniform vec2 uView;
+void main() {
+  vec2 uv = gl_FragCoord.xy * uTex;
+  vec2 v = texture(uVel, uv).xy;                     // px/s, GL frame
+  o = vec4(texture(uSrc, uv - uDt * v / uView).r * uFade, 0.0, 0.0, 1.0);
+}`;
+
 interface Target { tex: WebGLTexture; fb: WebGLFramebuffer }
 interface Prog { p: WebGLProgram; u: Record<string, WebGLUniformLocation | null> }
 
@@ -103,6 +112,7 @@ const DELAY = 70;               // ms the wake follows the pointer by: a deliber
 const FLOW = 0.55;              // how fast the fluid carries itself (1 = its own velocity): slower, more liquid
 const FADE = 0.45;              // its fade's time constant, s (gone in about a second and a half)
 const TRAIL = 1.8;              // each push reaches this far back along the pointer's path: a longer trail
+const DYE_FADE = 0.55;           // the dye's fade, s: the trail is gone well before the fluid is still
 export const STILL = 1.8;       // s after the last push: the fluid is still, and nothing is stepped or drawn
 
 /** a layer's own scale for the fluid; the push (its delay, its dose for the cursor's speed) is the same everywhere */
@@ -113,6 +123,12 @@ export interface WakeScale {
   flow?: number;
   /** how strongly small curls are kept alive (22) */
   curl?: number;
+  /** a dye laid along the cursor's path and carried by the fluid (the trail a page draws): css px per
+   *  dye texel, finer than the fluid. Off by default. */
+  dye?: number;
+  /** how fast the fluid carries the dye, as a fraction of its velocity (0.1): its velocity is scaled to
+   *  bend strokes, far quicker than a trail should drift */
+  dyeFlow?: number;
 }
 
 export class Wake {
@@ -124,18 +140,22 @@ export class Wake {
   /** pointer movement still waiting to be pushed in (the wake's delay) */
   get pending() { return this.queue.length > 0; }
 
-  private cell: number; private flow: number; private eps: number;
+  private cell: number; private flow: number; private eps: number; private dyeCell: number; private dyeFlow: number;
+  private dye: [Target, Target] | null = null; private dw = 0; private dh = 0; private vw = 1; private vh = 1;
+  /** each stretch of the cursor's path as it is pushed in (after the delay): viewport css px, its velocity
+   *  in px/s and its dose (0-1, how strongly it stirs the fluid) */
+  onPush: ((x: number, y: number, vx: number, vy: number, dose: number) => void) | null = null;
   constructor(gl: WebGL2RenderingContext, scale: WakeScale = {}) {
-    this.gl = gl; this.cell = scale.cell ?? CELL; this.flow = scale.flow ?? FLOW; this.eps = scale.curl ?? 22;
+    this.gl = gl; this.cell = scale.cell ?? CELL; this.flow = scale.flow ?? FLOW; this.eps = scale.curl ?? 22; this.dyeCell = scale.dye ?? 0; this.dyeFlow = scale.dyeFlow ?? 0.1;
     if (!gl.getExtension("EXT_color_buffer_float")) return;
     const sh = (t: number, src: string) => { const s = gl.createShader(t)!; gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
     const vs = sh(gl.VERTEX_SHADER, VERT); if (!vs) return;
-    for (const [name, src] of Object.entries({ advect: ADVECT, splat: SPLAT, curl: CURL, vort: VORT, div: DIV, pres: PRES, grad: GRAD })) {
+    for (const [name, src] of Object.entries({ advect: ADVECT, splat: SPLAT, curl: CURL, vort: VORT, div: DIV, pres: PRES, grad: GRAD, ...(this.dyeCell ? { dyeAdvect: DYE_ADVECT } : {}) })) {
       const fs = sh(gl.FRAGMENT_SHADER, src); if (!fs) return;
       const p = gl.createProgram()!; gl.attachShader(p, vs); gl.attachShader(p, fs); gl.bindAttribLocation(p, 0, "p"); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
       const u: Record<string, WebGLUniformLocation | null> = {};
-      for (const n of ["uTex", "uVel", "uDt", "uCell", "uFade", "uA", "uB", "uForce", "uR", "uCurl", "uEps", "uP", "uDiv"]) u[n] = gl.getUniformLocation(p, n);
+      for (const n of ["uTex", "uVel", "uDt", "uCell", "uFade", "uA", "uB", "uForce", "uR", "uCurl", "uEps", "uP", "uDiv", "uSrc", "uView"]) u[n] = gl.getUniformLocation(p, n);
       this.progs[name] = { p, u };
     }
     this.ok = true;
@@ -145,14 +165,17 @@ export class Wake {
   get supported() { return this.ok; }
   /** the velocity texture, for the composite */
   get texture() { return this.vel?.[0].tex ?? null; }
+  /** the dye texture (covers the viewport, GL frame), when the layer asked for one */
+  get dyeTexture() { return this.dye?.[0].tex ?? null; }
 
   /** size the simulation to the viewport (css px) */
   resize(vw: number, vh: number) {
     if (!this.ok) return;
     const gl = this.gl, w = Math.max(8, Math.ceil(vw / this.cell)), h = Math.max(8, Math.ceil(vh / this.cell));
+    this.vw = vw; this.vh = vh;
     if (w === this.w && h === this.h) return;
     this.w = w; this.h = h;
-    const target = (fmt: number, inner: number): Target => {
+    const target = (fmt: number, inner: number, w = this.w, h = this.h): Target => {
       const tex = gl.createTexture()!; gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, inner, w, h, 0, fmt, gl.HALF_FLOAT, null);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -165,6 +188,10 @@ export class Wake {
     this.vel = [target(gl.RG, gl.RG16F), target(gl.RG, gl.RG16F)];
     this.pres = [target(gl.RED, gl.R16F), target(gl.RED, gl.R16F)];
     this.div = target(gl.RED, gl.R16F); this.curl = target(gl.RED, gl.R16F);
+    if (this.dyeCell) {
+      this.dw = Math.max(8, Math.ceil(vw / this.dyeCell)); this.dh = Math.max(8, Math.ceil(vh / this.dyeCell));
+      this.dye = [target(gl.RED, gl.R16F, this.dw, this.dh), target(gl.RED, gl.R16F, this.dw, this.dh)];
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) this.ok = false;
   }
@@ -175,10 +202,10 @@ export class Wake {
   lift() { this.queue.push({ t: performance.now(), x: NaN, y: NaN }); }
   private queue: { t: number; x: number; y: number }[] = []; private prev: { t: number; x: number; y: number } | null = null;
 
-  private pass(name: string, out: Target, set: (u: Prog["u"]) => void) {
+  private pass(name: string, out: Target, set: (u: Prog["u"]) => void, w = this.w, h = this.h) {
     const gl = this.gl, pr = this.progs[name];
-    gl.useProgram(pr.p); gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb); gl.viewport(0, 0, this.w, this.h);
-    gl.uniform2f(pr.u.uTex, 1 / this.w, 1 / this.h);
+    gl.useProgram(pr.p); gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb); gl.viewport(0, 0, w, h);
+    gl.uniform2f(pr.u.uTex, 1 / w, 1 / h);
     set(pr.u);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
@@ -213,6 +240,18 @@ export class Wake {
         gl.uniform2f(u.uForce, dx * k, -dy * k); gl.uniform1f(u.uR, 4 + 6 * Math.sqrt(dose));
       });
       swap(); this.idle = 0; pushes++;
+      // the dye: a thin line along this stretch of the path, as strong as the push
+      const D = this.dye;
+      if (D) {
+        const c = this.dyeCell, P0: [number, number] = [a.x / c, (vh - a.y) / c], P1: [number, number] = [q.x / c, (vh - q.y) / c];
+        this.pass("splat", D[1], (u) => {
+          gl.uniform1i(u.uVel, this.bind(0, D[0]));
+          gl.uniform2f(u.uA, P0[0], P0[1]); gl.uniform2f(u.uB, P1[0], P1[1]);
+          gl.uniform2f(u.uForce, 0.45 + 0.9 * Math.sqrt(dose), 0); gl.uniform1f(u.uR, 0.7);
+        }, this.dw, this.dh);
+        const t = D[0]; D[0] = D[1]; D[1] = t;
+      }
+      this.onPush?.(q.x, q.y, (dx / ms) * 1000, (dy / ms) * 1000, dose);
     }
     if (this.idle > STILL) return;          // still: nothing to step
     // curls, kept alive
@@ -230,6 +269,12 @@ export class Wake {
     // carried along by itself, slowly (FLOW), and fading over FADE seconds
     this.pass("advect", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1f(u.uDt, dt * this.flow); gl.uniform1f(u.uCell, this.cell); gl.uniform1f(u.uFade, Math.exp(-dt / FADE)); });
     swap();
+    // the dye, carried by the fluid (its wisps curl where the fluid curls) and fading
+    const D = this.dye;
+    if (D) {
+      this.pass("dyeAdvect", D[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uSrc, this.bind(1, D[0])); gl.uniform1f(u.uDt, dt * this.dyeFlow); gl.uniform1f(u.uFade, Math.exp(-dt / DYE_FADE)); gl.uniform2f(u.uView, this.vw, this.vh); }, this.dw, this.dh);
+      const t = D[0]; D[0] = D[1]; D[1] = t;
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 }
@@ -241,13 +286,13 @@ export function rgb(s: string): RGB {
   if (h) { if (h.length === 3) h = h.replace(/./g, "$&$&"); const n = parseInt(h, 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
   const r = s.match(/(\d+(\.\d+)?)/g); return r ? [Number(r[0]) / 255, Number(r[1]) / 255, Number(r[2]) / 255] : [0, 0, 0];
 }
-export interface WakeColours { tone: RGB; fringe: RGB; fringeA: number; toneMix: number; gloss: number; hi: RGB; shade: RGB }
+export interface WakeColours { tone: RGB; fringe: RGB; fringeA: number; toneMix: number; gloss: number; hi: RGB; shade: RGB; trail: number }
 /** the wake's colours, from the theme tokens in force at `el` */
 export function wakeColours(el: Element): WakeColours {
   const cs = getComputedStyle(el), v = (k: string) => cs.getPropertyValue(k).trim();
   const num = (k: string, d: number) => { const x = v(k); return x === "" || Number.isNaN(Number(x)) ? d : Number(x); };
   return { tone: rgb(v("--wake-tone") || "#dce2ef"), fringe: rgb(v("--wake-fringe") || "#e5484d"), fringeA: num("--wake-fringe-alpha", 1),
-    toneMix: num("--wake-tone-mix", 1), gloss: num("--wake-gloss", 1), hi: rgb(v("--wake-hi") || "#ffffff"), shade: rgb(v("--wake-shade") || "#000000") };
+    toneMix: num("--wake-tone-mix", 1), gloss: num("--wake-gloss", 1), hi: rgb(v("--wake-hi") || "#ffffff"), shade: rgb(v("--wake-shade") || "#000000"), trail: num("--wake-trail", 0) };
 }
 
 // ---------- the shader's shared part: included by every layer's composite
@@ -336,8 +381,12 @@ export interface WakeLayerOptions {
   /** which parts the wake bends (and fringes); the others stay exactly where they are and the trace
    *  passes over them. All of them by default. */
   bends?: (p: Part) => boolean;
-  /** the fluid's scale on this page (the run page's by default) */
+  /** the fluid's scale on this page (the run page's by default); with `dye`, the wake is also drawn as a
+   *  trail (--wake-trail its strength): a thin line along the cursor's path whose wisps curl off with the
+   *  fluid, --wake-hi at its core and --wake-fringe at its edges */
   scale?: WakeScale;
+  /** each stretch of the cursor's path as the fluid takes it in (after the delay, with its dose) */
+  onPush?: (x: number, y: number, vx: number, vy: number, dose: number) => void;
 }
 
 const MAXL = 6;
@@ -349,6 +398,7 @@ uniform sampler2D uL0, uL1, uL2, uL3, uL4, uL5; uniform vec4 uLB[${MAXL}]; unifo
 uniform float uBend[${MAXL}];                     // 1: the wake bends that part; 0: it stays put
 uniform sampler2D uGround, uKeep;                 // the ground; where the wake may act (r)
 uniform vec3 uTone, uFringe, uHi, uShade; uniform float uFringeA, uToneMix, uGloss;
+uniform sampler2D uDye; uniform float uTrail;     // the trail's dye (viewport, GL frame) and its strength
 out vec4 o;
 ${WAKE_GLSL}
 // (a sampler array may only be indexed by a constant in GLSL ES 3.00, so the six are named)
@@ -368,11 +418,26 @@ vec3 groundAt(vec2 p) { return texture(uGround, p / uSize).rgb; }
 // how much of a bending stroke is at p (read from p - d): its difference from the ground there
 float ink(vec2 p, vec2 d) { vec4 c = layer(p, d, true); vec3 g = groundAt(p); return clamp(length(c.rgb + g * (1.0 - c.a) - g) * 3.0, 0.0, 1.0); }
 vec2 flowAt(vec2 p) { return wakeFlow(uVel, uHostVp + p, uView); }
+float dyeAt(vec2 p) { vec2 vp = uHostVp + p; return texture(uDye, vec2(vp.x, uView.y - vp.y) / uView).r; }
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uSize.y * uDpr - gl_FragCoord.y) / uDpr;
   vec2 d = flowAt(p);
-  float s = wakeStrength(d) * texture(uKeep, p / uSize).r;
-  if (s <= 0.0) { o = vec4(0.0); return; }
+  float keep = texture(uKeep, p / uSize).r;
+  float s = wakeStrength(d) * keep;
+  // the trail: its dye read as a glossy surface. Its body is the fringe colour, deepening to the shade on
+  // the side away from a light at the upper left; a small glint of --wake-hi along the lit edge.
+  float q = 0.0, ta = 0.0; vec3 tc = uFringe;
+  if (uTrail > 0.0) {
+    q = dyeAt(p);
+    vec2 gq = vec2(dyeAt(p + vec2(1.5, 0.0)) - dyeAt(p - vec2(1.5, 0.0)), dyeAt(p + vec2(0.0, 1.5)) - dyeAt(p - vec2(0.0, 1.5)));
+    float slope = smoothstep(0.01, 0.12, length(gq));
+    float face = dot(-gq / (length(gq) + 1e-4), normalize(vec2(-0.6, -0.8)));   // 1: facing the light
+    float glint = pow(max(face, 0.0), 6.0) * slope, dark = max(-face, 0.0) * slope;
+    tc = mix(uFringe, uShade, 0.55 * dark);
+    tc = mix(tc, uHi, 0.85 * glint);
+    ta = clamp(smoothstep(0.12, 0.42, q) * (0.62 + 0.38 * glint), 0.0, 1.0) * keep * uTrail;
+  }
+  if (s <= 0.0 || uN == 0) { o = vec4(tc * ta, ta); return; }
   vec3 g = groundAt(p);
   vec4 c = layer(p, d, false);
   vec3 col = c.rgb + g * (1.0 - c.a);
@@ -386,7 +451,8 @@ void main() {
                    length(flowAt(p + vec2(0.0, 6.0))) - length(flowAt(p - vec2(0.0, 6.0))));
     col = wakeTrace(col, gr, s, (1.0 - line) * uGloss, uHi, uShade, uFringe, uFringeA).rgb;
   }
-  float a = clamp(s * 4.0, 0.0, 1.0);
+  col = mix(col, tc, ta);
+  float a = max(clamp(s * 4.0, 0.0, 1.0), ta);
   o = vec4(col * a, a);
 }`;
 
@@ -416,14 +482,15 @@ export class WakeLayer {
     gl.useProgram(p);
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uHostVp", "uView", "uVel", "uL0", "uL1", "uL2", "uL3", "uL4", "uL5", "uLB", "uBend", "uN", "uGround", "uKeep", "uTone", "uFringe", "uHi", "uShade", "uFringeA", "uToneMix", "uGloss"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uSize", "uDpr", "uHostVp", "uView", "uVel", "uL0", "uL1", "uL2", "uL3", "uL4", "uL5", "uLB", "uBend", "uN", "uGround", "uKeep", "uTone", "uFringe", "uHi", "uShade", "uFringeA", "uToneMix", "uGloss", "uDye", "uTrail"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture()!; gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
     for (let i = 0; i < MAXL; i++) this.texL.push(tex());
     this.texG = tex(); this.texK = tex();
     for (let i = 0; i < MAXL; i++) gl.uniform1i(this.u[`uL${i}`], i);   // the parts on units 0-5
-    gl.uniform1i(this.u.uGround, 6); gl.uniform1i(this.u.uKeep, 7); gl.uniform1i(this.u.uVel, 8);
+    gl.uniform1i(this.u.uGround, 6); gl.uniform1i(this.u.uKeep, 7); gl.uniform1i(this.u.uVel, 8); gl.uniform1i(this.u.uDye, 9);
+    wake.onPush = o.onPush ?? null;
     o.host.insertBefore(cv, o.before?.() ?? null);
     this.visible = onScreen(o.host);
     followPointer((x, y) => { wake.move(x, y); this.kick(); }, () => wake.lift(), () => this.visible());
@@ -525,11 +592,12 @@ export class WakeLayer {
     gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, this.texG);
     gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, this.texK);
     gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, this.wake!.texture);
+    gl.activeTexture(gl.TEXTURE9); gl.bindTexture(gl.TEXTURE_2D, this.wake!.dyeTexture);
     gl.uniform4fv(this.u.uLB, boxes); gl.uniform1fv(this.u.uBend, bend); gl.uniform1i(this.u.uN, n);
     gl.uniform2f(this.u.uSize, this.w, this.h); gl.uniform1f(this.u.uDpr, this.dpr);
     gl.uniform2f(this.u.uHostVp, hb.left, hb.top); gl.uniform2f(this.u.uView, innerWidth, innerHeight);
     gl.uniform3f(this.u.uTone, ...col.tone); gl.uniform3f(this.u.uFringe, ...col.fringe); gl.uniform3f(this.u.uHi, ...col.hi); gl.uniform3f(this.u.uShade, ...col.shade);
-    gl.uniform1f(this.u.uFringeA, col.fringeA); gl.uniform1f(this.u.uToneMix, col.toneMix); gl.uniform1f(this.u.uGloss, col.gloss);
+    gl.uniform1f(this.u.uFringeA, col.fringeA); gl.uniform1f(this.u.uToneMix, col.toneMix); gl.uniform1f(this.u.uGloss, col.gloss); gl.uniform1f(this.u.uTrail, this.wake!.dyeTexture ? col.trail : 0);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     this.shown = true;
