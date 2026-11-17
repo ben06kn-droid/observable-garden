@@ -1,12 +1,15 @@
 // The docs page: reading first, in clear sky and glass (src/styles/docs.css), a link in the scroll chain
 // (home → run → docs → Sancho). The contents sit beside the text on wide screens and fold above it on
-// narrow ones, the current section marked; each code block has a copy button.
+// narrow ones, the current section marked; each code block has a copy button; glass bubbles drift up the
+// margin (src/bubbles.ts) and wobble where the cursor passes.
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/docs.css";
 import "../chain";
+import { reduceMotion } from "../common";
+import { Bubbles } from "../bubbles";
 
 const text = document.querySelector<HTMLElement>(".docs-text")!;
-const wide = matchMedia("(min-width: 1241px)");
+const wide = matchMedia("(min-width: 1241px)"), phone = matchMedia("(max-width: 812px)");
 
 // ---- contents: open beside the text on a wide screen; folded above it on a narrow one
 const toc = document.querySelector<HTMLDetailsElement>(".toc details")!;
@@ -56,3 +59,18 @@ for (const t of text.querySelectorAll("table")) {
     for (const c of tr.children) c.setAttribute("role", c.tagName === "TH" ? (header ? "columnheader" : "rowheader") : "cell");
   }
 }
+
+// ---- the bubbles: in the lane right of the text, below the header; none on a phone
+const head = document.querySelector<HTMLElement>(".top");
+const bubbles = new Bubbles(document.body, {
+  reduce: reduceMotion,
+  lane: () => {
+    if (phone.matches) return null;
+    const r = text.getBoundingClientRect(), gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gap")) || 24;
+    return { x0: Math.round(r.right + gap), x1: innerWidth, top: head?.getBoundingClientRect().bottom ?? 76, bottom: innerHeight };
+  },
+});
+bubbles.watch(document.querySelector<HTMLElement>(".carry-next"), document.querySelector<HTMLElement>(".foot"));
+let resizeT = 0;
+addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => bubbles.layout(), 150); });
+void document.fonts.ready.then(() => bubbles.layout());
