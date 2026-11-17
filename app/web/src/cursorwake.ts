@@ -95,7 +95,16 @@ void main() {
   o = vec4(texture(uVel, uv).xy - 0.5 * vec2(r - l, t - b), 0.0, 1.0);
 }`;
 
-// the dye (a page that draws the wake as a trail): carried by the fluid at its full speed, fading
+// the dye's line: tops the dye up to its strength along the stretch (never piles up where the cursor circles)
+const DYE_SPLAT = HEAD + `
+uniform sampler2D uVel; uniform vec2 uA, uB, uForce; uniform float uR;
+void main() {
+  vec2 p = gl_FragCoord.xy;
+  vec2 ab = uB - uA; float t = clamp(dot(p - uA, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
+  float d = length(p - (uA + ab * t));
+  o = vec4(max(texture(uVel, p * uTex).r, uForce.x * exp(-d * d / (uR * uR))), 0.0, 0.0, 1.0);
+}`;
+// the dye (a page that draws the wake as a trail): carried by the fluid, fading
 const DYE_ADVECT = HEAD + `
 uniform sampler2D uVel, uSrc; uniform float uDt, uFade; uniform vec2 uView;
 void main() {
@@ -143,7 +152,7 @@ export class Wake {
   /** pointer movement still waiting to be pushed in (the wake's delay) */
   get pending() { return this.queue.length > 0; }
 
-  private cell: number; private flow: number; private eps: number; private dyeCell: number; private dyeFlow: number; private dyeWidth: number; private dyeFade: number;
+  private cell: number; private flow: number; private eps: number; private dyeCell: number; private dyeFlow: number; private dyeWidth: number; private dyeFade: number; private dyeDose = 0;
   private dye: [Target, Target] | null = null; private dw = 0; private dh = 0; private vw = 1; private vh = 1;
   /** each stretch of the cursor's path as it is pushed in (after the delay): viewport css px, its velocity
    *  in px/s and its dose (0-1, how strongly it stirs the fluid) */
@@ -153,7 +162,7 @@ export class Wake {
     if (!gl.getExtension("EXT_color_buffer_float")) return;
     const sh = (t: number, src: string) => { const s = gl.createShader(t)!; gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
     const vs = sh(gl.VERTEX_SHADER, VERT); if (!vs) return;
-    for (const [name, src] of Object.entries({ advect: ADVECT, splat: SPLAT, curl: CURL, vort: VORT, div: DIV, pres: PRES, grad: GRAD, ...(this.dyeCell ? { dyeAdvect: DYE_ADVECT } : {}) })) {
+    for (const [name, src] of Object.entries({ advect: ADVECT, splat: SPLAT, curl: CURL, vort: VORT, div: DIV, pres: PRES, grad: GRAD, ...(this.dyeCell ? { dyeAdvect: DYE_ADVECT, dyeSplat: DYE_SPLAT } : {}) })) {
       const fs = sh(gl.FRAGMENT_SHADER, src); if (!fs) return;
       const p = gl.createProgram()!; gl.attachShader(p, vs); gl.attachShader(p, fs); gl.bindAttribLocation(p, 0, "p"); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
@@ -232,12 +241,26 @@ export class Wake {
       const q = this.queue.shift()!;
       if (Number.isNaN(q.x)) { this.prev = null; continue; }
       const a = this.prev; this.prev = q;
-      if (!a || pushes >= 8) continue;
+      if (!a) continue;
       const dx = q.x - a.x, dy = q.y - a.y, d = Math.hypot(dx, dy), ms = Math.max(4, q.t - a.t);
       if (d < 0.5) continue;
       const sp = Math.min(5000, (d / ms) * 1000);                        // px/s
       const dose = Math.pow(Math.min(1, Math.max(0, (sp - 90) / 1400)), 1.6);   // slow: next to nothing
       if (dose <= 0.002) continue;
+      // the dye: a line along every stretch of the path (so the trail never skips), its strength smoothed
+      // over the last few stretches (so it does not bead where the pointer's speed jitters)
+      const D = this.dye;
+      if (D) {
+        this.dyeDose += (dose - this.dyeDose) * 0.35;
+        const c = this.dyeCell, P0: [number, number] = [a.x / c, (vh - a.y) / c], P1: [number, number] = [q.x / c, (vh - q.y) / c], amt = 0.45 + 0.55 * Math.sqrt(this.dyeDose);
+        this.pass("dyeSplat", D[1], (u) => {
+          gl.uniform1i(u.uVel, this.bind(0, D[0]));
+          gl.uniform2f(u.uA, P0[0], P0[1]); gl.uniform2f(u.uB, P1[0], P1[1]);
+          gl.uniform2f(u.uForce, amt, 0); gl.uniform1f(u.uR, this.dyeWidth);
+        }, this.dw, this.dh);
+        const t = D[0]; D[0] = D[1]; D[1] = t; this.idle = 0;
+      }
+      if (pushes >= 8) continue;
       const k = (sp / d) * 3.4 * dose, A = toTex(q.x - dx * TRAIL, q.y - dy * TRAIL), B = toTex(q.x, q.y);
       this.pass("splat", V[1], (u) => {
         gl.uniform1i(u.uVel, this.bind(0, V[0]));
@@ -245,17 +268,6 @@ export class Wake {
         gl.uniform2f(u.uForce, dx * k, -dy * k); gl.uniform1f(u.uR, 4 + 6 * Math.sqrt(dose));
       });
       swap(); this.idle = 0; pushes++;
-      // the dye: a thin line along this stretch of the path, as strong as the push
-      const D = this.dye;
-      if (D) {
-        const c = this.dyeCell, P0: [number, number] = [a.x / c, (vh - a.y) / c], P1: [number, number] = [q.x / c, (vh - q.y) / c];
-        this.pass("splat", D[1], (u) => {
-          gl.uniform1i(u.uVel, this.bind(0, D[0]));
-          gl.uniform2f(u.uA, P0[0], P0[1]); gl.uniform2f(u.uB, P1[0], P1[1]);
-          gl.uniform2f(u.uForce, 0.45 + 0.9 * Math.sqrt(dose), 0); gl.uniform1f(u.uR, this.dyeWidth);
-        }, this.dw, this.dh);
-        const t = D[0]; D[0] = D[1]; D[1] = t;
-      }
       this.onPush?.(q.x, q.y, (dx / ms) * 1000, (dy / ms) * 1000, dose);
     }
     if (this.idle > this.still) return;     // still: nothing to step
@@ -423,8 +435,10 @@ vec4 layer(vec2 p, vec2 d, bool only) {
 vec3 groundAt(vec2 p) { return texture(uGround, p / uSize).rgb; }
 // how much of a bending stroke is at p (read from p - d): its difference from the ground there
 float ink(vec2 p, vec2 d) { vec4 c = layer(p, d, true); vec3 g = groundAt(p); return clamp(length(c.rgb + g * (1.0 - c.a) - g) * 3.0, 0.0, 1.0); }
-vec2 flowAt(vec2 p) { return wakeFlow(uVel, uHostVp + p, uView); }
-float dyeAt(vec2 p) { vec2 vp = uHostVp + p; return texture(uDye, vec2(vp.x, uView.y - vp.y) / uView).r; }
+// the fluid and its dye are kept in the host's own coordinates, so the wake stays where it is on the page
+// when the page scrolls
+vec2 flowAt(vec2 p) { return wakeFlow(uVel, p, uSize); }
+float dyeAt(vec2 p) { return texture(uDye, vec2(p.x, uSize.y - p.y) / uSize).r; }
 vec2 dyeGrad(vec2 p, float e) { return vec2(dyeAt(p + vec2(e, 0.0)) - dyeAt(p - vec2(e, 0.0)), dyeAt(p + vec2(0.0, e)) - dyeAt(p - vec2(0.0, e))) / (2.0 * e); }
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uSize.y * uDpr - gl_FragCoord.y) / uDpr;
@@ -438,7 +452,7 @@ void main() {
   vec3 tc = vec3(0.0); float ta = 0.0;
   if (uTrail > 0.0) {
     float q = dyeAt(p);
-    if (q > 0.03) {
+    if (q > 0.02) {
       // its slope, over two widths (a smooth surface, not the dye's grain)
       vec2 gq = (dyeGrad(p, 2.5) + dyeGrad(p, 5.0)) * 0.5;
       float body = smoothstep(0.05, 0.5, q);
@@ -457,7 +471,13 @@ void main() {
       tc = mix(tc, uShade, 0.25 * dark);
       tc = mix(tc, uFringe, 0.55 * ripple);
       tc = mix(tc, uHi, 0.75 * spec);
-      ta = smoothstep(0.03, 0.09, q) * keep * uTrail;
+      // at its outermost edge, always, a faint chromatic split: red just outside, cyan just inside
+      float outer = smoothstep(0.02, 0.045, q) * (1.0 - smoothstep(0.045, 0.075, q));
+      float inner = smoothstep(0.06, 0.09, q) * (1.0 - smoothstep(0.09, 0.13, q));
+      tc = mix(tc, vec3(1.0, 0.28, 0.42), 0.32 * outer);
+      tc = mix(tc, vec3(0.2, 0.78, 0.9), 0.26 * inner);
+      // over text too: the overlay lies under the text, so the trail shows behind the letters and never moves them
+      ta = smoothstep(0.02, 0.07, q) * uTrail;
     }
   }
   if (s <= 0.0 || uN == 0 || uAnyBend == 0.0) { o = vec4(tc * ta, ta); return; }
@@ -513,12 +533,13 @@ export class WakeLayer {
     this.texG = tex(); this.texK = tex();
     for (let i = 0; i < MAXL; i++) gl.uniform1i(this.u[`uL${i}`], i);   // the parts on units 0-5
     gl.uniform1i(this.u.uGround, 6); gl.uniform1i(this.u.uKeep, 7); gl.uniform1i(this.u.uVel, 8); gl.uniform1i(this.u.uDye, 9);
-    wake.onPush = o.onPush ?? null;
+    const push = o.onPush;   // handed on in viewport coordinates
+    wake.onPush = push ? (x, y, vx, vy, dose) => { const r = o.host.getBoundingClientRect(); push(x + r.left, y + r.top, vx, vy, dose); } : null;
     o.host.insertBefore(cv, o.before?.() ?? null);
     this.visible = onScreen(o.host);
-    followPointer((x, y) => { wake.move(x, y); this.kick(); }, () => wake.lift(), () => this.visible());
+    // the cursor in the host's coordinates (as it moves), so the wake is fixed to the page, not the screen
+    followPointer((x, y) => { const r = o.host.getBoundingClientRect(); wake.move(x - r.left, y - r.top); this.kick(); }, () => wake.lift(), () => this.visible());
     let t = 0; new ResizeObserver(() => { cancelAnimationFrame(t); t = requestAnimationFrame(() => this.layout()); }).observe(o.host);
-    addEventListener("resize", () => this.wake?.resize(innerWidth, innerHeight));
     this.layout();
   }
 
@@ -535,7 +556,7 @@ export class WakeLayer {
     this.dpr = Math.min(2, devicePixelRatio || 1); this.w = Math.max(1, this.o.host.clientWidth); this.h = Math.max(1, this.o.host.clientHeight);
     cv.width = Math.round(this.w * this.dpr); cv.height = Math.round(this.h * this.dpr);
     cv.style.setProperty("--w", `${this.w}px`); cv.style.setProperty("--h", `${this.h}px`);
-    this.wake?.resize(innerWidth, innerHeight);
+    this.wake?.resize(this.w, this.h);
     this.col = wakeColours(cv);
     // the ground, at a quarter of the size (it is smooth)
     const k = 0.25, gw = Math.ceil(this.w * k), gh = Math.ceil(this.h * k), gc = document.createElement("canvas"); gc.width = gw; gc.height = gh;
@@ -575,7 +596,7 @@ export class WakeLayer {
     this.raf = 0;
     const w = this.wake!, dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
     if (!this.visible()) { this.clear(); return; }
-    w.step(dt, innerHeight);
+    w.step(dt, this.h);
     if (w.idle >= w.still && !w.pending) { this.clear(); return; }
     if (w.ready) this.draw();
     this.kick();

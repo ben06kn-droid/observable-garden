@@ -77,10 +77,11 @@ const wake = new WakeLayer({ host: one,
   // what the trail refracts: the grove, the ground line and the leaves (none of them is bent)
   parts: () => [grovePart, horizonPart, $("air-one") as HTMLCanvasElement, $("pile-one") as HTMLCanvasElement],
   bends: () => false,
-  moving: () => !!grove?.stems.some((s) => s.getAnimations().length > 0),
+  // a tree swaying or arriving now (finished animations that hold their last frame do not count)
+  moving: () => !!grove?.stems.some((s) => s.getAnimations().some((a) => a.playState === "running")),
   keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *, .legend > span")].map(box),
-  // a trail 75% wider and longer-lived than the first, drifting at 40% of its speed
-  scale: { cell: 5, flow: 0.3, curl: 45, dye: 1.5, dyeFlow: 0.12, dyeWidth: 1.225, dyeFade: 0.96 },
+  // a wide trail drifting slowly, gone in about a second
+  scale: { cell: 5, flow: 0.3, curl: 45, dye: 1.5, dyeFlow: 0.12, dyeWidth: 1.225, dyeFade: 0.45 },
   onPush: (x, y, vx, vy, dose) => { const k = 0.5 + 0.9 * Math.sqrt(dose); life.wind.add(x, y, vx * k, vy * k); } });
 
 one.addEventListener("animationend", () => wake.invalidate());   // a tree done arriving or swaying
