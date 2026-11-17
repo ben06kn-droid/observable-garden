@@ -19,12 +19,16 @@
   // the rest of the gesture that made the carry (a trackpad's momentum, the last wheel notches) arrives
   // here: it must not scroll the page it landed on. Swallow wheel events while they keep coming, for at
   // most 1.2 s; the first pause of 220 ms ends it, and the visitor's next scroll is their own.
+  // Once it has ended, the listener removes itself: a wheel listener that is not passive makes every
+  // scroll wait for the main thread, so it must not outlive those 1.2 s.
   var settleUntil = performance.now() + 1200, lastWheel = 0;
-  addEventListener("wheel", function (e) {
+  var swallow = function (e) {
     var now = performance.now();
     if (settleUntil && now < settleUntil && (!lastWheel || now - lastWheel < 220)) { lastWheel = now; e.preventDefault(); return; }
-    settleUntil = 0; mark();
-  }, { passive: false });
+    settleUntil = 0; mark(); removeEventListener("wheel", swallow, { passive: false });
+  };
+  addEventListener("wheel", swallow, { passive: false });
+  setTimeout(function () { if (settleUntil) { settleUntil = 0; removeEventListener("wheel", swallow, { passive: false }); } }, 1300);
   addEventListener("touchstart", mark, { passive: true, once: true });
   addEventListener("keydown", mark, { once: true });
   window.__carry = { dir: c.dir, cover: !!c.cover, viewTransition: false };   // read by the browser check
