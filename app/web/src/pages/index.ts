@@ -7,7 +7,7 @@ import "../chain";
 import { reduceMotion } from "../common";
 import { BIRCH_LEAF_D } from "../birch";
 import { Field, startLife } from "../particles";
-import { WakeLayer } from "../cursorwake";
+import { svgPart, WakeLayer } from "../cursorwake";
 import { drawGrove, swayTree, type Grove, type GroveData } from "../woods";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -55,7 +55,7 @@ const draw = () => {
   leaves.setSources(grove.sources());
   if (reduceMotion) leaves.draw();         // no loop under reduced motion: the still frame, drawn once
   host.classList.add("drawn");             // a redraw (a resize) does not play the arrival again
-  wake.keepMask();
+  wake.invalidate(); wake.keepMask();
   // the legend counts what is drawn: every restart on a desktop, two of them on a phone
   const each = document.createElement("span"); each.className = "each"; each.textContent = ", a twig each";
   const shown = grove.shown < grove.restarts ? `${grove.shown} of ${grove.restarts} restarts` : `${grove.restarts} restarts`;
@@ -67,12 +67,23 @@ const draw = () => {
 // each stretch of the cursor's path to the leaves as it takes it in (the same beat and the same response
 // to speed), so the trail and the kick arrive together and leaves on the ground are sent back up.
 const box = (e: Element) => { const r = e.getBoundingClientRect(), b = one.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; };
+const horizonPart = { paint(c: CanvasRenderingContext2D) {      // the ground line and its ticks (drawn by CSS, so drawn here too)
+  const h = box(horizon); c.fillStyle = tone("--paper-tree"); c.fillRect(h.x, h.y, h.w, 1);
+  for (const i of horizon.querySelectorAll("i")) { const t = box(i); c.fillRect(t.x, h.y - 4, 1, 9); }
+} };
+const grovePart = svgPart(one, () => grove?.stems ?? []);
 const wake = new WakeLayer({ host: one,
   ground: (c, w, h) => { c.fillStyle = tone("--paper"); c.fillRect(0, 0, w, h); },
-  parts: () => [],
+  // what the trail refracts: the grove, the ground line and the leaves (none of them is bent)
+  parts: () => [grovePart, horizonPart, $("air-one") as HTMLCanvasElement, $("pile-one") as HTMLCanvasElement],
+  bends: () => false,
+  moving: () => !!grove?.stems.some((s) => s.getAnimations().length > 0),
   keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *, .legend > span")].map(box),
-  scale: { cell: 5, flow: 0.3, curl: 45, dye: 1.5, dyeFlow: 0.3 },
+  // a trail 75% wider and longer-lived than the first, drifting at 40% of its speed
+  scale: { cell: 5, flow: 0.3, curl: 45, dye: 1.5, dyeFlow: 0.12, dyeWidth: 1.225, dyeFade: 0.96 },
   onPush: (x, y, vx, vy, dose) => { const k = 0.5 + 0.9 * Math.sqrt(dose); life.wind.add(x, y, vx * k, vy * k); } });
+
+one.addEventListener("animationend", () => wake.invalidate());   // a tree done arriving or swaying
 
 // drawn once the type has settled, so the arrival plays once on the final layout
 Promise.all([fetch("/examples/grove.json").then((r) => r.json()), document.fonts.ready])
