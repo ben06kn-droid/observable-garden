@@ -90,12 +90,18 @@ void main() {
     s = vec2((a * 0.8 + 0.2 * a * a * a) * r, q.y * (1.0 - 0.03 * (1.0 - a * a)));
     pin = px * 0.6;
   }
-  vec3 col = uGround;
-  vec2 sp = rot(s, uAngle) + c;                                             // back on the page
-  vec4 t = texture(uText, (sp - uTextOff) / uSize);
-  col = mix(col, t.rgb / max(t.a, 1e-4), t.a);
-  float postIn = abs(s.y) < gy ? max(cover(s.x - uPostX, uPostW, pin), cover(s.x + uPostX, uPostW, pin)) : 0.0;
-  col = mix(col, uLine, postIn * 0.26);
+  // chromatic: red bends a little less and blue a little more than green, the split growing toward the
+  // walls (as the fan's lens does), thin enough to read as glass, not colour
+  vec3 col;
+  float edge = r > 0.0 ? pow(clamp(abs(q.x) / r, 0.0, 1.0), 2.0) : 0.0;
+  for (int k = 0; k < 3; k++) {
+    float f = 1.0 + (float(k) - 1.0) * 0.045 * edge;
+    vec2 sk = q + (s - q) * f;
+    vec4 t = texture(uText, (rot(sk, uAngle) + c - uTextOff) / uSize);
+    float ck = mix(uGround[k], (t.rgb / max(t.a, 1e-4))[k], t.a);
+    float postIn = abs(sk.y) < gy ? max(cover(sk.x - uPostX, uPostW, pin), cover(sk.x + uPostX, uPostW, pin)) : 0.0;
+    col[k] = mix(ck, uLine[k], postIn * 0.26);
+  }
   float aOut = postOut * 0.26;
   o = vec4(mix(uLine, col, inside), inside + (1.0 - inside) * aOut);
 }`;
@@ -131,7 +137,7 @@ export class Hourglass {
   // the sand is drawn smooth: its occupancy, softened, sampled at twice the grid, edged by a smoothstep
   private dirty = true; private occ!: Float32Array; private soft!: Float32Array; private shadeOf!: Uint8Array;
   private stir: { x: number; y: number; vx: number; vy: number; t: number; used?: boolean } | null = null;
-  private raf = 0; private last = 0; private running = false; private hint: HTMLElement;
+  private raf = 0; private last = 0; private running = false;
 
   constructor(host: HTMLElement, o: HourglassOptions) {
     this.o = o; this.H = o.height; this.capT = Math.round(o.height * 0.03); this.glass = o.height - 2 * this.capT - 6;
@@ -142,14 +148,11 @@ export class Hourglass {
     this.back = document.createElement("canvas"); this.front = document.createElement("canvas");
     this.back.className = "hg-back"; this.front.className = "hg-front";
     for (const c of [this.back, this.front]) c.setAttribute("aria-hidden", "true");
-    // the hint, until the first turn of the visit
-    this.hint = document.createElement("p"); this.hint.className = "hg-hint"; this.hint.textContent = "Drag to turn"; this.hint.setAttribute("aria-hidden", "true");
-    let seen = false; try { seen = sessionStorage.getItem("hg-turned") === "1"; } catch { /* no storage: show it */ }
-    if (seen || this.reduce) this.hint.classList.add("gone");
+    // no caption: the glass explains itself
     // what takes the pointer: the glass and its caps, not the whole (mostly clear) square it is drawn in,
     // so the page beside it stays clickable
     const hit = document.createElement("div"); hit.className = "hg-hit";
-    this.el.append(this.back, this.front, hit, this.hint);
+    this.el.append(this.back, this.front, hit);
     host.appendChild(this.el);
     this.layout();
     this.readPalette();
@@ -597,8 +600,7 @@ export class Hourglass {
     // the first drag of the visit: the caption fades for good (a click turns the glass but is not a drag)
     const firstDrag = () => {
       if (this.turned) return;
-      this.turned = true; this.hint.classList.add("gone");
-      try { sessionStorage.setItem("hg-turned", "1"); } catch { /* no storage */ }
+      this.turned = true;
       this.o.onFirstTurn?.();
     };
     el.addEventListener("pointermove", (e) => {
