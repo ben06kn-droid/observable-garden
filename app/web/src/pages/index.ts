@@ -74,7 +74,10 @@ const wake = new WakeLayer({ host: one,
   // the text's own boxes (the legend's spans, not its padded paragraph, which reaches up to the ground line)
   keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *, .legend > span")].map(box),
   moving: () => !!grove?.stems.some((s) => s.getAnimations().length > 0),
-  bends: (p) => p instanceof HTMLCanvasElement });           // the leaves, in the air and on the ground
+  bends: (p) => p instanceof HTMLCanvasElement,             // the leaves, in the air and on the ground
+  // a finer fluid that carries itself less: the trace follows the cursor and breaks into very small curls
+  // close to its path (the delay and the response to the cursor's speed are the run page's)
+  scale: { cell: 5, flow: 0.3, curl: 22 } });
 const grovePart = svgPart(one, () => grove?.stems ?? []);
 one.addEventListener("animationend", () => wake.invalidate());   // a tree done arriving or swaying
 

@@ -105,6 +105,16 @@ const FADE = 0.45;              // its fade's time constant, s (gone in about a 
 const TRAIL = 1.8;              // each push reaches this far back along the pointer's path: a longer trail
 export const STILL = 1.8;       // s after the last push: the fluid is still, and nothing is stepped or drawn
 
+/** a layer's own scale for the fluid; the push (its delay, its dose for the cursor's speed) is the same everywhere */
+export interface WakeScale {
+  /** css px per simulation texel (8): smaller makes finer curls and a narrower trail */
+  cell?: number;
+  /** how fast the fluid carries itself (0.55): lower keeps the curls close to the cursor's path */
+  flow?: number;
+  /** how strongly small curls are kept alive (22) */
+  curl?: number;
+}
+
 export class Wake {
   private gl: WebGL2RenderingContext; private w = 0; private h = 0; private ok = false;
   private vel: [Target, Target] | null = null; private pres: [Target, Target] | null = null; private div: Target | null = null; private curl: Target | null = null;
@@ -114,8 +124,9 @@ export class Wake {
   /** pointer movement still waiting to be pushed in (the wake's delay) */
   get pending() { return this.queue.length > 0; }
 
-  constructor(gl: WebGL2RenderingContext) {
-    this.gl = gl;
+  private cell: number; private flow: number; private eps: number;
+  constructor(gl: WebGL2RenderingContext, scale: WakeScale = {}) {
+    this.gl = gl; this.cell = scale.cell ?? CELL; this.flow = scale.flow ?? FLOW; this.eps = scale.curl ?? 22;
     if (!gl.getExtension("EXT_color_buffer_float")) return;
     const sh = (t: number, src: string) => { const s = gl.createShader(t)!; gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
     const vs = sh(gl.VERTEX_SHADER, VERT); if (!vs) return;
@@ -138,7 +149,7 @@ export class Wake {
   /** size the simulation to the viewport (css px) */
   resize(vw: number, vh: number) {
     if (!this.ok) return;
-    const gl = this.gl, w = Math.max(8, Math.ceil(vw / CELL)), h = Math.max(8, Math.ceil(vh / CELL));
+    const gl = this.gl, w = Math.max(8, Math.ceil(vw / this.cell)), h = Math.max(8, Math.ceil(vh / this.cell));
     if (w === this.w && h === this.h) return;
     this.w = w; this.h = h;
     const target = (fmt: number, inner: number): Target => {
@@ -182,7 +193,7 @@ export class Wake {
     // the push, a beat behind the pointer (DELAY ms, on purpose): each stretch of its path, along a capsule
     // that widens with its speed, its strength rising steeply with speed (a slow drift barely stirs it, a
     // quick flick throws a long, wide wake)
-    const toTex = (x: number, y: number): [number, number] => [x / CELL, (vh - y) / CELL];
+    const toTex = (x: number, y: number): [number, number] => [x / this.cell, (vh - y) / this.cell];
     const due = performance.now() - DELAY;
     let pushes = 0;
     while (this.queue.length && this.queue[0].t <= due) {
@@ -206,7 +217,7 @@ export class Wake {
     if (this.idle > STILL) return;          // still: nothing to step
     // curls, kept alive
     this.pass("curl", this.curl, (u) => gl.uniform1i(u.uVel, this.bind(0, V[0])));
-    this.pass("vort", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uCurl, this.bind(1, this.curl!)); gl.uniform1f(u.uEps, 22); gl.uniform1f(u.uDt, dt); });
+    this.pass("vort", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uCurl, this.bind(1, this.curl!)); gl.uniform1f(u.uEps, this.eps); gl.uniform1f(u.uDt, dt); });
     swap();
     // incompressible
     this.pass("div", this.div, (u) => gl.uniform1i(u.uVel, this.bind(0, V[0])));
@@ -217,7 +228,7 @@ export class Wake {
     this.pass("grad", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uP, this.bind(1, P[0])); });
     swap();
     // carried along by itself, slowly (FLOW), and fading over FADE seconds
-    this.pass("advect", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1f(u.uDt, dt * FLOW); gl.uniform1f(u.uCell, CELL); gl.uniform1f(u.uFade, Math.exp(-dt / FADE)); });
+    this.pass("advect", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1f(u.uDt, dt * this.flow); gl.uniform1f(u.uCell, this.cell); gl.uniform1f(u.uFade, Math.exp(-dt / FADE)); });
     swap();
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
@@ -325,6 +336,8 @@ export interface WakeLayerOptions {
   /** which parts the wake bends (and fringes); the others stay exactly where they are and the trace
    *  passes over them. All of them by default. */
   bends?: (p: Part) => boolean;
+  /** the fluid's scale on this page (the run page's by default) */
+  scale?: WakeScale;
 }
 
 const MAXL = 6;
@@ -398,7 +411,7 @@ export class WakeLayer {
     if (!vs || !fs) { if (import.meta.env.DEV) console.error("cursorwake: the layer's shader did not compile"); return; }
     const p = gl.createProgram()!; gl.attachShader(p, vs); gl.attachShader(p, fs); gl.bindAttribLocation(p, 0, "p"); gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
-    const wake = new Wake(gl); if (!wake.supported) return;
+    const wake = new Wake(gl, o.scale); if (!wake.supported) return;
     this.wake = wake; this.gl = gl; this.prog = p; this.canvas = cv;
     gl.useProgram(p);
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
