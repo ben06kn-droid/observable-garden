@@ -1,7 +1,7 @@
 // The cursor's wake over the fan: a small fluid simulation, after lukres.dev's cursor effect. The
 // pointer's movement pushes velocity into the fluid along its path; small curls are kept alive
 // (vorticity confinement); the fluid is made incompressible (a few pressure iterations) and fades
-// quickly (gone about a third of a second after the cursor stops). The fan's composite reads the
+// slowly (gone about a second after the cursor stops). The fan's composite reads the
 // velocity to bend its paths along the wake and colour them silver-white with fine red fringes there.
 //
 // It runs at an eighth of the viewport's size, in the fan's own WebGL2 context, on half-float targets
@@ -81,6 +81,10 @@ interface Prog { p: WebGLProgram; u: Record<string, WebGLUniformLocation | null>
 
 export const CELL = 8;          // css px per simulation texel
 const DELAY = 70;               // ms the wake follows the pointer by: a deliberate beat, not lag
+const FLOW = 0.55;              // how fast the fluid carries itself (1 = its own velocity): slower, more liquid
+const FADE = 0.45;              // its fade's time constant, s (gone in about a second and a half)
+const TRAIL = 1.8;              // each push reaches this far back along the pointer's path: a longer trail
+export const STILL = 1.8;       // s after the last push: the fluid is still, and nothing is stepped or drawn
 
 export class Wake {
   private gl: WebGL2RenderingContext; private w = 0; private h = 0; private ok = false;
@@ -170,7 +174,7 @@ export class Wake {
       const sp = Math.min(5000, (d / ms) * 1000);                        // px/s
       const dose = Math.pow(Math.min(1, Math.max(0, (sp - 90) / 1400)), 1.6);   // slow: next to nothing
       if (dose <= 0.002) continue;
-      const k = (sp / d) * 3.4 * dose, A = toTex(a.x, a.y), B = toTex(q.x, q.y);
+      const k = (sp / d) * 3.4 * dose, A = toTex(q.x - dx * TRAIL, q.y - dy * TRAIL), B = toTex(q.x, q.y);
       this.pass("splat", V[1], (u) => {
         gl.uniform1i(u.uVel, this.bind(0, V[0]));
         gl.uniform2f(u.uA, A[0], A[1]); gl.uniform2f(u.uB, B[0], B[1]);
@@ -178,7 +182,7 @@ export class Wake {
       });
       swap(); this.idle = 0; pushes++;
     }
-    if (this.idle > 0.8) return;            // still: nothing to step
+    if (this.idle > STILL) return;          // still: nothing to step
     // curls, kept alive
     this.pass("curl", this.curl, (u) => gl.uniform1i(u.uVel, this.bind(0, V[0])));
     this.pass("vort", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uCurl, this.bind(1, this.curl!)); gl.uniform1f(u.uEps, 22); gl.uniform1f(u.uDt, dt); });
@@ -191,8 +195,8 @@ export class Wake {
     }
     this.pass("grad", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uP, this.bind(1, P[0])); });
     swap();
-    // carried along by itself, and fading: a time constant of about a sixth of a second
-    this.pass("advect", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uCell, CELL); gl.uniform1f(u.uFade, Math.exp(-dt / 0.17)); });
+    // carried along by itself, slowly (FLOW), and fading over FADE seconds
+    this.pass("advect", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1f(u.uDt, dt * FLOW); gl.uniform1f(u.uCell, CELL); gl.uniform1f(u.uFade, Math.exp(-dt / FADE)); });
     swap();
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }

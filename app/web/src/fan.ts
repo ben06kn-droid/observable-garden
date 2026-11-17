@@ -21,7 +21,7 @@
 //
 // Reduced motion: a still fan, no wake.
 
-import { Wake } from "./wake";
+import { STILL, Wake } from "./wake";
 
 export interface FanRect { x: number; y: number; w: number; h: number; keep: number }   // page px; keep 0 = no lines there
 export interface FanOptions {
@@ -75,7 +75,7 @@ void main() {
   float py = pc.y + uScroll;
   if (py < uRegion.x || py > uRegion.y) { o = vec4(0.0); return; }
   vec2 d = uWake > 0.0 ? flowAt(pc) : vec2(0.0);
-  float s = uWake * smoothstep(0.6, 7.0, length(d));
+  float s = uWake * smoothstep(0.25, 5.0, length(d));
   vec2 a = cov(pc - d);
   vec3 col = mix(mix(uGround, uLine, a.x), uSand, a.y);
   float alpha = max(a.x, a.y);
@@ -308,7 +308,7 @@ export class Fan {
     gl.uniform3f(this.u.uGround, ...this.ground); gl.uniform3f(this.u.uLine, ...this.line); gl.uniform3f(this.u.uSand, ...this.sand);
     gl.uniform1f(this.u.uWA, this.wa); gl.uniform1f(this.u.uSA, 0.95);
     gl.uniform3f(this.u.uSilver, ...this.silver); gl.uniform3f(this.u.uRed, ...this.red); gl.uniform3f(this.u.uHi, ...this.hi); gl.uniform3f(this.u.uShade, ...this.shade);
-    const w = this.wake, on = !!w?.ready && w.idle < 0.8;
+    const w = this.wake, on = !!w?.ready && w.idle < STILL;
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, on ? w!.texture : null); gl.uniform1i(this.u.uVel, 2); gl.uniform1f(this.u.uWake, on ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.texP);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.pcv); gl.uniform1i(this.u.uPaths, 0);

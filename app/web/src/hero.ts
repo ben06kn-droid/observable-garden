@@ -14,7 +14,7 @@
 // flow (which stays within the outline), silver-white with fine red fringes. In the blank space the wake
 // is the fan's (src/fan.ts), drawn under this layer, which is clear there. Only pointer movement drives it.
 import { GLSL_PROFILE, type Glass } from "./glass";
-import { Wake } from "./wake";
+import { STILL, Wake } from "./wake";
 
 const VERT = `#version 300 es
 in vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }`;
@@ -47,7 +47,7 @@ void main() {
   float v = q.y / uGy, r = abs(v) < 1.0 ? halfWidth(v, uH) : 0.0;
   bool inside = abs(v) < 1.0 && abs(q.x) < r;
   vec2 d = uWake > 0.0 ? flowAt(p) : vec2(0.0);
-  float s = uWake * smoothstep(0.6, 7.0, length(d));
+  float s = uWake * smoothstep(0.25, 5.0, length(d));
 
   // the text, never moved: plain outside the glass; through it, seen through a thick cylinder (x magnified
   // toward the middle, compressed toward the walls, y untouched), each channel bent a little differently
@@ -220,7 +220,7 @@ export class Hero {
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
     const w = this.wake;
     w?.step(dt, innerHeight);
-    const waking = !!w?.ready && w.idle < 0.8;
+    const waking = !!w?.ready && w.idle < STILL;
     this.draw(false);
     if (waking || w?.pending) this.kick();             // and through the delay before a push lands
   };
@@ -239,7 +239,7 @@ export class Hero {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.o.glass.canvas);
       this.glassDirty = false;
     }
-    const m = this.o.glass.measures(), w = this.wake, on = !!w?.ready && w.idle < 0.8;
+    const m = this.o.glass.measures(), w = this.wake, on = !!w?.ready && w.idle < STILL;
     gl.uniform2f(this.u.uSize, this.w, this.h); gl.uniform1f(this.u.uDpr, k);
     gl.uniform2f(this.u.uOrigin, this.origin[0], this.origin[1]); gl.uniform2f(this.u.uScroll, scrollX, scrollY); gl.uniform2f(this.u.uView, innerWidth, innerHeight);
     gl.uniform3f(this.u.uGround, ...this.ground); gl.uniform3f(this.u.uSilver, ...this.silver); gl.uniform3f(this.u.uRed, ...this.red);
