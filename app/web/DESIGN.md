@@ -190,8 +190,10 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     above the tree.
   - **Headline**: run.ts places the glass so the headline's last letters pass through the upper bulb's
     empty part. The glass grows with the width, as the headline does.
-  - **Sand**: drawn smooth-edged and clipped to the inner wall. During a run, the bed levels after the turn;
-    at the end the top bulb empties fully and the pile relaxes into one cone.
+  - **Sand**: drawn smooth-edged and clipped to the inner wall. Every turn (a run's, a drag's or a
+    click's) settles the same way once the glass is still: the bed levels with the neck shut, then the top
+    bulb drains completely and the pile ends as one centred cone. The axis column is always open, so the
+    phone's smaller glass runs too.
   - **Verdict and moves**: the verdict line is large. The reasons are reading text in a disclosure, open on
     a desktop and closed on a phone. Each move is a block; a refused one has a red rule and a "refused" tag.
 - **docs**: ink on a cool light ground, one ink-blue accent: a page for reading. Privacy, terms, 404 and a

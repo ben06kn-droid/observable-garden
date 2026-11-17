@@ -120,6 +120,9 @@ export class Hourglass {
   // after a run's turn, the sand that fell to the far end spreads level (so the run's sand builds one
   // clean cone on it); the neck stays shut until it has
   private level = 0;
+  // after a turn by hand (a drag or a click): the same settling as after a run, once the glass is still;
+  // the bed levels with the neck shut, then the top drains fully and the pile relaxes into one cone
+  private pendingSettle = false; private drainAll = false;
   private done: (() => void) | null = null;
   // sand
   private cs = 1.75; private gw = 0; private gh = 0; private mask!: Uint8Array; private cell!: Uint8Array; private stamp!: Uint16Array; private air!: Uint8Array; private drift: [number, number] = [0, 0]; private tick = 1;
@@ -305,7 +308,8 @@ export class Hourglass {
     const wall = 2.6;
     for (let j = 0; j < this.gh; j++) for (let i = 0; i < this.gw; i++) {
       const x = (i - (this.gw - 1) / 2) * cs, y = (j + 0.5) * cs - gy;
-      if (Math.abs(y) < gy - 3 && Math.abs(x) < halfWidth(y / gy, this.H) - wall - cs * 0.3) this.mask[j * this.gw + i] = 1;
+      // the axis column is always open, so a small glass (whose neck is narrower than a cell) still runs
+      if (Math.abs(y) < gy - 3 && (Math.abs(x) < halfWidth(y / gy, this.H) - wall - cs * 0.3 || i === (this.gw - 1) / 2)) this.mask[j * this.gw + i] = 1;
     }
     // about two thirds of the top bulb's volume: most in the top, a pile already in the bottom
     const top: number[] = [], bot: number[] = [];
@@ -364,7 +368,7 @@ export class Hourglass {
     // during a run the neck lets through only the spent share of the budget (and nothing until the glass
     // has turned over); the neck's middle row is where a grain counts as through
     const neckRow = Math.floor(Hh / 2), neckCol = (W - 1) / 2, gate = this.gate;
-    const ending = !!gate && gate.share >= 1, levelling = !!gate && this.level > 0;
+    const ending = (!!gate && gate.share >= 1) || this.drainAll, levelling = this.level > 0;
     const across = (sgn: number) => { const d = sgn < 0 ? dl : dr; return [d[0] - d0[0], d[1] - d0[1]]; };   // level, either way
     const up = (i: number, j: number) => ((j - Hh / 2) * g[1] + (i - neckCol) * g[0]) < 0;
     let moved = 0, movedLow = 0;
@@ -387,6 +391,7 @@ export class Hourglass {
         let to = -1;
         if (ok(i + d0[0], j + d0[1])) {
           if (falls >= 1) break;
+          if (levelling && j === neckRow && i === neckCol) break;
           if (gate && j === neckRow && i === neckCol) {
             if (!gate.total || this.level || gate.passed >= gate.share * gate.total) break;
             gate.passed++; this.lastPass = performance.now();
@@ -424,7 +429,7 @@ export class Hourglass {
             const first = rnd() < 0.5 ? -1 : 1;
             for (const sgn of [first, -first]) {
               const h = across(sgn);
-              for (let q = 1; q <= 16; q++) { const pi = i + h[0] * q, pj = j + h[1] * q; if (!ok(pi, pj)) break; if (ok(pi + d0[0], pj + d0[1])) { to = (j + h[1]) * W + i + h[0]; break; } }
+              for (let q = 1; q <= 60; q++) { const pi = i + h[0] * q, pj = j + h[1] * q; if (!ok(pi, pj)) break; if (ok(pi + d0[0], pj + d0[1])) { to = (j + h[1]) * W + i + h[0]; break; } }
               if (to >= 0) break;
             }
           }
@@ -437,7 +442,7 @@ export class Hourglass {
     }
     this.moved = moved; if (moved) this.dirty = true;
     // the bed is level once nothing in the lower bulb moves (or after three seconds at most)
-    if (levelling && (movedLow === 0 || performance.now() - this.level > 3000)) this.level = 0;
+    if (levelling && (movedLow === 0 || performance.now() - this.level > 4000)) this.level = 0;
 
     // the cursor is a wind over the sand (as it is over the home page's leaves): grains near it (within
     // about twenty pixels) are thrown up out of the sand and along its path, through open cells only,
@@ -624,6 +629,7 @@ export class Hourglass {
     document.addEventListener("pointerleave", () => { this.lean = 0; });
     const settle = (rest: number) => {
       const flipped = Math.round(rest / Math.PI) % 2 !== 0, was = Math.round(this.rest / Math.PI) % 2 !== 0;
+      if (Math.abs(rest - this.rest) > 1 && !this.gate) { this.pendingSettle = true; this.drainAll = false; this.level = 0; }
       this.rest = rest; this.target = rest + this.lean;
       if (flipped !== was) { const b = el.getBoundingClientRect(); this.o.onFlip?.(flipped, { x: b.left + b.width / 2, y: b.top + b.height / 2 }); }
     };
@@ -641,7 +647,11 @@ export class Hourglass {
       if (this.locked || (!this.arrived && !this.reduce)) return;
       this.lean = 0;
       settle(this.rest + Math.PI);
-      if (this.reduce) { this.angle = this.target; this.order = null; for (let s = 0; s < 400; s++) this.stepSand(); this.render(); }
+      if (this.reduce) {
+        this.angle = this.target; this.order = null; this.pendingSettle = false; this.level = performance.now(); this.drainAll = true;
+        for (let s = 0; s < 8000 && !(s > 10 && this.moved === 0 && this.level === 0 && this.upperCount() === 0); s++) this.stepSand();
+        this.drainAll = false; this.render();
+      }
     });
   }
   private physics(dt: number) {
@@ -675,6 +685,9 @@ export class Hourglass {
         // a run: once the glass has turned over, the grains above the neck are the budget; when the run is
         // over and the last grain has landed, the page is told
         if (this.gate && !this.gate.total && Math.abs(this.angle - this.rest) < 0.01 && Math.abs(this.vel) < 0.05) this.armGate();
+        // a turn by hand, once the glass is still: level the bed, then drain everything into one cone
+        if (this.pendingSettle && !this.dragging && Math.abs(this.angle - this.target) < 0.02 && Math.abs(this.vel) < 0.05) { this.pendingSettle = false; this.level = performance.now(); this.drainAll = true; }
+        if (this.drainAll && !this.level && this.moved === 0 && this.upperCount() === 0) this.drainAll = false;
         if (this.gate && this.done && this.gate.share >= 1 && this.settledEmpty()) this.endRun();
       }
       let shifted = false;
