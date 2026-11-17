@@ -7,6 +7,7 @@ import "../chain";
 import { reduceMotion } from "../common";
 import { BIRCH_LEAF_D } from "../birch";
 import { Field, startLife } from "../particles";
+import { svgPart, WakeLayer } from "../cursorwake";
 import { drawGrove, swayTree, type Grove, type GroveData } from "../woods";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -53,11 +54,27 @@ const draw = () => {
   leaves.setSources(grove.sources());
   if (reduceMotion) leaves.draw();         // no loop under reduced motion: the still frame, drawn once
   host.classList.add("drawn");             // a redraw (a resize) does not play the arrival again
+  wake.invalidate(); wake.keepMask();
   // the legend counts what is drawn: every restart on a desktop, two of them on a phone
   const each = document.createElement("span"); each.className = "each"; each.textContent = ", a twig each";
   const shown = grove.shown < grove.restarts ? `${grove.shown} of ${grove.restarts} restarts` : `${grove.restarts} restarts`;
   $("grove-count").replaceChildren(`${shown} · ${grove.evaluations} evaluations`, each);
 };
+// ---- the cursor's wake (cursorwake.ts, the site's signature): over the grove, the ground line and the
+// leaves, never the text. The trees keep their own colours and bend; the fringes are the grove's green.
+const box = (e: Element) => { const r = e.getBoundingClientRect(), b = one.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; };
+const horizonPart = { paint(c: CanvasRenderingContext2D) {      // the ground line and its ticks (drawn by CSS, so drawn here too)
+  const h = box(horizon); c.fillStyle = tone("--paper-tree"); c.fillRect(h.x, h.y, h.w, 1);
+  for (const i of horizon.querySelectorAll("i")) { const t = box(i); c.fillRect(t.x, h.y - 4, 1, 9); }
+} };
+const wake = new WakeLayer({ host: one,
+  ground: (c, w, h) => { c.fillStyle = tone("--paper"); c.fillRect(0, 0, w, h); },
+  parts: () => [grovePart, horizonPart, $("air-one") as HTMLCanvasElement, $("pile-one") as HTMLCanvasElement],
+  keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *, .legend")].map(box),
+  moving: () => !!grove?.stems.some((s) => s.getAnimations().length > 0) });
+const grovePart = svgPart(one, () => grove?.stems ?? []);
+one.addEventListener("animationend", () => wake.invalidate());   // a tree done arriving or swaying
+
 // drawn once the type has settled, so the arrival plays once on the final layout
 Promise.all([fetch("/examples/grove.json").then((r) => r.json()), document.fonts.ready])
   .then(([g]) => { data = g as GroveData; avoid = text(); draw(); }).catch(() => {});
