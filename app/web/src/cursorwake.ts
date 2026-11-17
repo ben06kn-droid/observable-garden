@@ -104,6 +104,26 @@ void main() {
   float d = length(p - (uA + ab * t));
   o = vec4(max(texture(uVel, p * uTex).rg, vec2(uForce.x * exp(-d * d / (uR * uR)))), 0.0, 1.0);
 }`;
+// the ribbon (a page that draws the wake as one calm ribbon): r is its life, 1 at its centre when laid and
+// less toward its soft edges, falling at a steady rate so it holds and then fades, its edges going first (it
+// thins as it ages, never spreading into a haze); g is which side of the cursor's path it lies on (0 or 1)
+const RIBBON_SPLAT = HEAD + `
+uniform sampler2D uVel; uniform vec2 uA, uB; uniform float uR;
+void main() {
+  vec2 p = gl_FragCoord.xy, ab = uB - uA;
+  float t = clamp(dot(p - uA, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
+  float d = length(p - (uA + ab * t)), prof = exp(-d * d / (uR * uR));
+  float side = (ab.x * (p.y - uA.y) - ab.y * (p.x - uA.x)) > 0.0 ? 1.0 : 0.0;
+  vec2 old = texture(uVel, p * uTex).rg;
+  o = prof > old.r ? vec4(prof, side, 0.0, 1.0) : vec4(old, 0.0, 1.0);
+}`;
+const RIBBON_ADVECT = HEAD + `
+uniform sampler2D uVel, uSrc; uniform float uDt, uFade; uniform vec2 uView;
+void main() {
+  vec2 uv = gl_FragCoord.xy * uTex;
+  vec2 c = texture(uSrc, uv - uDt * texture(uVel, uv).xy / uView).rg;
+  o = vec4(max(0.0, c.r - uFade), c.g, 0.0, 1.0);   // uFade: the life lost this step
+}`;
 // the dye (a page that draws the wake as a trail): carried by the fluid, fading
 const DYE_ADVECT = HEAD + `
 uniform sampler2D uVel, uSrc; uniform float uDt, uFade, uFade2; uniform vec2 uView;
@@ -143,6 +163,17 @@ export interface WakeScale {
   /** the dye line's half width in dye texels (0.7) and its fade's time constant in s (0.55) */
   dyeWidth?: number;
   dyeFade?: number;
+  /** the force the cursor puts in, × the run page's (1) */
+  force?: number;
+  /** the cursor's speed counted at most this (px/s, 5000): a flick stirs no more than a sweep at this speed */
+  maxSpeed?: number;
+  /** the cursor's position smoothed over about this many ms before it drives the fluid (0) */
+  smooth?: number;
+  /** the fluid's fade's time constant, s (0.45): lower settles sooner */
+  fade?: number;
+  /** a calm ribbon instead of a dye trail (with `dye` its cell): its life in s, its half width in its texels,
+   *  how fast the fluid carries it (× its velocity) */
+  ribbon?: { life: number; width: number; flow: number };
 }
 
 export class Wake {
@@ -155,16 +186,19 @@ export class Wake {
   get pending() { return this.queue.length > 0; }
 
   private cell: number; private flow: number; private eps: number; private dyeCell: number; private dyeFlow: number; private dyeWidth: number; private dyeFade: number; private dyeDose = 0;
+  private force: number; private maxSpeed: number; private smoothMs: number; private fadeT: number; private ribbon: WakeScale["ribbon"];
+  private sm: { t: number; x: number; y: number } | null = null;
   private dye: [Target, Target] | null = null; private dw = 0; private dh = 0; private vw = 1; private vh = 1;
   /** each stretch of the cursor's path as it is pushed in (after the delay): viewport css px, its velocity
    *  in px/s and its dose (0-1, how strongly it stirs the fluid) */
   onPush: ((x: number, y: number, vx: number, vy: number, dose: number) => void) | null = null;
   constructor(gl: WebGL2RenderingContext, scale: WakeScale = {}) {
     this.gl = gl; this.cell = scale.cell ?? CELL; this.flow = scale.flow ?? FLOW; this.eps = scale.curl ?? 22; this.dyeCell = scale.dye ?? 0; this.dyeFlow = scale.dyeFlow ?? 0.1; this.dyeWidth = scale.dyeWidth ?? 0.7; this.dyeFade = scale.dyeFade ?? DYE_FADE;
+    this.force = scale.force ?? 1; this.maxSpeed = scale.maxSpeed ?? 5000; this.smoothMs = scale.smooth ?? 0; this.fadeT = scale.fade ?? FADE; this.ribbon = scale.ribbon;
     if (!gl.getExtension("EXT_color_buffer_float")) return;
     const sh = (t: number, src: string) => { const s = gl.createShader(t)!; gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
     const vs = sh(gl.VERTEX_SHADER, VERT); if (!vs) return;
-    for (const [name, src] of Object.entries({ advect: ADVECT, splat: SPLAT, curl: CURL, vort: VORT, div: DIV, pres: PRES, grad: GRAD, ...(this.dyeCell ? { dyeAdvect: DYE_ADVECT, dyeSplat: DYE_SPLAT } : {}) })) {
+    for (const [name, src] of Object.entries({ advect: ADVECT, splat: SPLAT, curl: CURL, vort: VORT, div: DIV, pres: PRES, grad: GRAD, ...(this.dyeCell ? (scale.ribbon ? { dyeAdvect: RIBBON_ADVECT, dyeSplat: RIBBON_SPLAT } : { dyeAdvect: DYE_ADVECT, dyeSplat: DYE_SPLAT }) : {}) })) {
       const fs = sh(gl.FRAGMENT_SHADER, src); if (!fs) return;
       const p = gl.createProgram()!; gl.attachShader(p, vs); gl.attachShader(p, fs); gl.bindAttribLocation(p, 0, "p"); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
@@ -182,7 +216,7 @@ export class Wake {
   /** s after the last push until the wake is still: longer while a slow dye is still fading */
   /** the dye's fade (s), for reading its age */
   get fadeTime() { return this.dyeFade; }
-  get still() { return this.dye ? Math.max(STILL, this.dyeFade * 5) : STILL; }
+  get still() { return this.ribbon ? Math.max(STILL, this.ribbon.life + 0.2) : this.dye ? Math.max(STILL, this.dyeFade * 5) : STILL; }
   /** the dye texture (covers the viewport, GL frame), when the layer asked for one */
   get dyeTexture() { return this.dye?.[0].tex ?? null; }
 
@@ -215,9 +249,16 @@ export class Wake {
   }
 
   /** the pointer moved to (x, y), viewport css px: kept, and pushed into the fluid DELAY ms later */
-  move(x: number, y: number) { this.queue.push({ t: performance.now(), x, y }); if (this.queue.length > 240) this.queue.shift(); }
+  move(x: number, y: number) {
+    const t = performance.now();
+    if (this.smoothMs > 0) {          // smoothed: the path in a soft curve, never a jitter
+      const sm = this.sm, k = sm ? 1 - Math.exp(-(t - sm.t) / (this.smoothMs / 2)) : 1;
+      x = sm ? sm.x + (x - sm.x) * k : x; y = sm ? sm.y + (y - sm.y) * k : y; this.sm = { t, x, y };
+    }
+    this.queue.push({ t, x, y }); if (this.queue.length > 240) this.queue.shift();
+  }
   /** the pointer left: the next movement starts a new stroke */
-  lift() { this.queue.push({ t: performance.now(), x: NaN, y: NaN }); }
+  lift() { this.sm = null; this.queue.push({ t: performance.now(), x: NaN, y: NaN }); }
   private queue: { t: number; x: number; y: number }[] = []; private prev: { t: number; x: number; y: number } | null = null;
 
   private pass(name: string, out: Target, set: (u: Prog["u"]) => void, w = this.w, h = this.h) {
@@ -261,7 +302,7 @@ export class Wake {
       if (!a) continue;
       const dx = q.x - a.x, dy = q.y - a.y, d = Math.hypot(dx, dy), ms = Math.max(4, q.t - a.t);
       if (d < 0.5) continue;
-      const sp = Math.min(5000, (d / ms) * 1000);                        // px/s
+      const sp = Math.min(this.maxSpeed, (d / ms) * 1000);              // px/s
       const dose = Math.pow(Math.min(1, Math.max(0, (sp - 90) / 1400)), 1.6);   // slow: next to nothing
       if (dose <= 0.002) continue;
       // the dye: a line along every stretch of the path (so the trail never skips), its strength smoothed
@@ -269,6 +310,14 @@ export class Wake {
       const D = this.dye;
       if (D) {
         this.dyeDose += (dose - this.dyeDose) * 0.35;
+        if (this.ribbon) {         // the ribbon: laid along the path at its full width, whatever the speed
+          const c = this.dyeCell, R0 = this.ribbon.width;
+          this.pass("dyeSplat", D[1], (u) => {
+            gl.uniform1i(u.uVel, this.bind(0, D[0]));
+            gl.uniform2f(u.uA, a.x / c, (vh - a.y) / c); gl.uniform2f(u.uB, q.x / c, (vh - q.y) / c); gl.uniform1f(u.uR, R0);
+          }, this.dw, this.dh);
+          const t2 = D[0]; D[0] = D[1]; D[1] = t2; this.idle = 0;
+        } else {
         const c = this.dyeCell, P0: [number, number] = [a.x / c, (vh - a.y) / c], P1: [number, number] = [q.x / c, (vh - q.y) / c], amt = 0.45 + 0.55 * Math.sqrt(this.dyeDose);
         this.pass("dyeSplat", D[1], (u) => {
           gl.uniform1i(u.uVel, this.bind(0, D[0]));
@@ -276,9 +325,10 @@ export class Wake {
           gl.uniform2f(u.uForce, amt, 0); gl.uniform1f(u.uR, this.dyeWidth);
         }, this.dw, this.dh);
         const t = D[0]; D[0] = D[1]; D[1] = t; this.idle = 0;
+        }
       }
       if (pushes >= 8) continue;
-      const k = (sp / d) * 3.4 * dose, A = toTex(q.x - dx * TRAIL, q.y - dy * TRAIL), B = toTex(q.x, q.y);
+      const k = (sp / d) * 3.4 * dose * this.force, A = toTex(q.x - dx * TRAIL, q.y - dy * TRAIL), B = toTex(q.x, q.y);
       this.pass("splat", V[1], (u) => {
         gl.uniform1i(u.uVel, this.bind(0, V[0]));
         gl.uniform2f(u.uA, A[0], A[1]); gl.uniform2f(u.uB, B[0], B[1]);
@@ -301,12 +351,15 @@ export class Wake {
     this.pass("grad", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uP, this.bind(1, P[0])); });
     swap();
     // carried along by itself, slowly (FLOW), and fading over FADE seconds
-    this.pass("advect", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1f(u.uDt, dt * this.flow); gl.uniform1f(u.uCell, this.cell); gl.uniform1f(u.uFade, Math.exp(-dt / FADE)); });
+    this.pass("advect", V[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1f(u.uDt, dt * this.flow); gl.uniform1f(u.uCell, this.cell); gl.uniform1f(u.uFade, Math.exp(-dt / this.fadeT)); });
     swap();
     // the dye, carried by the fluid (its wisps curl where the fluid curls) and fading
     const D = this.dye;
     if (D) {
-      this.pass("dyeAdvect", D[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uSrc, this.bind(1, D[0])); gl.uniform1f(u.uDt, dt * this.dyeFlow); gl.uniform1f(u.uFade, Math.exp(-dt / this.dyeFade)); gl.uniform1f(u.uFade2, Math.exp(-2 * dt / this.dyeFade)); gl.uniform2f(u.uView, this.vw, this.vh); }, this.dw, this.dh);
+      const R = this.ribbon;
+      this.pass("dyeAdvect", D[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, V[0])); gl.uniform1i(u.uSrc, this.bind(1, D[0]));
+        gl.uniform1f(u.uDt, dt * (R ? R.flow : this.dyeFlow)); gl.uniform1f(u.uFade, R ? dt / R.life : Math.exp(-dt / this.dyeFade));
+        gl.uniform1f(u.uFade2, Math.exp(-2 * dt / this.dyeFade)); gl.uniform2f(u.uView, this.vw, this.vh); }, this.dw, this.dh);
       const t = D[0]; D[0] = D[1]; D[1] = t;
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
