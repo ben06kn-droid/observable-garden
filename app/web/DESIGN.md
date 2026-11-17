@@ -166,21 +166,34 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     opacity, a slow fall, a light cursor wind; they leave from the trees' leaves, lie along the ground line
     one deep and fade where they fall past its ends.
 - **run**: lukres.dev's near-black (#121416) and off-white (#f0f1fa), hairline rules, and one warm sand
-  (#d6b27b) for the hourglass's sand and the one accent (Start, the submitted branch, focus). No glows,
-  halos or gradients. Only two things are on the page: the hourglass (src/hourglass.ts) and the form.
+  (#d6b27b) for the glass's sand, the gold paths and the one accent (Start, the submitted branch, focus).
+  No glows, halos or gradients. Three things are on the page: the glass, the fan of paths and the form.
   - **Desktop**: on the 12-column grid. The hero, the form, the run's tree and the moves sit in columns 1–8;
     each form section (01 Data, 02 Model, 03 Key, 04 Budget) has its name in 1–2 and its fields in 3–8.
-    The hourglass is sticky in 9–12, beside the form and the run. The headline runs past column 8 behind
-    the glass, which bends it (it stays real text). No form text ever sits behind the glass.
-  - **Phone**: composed for itself. Headline, lead, glass, then the sections stacked; nothing is behind the glass.
+  - **The glass** (src/glass.ts): a still hourglass drawn as its two outline curves and its sand, no frame.
+    It stands in columns 9–12 from the opening screen to the rule above 03 Key and scrolls with the page;
+    its bulbs clear the form's columns and may be cropped by the page's right edge. The sand is large
+    grains, few enough to be seen falling: the pile a vector shape traced from the grains and filled with a
+    grain texture, grains in the air and the single thread through the neck drawn as round grains. The
+    sand follows the reader, not a clock: the top bulb is full at the top of the page and has drained by
+    the 03 Key rule, with a slow drip running ahead; scrolling back pours it back. It shows no number and is
+    not tied to a run. The cursor scatters the grains it passes through. The headline's last letters pass
+    through the empty top of the upper bulb, bent, each colour channel refracted a little differently.
+  - **Inversion**: a click on the glass (or Enter) inverts the palette from the click
+    (html[data-hg="light"]); both palettes meet AA.
+  - **The fan** (src/fan.ts): random-walk hairlines down the whole left of the page, from the top to above
+    "Continue to docs", behind everything. They run right until the glass (beside it) or the page's right
+    edge (below it), fading before it. Most are faint off-white; about one in six is gold. They draw left
+    to right at a pace that follows the scroll and eases to an idle; at the foot they slow and rest. Behind
+    text they dim to a tenth (AA holds for the faintest text over a gold path, both palettes); under
+    inputs, selects, text areas and buttons they are removed.
+  - **Phone**: composed for itself. Headline, lead, a smaller glass, then the sections stacked; the fan is
+    a band between the form and the tree.
   - **Form**: a short lead, with the long paragraph word for word in a details disclosure. File pickers keep
     the native input (unseen, focusable) under a label showing the loaded file's name. Errors appear inline
     above Start. The disclaimers are one row of four notes at the end.
-  - **Inversion**: turning the glass over (a click, or a drag past 90°) inverts the palette from the neck
-    (html[data-hg="light"]); both palettes meet AA.
-  - **Runs**: a run turns the glass over and locks it. The sand follows the moves spent (four fifths) and then
-    the replay (the last fifth), and the verdict appears as the last grain lands.
-  - **Reduced motion**: no WebGL, so the headline wraps beside the glass and nothing passes behind it.
+  - **Reduced motion**: the glass still with its sand settled where the reader is, no lens (the headline
+    wraps clear of the glass); the fan still.
   - **Empty tree area**: before a run, it shows the ground line and one line saying what will grow there.
   - **The run's tree** (src/runtree.ts): the home page's birch (src/birch.ts), one per restart, in columns
     1–4 of the stage, filling its height. It keeps the home page's rules: a weight hierarchy and no
@@ -188,12 +201,6 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     Sharpe: the numbers are on a gauge in columns 5–8, scaled from zero. The gauge carries the bar (dotted),
     the submitted or best-so-far level, and the verdict word large at its top. On a phone the gauge sits
     above the tree.
-  - **Headline**: run.ts places the glass so the headline's last letters pass through the upper bulb's
-    empty part. The glass grows with the width, as the headline does.
-  - **Sand**: drawn smooth-edged and clipped to the inner wall. Every turn (a run's, a drag's or a
-    click's) settles the same way once the glass is still: the bed levels with the neck shut, then the top
-    bulb drains completely and the pile ends as one centred cone. The axis column is always open, so the
-    phone's smaller glass runs too.
   - **Verdict and moves**: the verdict line is large. The reasons are reading text in a disclosure, open on
     a desktop and closed on a phone. Each move is a block; a refused one has a red rule and a "refused" tag.
 - **docs**: ink on a cool light ground, one ink-blue accent: a page for reading. Privacy, terms, 404 and a
