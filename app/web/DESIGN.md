@@ -170,30 +170,38 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   No glows, halos or gradients. Three things are on the page: the glass, the fan of paths and the form.
   - **Desktop**: on the 12-column grid. The hero, the form, the run's tree and the moves sit in columns 1–8;
     each form section (01 Data, 02 Model, 03 Key, 04 Budget) has its name in 1–2 and its fields in 3–8.
-  - **The glass** (src/glass.ts): a still hourglass drawn as its two outline curves and its sand, no frame.
-    It stands in columns 9–12 from the opening screen to the rule above 03 Key and scrolls with the page;
-    its bulbs clear the form's columns and may be cropped by the page's right edge. The sand is large
-    grains, few enough to be seen falling: the pile a vector shape traced from the grains and filled with a
-    grain texture, grains in the air and the single thread through the neck drawn as round grains. The
-    sand follows the reader, not a clock: the top bulb is full at the top of the page and has drained by
-    the 03 Key rule, with a slow drip running ahead; scrolling back pours it back. It shows no number and is
-    not tied to a run. The cursor scatters the grains it passes through. The headline's last letters pass
-    through the empty top of the upper bulb, bent, each colour channel refracted a little differently.
+  - **The glass** (src/glass.ts): a still hourglass drawn as its two outline curves, no frame. Each wall
+    widens from a round neck all the way to its rim (the half width never decreases away from the neck),
+    so each bulb is widest at its open rim. It stands in columns 9–12 from the opening screen to the rule
+    above 03 Key and scrolls with the page; its bulbs clear the form's columns and may be cropped by the
+    page's right edge. Through it pours an abstract flow: fine strokes of varying length and a few small
+    shapes, entering across the top rim, drawn together through the neck along streamlines (each a fixed
+    fraction of the half width, so nothing crosses a wall) and spreading out to leave at the bottom rim.
+    Nothing collects; it runs at one steady rate from the first frame, quicker where the glass is narrow,
+    and nothing about it changes with the scroll. White with about one gold stroke in eight; where the
+    strokes crowd into the neck each is drawn fainter, so it stays a bundle of lines. The headline's last
+    letters pass through the upper bulb, bent, each colour channel refracted a little differently.
   - **Inversion**: a click on the glass (or Enter) inverts the palette from the click
     (html[data-hg="light"]); both palettes meet AA.
   - **The fan** (src/fan.ts): random-walk hairlines down the whole left of the page, from the top to above
     "Continue to docs", behind everything. They run right until the glass (beside it) or the page's right
     edge (below it), fading before it. Most are faint off-white; about one in six is gold. They draw left
     to right at a pace that follows the scroll and eases to an idle; at the foot they slow and rest. Behind
-    text they dim to a tenth (AA holds for the faintest text over a gold path, both palettes); under
+    text they dim to 6% (7:1 holds for every text tone over a gold path, both palettes); under
     inputs, selects, text areas and buttons they are removed.
   - **Phone**: composed for itself. Headline, lead, a smaller glass, then the sections stacked; the fan is
     a band between the form and the tree.
   - **Form**: a short lead, with the long paragraph word for word in a details disclosure. File pickers keep
     the native input (unseen, focusable) under a label showing the loaded file's name. Errors appear inline
     above Start. The disclaimers are one row of four notes at the end.
-  - **Reduced motion**: the glass still with its sand settled where the reader is, no lens (the headline
-    wraps clear of the glass); the fan still.
+  - **Reduced motion**: one still frame of the glass's flow (the headline wraps clear of the glass); the
+    fan still.
+  - **Reading face**: body, label and small text in Inter (variable, 450), self-hosted, latin subset; IBM
+    Plex Sans stays for the headline and the large words, IBM Plex Mono for labels in capitals. Muted and faint text were brightened so
+    every text tone keeps 7.8:1 or more where a path passes behind it (the fan dims to 6% behind text).
+  - **Scrolling**: native only. Every scroll, wheel and touch listener is passive; the carry's one
+    non-passive wheel listener (it swallows the gesture that made a carry) removes itself after 1.2 s.
+    Animation runs from animation frames; the glass pauses off screen; nothing forces layout in a scroll.
   - **Empty tree area**: before a run, it shows the ground line and one line saying what will grow there.
   - **The run's tree** (src/runtree.ts): the home page's birch (src/birch.ts), one per restart, in columns
     1–4 of the stage, filling its height. It keeps the home page's rules: a weight hierarchy and no
