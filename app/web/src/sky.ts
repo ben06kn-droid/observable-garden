@@ -22,12 +22,15 @@
 // still. Paused while the page is hidden.
 import { followPointer, rgb, Wake, WAKE_GLSL, wakeColours, wakeWanted, type RGB } from "./cursorwake";
 
-export interface Lane { x0: number; x1: number; top: number; bottom: number }   // viewport px
+/** viewport px; `under`: how far the bubbles may drift in under the pane at its left (behind the glass, short of the text) */
+export interface Lane { x0: number; x1: number; top: number; bottom: number; under?: number }
 export interface SkyOptions {
   /** the bubbles' lane, viewport px; null: no bubbles (a phone) */
   lane: () => Lane | null;
   /** a phone: the light fields at half size, no tail */
   small: () => boolean;
+  /** the area behind the text (viewport px): the tail fades before it, so it shows only through the glass's edges */
+  text?: () => { x: number; y: number; w: number; h: number } | null;
   reduce: boolean;
 }
 interface Bubble {
@@ -49,7 +52,7 @@ uniform vec2 uSize; uniform float uDpr, uTime;
 uniform vec3 uG[5]; uniform vec4 uF[3]; uniform vec3 uFC[3];   // the gradient's stops; the light fields (x, y, radius, alpha) and colours
 uniform vec3 uTone, uFringe;
 uniform vec4 uB[${MAXN}]; uniform vec4 uW[${MAXN}]; uniform vec4 uT[${MAXN}]; uniform int uN;   // bubbles: (x, y, r, shown), wobble, (kind: 0 blue, 1 green)
-uniform sampler2D uVel; uniform float uWake;
+uniform sampler2D uVel; uniform float uWake; uniform vec4 uText;   // the area behind the text (x, y, w, h)
 out vec4 o;
 ${WAKE_GLSL}
 vec3 gradientAt(float v) {
@@ -73,8 +76,10 @@ void main() {
   // cyan on one edge of the flow and green on the other
   const vec3 PALE = vec3(0.902, 0.933, 0.957);
   vec2 d = vec2(0.0); float s = 0.0;
-  if (uWake > 0.0) {
-    d = flowAt(p); s = wakeStrength(d);
+  // never behind the text: it fades out over 24px before the text's area
+  vec2 tq = max(uText.xy - p, p - (uText.xy + uText.zw)); float away = smoothstep(0.0, 24.0, max(tq.x, tq.y));
+  if (uWake > 0.0 && away > 0.0) {
+    d = flowAt(p) * away; s = wakeStrength(d);
     if (s > 0.0) {
       vec2 gr = vec2(length(flowAt(p + vec2(6.0, 0.0))) - length(flowAt(p - vec2(6.0, 0.0))),
                      length(flowAt(p + vec2(0.0, 6.0))) - length(flowAt(p - vec2(0.0, 6.0))));
@@ -157,7 +162,7 @@ export class Sky {
     this.gl = gl; this.prog = p; gl.useProgram(p);
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uTime", "uG", "uF", "uFC", "uTone", "uFringe", "uB", "uW", "uT", "uN", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uSize", "uDpr", "uTime", "uG", "uF", "uFC", "uTone", "uFringe", "uB", "uW", "uT", "uN", "uVel", "uWake", "uText"]) this.u[n] = gl.getUniformLocation(p, n);
     host.prepend(this.canvas);
     // the cursor's tail: only with a fine pointer that hovers, motion allowed, not on a phone
     if (!o.reduce && wakeWanted() && !o.small()) {
@@ -198,7 +203,7 @@ export class Sky {
         // half of each, alternating down the lane as they first appear
         [...this.b].sort((a, b) => a.y - b.y).forEach((b, k) => { b.tint = k % 2; });
       }
-      for (const b of this.b) { b.r = SIZES[b.i] * W; b.x = Math.max(L.x0 + b.r + 6, Math.min(L.x1 - b.r - 10, b.x)); }
+      for (const b of this.b) { b.r = SIZES[b.i] * W; b.x = Math.max(L.x0 - (L.under ?? 0) + b.r + 6, Math.min(L.x1 - b.r - 10, b.x)); }
     }
     if (this.o.reduce) this.draw(); else this.kick();
   }
@@ -210,7 +215,9 @@ export class Sky {
     let best = { x: 0, y: 0, room: -Infinity };
     for (let k = 0; k < 40; k++) {
       const y = anywhere ? L.top + r * 1.2 + this.rnd() * (L.bottom - L.top + 160) : L.bottom + r + 20 + this.rnd() * 220;
-      const m = r * 1.13 + 16, x = L.x0 + m + this.rnd() * Math.max(0, W - 2 * m);
+      // two of them (the smallest and the middle) rise close to the pane, so one is often seen passing under its edge
+      const m = r * 1.13 + 16, u0 = L.x0 - (L.under ?? 0), near = (i === 0 || i === 2) && !!L.under;
+      const x = near ? u0 + r * 0.9 + this.rnd() * r * 0.6 : u0 + m + this.rnd() * Math.max(0, W + (L.under ?? 0) - 2 * m);
       let room = Infinity;
       for (const o of this.b) if (o.i !== i) room = Math.min(room, Math.hypot(o.x - x, o.y - y) - o.r - r);
       if (room > best.room) best = { x, y, room };
@@ -282,7 +289,7 @@ export class Sky {
       // where the cue or the footer rises into the lane, the bubbles fade before it
       const bottom = Math.min(L.bottom, this.blocker());
       for (const b of this.b) {
-        const m = b.r * 1.13 + 2, x = Math.max(L.x0 + m, Math.min(L.x1 - m, b.x + b.px + b.sway * Math.sin(t * 6.28 / b.period + b.ph)));
+        const m = b.r * 1.13 + 2, x = Math.max(L.x0 - (L.under ?? 0) + m, Math.min(L.x1 - m, b.x + b.px + b.sway * Math.sin(t * 6.28 / b.period + b.ph)));
         let vis = Math.max(0, Math.min(1, (bottom - (b.y + b.r)) / (0.6 * b.r) + 1));
         if (b.out) vis *= Math.max(0, 1 - (t - b.out) / OUT);
         B.push(x, b.y, b.r, vis); Wv.push(b.a2, b.t2, b.a3, b.t3); T.push(b.tint, 0, 0, 0);
@@ -297,6 +304,7 @@ export class Sky {
     gl.uniform1i(this.u.uN, B.length / 4);
     const w = this.wake, on = !!w?.ready && w.idle < w.still;
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, on ? w!.texture : null); gl.uniform1i(this.u.uVel, 0); gl.uniform1f(this.u.uWake, on ? 1 : 0);
+    const tx = on ? this.o.text?.() : null; gl.uniform4f(this.u.uText, tx?.x ?? -1e5, tx?.y ?? -1e5, tx?.w ?? 0, tx?.h ?? 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

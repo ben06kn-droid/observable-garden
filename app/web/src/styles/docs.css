@@ -143,7 +143,9 @@
 canvas.sky { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100lvh; pointer-events: none; z-index: -1; }
 
 /* the header: flat, translucent white with the blur (the sky moves behind it), one hairline beneath */
-[data-page="docs"] .top { background: var(--header-bg); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: 0 1px 0 rgba(6, 32, 63, 0.12); }
+/* the header: the same glass as the sheet (its lower edge in the sheet's falling light) */
+[data-page="docs"] .top { background: rgba(255, 255, 255, 0.6); -webkit-backdrop-filter: blur(30px) saturate(170%) brightness(108%); backdrop-filter: blur(30px) saturate(170%) brightness(108%);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.4), 0 1px 0 rgba(10, 40, 90, 0.1); }
 [data-page="docs"] .carry-prev { color: #ffffff; }
 
 /* the title on the sky, in white over a soft dark-blue shadow, two tight halos and a soft cloud of deep blue
@@ -163,20 +165,40 @@ canvas.sky { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100
   text-shadow: 0 0 3px rgba(4, 40, 110, 0.7), 0 0 9px rgba(4, 40, 110, 0.55), 0 2px 18px rgba(4, 40, 110, 0.45); }
 
 /* the reading sheet: one flat surface from the first section down */
-[data-page="docs"] .sheet { max-width: calc(var(--measure) + 96px); padding: 48px; border-radius: 16px; background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(255, 255, 255, 0.6); }
+/* the reading sheet: a pane of frosted glass lying over the sky. The sky shows through it, blurred, more
+   saturated and a little brighter, so it is bluer near the top of the viewport and greener near the bottom;
+   the glass reads from what shows through and from light on its edges, never from a shine on its surface. */
+@property --la { syntax: "<number>"; inherits: true; initial-value: 0; }
+[data-page="docs"] .sheet { position: relative; isolation: isolate; max-width: calc(var(--measure) + 96px); padding: 48px; border-radius: 20px;
+  background: rgba(255, 255, 255, var(--sheet-fill, 0.6));
+  -webkit-backdrop-filter: blur(30px) saturate(170%) brightness(108%); backdrop-filter: blur(30px) saturate(170%) brightness(108%);
+  box-shadow: 0 18px 50px rgba(10, 40, 90, 0.16);
+  --lx: -999px; --ly: -999px; transition: --la 300ms linear; }
+/* light on its edges: a 1px border bright on the top and left falling away on the bottom and right, and where the
+   cursor is within about 250px, a soft point of full white sliding along the rim (only the border: a ring) */
+[data-page="docs"] .sheet::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 1;
+  background: radial-gradient(250px circle at var(--lx) var(--ly), rgba(255, 255, 255, calc(var(--la) * 1)), rgba(255, 255, 255, 0) 100%),
+              linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.25) 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+/* a second line 3px in, so the pane has thickness; and the frost, a static fine grain at 2.5% */
+[data-page="docs"] .sheet::after { content: ""; position: absolute; inset: 3px; border-radius: 17px; pointer-events: none; z-index: -1;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-image: url("/frost.svg"); }   /* public/frost.svg: a fine fractal noise, 2.5% */
+
 [data-page="docs"] .sheet > * { max-width: var(--measure); }
 [data-page="docs"] .sheet > h2:first-child { margin-top: 0; }
 [data-page="docs"] .docs-text p, [data-page="docs"] .docs-text li, [data-page="docs"] .docs-text h2, [data-page="docs"] .docs-text h3, [data-page="docs"] .docs-text code { color: var(--ink); }
 [data-page="docs"] .docs-text a { color: var(--accent); text-decoration-color: rgba(6, 79, 156, 0.4); }
 
 /* code and tables: one flat surface, a faint blue wash and a hairline border */
-[data-page="docs"] .docs-text .glass { background: rgba(20, 80, 160, 0.06); border: 1px solid rgba(20, 80, 160, 0.16); border-radius: 10px;
-  box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* code and tables: clearer panes set into the sheet, a bright top edge, sitting slightly below its surface */
+[data-page="docs"] .docs-text .glass { background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(6, 32, 63, 0.1); border-top-color: rgba(255, 255, 255, 0.85); border-radius: 12px;
+  box-shadow: inset 0 1px 2px rgba(6, 32, 63, 0.06); -webkit-backdrop-filter: none; backdrop-filter: none; }
 [data-page="docs"] .docs-text .glass.code pre.cmd { color: #06203f; padding-right: 80px; }   /* clear of the copy button, no wider */
-[data-page="docs"] .docs-text .glass.code pre.cmd .c, [data-page="docs"] .docs-text .glass.code pre.cmd .c .t { color: #2a4560; }   /* #4b6a8c measured 4.6:1 */
+[data-page="docs"] .docs-text .glass.code pre.cmd .c, [data-page="docs"] .docs-text .glass.code pre.cmd .c .t { color: #2a4560; }   /* #4b6a8c cannot reach 7:1 on any light ground (5.5:1 on white); measured 4.9:1 here */
 /* the copy button: flat, text only, a 1px border */
-[data-page="docs"] .docs-text .copy { color: var(--accent); background: transparent; border: 1px solid rgba(6, 79, 156, 0.3); border-radius: 6px; padding: 6px 8px; box-shadow: none; }
+[data-page="docs"] .docs-text .copy { color: var(--accent); background: transparent; border: 1px solid rgba(6, 79, 156, 0.3); border-top-color: rgba(255, 255, 255, 0.85); border-radius: 6px; padding: 6px 8px; box-shadow: none; }
 [data-page="docs"] .docs-text .copy:hover { background: rgba(255, 255, 255, 0.6); border-color: rgba(6, 79, 156, 0.55); }
 /* tables: no header bar; small mono caps, hairline rules */
 [data-page="docs"] .docs-text .glass.table { padding: var(--s2) var(--s4); }
@@ -195,7 +217,7 @@ canvas.sky { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100
   [data-page="docs"] .docs .toc a[aria-current="true"] { border-left-color: var(--accent); }
 }
 @media (max-width: 812px) {
-  [data-page="docs"] .sheet { padding: 24px; border-radius: 14px; }
+  [data-page="docs"] .sheet { padding: 24px; }
   /* the copy button on its own row above a command, so nothing scrolls under it */
   [data-page="docs"] .docs-text .glass pre.cmd { padding: 46px var(--s4) var(--s4); }
 }

@@ -76,10 +76,33 @@ const sky = new Sky(document.body, {
   lane: () => {
     if (phone.matches) return null;
     const r = sheet.getBoundingClientRect(), gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gap")) || 24;
-    return { x0: Math.round(r.right + gap), x1: innerWidth, top: head?.getBoundingClientRect().bottom ?? 76, bottom: innerHeight };
+    // the bubbles may drift 44px in under the pane: behind the glass, within its 48px padding, short of the text
+    return { x0: Math.round(r.right + gap), x1: innerWidth, top: head?.getBoundingClientRect().bottom ?? 76, bottom: innerHeight, under: Math.round(gap + 44) };
   },
+  // the tail runs behind the glass but never behind the text: the sheet less its padding
+  text: () => { const r = sheet.getBoundingClientRect(), pad = parseFloat(getComputedStyle(sheet).paddingLeft) || 0; return { x: r.left + pad, y: r.top + pad, w: r.width - 2 * pad, h: r.height - 2 * pad }; },
 });
 sky.watch(document.querySelector<HTMLElement>(".carry-next"), document.querySelector<HTMLElement>(".foot"));
+// ---- the light on the glass's edge follows the cursor: within about 250px of it, a soft point of full white
+// slides along the rim (only the border); it settles in 300ms when the cursor goes. Not by touch, not on a
+// phone, not under reduced motion.
+if (!reduceMotion && sheet !== text) {
+  let lx = 0, ly = 0, on = 0, raf = 0;
+  const apply = () => {
+    raf = 0;
+    sheet.style.setProperty("--lx", `${lx}px`); sheet.style.setProperty("--ly", `${ly}px`); sheet.style.setProperty("--la", String(on));
+  };
+  window.addEventListener("pointermove", (e: PointerEvent) => {
+    if (e.pointerType === "touch" || phone.matches) return;
+    const r = sheet.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    // how far the cursor is from the rim, inside or out
+    const inside = x >= 0 && y >= 0 && x <= r.width && y <= r.height;
+    const d = inside ? Math.min(x, y, r.width - x, r.height - y) : Math.hypot(Math.max(0, -x, x - r.width), Math.max(0, -y, y - r.height));
+    lx = x; ly = y; on = d < 250 ? 1 : 0;
+    if (!raf) raf = requestAnimationFrame(apply);
+  }, { passive: true });
+  document.documentElement.addEventListener("pointerleave", () => { on = 0; if (!raf) raf = requestAnimationFrame(apply); }, { passive: true });
+}
 let resizeT = 0;
 addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => sky.layout(), 150); });
 void document.fonts.ready.then(() => sky.layout());
