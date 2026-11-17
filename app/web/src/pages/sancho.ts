@@ -4,7 +4,8 @@
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/sancho.css";
 import "../chain";
-import { h } from "../common";
+import { h, reduceMotion } from "../common";
+import { Desert } from "../desert";
 import { INSTALL } from "../install";
 import { BLOCKS, configSha256, DEFAULT, fileText, firstScored, LEVERS, MEMORY_ROWS, numberList, problems, REGIMES, type Values } from "../levers";
 
@@ -138,3 +139,12 @@ form.addEventListener("submit", (e) => e.preventDefault());
   build();
   await update();
 })();
+
+// ---- the desert behind the page (src/desert.ts): fixed to the viewport; on a phone a band under the header
+const phone = matchMedia("(max-width: 812px)");
+const desert = new Desert(document.body, { reduce: reduceMotion, small: () => phone.matches });
+const placeDesert = () => { if (phone.matches) document.querySelector(".top")?.after(desert.canvas); else document.body.prepend(desert.canvas); };
+placeDesert();
+let resizeT = 0;
+addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => { placeDesert(); desert.layout(); }, 150); });
+void document.fonts.ready.then(() => desert.layout());
