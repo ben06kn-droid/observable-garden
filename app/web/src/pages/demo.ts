@@ -1,296 +1,348 @@
+// The demo (demo.html; DESIGN.md 3, demo): three bundled searches, each run through the gate in the browser. One
+// search is drawn as one tree (src/runtree.ts, src/demotree.ts) growing in search order, the repeated searches as a
+// bed of small flowers (src/demobed.ts), the stages told in plain words in one fixed place, the verdict under them.
+// After the verdict, the tree opens the run: a panel over the text column, beside the tree, telling every move in a
+// sentence from the log. The cursor's tail (src/cursorwake.ts) acts on the tree, the bed and the backdrop, inside a
+// run as outside it, under the text and never on the panel.
 import "../common";              // the shared stylesheet first, so the theme wins ties
-import "../styles/demo.css";
+import "../styles/demo-page.css";
 import { auditId, h, MEANING, reduceMotion, sha256Hex, word } from "../common";
-import { makeBed } from "../bed";
-import { makeCity } from "../city";
 import { command, demos, loadDemo, type Demo } from "../demos";
-import { Fx } from "../fx";
-import { drawGarden, H as GH, SEED as SEED_AT, W as GW, type GardenHandle } from "../garden";
 import { loadGate } from "../gate";
-import { colourOf, kindOf } from "../heads";
-import { SHAPES } from "../leaves";
-import { Field, startLife } from "../particles";
+import { buildRunTree, type RunTree } from "../runtree";
+import { drawTree, treeFrame, type TreeView } from "../demotree";
+import { makeBed } from "../demobed";
 import { svgPart, WakeLayer } from "../cursorwake";
-import { makeRunView } from "../runView";
-import { makeNotes } from "../notes";
-import { branchSources, woodTwo } from "../woods";
-import type { AuditResult, SearchTree } from "../types";
+import type { AuditResult, Progress, SearchTree } from "../types";
 
 const SEED = 0;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const two = $("demo"), scene = $("scene");
-const svg = $("garden") as unknown as SVGSVGElement, spot = $("spot"), seed = $("seed");
+const section = $("demo"), stage = $("stage"), svg = $("tree") as unknown as SVGSVGElement, bedCv = $("bed") as HTMLCanvasElement;
+const rowsEl = $("rows"), startBtn = $<HTMLButtonElement>("start"), sayEl = $("say"), countEl = $("count");
+const verdictEl = $("verdict"), panel = $("inside"), panelBody = $("in-body"), panelTitle = $("in-h");
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, reduceMotion ? Math.min(ms, 400) : ms));
+const fmtB = (n: number) => n.toLocaleString("en");
 
-// ---- page two's effects canvas (fx.ts) and the run view (runView.ts)
-const fx = new Fx($("fx") as HTMLCanvasElement, two);
-const bed = makeBed($("bed") as unknown as SVGSVGElement, two);
-let garden: GardenHandle | null = null;
-const sparks = (): [number, number][] => {   // the heads the ring strikes lightning from: the bed's, and the blossoms on the run's tree
-  const b = two.getBoundingClientRect();
-  const blossoms = Array.from(svg.querySelectorAll(".blossom.open")).map((e) => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2 - b.left, r.top + r.height / 2 - b.top] as [number, number]; });
-  return [...bed.heads(), ...blossoms];
+// what each search is, and what to watch for
+const ABOUT: Record<string, string> = {
+  nothing: "A short search on a small panel whose only edge is weak. Watch whether its best rule stands apart from the repeats.",
+  planted: "The same search on a panel with a known rule planted in it. Watch a real edge stand clear of what luck reaches.",
+  restart: "A longer search, with swaps, flips and seven restarts. Watch the repeats search just as widely, and so reach higher.",
 };
-// inside a run with several trees, the one being read is lit and the others dim
-const litTree = (stem: number | null) => svg.querySelectorAll<SVGGElement>("[data-stem]").forEach((g) => g.classList.toggle("dimmed", stem !== null && Number(g.dataset.stem) !== stem));
-const inside = makeRunView({ two, scene, panel: $("inside"), fx, tree: () => garden?.treeRect() ?? null, sparks, reduce: reduceMotion,
-  onTree: litTree, isTree: (t) => !!t.closest?.("#garden .real .stem") });
 
-// ---- petals (particles.ts): the ground is the bed's parabola (bed.ts)
-// the verdict written onto the drawing (notes.ts); the petals fade behind its labels and the choice
-const notes = makeNotes(spot, two, () => bed.heads());
-let choiceBox = { x: 0, y: 0, w: 0, h: 0 };
-const petals = new Field({ box: two, air: $("air-two") as HTMLCanvasElement, pile: $("pile-two") as HTMLCanvasElement, kind: "petal", count: 80, start: 36,
-  ground: (x) => { const W = two.clientWidth, u = (x - W / 2) / (W / 2); return two.clientHeight * (0.93 - 0.11 * u * u); },
-  cap: () => (innerWidth < 760 ? 0 : 12), avoid: () => [...notes.boxes(), choiceBox], kick: 1.3, lift: 240 });
-let busy = false;
-// the cursor's wind on the petals comes from the wake (below), not straight from the pointer
-const life = startLife({ fields: [petals], paused: () => inside.isOpen(), throttled: () => busy, reduce: reduceMotion, cursor: false });
+interface Run { demo: Demo; tree: SearchTree | null; rt: RunTree | null; result: AuditResult | null; refused?: string; log: any; submitted: { rule: string; sharpe: number; text: string } | null }
+const runs = new Map<string, Run>();
+let list: Demo[] = [], chosen: Demo | null = null, shown: string | null = null, busy = false, growing = false;
+let view: TreeView | null = null;
 
-// ---- the cursor's wake (cursorwake.ts, the site's signature): the home page's trail, in neon blue with
-// pink edges. It bends nothing: the city, the background trees, the petals in the air and the run's tree
-// are seen refracted through it. It lies over the run's tree and under the verdict and stage notes, the
-// bed and the panels (its canvas sits in #spot, after the tree), so it never hides the text. The petals
-// feel it as wind. Paused inside a run.
-const scenery = svgPart(scene, () => [$("city") as unknown as SVGSVGElement, $("wood2") as unknown as SVGSVGElement]);
-const tree = svgPart(scene, () => [svg]);
-// the growing tree: its picture is refreshed at most four times a second while the trail shows it; if a
-// refresh costs more than 4 ms while it grows, the trail keeps clear of the tree until it has grown
-let slowGrowth = false;
-const treeBox = () => { const r = spot.getBoundingClientRect(), b = scene.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; };
-const groundOf = (c: CanvasRenderingContext2D, w: number, h: number) => {   // the section's own gradient
-  const bg = getComputedStyle(two).backgroundImage, m = bg.match(/linear-gradient\((to (?:top|bottom)),\s*(.*)\)$/);
-  if (!m) { c.fillStyle = getComputedStyle(two).backgroundColor || "#05040b"; c.fillRect(0, 0, w, h); return; }
-  const g = m[1] === "to top" ? c.createLinearGradient(0, h, 0, 0) : c.createLinearGradient(0, 0, 0, h);
-  for (const st of m[2].match(/rgba?\([^)]*\)\s*[\d.]+%/g) ?? []) { const [, col, pct] = st.match(/(rgba?\([^)]*\))\s*([\d.]+)%/)!; g.addColorStop(Number(pct) / 100, col); }
-  c.fillStyle = g; c.fillRect(0, 0, w, h);
+// ---- the status: one or two short lines in a fixed place
+function say(text: string | (string | Node)[], count = "") {
+  sayEl.replaceChildren(...(typeof text === "string" ? [text] : text));
+  countEl.textContent = count;
+}
+const ruleSpan = (r: string) => { const s = document.createElement("span"); s.className = "rule"; s.textContent = r; return s; };
+
+// ---- the bed, in the tree's frame
+const bed = makeBed(bedCv, () => treeFrame(svg, stage));
+let half = 330;
+
+// ---- the cursor's tail: the trail over the tree, the bed and the backdrop, under the text, never on the panel
+const lightEl = section.querySelector<HTMLElement>(".dm-light")!;
+const ground = (c: CanvasRenderingContext2D, w: number, hgt: number) => {
+  c.fillStyle = getComputedStyle(document.body).backgroundColor || "#07060b"; c.fillRect(0, 0, w, hgt);
+  const r = lightEl.getBoundingClientRect(), b = section.getBoundingClientRect();
+  const cx = r.left - b.left + r.width / 2, cy = r.top - b.top + r.height / 2;
+  c.save(); c.translate(cx, cy); c.scale(r.width / 2, r.height / 2);
+  const g = c.createRadialGradient(0, 0, 0, 0, 0, 1);
+  g.addColorStop(0, "rgba(68, 184, 255, 0.10)"); g.addColorStop(0.55, "rgba(68, 184, 255, 0.045)"); g.addColorStop(1, "rgba(68, 184, 255, 0)");
+  c.fillStyle = g; c.fillRect(-1, -1, 2, 2); c.restore();
 };
-const wake = new WakeLayer({ host: scene, ground: groundOf,
-  mount: { parent: spot, before: svg.nextElementSibling },
-  parts: () => slowGrowth ? [scenery, $("air-two") as HTMLCanvasElement] : [scenery, $("air-two") as HTMLCanvasElement, tree],
+const box = (e: Element) => { const r = e.getBoundingClientRect(), b = section.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; };
+const treePart = svgPart(section, () => [svg]);
+const wake = new WakeLayer({ host: section, ground,
+  mount: { parent: stage, before: null },
+  parts: () => [treePart, bedCv],
   bends: () => false,
-  keep: () => slowGrowth ? [treeBox()] : [],
-  active: () => !inside.isOpen(),
-  moving: () => busy,
+  keep: () => (panel.hidden ? [] : [box(panel)]),
+  active: () => true,
+  moving: () => growing,
   minRepaint: 250,
-  // halfway between the narrow line it was and the docs tail (src/sky.ts; 2026-11-18). The fluid's settings, shared
-  // with docs, are the midpoints: cell 5 | 8, flow 0.3 | 0.4125, curl 70 | 13.2, force 1 | 0.6, fade 0.45 | 0.54. The
-  // dye has no docs counterpart (docs draws the fluid itself): its width is the midpoint of the line's (2.4px) and
-  // the docs push's (32 + 48·√dose px), its carry the midpoint of 0.12 and the docs flow; its fade, 0.42 s, was set
-  // by measurement so the tail's visible area 0.9 s after a stroke is halfway between the two (about 8k px)
-  // its life then cut to 65% (2026-11-18): both fades × 0.65 (0.495 → 0.322 s, 0.42 → 0.273 s); nothing else changed
+  // the trail's shape and life as before (2026-11-18): halfway between the narrow line and the docs tail, life x 0.65
   scale: { cell: 6.5, flow: 0.35625, curl: 41.6, force: 0.8, fade: 0.495 * 0.65,
-           dye: 1.5, dyeWidth: 17.2 / 1.5, dyeGrow: 24 / 1.5, dyeFlow: 0.26625, dyeFade: 0.42 * 0.65 },
-  onPush: (x, y, vx, vy, dose) => { const k = 0.5 + 0.9 * Math.sqrt(dose); life.wind.add(x, y, vx * k, vy * k); } });
-// a change to the drawings: painted again in idle time
-const mo = new MutationObserver(() => {
-  wake.invalidate();
-  if (busy && !slowGrowth && wake.paintMs > 4) { slowGrowth = true; wake.keepMask(); }
-});
-// only the drawings' structure (a tree drawn, a twig grown): the city's pulses and a blossom's light are
-// left as they were painted (the trail freezes them for its second; accepted)
-for (const el of [svg, $("wood2"), $("city")]) mo.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["d"] });
+           dye: 1.5, dyeWidth: 17.2 / 1.5, dyeGrow: 24 / 1.5, dyeFlow: 0.26625, dyeFade: 0.42 * 0.65 } });
+new MutationObserver(() => wake.invalidate()).observe(svg, { subtree: true, childList: true, attributes: true, attributeFilter: ["d", "class"] });
 
-// ---- the background trees (woods.ts): the restart example's search, from its log, six at the edges as
-// dim violet-pink neon. They do not respond to clicks; their branches shed the petals.
-const bgTwo = $("wood2") as unknown as SVGSVGElement;
-let backdrop: SearchTree | null = null;
-const woods = () => {
-  if (!backdrop) return;
-  woodTwo(bgTwo, backdrop);
-  petals.setSources(branchSources(bgTwo, two));
-};
-fetch("/examples/overview-tree.json").then((r) => r.json()).then((tree: SearchTree) => { backdrop = tree; woods(); }).catch(() => {});
-
-// ---- the city around page two (city.ts): cables, pylons, signs; a pulse now and then; a click strikes
-const city = makeCity($("city") as unknown as SVGSVGElement, reduceMotion, fx);
-city.draw();
-city.start(() => inside.isOpen() || document.hidden);
-let resizeT = 0;
-window.addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => { woods(); city.draw(); placeSeed(); notes.place(); }, 200); });
-
-// ---- page two: the run's tree in the spot, the bed along the bottom
-const runBtn = $<HTMLButtonElement>("run");
-const runs = new Map<string, { tree: SearchTree | null; result: AuditResult | null; refused?: string }>();
-let shown: string | null = null, chosen: Demo, list: Demo[] = [];
-
-function enter() {
-  if (!shown || busy) return;
-  const r = runs.get(shown), d = list.find((x) => x.key === shown)!;
-  if (!r?.tree || (!r.result && !r.refused)) return;      // only once the verdict is in
-  inside.open({ id: d.key, title: d.title, tree: r.tree, result: r.result, refused: r.refused });
-  notes.entered();
+// ---- the searches: numbered rows, one Start
+function markRows() {
+  rowsEl.querySelectorAll<HTMLButtonElement>(".dm-row").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.key === chosen?.key));
+    b.disabled = busy;
+    const r = runs.get(b.dataset.key!), tag = b.querySelector(".r")!;
+    tag.textContent = r?.result ? `${word(r.result.status)} · p ${r.result.p_replay?.toFixed(4) ?? "n/a"}` : r?.refused ? "Refused" : "";
+  });
+  const done = chosen && runs.get(chosen.key)?.result;
+  startBtn.textContent = busy ? "Running" : done ? "Start again" : "Start";
+  startBtn.disabled = busy || !chosen;
 }
-$("bed").addEventListener("click", enter);
-
-// the run's tree: every evaluation of the search a twig (garden.ts `twigs`); hovering only brightens
-// it, a click (or Enter) goes inside once the verdict is in
-function drawRun(d: Demo, t: SearchTree, r: AuditResult | null) {
-  garden = drawGarden(svg, t, { interactive: true, halo: true, neon: true, canopy: false, twigs: true, bar: r?.class_bar,
-    blossom: { kind: kindOf(d.key), colour: colourOf(d.key) },
-    submitted: r ? { rule: r.submitted_feature_names.join(" "), sharpe: r.submitted_sharpe } : undefined });
-  garden.onPick((stem) => (inside.isOpen() ? inside.choose(stem) : enter()));   // inside, a click picks that tree
-  requestAnimationFrame(placeChoice);
-  svg.setAttribute("aria-label", `${d.title}: the run's tree, ${t.moves.length} moves and ${t.evaluations} evaluations. Choose it to go inside the run once the verdict is in.`);
-  return garden;
-}
-
 demos().then((ds) => {
   list = ds; chosen = ds[0];
-  const chips = $("chips");
-  for (const d of ds) {
-    const li = h("li", null, null, chips);
-    const b = h("button", "chip", null, li) as HTMLButtonElement;
+  ds.forEach((d, i) => {
+    const li = h("li", null, null, rowsEl);
+    const b = h("button", "dm-row", null, li) as HTMLButtonElement;
     b.type = "button"; b.dataset.key = d.key;
-    b.append(d.title); h("small", null, d.about, b);
-    b.addEventListener("click", () => {
-      chosen = d; markChip();
-      const r = runs.get(d.key);
-      if (r?.tree && !busy) {                         // a run already made: show it as it ended
-        shown = d.key; bed.reset(d.key); bed.finish(); settle(drawRun(d, r.tree, r.result)).bloom(r.refused ? 0 : 1); seed.classList.add("spent");
-        if (r.result) { notes.verdict(garden!, r.result, r.tree.evaluations, SEED); below(r.result); } else if (r.refused) notes.refused(garden, r.refused, r.tree.evaluations);
-      }
-    });
-  }
-  markChip();
-  placeSeed();
+    h("span", "n", String(i + 1).padStart(2, "0"), b); h("span", "t", d.title, b); h("span", "r", null, b); h("span", "a", ABOUT[d.key] ?? d.about, b);
+    b.addEventListener("click", () => { if (busy) return; chosen = d; markRows(); showFinished(d.key); });
+  });
+  markRows();
 });
-function markChip() { $("chips").querySelectorAll<HTMLButtonElement>(".chip[data-key]").forEach((c) => c.setAttribute("aria-pressed", String(c.dataset.key === chosen.key))); }
+startBtn.addEventListener("click", () => { if (!busy && chosen) void run(chosen); });
 
-runBtn.addEventListener("click", () => { if (!busy) void run(chosen); });
+// ---- idle: the ground and the seed where the trunk will stand
+function idle() {
+  svg.replaceChildren(); view = null; shown = null;
+  svg.setAttribute("viewBox", "-330 -745 660 790"); svg.setAttribute("preserveAspectRatio", "xMidYMax meet");
+  const NS = "http://www.w3.org/2000/svg";
+  const l = document.createElementNS(NS, "line"); l.setAttribute("class", "ground"); l.setAttribute("x1", "-330"); l.setAttribute("x2", "330"); l.setAttribute("y1", "0.3"); l.setAttribute("y2", "0.3"); svg.append(l);
+  const c = document.createElementNS(NS, "circle"); c.setAttribute("class", "node"); c.setAttribute("cx", "0"); c.setAttribute("cy", "-2.4"); c.setAttribute("r", "2.2"); svg.append(c);
+  svg.classList.remove("ready"); svg.removeAttribute("tabindex"); svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "The run's tree. Choose a search and press Start.");
+  bed.clear();
+}
+idle();
 
+// the submitted rule, from the log's own submit call: its support named by the tree's features, its score as logged
+function submittedOf(log: any, t: SearchTree): Run["submitted"] {
+  const call = [...(log.calls ?? [])].reverse().find((c: any) => c.tool === "submit" && c.ok !== false);
+  if (!call?.state?.support) return null;
+  const rule = call.state.support.map(([k, s]: [number, number]) => (s > 0 ? "+" : "-") + t.feature_names[k]).join(" ");
+  const m = /sharpe (-?[\d.]+)/.exec(call.text ?? "");
+  return { rule, sharpe: call.state.score, text: m ? m[1] : String(call.state.score) };
+}
+
+// ---- a run
 async function run(demo: Demo) {
-  busy = true; runBtn.disabled = true;
-  $("record").hidden = true;
-  const key = demo.key, B = demo.B;
-  runs.set(key, { tree: null, result: null });
-  shown = key; bed.reset(key); bed.start();     // the bed blooms on its own clock from the click
-  svg.replaceChildren(); idleBox(); garden = null; notes.clear(); placeChoice();
-  seed.classList.remove("spent");
+  busy = true; shown = demo.key; closeInside(false);
+  verdictEl.hidden = true; $("record").hidden = true;
+  idle(); shown = demo.key; markRows();
+  const B = demo.B;
+  const r: Run = { demo, tree: null, rt: null, result: null, log: null, submitted: null };
+  runs.set(demo.key, r);
+  say("The gate is loading in your browser. The first time takes a few seconds.");
   try {
     const [gate, loaded] = await Promise.all([loadGate(), loadDemo(demo)]);
-    let searched: () => void = () => {};
-    const searchShown = new Promise<void>((r) => { searched = r; });
-    let replay = 0, searchDone = false;
-    const showNull = () => notes.replay(`replay · ${Math.round(replay * B).toLocaleString("en")} of ${B.toLocaleString("en")}`);
-    const out = await gate.audit({ ...loaded.inputs, B, seed: SEED }, {
-      onSearch: (t) => { runs.get(key)!.tree = t; void grow(demo, t).then(() => { searchDone = true; garden?.bloomAll(2600); showNull(); searched(); }); },
-      onProgress: (p) => { if (p.stage === "replay") replay = p.done / p.total; if (searchDone) showNull(); },
-    });
-    await searchShown;
-    if (out.kind === "refused") {
-      runs.get(key)!.refused = out.message;
-      (garden as GardenHandle | null)?.bloom(0);
-      notes.refused(garden, out.message, runs.get(key)!.tree?.evaluations ?? 0);
-      return;
-    }
-    const r = out.result;
-    runs.get(key)!.result = r;
-    settle(drawRun(demo, runs.get(key)!.tree!, r)).bloom(1);     // the submitted branch and the bar, now known
-    const tr = garden!.treeRect(), cr = ($("city") as HTMLElement).getBoundingClientRect();   // the verdict's pulse arrives at the tree's top
-    city.pulseTo(tr.left + tr.width / 2 - cr.left, tr.top - cr.top);
-    notes.verdict(garden!, r, runs.get(key)!.tree!.evaluations, SEED);
-    below(r);
-    await record(r, demo, loaded.inputs.panel, loaded.inputs.cls, loaded.inputs.log, loaded.logJson, gate.wheel);
-  } catch (e) {
-    notes.refused(garden, String((e as Error).message ?? e), 0, "ERROR");
-  } finally {
-    busy = false; runBtn.disabled = false;
-    if (slowGrowth) { slowGrowth = false; wake.keepMask(); wake.invalidate(); }   // grown: the trail passes over the tree again
-  }
-}
-
-// the verdict's meaning and its reasons, below the fold, as plain type
-function below(r: AuditResult) {
-  $("rec-meaning").textContent = `${word(r.status)}: ${MEANING[word(r.status)] ?? ""}`;
-  const ul = $("rec-reasons"); ul.replaceChildren();
-  for (const x of r.reasons) h("li", null, x, ul);
-}
-
-// ---- the seed: before a run, a bright point in the ground where the trunk will stand (the garden's
-// own trunk position, garden.ts SEED), breathing, with one swaying sprout, and the three examples
-// beside it as the choice. Run grows the trunk out of it (the trunk scales up from its foot), so the
-// idle is the run's first frame. For an example with restarts, the first tree stands here.
-function idleBox() { svg.setAttribute("viewBox", `0 0 ${GW} ${GH}`); svg.setAttribute("preserveAspectRatio", "xMidYMax meet"); svg.classList.add("garden"); }
-let seedAt: [number, number] = [0, 0];
-function placeSeed() {
-  if (!svg.getAttribute("viewBox")) idleBox();
-  const m = svg.getScreenCTM(), sr = spot.getBoundingClientRect();
-  if (!m) return;
-  const p = svg.createSVGPoint(); p.x = SEED_AT[0]; p.y = SEED_AT[1];
-  const q = p.matrixTransform(m), tr = two.getBoundingClientRect();
-  seed.style.transform = `translate3d(${(q.x - sr.left).toFixed(1)}px, ${(q.y - sr.top).toFixed(1)}px, 0)`;
-  seedAt = [q.x - tr.left, q.y - tr.top];                    // in the section's pixels
-  placeChoice();
-}
-// the choice sits beside the seed; once a tree stands there it moves to the dark upper left, level with
-// the sign across the page, where no branch, flower or petal pile sits behind the names
-function placeChoice() {
-  const box = $("choice"), tr = two.getBoundingClientRect(), tree = svg.querySelector(".real") ? garden?.treeRect() : null;
-  const moved = !!(tree && tree.width && innerWidth >= 760);
-  box.classList.toggle("moved", moved);   // in the upper left, the names only: the line on the demo has been read
-  const [x, y] = moved ? freeSpot(box.offsetWidth, box.offsetHeight, tr) : [seedAt[0] + 34, seedAt[1] - box.offsetHeight - 64];   // clear of the pile on the ground
-  box.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
-  choiceBox = { x: x - 12, y: y - 8, w: box.offsetWidth + 24, h: box.offsetHeight + 16 };
-}
-// the first place in the upper left, scanning down then right, where the names touch no frond of a
-// background tree and no cable (14 px clear): the text moves, never the drawing
-function freeSpot(w: number, hgt: number, tr: DOMRect): [number, number] {
-  const pts = [...branchSources(bgTwo, two), ...city.points()], pad = 14, W = tr.width, H = tr.height;
-  const clear = (x: number, y: number) => pts.every((p) => !("x" in p ? p.x > x - pad && p.x < x + w + pad && p.y > y - pad && p.y < y + hgt + pad : p[0] > x - pad && p[0] < x + w + pad && p[1] > y - pad && p[1] < y + hgt + pad));
-  for (let x = W * 0.045; x < W * 0.24 - w; x += 12) for (let y = 70; y < H * 0.6 - hgt; y += 8) if (clear(x, y)) return [x, y];
-  return [W * 0.06, H * 0.34];
-}
-// a redrawn tree shows its blossoms as they were, without opening them again
-function settle(g: GardenHandle) { svg.classList.add("settled"); requestAnimationFrame(() => requestAnimationFrame(() => svg.classList.remove("settled"))); return g; }
-idleBox(); placeSeed();
-bed.reset("idle");   // the ground and its line from the start; the flowers come with a run
-
-// ---- a petal now and then lands on the bar (once a run has drawn it), rests, slides off an end and
-// falls. Decoration on the gate's bar: it reads where the bar is, nothing else.
-const barPetal = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-barPetal.setAttribute("viewBox", "-10 -10 20 20"); barPetal.setAttribute("class", "bar-petal"); barPetal.setAttribute("aria-hidden", "true");
-barPetal.innerHTML = `<path d="${SHAPES.petal}"></path>`;
-spot.appendChild(barPetal);
-function petalOnBar() {
-  const lines = Array.from(svg.querySelectorAll(".bar line"));
-  if (!reduceMotion && lines.length && !inside.isOpen() && !document.hidden) {
-    const l0 = lines[0].getBoundingClientRect(), l1 = lines[lines.length - 1].getBoundingClientRect(), sr = spot.getBoundingClientRect(), s = 12;
-    const left = l0.left - sr.left, right = l1.right - sr.left, y = l0.top - sr.top - s * 0.75, dir = Math.random() < 0.5 ? -1 : 1;
-    const x = left + (right - left) * (0.2 + Math.random() * 0.6), end = dir > 0 ? right : left - s, r0 = Math.random() * 90;
-    const T = (px: number, py: number, r: number) => `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0) rotate(${r.toFixed(0)}deg)`;
-    barPetal.animate([
-      { transform: T(x - dir * 40, y - 160, r0), opacity: 0 },
-      { transform: T(x, y, r0 + 140), opacity: 1, offset: 0.32, easing: "cubic-bezier(.3, .6, .4, 1)" },
-      { transform: T(x, y, r0 + 140), opacity: 1, offset: 0.5, easing: "cubic-bezier(.5, 0, .9, .6)" },
-      { transform: T(end, y + 2, r0 + 140 + dir * 25), opacity: 1, offset: 0.82 },
-      { transform: T(end + dir * 24, y + 150, r0 + 330), opacity: 0 },
-    ], { duration: 7200, easing: "linear" });
-  }
-  window.setTimeout(petalOnBar, 9000 + Math.random() * 7000);
-}
-window.setTimeout(petalOnBar, 6000);
-
-// the run's tree grows evaluation by evaluation in the log's order; the bed's first half follows it
-function grow(d: Demo, t: SearchTree): Promise<void> {
-  const g = drawRun(d, t, null);
-  const finish = () => notes.search(g, g.total, "search", `${t.evaluations} evaluations`);
-  if (reduceMotion) { g.setStep(g.total); seed.classList.add("spent"); finish(); return Promise.resolve(); }
-  g.grow(); g.setStep(0);
-  const per = Math.min(70, 4200 / t.evaluations);
-  return new Promise((resolve) => {
-    let k = 0, mi = 0, inMove = 0;
-    const tick = () => {
-      if (mi >= t.moves.length) { finish(); resolve(); return; }
-      k++; inMove++; g.setStep(k);
-      if (k === 1) seed.classList.add("spent");                // the trunk has grown out of the seed
-      notes.search(g, k, t.moves[mi].kind, `${k} of ${t.evaluations}`);
-      if (inMove >= t.moves[mi].candidates.length) { mi++; inMove = 0; }
-      window.setTimeout(tick, per);
+    r.log = loaded.logJson;
+    const alpha = Number(loaded.logJson.alpha ?? 0.05);
+    let gotTree: () => void = () => {};
+    const treeIn = new Promise<void>((res) => { gotTree = res; });
+    const prog: Partial<Record<Progress["stage"], Progress>> = {};
+    let phase: "search" | "repeat" | "after" = "search";
+    const repeatCount = () => {
+      const p = prog.replay;
+      countEl.textContent = p ? `Search ${fmtB(p.done)} of ${fmtB(p.total)}` : "Resampling the data";
     };
-    tick();
+    say("The agent searches. Every rule it scores is recorded.");
+    const outP = gate.audit({ ...loaded.inputs, B, seed: SEED }, {
+      onSearch: (t) => { r.tree = t; r.submitted = submittedOf(loaded.logJson, t); r.rt = buildRunTree(t, { submitted: r.submitted }); gotTree(); },
+      onProgress: (p) => { prog[p.stage] = p; if (phase === "repeat") repeatCount(); },
+    });
+    await Promise.race([treeIn, outP]);
+    if (!r.rt || !r.tree) { const out = await outP; throw new Error(out.kind === "refused" ? out.message : "The gate returned no search."); }
+    await grow(r.rt, r.tree);
+
+    // what was submitted
+    view!.showPink(true); view!.bloom("submitted");
+    if (r.submitted) say(["The agent submits its best: ", ruleSpan(r.submitted.rule), `, in-sample Sharpe ${r.submitted.text}.`], `Search complete · ${r.tree.evaluations} rules scored`);
+    await sleep(2200);
+
+    // the search repeated on data with nothing in it
+    phase = "repeat";
+    say(`The gate now repeats the same search ${fmtB(B)} times, on resampled data where no rule has a real edge.`);
+    repeatCount();
+    bed.reset(demo.key, half);
+    if (reduceMotion) bed.finish(); else bed.start();
+    const [out] = await Promise.all([outP, sleep(3200)]);
+    phase = "after";
+    if (out.kind === "refused") { r.refused = out.message; finishRefused(r); return; }
+    r.result = out.result;
+
+    // the level a result must clear
+    say(`To pass, the submitted Sharpe must beat what at least ${Math.round((1 - alpha) * 100)} in 100 of those searches reach.`, `α ${alpha}`);
+    await sleep(2400);
+    bed.finish();
+    showVerdict(r);
+    await record(r.result, demo, loaded.inputs.panel, loaded.inputs.cls, loaded.inputs.log, loaded.logJson, gate.wheel);
+  } catch (e) {
+    say(`The run stopped: ${String((e as Error).message ?? e)}`);
+  } finally {
+    busy = false; growing = false; markRows();
+  }
+}
+
+// the tree grows rule by rule in the log's order; the count says how far the search has come
+function grow(rt: RunTree, t: SearchTree): Promise<void> {
+  view = drawTree(svg, rt);
+  half = Math.max(160, Math.max(-rt.l, rt.r) + 24);
+  bed.reset(shown ?? "", half);
+  view.bloom("growing");
+  const E = rt.evaluations, M = t.moves.length;
+  const moveOf: number[] = []; t.moves.forEach((m, i) => m.candidates.forEach(() => moveOf.push(i)));
+  const counter = (k: number) => { const i = Math.min(E, Math.max(0, Math.floor(k))); countEl.textContent = `Move ${Math.min(M, (moveOf[Math.min(i, E - 1)] ?? 0) + 1)} of ${M} · rule ${i} of ${E}`; };
+  if (reduceMotion) { view.setAt(E + 1); counter(E); return Promise.resolve(); }
+  const per = Math.max(12, Math.min(120, 5200 / E));
+  growing = true;
+  return new Promise((resolve) => {
+    const t0 = performance.now();
+    let last = -2;
+    const frame = (now: number) => {
+      const at = (now - t0) / per - 1;
+      view!.setAt(Math.min(at, E + 1));
+      if (Math.floor(at) !== last) { last = Math.floor(at); counter(at); }
+      if (at < E + 1) requestAnimationFrame(frame); else { growing = false; counter(E); resolve(); }
+    };
+    requestAnimationFrame(frame);
   });
 }
 
+function showVerdict(r: Run) {
+  const res = r.result!, w = word(res.status), alpha = res.alpha;
+  const meaning = MEANING[w] ?? "";
+  say(`${w}: ${meaning}`, `p ${res.p_replay?.toFixed(4) ?? "n/a"} · α ${alpha} · ${fmtB(res.B)} searches`);
+  $("v-word").textContent = w;
+  $("v-nums").textContent = `p ${res.p_replay?.toFixed(4) ?? "n/a"} against α ${alpha}, over ${fmtB(res.B)} repeated searches`;
+  verdictEl.hidden = false;
+  view?.bloom("none");
+  makeOpenable(r);
+  $("rec-meaning").textContent = `${w}: ${meaning}`;
+  const ul = $("rec-reasons"); ul.replaceChildren();
+  for (const x of res.reasons) h("li", null, x, ul);
+}
+function finishRefused(r: Run) {
+  say(`The gate refused this run: ${r.refused}`);
+  $("v-word").textContent = "REFUSED"; $("v-nums").textContent = ""; verdictEl.hidden = false;
+  makeOpenable(r);
+}
+function makeOpenable(r: Run) {
+  svg.classList.add("ready"); svg.setAttribute("tabindex", "0"); svg.setAttribute("role", "button");
+  svg.setAttribute("aria-label", `${r.demo.title}: the run's tree, ${r.tree?.moves.length ?? 0} moves and ${r.tree?.evaluations ?? 0} rules scored. Open the run.`);
+}
+
+// a search already run: shown as it ended
+function showFinished(key: string) {
+  const r = runs.get(key);
+  closeInside(false);
+  if (!r?.rt || !r.tree || (!r.result && !r.refused)) { idle(); verdictEl.hidden = true; $("record").hidden = true; say("Choose a search and press Start."); return; }
+  shown = key;
+  view = drawTree(svg, r.rt); half = Math.max(160, Math.max(-r.rt.l, r.rt.r) + 24);
+  view.setAt(r.rt.evaluations + 1); view.showPink(true);
+  bed.reset(key, half); bed.finish();
+  if (r.result) { showVerdict(r); $("record").hidden = false; } else finishRefused(r);
+}
+
+// ---- inside a run
+function openInside() {
+  const r = shown ? runs.get(shown) : null;
+  if (busy || !r?.tree || (!r.result && !r.refused)) return;
+  panelTitle.textContent = r.demo.title;
+  fillInside(r);
+  panel.hidden = false; section.classList.add("inside-open");
+  panelTitle.focus();
+  if (innerWidth <= 812) panel.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+  wake.invalidate();
+}
+function closeInside(refocus = true) {
+  if (panel.hidden) return;
+  panel.hidden = true; section.classList.remove("inside-open");
+  if (refocus) svg.focus();
+}
+svg.addEventListener("click", () => { if (svg.classList.contains("ready")) (panel.hidden ? openInside() : closeInside()); });
+svg.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && svg.classList.contains("ready")) { e.preventDefault(); panel.hidden ? openInside() : closeInside(); } });
+$("in-close").addEventListener("click", () => closeInside());
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden && !document.querySelector(".top.open")) { e.preventDefault(); closeInside(); } });
+
+// the run told move by move, from the log's own words and numbers
+const SEARCH = new Set(["init", "extend_best", "swap_worst", "flip", "restart"]);
+const TRIES: Record<string, string> = {
+  init: "Scored every one-feature rule",
+  extend_best: "Tried adding one more feature to its rule",
+  swap_worst: "Tried swapping out each feature of its rule",
+  restart: "Started again from the ground, as its declared rule says",
+};
+function fillInside(r: Run) {
+  const t = r.tree!, log = r.log, names = t.feature_names;
+  const named = (idx: string) => idx.split(",").map((x) => x.trim()).filter(Boolean).map((x) => (x.endsWith("+") ? "+" : "-") + names[Number(x.slice(0, -1))]).join(" ");
+  panelBody.replaceChildren();
+  const calls: any[] = log?.calls ?? [];
+  let k = 0, moves = 0, best: string | null = null, lastRefused: any = null, pred: any = null;
+  const items: { p: (string | Node)[]; tool: string; refused?: string }[] = [];
+  for (const c of calls) {
+    const text: string = c.text ?? "";
+    if (c.ok === false) {
+      items.push({ p: [`Tried to ${c.tool === "restart" ? "start again" : c.tool.replace(/_/g, " ")}; refused: ${text}.`], tool: c.tool, refused: text });
+      if (SEARCH.has(c.tool)) lastRefused = c;
+      continue;
+    }
+    if (c.tool === "declare_triggers") {
+      const tr = (c.args?.triggers ?? []).map((x: any) => {
+        // the gate's own definitions (quixote/session.py): a move's gain is its score less the best before it; failures
+        // count the moves in a row that do not beat the best (an improvement or a restart starts the count again)
+        const cond = x.trigger === "last_gain_at_most" ? (Number(x.param) === 0 ? "once a move does not beat its best" : `once a move beats its best by ${x.param} or less`)
+          : x.trigger === "failures_at_least" ? `after ${x.param} moves in a row that do not beat its best` : `${x.trigger} ${x.param}`;
+        return `${x.action} ${cond}`;
+      }).join("; ");
+      items.push({ p: [`Declared its rule before searching: ${tr}.`], tool: c.tool });
+      continue;
+    }
+    if (c.tool === "predict") { pred = c.args; items.push({ p: [`Recorded a prediction for its rule: ${c.args?.mean} (sd ${c.args?.sd}).`], tool: c.tool }); continue; }
+    if (c.tool === "submit") {
+      const m = /submitted \[([^\]]*)\] sharpe (-?[\d.]+)/.exec(text);
+      items.push({ p: ["Submitted ", ruleSpan(m ? named(m[1]) : r.submitted?.rule ?? ""), ` at in-sample Sharpe ${m ? m[2] : ""}.`], tool: c.tool });
+      continue;
+    }
+    // a search move: what it tried, how many rules it scored (the gate's re-execution of the log), what it kept
+    const tm = t.moves[k];
+    const n = tm && tm.kind === c.tool ? tm.candidates.length : null;
+    if (SEARCH.has(c.tool) || /kept:/.test(text)) { k++; moves++; }
+    let m = /kept: \[([^\]]*)\] sharpe (-?[\d.]+) \(best (-?[\d.]+)/.exec(text);
+    const rs = /restarted on (.+?): \[([^\]]*)\] sharpe (-?[\d.]+) \(best (-?[\d.]+)\)/.exec(text);
+    const tries = c.tool === "flip" ? `Flipped the sign of ${names[c.args?.feature] ?? "a feature"}` : TRIES[c.tool] ?? c.tool.replace(/_/g, " ");
+    const scored = n !== null ? `${n} rule${n === 1 ? "" : "s"}` : "";
+    if (rs) m = [rs[0], rs[2], rs[3], rs[4]] as unknown as RegExpExecArray;
+    if (m) {
+      const sub = r.submitted && named(m[1]) === r.submitted.rule && m[2] === r.submitted.text;
+      const stays = m[3] !== m[2] ? ` Its best stays ${m[3]}.` : "";
+      best = best === null || Number(m[3]) > Number(best) ? m[3] : best;
+      items.push({ p: [`${tries}: scored ${scored}, kept `, sub ? ruleSpan(named(m[1])) : named(m[1]), ` at Sharpe ${m[2]}.${stays}`], tool: c.tool });
+    } else items.push({ p: [`${tries}: ${text.split(" | ")[0]}`], tool: c.tool });
+  }
+  const sumP = h("p", "sum", null, panelBody);
+  sumP.append(`${moves} moves, ${t.evaluations} rules scored. Best in-sample Sharpe ${best ?? "n/a"}. Submitted `);
+  if (r.submitted) sumP.append(ruleSpan(r.submitted.rule), ` at ${r.submitted.text}.`);
+  const ol = h("ol", null, null, panelBody);
+  items.forEach((it, i) => {
+    const li = h("li", it.refused ? "refused" : null, null, ol);
+    h("span", "i", String(i + 1).padStart(2, "0"), li);
+    const p = h("p", null, null, li);
+    if (it.refused) h("span", "tag", "refused", p);
+    p.append(...it.p);
+    h("span", "tool", it.tool, p);
+  });
+  const end = h("div", "end", null, panelBody);
+  h("h3", null, "How the search ended", end);
+  const pe = h("p", null, null, end);
+  pe.append(lastRefused ? `It ended when it tried to start again and was refused: ${lastRefused.text}. ` : `It ended after ${moves} moves. `);
+  if (pred) pe.append(`It recorded a prediction of ${pred.mean} (sd ${pred.sd}) and submitted `); else pe.append("It submitted ");
+  if (r.submitted) pe.append(ruleSpan(r.submitted.rule), ` at in-sample Sharpe ${r.submitted.text}.`);
+  h("h3", null, "What the gate decided", end);
+  if (r.result) {
+    const res = r.result, w = word(res.status);
+    h("p", null, `It repeated the search ${fmtB(res.B)} times on resampled data where no rule has a real edge. p is ${res.p_replay?.toFixed(4) ?? "n/a"}, against α ${res.alpha}: ${w}. ${(MEANING[w] ?? "").replace(/^./, (x) => x.toUpperCase())}`, end);
+    h("p", "nums", `Class tier, beside it: p ${res.p_class.toFixed(4)}; the class's bar ${res.class_bar.toFixed(3)} over all ${fmtB(res.class_size)} rules.`, end);
+  } else h("p", null, `The gate refused the run: ${r.refused}`, end);
+  panelBody.tabIndex = 0;
+  panelBody.scrollTop = 0;
+}
+
+// ---- the record, below the first screen
 async function record(r: AuditResult, demo: Demo, panelBytes: ArrayBuffer, cls: string, logText: string, log: any, wheel: string) {
   const [panelSha, classSha, logSha] = await Promise.all([sha256Hex(panelBytes), sha256Hex(cls), sha256Hex(logText)]);
   const id = await auditId({ alpha: r.alpha, B: r.B, class_sha256: classSha, log_sha256: logSha, panel_sha256: panelSha, seed: SEED, wheel });
@@ -315,3 +367,8 @@ async function record(r: AuditResult, demo: Demo, panelBytes: ArrayBuffer, cls: 
   }
   $("record").hidden = false;
 }
+
+// a resize redraws the bed in the tree's new frame
+let rz = 0;
+window.addEventListener("resize", () => { clearTimeout(rz); rz = window.setTimeout(() => { bed.paint(); wake.invalidate(); }, 150); });
+void list;

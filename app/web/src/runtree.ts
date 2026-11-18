@@ -39,6 +39,11 @@ export interface RunTree {
   forced: number;
   /** where one kept move's length of stem ends and the next begins: a small mark, shown once the stem passes it */
   nodes: { p: P; t: number; stem: number }[];
+  /** each stem's centre line, its width along it (u: 0 at the foot, 1 at the tip, by the line's points) and the
+   *  spans of the search over which it grows from u0 to u1 */
+  stemGeo: { axis: P[]; w: (u: number) => number; spans: { u0: number; u1: number; t0: number; t1: number }[] }[];
+  /** the pink path's stems: each stem from its foot to u (the trunk to a limb's foot, then the limb) */
+  pinkStems: { stem: number; u: number }[];
 }
 
 const hash = (i: number) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
@@ -290,16 +295,18 @@ export function buildRunTree(tree: SearchTree, o: RunTreeOptions = {}): RunTree 
   // ---- the pink path: the stem from the foot to the branch (for a restart's limb, the trunk to where the limb
   // leaves it first), the branch to the twig, the twig
   const pink: Stroke[] = [];
+  const pinkStems: RunTree["pinkStems"] = [];
   let mark: P | null = null;
   if (sub.twig && sub.branch && sub.stem) {
     const { twig, branch: pb, stem: ps } = sub;
     const g = geos[ps.s], n = g.axis.length - 1;
     if (ps.s > 0) {   // the trunk up to the limb's foot
       const tr = geos[0], foot = g.axis[0], k = tr.axis.findIndex((p) => p[0] === foot[0] && p[1] === foot[1]);
-      if (k > 0) pink.push({ kind: "stem", pts: tr.axis.slice(0, k + 1), w0: tr.w(0), w1: tr.w(k / n), t0: 0, t1: 0, stem: 0, move: -1, pink: true });
+      if (k > 0) { pink.push({ kind: "stem", pts: tr.axis.slice(0, k + 1), w0: tr.w(0), w1: tr.w(k / n), t0: 0, t1: 0, stem: 0, move: -1, pink: true }); pinkStems.push({ stem: 0, u: k / n }); }
     }
     const sp = g.axis.slice(0, Math.ceil(ps.u * n) + 1); sp[sp.length - 1] = at(g, ps.u).p;
     pink.push({ kind: "stem", pts: sp, w0: g.w(0), w1: g.w(ps.u), t0: 0, t1: 0, stem: ps.s, move: -1, pink: true });
+    pinkStems.push({ stem: ps.s, u: ps.u });
     const bp = pb.stroke.pts, bn = bp.length - 1, bx = pb.upTo * bn, bi = Math.min(bn - 1, Math.floor(bx));
     const bpts = bp.slice(0, bi + 1); bpts.push([lerp(bp[bi][0], bp[bi + 1][0], bx - bi), lerp(bp[bi][1], bp[bi + 1][1], bx - bi)]);
     pink.push({ kind: "branch", pts: bpts, w0: pb.stroke.w0, w1: lerp(pb.stroke.w0, pb.stroke.w1, pb.upTo), t0: 0, t1: 0, stem: ps.s, move: -1, pink: true });
@@ -309,7 +316,8 @@ export function buildRunTree(tree: SearchTree, o: RunTreeOptions = {}): RunTree 
 
   let l = 0, r = 0, top = 0;
   for (const st of strokes) for (const p of st.pts) { l = Math.min(l, p[0]); r = Math.max(r, p[0]); top = Math.min(top, p[1]); }
-  return { strokes, evaluations: E, stems: S, l: l - 6, r: r + 6, top: top - 6, pink, mark, forced, nodes };
+  return { strokes, evaluations: E, stems: S, l: l - 6, r: r + 6, top: top - 6, pink, mark, forced, nodes, pinkStems,
+    stemGeo: geos.map((g, s) => ({ axis: g.axis, w: g.w, spans: stemMoves[s].map((mi, j) => ({ u0: j === 0 ? 0 : g.u[j], u1: g.u[j + 1], t0: j === 0 ? first[mi] - 1 : first[mi], t1: first[mi] + moves[mi].candidates.length })) })) };
 }
 
 /** Pairs of strokes that cross, other than a stroke where it leaves its parent (the birch's rule). */

@@ -4,66 +4,93 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quixote · demo</title>
-<meta name="description" content="The gate on three bundled searches, in your browser: the search, re-run on noise, then the verdict.">
+<meta name="description" content="Watch one agent's search, then watch the gate repeat it on resampled data where no rule has a real edge. In your browser, in seconds.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <script type="module" src="/src/pages/demo.ts"></script>
 </head>
 <body>
-<a class="skip" href="#choice">Skip to the examples</a>
+<a class="skip" href="#searches">Skip to the searches</a>
 <!-- menu -->
 
 <main>
-  <section class="page two" id="demo" aria-label="The demo">
-    <div class="scene" id="scene">
-      <div class="tide-sky" aria-hidden="true"></div>
-      <svg class="city" id="city"></svg>
-      <svg class="wood2" id="wood2" role="group" aria-label="Trees"></svg>
-      <canvas class="air" id="air-two" aria-hidden="true"></canvas>
-      <div class="spot notes-host" id="spot">
-        <svg id="garden" role="group" aria-label="The run's tree. Choose an example and run the gate."></svg>
-        <div class="seed" id="seed" aria-hidden="true"><span class="glow"></span><span class="core"></span><svg class="sprout" viewBox="-10 -30 20 32"><path d="M0 0 C1.5 -8 -2 -14 0 -24"/><path class="leaflet" d="M0 -13 C3 -17 7 -16 9 -21 C5 -22 1 -19 0 -13 Z"/></svg></div>
+  <section class="dm" id="demo" aria-labelledby="dm-h">
+    <div class="dm-light" aria-hidden="true"></div>
+    <div class="dm-grid">
+      <div class="dm-text" id="dm-text">
+        <p class="label">Demo</p>
+        <h1 id="dm-h">The best of many tries</h1>
+        <div class="dm-intro">
+          <p>An agent’s best backtest always looks good, because it is the best of many tries.</p>
+          <p>Here you watch one complete search, then watch the gate repeat that same search on resampled data where no
+            rule has a real edge. If the submitted result stands apart from what those searches reach by luck, it
+            passes.</p>
+          <p>It runs in your browser, with nothing to install or upload.</p>
+        </div>
+
+        <fieldset class="dm-searches" id="searches">
+          <legend class="label">Three searches</legend>
+          <ol id="rows"></ol>
+          <button class="dm-start" id="start" type="button">Start</button>
+        </fieldset>
+
+        <div class="dm-status" id="status" aria-live="polite">
+          <p class="say" id="say">Choose a search and press Start.</p>
+          <p class="count" id="count"></p>
+        </div>
+
+        <div class="dm-verdict" id="verdict" hidden>
+          <p class="word" id="v-word"></p>
+          <p class="nums" id="v-nums"></p>
+          <p class="hint" id="v-hint">Select the tree to see inside the run</p>
+        </div>
       </div>
-      <svg class="bed" id="bed"></svg>
-      <canvas class="pile" id="pile-two" aria-hidden="true"></canvas>
-      <div class="shade" aria-hidden="true"></div>
-      <canvas class="fx" id="fx" aria-hidden="true"></canvas>
-      <aside class="full-gate" aria-label="The full gate">
-        <p class="label">The full version</p>
-        <p>These three examples only show how the gate works. To test the full gate, with your own panel, class and
-          model as the agent, go to <a href="/run.html">Run</a>. The <a href="/docs.html">Docs</a> cover the method,
-          the file formats and the command line.</p>
+
+      <div class="dm-stage" id="stage">
+        <svg class="dm-tree" id="tree" role="img" aria-label="The run's tree. Choose a search and press Start."></svg>
+        <canvas class="dm-bed" id="bed" aria-hidden="true"></canvas>
+      </div>
+
+      <aside class="dm-inside" id="inside" aria-labelledby="in-h" hidden>
+        <header>
+          <p class="label">Inside the run</p>
+          <h2 id="in-h" tabindex="-1"></h2>
+          <button class="dm-close" id="in-close" type="button">Close</button>
+        </header>
+        <div class="dm-inside-body" id="in-body"></div>
       </aside>
-      <div class="choice" id="choice" data-tide>
-        <p class="choice-note">A mini demo of the full gate: three bundled searches on a small panel. Choose one and run it.</p>
-        <ul class="controls" id="chips" aria-label="Example"></ul>
-        <button class="run" id="run" type="button">Run the gate</button>
-      </div>
     </div>
   </section>
 
-  <section class="below" id="record" aria-labelledby="rec-h" hidden>
-    <div class="verdict-text">
-      <h2 id="rec-h">The verdict</h2>
-      <p class="meaning" id="rec-meaning"></p>
-      <h3>Reasons</h3>
-      <ul class="reasons" id="rec-reasons"></ul>
-    </div>
-    <div class="cols">
+  <section class="dm-below" id="record" aria-labelledby="rec-h" hidden>
+    <div class="dm-below-grid">
       <div>
-        <h2>The record</h2>
+        <h2 id="rec-h">The record</h2>
+        <p class="meaning" id="rec-meaning"></p>
+        <details class="dm-d" open>
+          <summary>Reasons</summary>
+          <ul class="reasons" id="rec-reasons"></ul>
+        </details>
         <dl class="kv" id="rec-kv"></dl>
+        <p class="label">Reproduce from the command line</p>
         <pre class="cmd" id="rec-cmd"></pre>
-        <p><a id="rec-link" href="/result.html">Open this verdict on its own page</a></p>
+        <p class="to-result"><a id="rec-link" href="/result.html">Open this verdict on its own page →</a></p>
         <div class="two-lines"><p>This is not investment advice.</p><p>This is not a registered result; nothing from this app enters the research record.</p></div>
       </div>
       <div>
-        <h2>The log</h2>
-        <div class="log" id="rec-log"></div>
+        <details class="dm-d">
+          <summary>The log, as written</summary>
+          <div class="log" id="rec-log"></div>
+        </details>
+        <aside class="dm-full" aria-label="The full gate">
+          <p class="label">The full version</p>
+          <p>These three searches only show how the gate works. To test your own panel and class with your model as the
+            agent, go to <a href="/run.html">Run</a>. The <a href="/docs.html">Docs</a> cover the method, the file formats
+            and the command line.</p>
+        </aside>
       </div>
     </div>
   </section>
 </main>
-<div id="inside" class="run-panel" hidden></div>
 
 <footer class="foot">
   <span>Quixote · MIT · computed in your browser; nothing you load or type is sent to us</span>
