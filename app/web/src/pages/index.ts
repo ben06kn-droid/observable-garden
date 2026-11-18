@@ -1,9 +1,9 @@
-// The home page: the overview on paper, the search drawn as a grove of birches standing on one ground
-// line, their turned leaves falling onto it. The demo is its own page (demo.html, src/pages/demo.ts); the scroll chain
-// (chain.ts) carries the visitor on to the run page from the end of this one.
+// The home section of the one-page site (src/onepage/): the overview on paper, the search drawn as a grove of birches
+// standing on one ground line, their turned leaves falling onto it. The demo is its own page (demo.html,
+// src/pages/demo.ts). Built behind the loading screen (its work registered with boot.ts's task()).
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/home.css";
-import { settled } from "../chain";
+import { inView, section, task } from "../onepage/boot";
 import { reduceMotion } from "../common";
 import { BIRCH_LEAF_D } from "../birch";
 import { Field, startLife } from "../particles";
@@ -14,7 +14,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const one = $("overview"), groveBox = $("bg-trees"), host = $("grove");
 const horizon = one.querySelector<HTMLElement>(".horizon")!;
 const phone = () => window.matchMedia("(max-width: 812px)").matches;
-const tone = (k: string) => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+const home = section("home");
+const tone = (k: string) => getComputedStyle(home).getPropertyValue(k).trim();   // the theme is the section's
 
 // ---- leaves (particles.ts): the birches' own leaf, turned ochre (the page's one warm accent; on the trees
 // they are green), few and small, near ones larger and more opaque; a slow fall and a calm sway. They
@@ -32,7 +33,8 @@ const leaves = new Field({ box: one, air: $("air-one") as HTMLCanvasElement, pil
   look: { shapes: [BIRCH_LEAF_D], tones: [tone("--leaf-1"), tone("--leaf-2"), tone("--leaf-3")], size: [6, 12.5], alpha: [0.55, 1],
           fall: [26, 46], sway: 13, spin: 0.9, wind: 0.45, rest: 0.55, kick: 1.3, lift: 240 } });
 // the cursor's wind on the leaves comes from the wake (below), not straight from the pointer
-const life = startLife({ fields: [leaves], paused: () => document.hidden, throttled: () => false, reduce: reduceMotion, cursor: false });
+// paused while the page is hidden or the home section is off screen
+const life = startLife({ fields: [leaves], paused: () => document.hidden || !inView("home"), throttled: () => false, reduce: reduceMotion, cursor: false });
 
 // ---- the grove (woods.ts): the restart example's search as birches, placed at build time
 // (scripts/make_grove.mjs); desktop shows every restart, the phone its own grove of two. A click (or
@@ -86,10 +88,10 @@ const wake = new WakeLayer({ host: one,
 
 one.addEventListener("animationend", () => wake.invalidate());   // a tree done arriving or swaying
 
-// drawn once the type has settled and the page has arrived (src/chain.ts: never in a prerender, never under a
-// carry's transition), so the grove's arrival plays once, on the final layout, where it can be seen
-Promise.all([fetch("/examples/grove.json").then((r) => r.json()), document.fonts.ready, settled])
-  .then(([g]) => { data = g as GroveData; avoid = text(); draw(); }).catch(() => {});
+// drawn once the type has settled, behind the loading screen: the grove's data fetched, then the grove drawn
+const fetched = task("home: grove data"), drawn = task("home: grove drawn");
+Promise.all([fetch("/examples/grove.json").then((r) => r.json()).finally(fetched), document.fonts.ready])
+  .then(([g]) => { data = g as GroveData; avoid = text(); draw(); requestAnimationFrame(() => drawn()); }).catch(() => drawn());
 // redrawn whenever the grove's box changes size (fonts arriving, a resize), never stretched
 let resizeT = 0, size = "";
 new ResizeObserver(([e]) => {

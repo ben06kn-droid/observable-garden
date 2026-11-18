@@ -8,7 +8,7 @@
 // allow_pickle=False) and checked before the key is used; their errors are shown word for word.
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/run.css";
-import { fadeIn, idle, settled } from "../chain";
+import { idle, refreshThemes, revealed, section, task } from "../onepage/boot";
 import { auditId, h, MEANING, reduceMotion, sha256Hex, word } from "../common";
 import { cancelGate, loadGate, type RunOutcome } from "../gate";
 import { makeScene } from "../scene";
@@ -69,17 +69,19 @@ const counter = $("move-count");
 // The fan: random paths down the whole left of the page, from the top to above "Continue to docs",
 // running right until the glass (beside it) or the page's right edge (below it); dimmed behind text,
 // never under a field; its last paths come to rest at the foot. On a phone: a band between sections.
-const root = document.documentElement;
+// the palette is the run section's (its theme), mirrored on its backdrop so the ground behind it turns too; the
+// view transition that reveals the change is the document's
+const root = section("run"), doc = document.documentElement, ground = document.querySelector<HTMLElement>('.backdrop[data-for="run"]');
 const phone = () => matchMedia("(max-width: 812px)").matches;
 const keySect = () => document.querySelectorAll<HTMLElement>(".run-form .sect")[2];
 let glass: Glass | null = null, glassPhone: boolean | null = null, glassH = 0;
 function invert(at: { x: number; y: number }) {
-  const swap = () => { root.dataset.hg = root.dataset.hg === "light" ? "dark" : "light"; glass?.refreshPalette(); fan?.refreshPalette(); hero?.layout(); };
+  const swap = () => { root.dataset.hg = root.dataset.hg === "light" ? "dark" : "light"; if (ground) ground.dataset.hg = root.dataset.hg; refreshThemes(); glass?.refreshPalette(); fan?.refreshPalette(); hero?.layout(); };
   const d = document as Document & { startViewTransition?: (f: () => void) => { finished: Promise<void> } };
   if (reduceMotion || !d.startViewTransition) { swap(); return; }
-  root.style.setProperty("--vx", `${at.x}px`); root.style.setProperty("--vy", `${at.y}px`);
-  root.dataset.hgSwap = "";
-  d.startViewTransition(swap).finished.finally(() => { delete root.dataset.hgSwap; });
+  doc.style.setProperty("--vx", `${at.x}px`); doc.style.setProperty("--vy", `${at.y}px`);
+  doc.dataset.hgSwap = "";
+  d.startViewTransition(swap).finished.finally(() => { delete doc.dataset.hgSwap; });
 }
 function buildGlass() {
   const ph = phone(), host = $("hg-host");
@@ -89,15 +91,15 @@ function buildGlass() {
   const H = ph ? Math.round(Math.max(420, Math.min(640, innerHeight * 0.76)))
     : Math.round(keySect().getBoundingClientRect().top - host.getBoundingClientRect().top - opened);
   if (glass && glassPhone === ph && Math.abs(H - glassH) < 24) { placeGlass(); hero?.layout(); return; }
-  glass?.destroy(); hero?.destroy(); hero = null; $("main").querySelector(".hero")!.classList.remove("painted");
+  glass?.destroy(); hero?.destroy(); hero = null; $("run-main").querySelector(".hero")!.classList.remove("painted");
   glassPhone = ph; glassH = H;
   // on a desktop with motion, the hero layer draws the glass and the opening text (the wake bends them)
   const layered = !ph && !reduceMotion;
   glass = new Glass(host, { height: H, reduce: reduceMotion, composited: layered, onClick: invert, onFrame: () => hero?.glassFrame() });
   placeGlass();
   if (layered) {
-    const veil = $("main").querySelector<HTMLElement>(".hero")!;
-    const h = new Hero({ host: $("main"), glass, veil, textBottom: () => document.querySelector(".run-form .sect")!.getBoundingClientRect().top + scrollY,
+    const veil = $("run-main").querySelector<HTMLElement>(".hero")!;
+    const h = new Hero({ host: $("run-main"), glass, veil, textBottom: () => document.querySelector(".run-form .sect")!.getBoundingClientRect().top + scrollY,
       text: () => [...veil.querySelectorAll<HTMLElement>(".label, h1, .lead, .about summary, .about[open] p, .to-demo a")] });
     if (h.ok) { hero = h; veil.classList.add("painted"); hero.layout(); }
     else { h.destroy(); glass.el.classList.remove("composited"); }
@@ -124,20 +126,20 @@ const TEXT = ".hero .label, .hero h1, .hero .lead, .hero .about, .hero .to-demo,
   + ".run-notes p, .carry-next .k, .carry-next .to";
 const FIELDS = ".run-form input:not([type=file]), .run-form select, .run-form textarea, .run-form label.file, .run-form button, #record button";
 function measure() {
-  const y = scrollY, rect = (e: Element) => e.getBoundingClientRect(), next = document.querySelector(".carry-next .k");
+  const y = scrollY, rect = (e: Element) => e.getBoundingClientRect(), next = root.querySelector(".carry-next .k");
   geom.bottom = (next ? rect(next).top : document.documentElement.scrollHeight - y) + y - 32;
-  geom.right = innerWidth - parseFloat(getComputedStyle($("main").querySelector(".run-grid")!).paddingRight || "72");
+  geom.right = innerWidth - parseFloat(getComputedStyle($("run-main").querySelector(".run-grid")!).paddingRight || "72");
   if (glass && !glassPhone) { const g = rect(glass.el), m = glass.measures(); geom.glass = [g.top + y, g.bottom + y, g.left + g.width / 2 - m.R - 28]; }
   else geom.glass = [0, 0, Infinity];
   const list: FanRect[] = [], range = document.createRange(), pad = 6;
   // behind text: the text's own extent (a grid cell may stretch an element far past its words). At 6% of
   // the lines' strength, every text tone keeps 7.8:1 or more over a gold path, in both palettes
-  for (const e of document.querySelectorAll(TEXT)) {
+  for (const e of root.querySelectorAll(TEXT)) {
     range.selectNodeContents(e); const r = range.getBoundingClientRect();
     if (r.width && r.height) list.push({ x: r.left - pad, y: r.top + y - pad, w: r.width + 2 * pad, h: r.height + 2 * pad, keep: 0.06 });
   }
   const tree = svg.querySelector(".real"); if (tree) { const r = rect(tree); if (r.width) list.push({ x: r.left - 10, y: r.top + y - 10, w: r.width + 20, h: r.height + 20, keep: 0.15 }); }
-  for (const e of document.querySelectorAll(FIELDS)) { const r = rect(e); if (r.width && r.height) list.push({ x: r.left - 6, y: r.top + y - 6, w: r.width + 12, h: r.height + 12, keep: 0 }); }
+  for (const e of root.querySelectorAll(FIELDS)) { const r = rect(e); if (r.width && r.height) list.push({ x: r.left - 6, y: r.top + y - 6, w: r.width + 12, h: r.height + 12, keep: 0 }); }
   geom.masks = list;
 }
 function buildFan() {
@@ -146,29 +148,27 @@ function buildFan() {
   fan?.destroy(); fan = null; fanPhone = ph;
   if (ph) {
     const band = $("fan-band");
-    fan = new Fan(document.body, { reduce: reduceMotion, seed: 7,
+    fan = new Fan(root, { reduce: reduceMotion, seed: 7,
       region: () => { const r = band.getBoundingClientRect(); return { top: r.top + scrollY + 1, bottom: r.bottom + scrollY }; },
       reach: () => innerWidth - 12 });
     return;
   }
   measure();
-  fan = new Fan(document.body, { reduce: reduceMotion, foot: 280, seed: 5, wake: true,
-    region: () => ({ top: 0, bottom: geom.bottom }),
+  fan = new Fan(root, { reduce: reduceMotion, foot: 280, seed: 5, wake: true,
+    region: () => ({ top: root.getBoundingClientRect().top + scrollY, bottom: geom.bottom }),   // from the section's top
     reach: (y) => (y >= geom.glass[0] && y <= geom.glass[1] ? geom.glass[2] : geom.right),
     masks: () => geom.masks });
 }
 let relayT = 0, started = false;
 const relayout = () => { if (!started) return; window.clearTimeout(relayT); relayT = window.setTimeout(() => { buildGlass(); buildFan(); }, 150); };
-new ResizeObserver(relayout).observe($("main"));
-// started once the page has arrived (src/chain.ts): never in a prerender, never under a carry's transition. Until
-// then the page is its plain ground (run.css) and its text; the glass and the fan fade in over it, and the lensed
-// headline cross-fades with the page's own (.hero.arriving: the text goes transparent over the same 450 ms)
-void Promise.all([document.fonts.ready, settled]).then(() => {
+new ResizeObserver(relayout).observe($("run-main"));
+// built behind the loading screen once the type has settled: the glass, the hero layer and the fan, their first
+// frames drawn before the site is shown
+const built = task("run: glass, hero layer and fan");
+void document.fonts.ready.then(() => {
   started = true;
-  const veil = $("main").querySelector<HTMLElement>(".hero")!;
-  if (!reduceMotion) { veil.classList.add("arriving"); window.setTimeout(() => veil.classList.remove("arriving"), 600); }
   buildGlass(); buildFan();
-  void fadeIn(glass?.el, document.querySelector("canvas.hero-layer"), document.querySelector("canvas.fan"));
+  requestAnimationFrame(() => requestAnimationFrame(() => built()));
 });
 
 // ---- inputs: the bundled pair to start, or the visitor's files; checked by the package's loaders
@@ -433,10 +433,10 @@ async function shareLink(r: AuditResult, record: Record<string, unknown>): Promi
 }
 
 // ---- start: the prompt from the CLI adapter, the bundled inputs
-// Pyodide and the package (about 23 MB) load in a worker once the page has arrived and the browser is idle:
-// never in a prerender, never while a carry's transition plays
+// Pyodide and the package (about 23 MB) load in a worker once the site is shown and the browser is idle: never
+// behind the loading screen. Start pressed before then waits for it (start() awaits loadGate, with its status)
 (async () => {
-  await settled; await idle();
+  await revealed; await idle();
   try {
     const gate = await loadGate();
     const p = await gate.prompt();

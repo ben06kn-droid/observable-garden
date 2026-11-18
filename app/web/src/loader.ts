@@ -4,22 +4,13 @@
 // finished B (3 s), holds the B still until loading is done, then slides the whole screen up (600 ms) to reveal
 // the site beneath. Shown once per browser session. Reduced motion: a still navy B and the box, then a plain cut.
 import "./styles/loader.css";
+import { MARK } from "./loader-mark";
 
 const SEEN = "qx-loader-seen";
 const FORMED_MS = 3000;
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const MARK = `<svg class="mark" viewBox="0 0 160 160" aria-hidden="true"><g class="all">
-  <circle class="ring" cx="80" cy="80" r="52" pathLength="1"/>
-  <g class="half ld-top"><path d="M 28 80 A 52 52 0 0 1 132 80"/></g>
-  <g class="half ld-bottom"><path d="M 132 80 A 52 52 0 0 1 28 80"/></g>
-  <line class="cut" x1="20" y1="80" x2="140" y2="80" pathLength="1"/>
-</g></svg>
-<svg class="tank" viewBox="-1 -15 78 400" aria-hidden="true">
-  <defs><clipPath id="ld-box"><polygon points="0,0 20,-14 76,-14 76,370 56,384 0,384"/></clipPath></defs>
-  <g clip-path="url(#ld-box)"><polygon class="level" points="0,0 20,-14 76,-14 76,520 0,520"/></g>
-  <path class="edge" d="M 0 0 H 56 V 384 H 0 Z M 0 0 L 20 -14 H 76 L 56 0 M 76 -14 V 370 L 56 384"/>
-</svg>`;
+
 
 export class Loader {
   readonly el: HTMLElement;
@@ -30,14 +21,22 @@ export class Loader {
   /** whether the screen has already played in this browser session (later visits go straight to the site) */
   static seen(): boolean { try { return sessionStorage.getItem(SEEN) === "1"; } catch { return false; } }
 
-  constructor(host: HTMLElement = document.body) {
-    this.el = document.createElement("div");
-    this.el.className = "loader";
-    this.el.setAttribute("role", "progressbar"); this.el.setAttribute("aria-label", "Loading the site");
-    this.el.setAttribute("aria-valuemin", "0"); this.el.setAttribute("aria-valuemax", "100"); this.el.setAttribute("aria-valuenow", "0");
-    this.el.innerHTML = MARK;
-    host.append(this.el);
-    this.formed = reduce ? Promise.resolve() : new Promise((r) => window.setTimeout(r, FORMED_MS));
+  /** `existing`: the screen already in the page (the one-page site writes it into its HTML); otherwise one is made.
+   *  `formed`: the B is already in place and there is no minimum time (a rebuild later in the session: public/loader-early.js) */
+  constructor(existing?: HTMLElement | null, { formed = false } = {}) {
+    if (existing) this.el = existing;
+    else {
+      this.el = document.createElement("div");
+      this.el.className = "loader";
+      this.el.setAttribute("role", "progressbar"); this.el.setAttribute("aria-label", "Loading the site");
+      this.el.setAttribute("aria-valuemin", "0"); this.el.setAttribute("aria-valuemax", "100"); this.el.setAttribute("aria-valuenow", "0");
+      this.el.innerHTML = MARK;
+      document.body.append(this.el);
+    }
+    if (formed) this.el.classList.add("formed");
+    // the B takes 3 s from the screen's first frame (its animations start with the page); a rebuild has no minimum
+    const left = Math.max(0, FORMED_MS - performance.now());
+    this.formed = reduce || formed ? Promise.resolve() : new Promise((r) => window.setTimeout(r, existing ? left : FORMED_MS));
     this.full = new Promise((r) => { this.filled = r; });
   }
 
