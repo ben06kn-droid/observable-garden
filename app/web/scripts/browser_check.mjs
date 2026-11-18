@@ -8,7 +8,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { serve } from "./serve_dist.mjs";
 import { serveLocal } from "./mock_providers.mjs";
 
@@ -270,17 +270,42 @@ async function contrast(selector, samples = 6) {
 
 // --pages --fixtures DIR: the Sancho page's lever editor and the viewer. DIR holds result.json
 // (quixote audit --json on examples/logs/scripted_session.json, B 500) and sancho_out/sancho.json
-// (quixote sancho on a panel long enough for it); the log, panel and class are examples/'. Without --fixtures, the
-// Sancho editor alone.
+// (quixote sancho on a panel long enough for it): scripts/make_viewer_fixtures.sh writes them to scripts/fixtures/viewer;
+// the log, panel and class are examples/'. Without --fixtures, the Sancho editor alone.
 if (process.argv.includes("--pages")) {
-  const fx = arg("--fixtures", null), ex = join(import.meta.dirname, "..", "..", "..", "examples");
+  // absolute: Chrome's renderer crashed on a relative path given to DOM.setFileInputFiles (2026-11-18)
+  const fx = arg("--fixtures", null) && resolve(arg("--fixtures", null)), ex = join(import.meta.dirname, "..", "..", "..", "examples");
   const setFiles = async (paths) => {
-    const { result } = await send("Runtime.evaluate", { expression: "document.getElementById('v-files')" }, page);
+    const { result } = await send("Runtime.evaluate", { expression: "document.getElementById('v-files')" }, page);   // the viewer's input, inside its layer
     await send("DOM.enable", {}, page);
     await send("DOM.setFileInputFiles", { files: paths, objectId: result.objectId }, page);
   };
   try {
     await viewport(1440, 900);
+    // the viewer needs the fixtures (a result and a Sancho run, made by the package); without them it is skipped
+    if (fx) {
+    // the viewer's text is the old viewer's: its record rows, meaning and command are compared word for word in the report
+    const vtext = () => evaluate(`({ error: document.getElementById('v-error').textContent, files: [...document.querySelectorAll('#v-list li')].map((e) => e.textContent.split(' · ')[0]),
+      panels: [...document.querySelectorAll('.v-panel:not([hidden])')].map((p) => p.dataset.name), status: document.getElementById('v-fig-h').textContent,
+      figures: [...document.querySelectorAll('.v-fig')].map((f) => f.querySelector('dt').textContent + ': ' + f.querySelector('dd').textContent),
+      heading: document.getElementById('v-rec-h').textContent, meaning: document.getElementById('v-meaning').textContent,
+      record: [...document.querySelectorAll('#v-kv dt')].map((d) => d.textContent + ': ' + d.nextElementSibling.textContent), cmd: document.getElementById('v-cmd').textContent,
+      fits: [...document.querySelectorAll('.v-panel:not([hidden])')].every((p) => { const cs = getComputedStyle(p); return p.querySelector('.v-in').scrollHeight <= p.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) + 1; }) })`);
+    const panels = async (name) => { const n = await evaluate(`document.querySelectorAll('.v-panel:not([hidden])').length`);
+      for (let i = 0; i < n; i++) { await evaluate(`document.getElementById('v-count').textContent`); await shot(`${name}-${i + 1}`);
+        for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 }, page); await sleep(900); } };
+    console.error("[pages] viewer: to /viewer.html"); await go("/viewer.html");
+    console.error("[pages] viewer: a search"); await setFiles([join(ex, "logs", "scripted_session.json"), join(fx, "result.json"), join(ex, "data", "tiny_panel.npz"), join(ex, "class.json")]);
+    console.error("[pages] viewer: files set"); await until(`document.getElementById('v-count').textContent.startsWith('02')`, 90000); await sleep(1500);
+    console.error("[pages] viewer: drawn"); report.viewer_search = { ...(await vtext()), word: await evaluate(`document.querySelector('#v-spot .note-word')?.textContent`),
+      labels: await evaluate(`[...document.querySelectorAll('#v-spot .note:not([hidden])')].map((e) => e.textContent)`), twigs: await evaluate(`document.querySelectorAll('#v-garden .real .twig').length`) };
+    await panels("viewer-search");
+    await go("/viewer.html");
+    console.error("[pages] viewer: Sancho"); await setFiles([join(fx, "sancho_out", "sancho.json")]);
+    await until(`document.getElementById('v-count').textContent.startsWith('02')`, 30000); await sleep(800);
+    report.viewer_sancho = { ...(await vtext()), bonsai: await evaluate(`!!document.querySelector('#v-garden .bonsai')`), label: await evaluate(`document.querySelector('#v-garden .bonsai-label')?.textContent`) };
+    await panels("viewer-sancho");
+    } else report.viewer = "skipped: no --fixtures";
     await go("/sancho.html");
     await until(`/^[0-9a-f]{64}$/.test(document.getElementById('cfg-hash').textContent)`, 10000);
     const state = () => evaluate(`({ hash: document.getElementById('cfg-hash').textContent, kind: document.getElementById('cfg-kind').textContent,
@@ -292,13 +317,13 @@ if (process.argv.includes("--pages")) {
     const setLever = (name, value) => evaluate(`(() => { const l = [...document.querySelectorAll('.lever')].find((x) => x.querySelector('.lever-name').textContent === '${name}');
       const c = l.querySelector('input:not([type=checkbox]), select, textarea'); c.value = ${JSON.stringify(value)}; c.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
     await setLever("horizon", "1"); await sleep(300);
-    report.sancho.tailored = await state();
+    console.error("[pages] sancho: levers"); report.sancho.tailored = await state();
     await setLever("rates", "0.3, abc"); await sleep(300);
     report.sancho.bad_rates = await state();
     await evaluate(`document.getElementById('cfg-reset').click(); true`); await sleep(300);
     report.sancho.after_reset = (await state()).hash === report.sancho.registered.hash;
     // the download: the file the page writes, read back; its hash (the page's canonical form) is the one shown
-    const dl = mkdtempSync(join(tmpdir(), "qx-dl-"));
+    console.error("[pages] sancho: the download"); const dl = mkdtempSync(join(tmpdir(), "qx-dl-"));
     await send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: dl, eventsEnabled: true });
     await setLever("horizon", "20"); await sleep(300);
     const shown = (await state()).hash;
@@ -308,29 +333,10 @@ if (process.argv.includes("--pages")) {
     report.sancho.download = { bytes: text.length, horizon: JSON.parse(text).horizon, hash_matches_shown: (await L.configSha256(JSON.parse(text))) === shown };
     if (fx) writeFileSync(join(fx, "tailored_config.json"), text);       // for the equivalence check against sancho.config, if wanted
 
-    // the viewer needs the fixtures (a result and a Sancho run, made by the package); without them it is skipped
-    if (fx) {
-    await go("/viewer.html");
-    await setFiles([join(ex, "logs", "scripted_session.json"), join(fx, "result.json"), join(ex, "data", "tiny_panel.npz"), join(ex, "class.json")]);
-    await until(`!document.getElementById('v-record').hidden`, 90000); await sleep(1500);
-    report.viewer_search = await evaluate(`({ files: [...document.querySelectorAll('#v-list li')].map((e) => e.textContent.split(' · ')[0]), error: document.getElementById('v-error').textContent,
-      word: document.getElementById('verdict-word')?.textContent, labels: [...document.querySelectorAll('#spot .note:not([hidden])')].map((e) => e.textContent),
-      twigs: document.querySelectorAll('#garden .real .twig').length, meaning: document.getElementById('v-meaning').textContent,
-      record: [...document.querySelectorAll('#v-kv dt')].map((d) => d.textContent + ': ' + d.nextElementSibling.textContent), cmd: document.getElementById('v-cmd').textContent })`);
-    await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); true`); await sleep(500); await shot("viewer-search");
-    await go("/viewer.html");
-    await setFiles([join(fx, "sancho_out", "sancho.json")]);
-    await until(`!document.getElementById('v-record').hidden`, 30000); await sleep(800);
-    report.viewer_sancho = await evaluate(`({ error: document.getElementById('v-error').textContent, bonsai: !!document.querySelector('#garden .bonsai'),
-      label: document.querySelector('#garden .bonsai-label')?.textContent, heading: document.getElementById('v-rec-h').textContent, meaning: document.getElementById('v-meaning').textContent,
-      record: [...document.querySelectorAll('#v-kv dt')].map((d) => d.textContent + ': ' + d.nextElementSibling.textContent), cmd: document.getElementById('v-cmd').textContent })`);
-    await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); true`); await sleep(500); await shot("viewer-sancho");
-    await evaluate(`window.scrollTo(0, 0); true`); await sleep(300); await shot("viewer-sancho-full", true);
-    } else report.viewer = "skipped: no --fixtures";
     // every page at phone width (375 px): no horizontal scroll, and the header's links inside the header
-    await viewport(375, 740);
+    console.error("[pages] phone"); await viewport(375, 740);
     report.phone = {};
-    for (const pg of ["/", "/demo.html", "/eucalyptus.html", "/contact.html", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html"]) {
+    for (const pg of ["/", "/demo.html", "/eucalyptus.html", "/contact.html", "/docs.html", "/sancho.html", "/run.html", "/privacy.html"]) {
       await go(pg); await sleep(400);
       // the menu on a phone: the control and, open, its panel inside the screen, sized for touch (44 px)
       report.phone[pg] = await evaluate(`(() => { const b = document.querySelector('.menu-btn'); b.click(); const p = document.querySelector('.menu-panel').getBoundingClientRect(), r = b.getBoundingClientRect();
@@ -701,7 +707,7 @@ try {
   // the menu's pill on every page: its ground (alpha 1 is the page's own ground; docs and Sancho their glass and sheet,
   // with what lies beneath blurred), its ink, and no full-width bar
   report.menu_pill = {};
-  for (const p of ["/", "/demo.html", "/eucalyptus.html", "/contact.html", "/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html", `/result.html?ex=${example}`]) {
+  for (const p of ["/", "/demo.html", "/eucalyptus.html", "/contact.html", "/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/share.html", `/result.html?ex=${example}`]) {
     await go(p);
     report.menu_pill[p] = await evaluate(`(() => { const b = document.querySelector('.menu-btn'), cs = getComputedStyle(b), t = document.querySelector('.top').getBoundingClientRect();
       return { ground: cs.backgroundColor, ink: cs.color, blur: cs.backdropFilter !== 'none', width: Math.round(t.width), no_bar: t.width < innerWidth / 3 }; })()`);
@@ -727,7 +733,7 @@ try {
   // the footer on every page with one: the line on the grid's left edge, Privacy, Terms and Source on the right, nothing else;
   // the paper only from home's line and the docs section, never from the menu or a footer
   report.footer = {};
-  for (const p of ["/eucalyptus.html", "/demo.html", "/contact.html", "/privacy.html", "/terms.html", "/viewer.html", "/share.html", `/result.html?ex=${example}`]) {
+  for (const p of ["/eucalyptus.html", "/demo.html", "/contact.html", "/privacy.html", "/terms.html", "/share.html", `/result.html?ex=${example}`]) {
     await go(p);
     report.footer[p] = await evaluate(`(() => { const f = document.querySelector('.foot'); if (!f) return null; const t = f.querySelector(':scope > span').getBoundingClientRect(), n = f.querySelector('nav').getBoundingClientRect(), fr = f.getBoundingClientRect();
       const pad = parseFloat(getComputedStyle(f).paddingLeft);
@@ -737,6 +743,44 @@ try {
   report.paper_link = await evaluate(`(() => { const p = [...document.querySelectorAll('a[href^="https://papers.ssrn.com/"]')];
     return { home: p.some((a) => a.closest('[data-section="home"]')), docs: p.some((a) => a.closest('[data-section="docs"]')), in_menu_or_footer: p.some((a) => a.closest('.top, .foot')),
       safe: p.every((a) => a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer')) }; })()`);
+  // the viewer (src/viewerstrip.ts): a layer over the one page, entered only from the Sancho section's control; the only
+  // link to /viewer.html on the site is that control, and the menu has none. Open by click: /viewer.html and its title,
+  // one history entry, the page beneath inert and its scroll kept; the arrows and the wheel move panels; scrolling back
+  // from the first panel, Escape, Close and Back leave, focus back on the control; Forward opens it again; a direct link
+  // opens it behind the loading screen, and Close then leaves /sancho.html in the address.
+  await viewport(1440, 900);
+  await go("/sancho.html");
+  const vstate = () => evaluate(`({ path: location.pathname, title: document.title, open: !document.getElementById('viewer').hidden, y: Math.round(scrollY),
+    inert: document.getElementById('main').inert, focus_on_control: document.activeElement === document.querySelector('[data-open-viewer]'), count: document.getElementById('v-count').textContent })`);
+  const vkey = async (k, vk) => { for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: k, code: k, windowsVirtualKeyCode: vk }, page); };
+  report.viewer_links = await evaluate(`({ to_viewer: [...document.querySelectorAll('a[href$="viewer.html"]')].map((a) => (a.closest('[data-section]')?.dataset.section ?? (a.closest('.top') ? 'menu' : 'elsewhere')) + ':' + a.textContent.trim()),
+    in_menu: [...document.querySelectorAll('.menu-panel a')].some((a) => /viewer/i.test(a.href + a.textContent)) })`);
+  await evaluate(`document.querySelector('[data-open-viewer]').scrollIntoView({ block: 'center' }); true`); await sleep(400);
+  const y0 = await evaluate("Math.round(scrollY)");
+  await evaluate(`document.querySelector('[data-open-viewer]').click(); true`); await sleep(1300);
+  report.viewer_layer = { opened: await vstate(), own_entry: await evaluate("history.state?.viewer === 1"), y0 };   // (history.length stops growing at 50 in a long run)
+  // a burst of wheel events back from the first panel, all before Back arrives: it closes on Sancho, never further
+  await evaluate(`(() => { const v = document.getElementById('viewer'); for (let i = 0; i < 10; i++) v.dispatchEvent(new WheelEvent('wheel', { deltaY: -60, bubbles: true })); return true; })()`);
+  await sleep(1500);
+  report.viewer_layer.burst_out = await vstate();
+  await evaluate(`document.querySelector('[data-open-viewer]').click(); true`); await sleep(1300);
+  await shot("viewer-open");
+  await vkey("ArrowRight", 39); await sleep(700);
+  report.viewer_layer.arrow_without_file = (await vstate()).count;
+  await vkey("Escape", 27); await sleep(1200);
+  report.viewer_layer.escape = await vstate();
+  await evaluate("history.forward(); true"); await sleep(1300);
+  report.viewer_layer.forward = await vstate();
+  await evaluate("history.back(); true"); await sleep(1300);
+  report.viewer_layer.back = await vstate();
+  await evaluate(`document.querySelector('[data-open-viewer]').click(); true`); await sleep(1300);
+  for (let i = 0; i < 12; i++) { await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: 720, y: 450, deltaX: 0, deltaY: -40 }, page); await sleep(17); }
+  await sleep(1300);
+  report.viewer_layer.scroll_up_out = await vstate();
+  await go("/viewer.html");
+  report.viewer_layer.direct = await vstate();
+  await evaluate(`document.getElementById('v-close').click(); true`); await sleep(1300);
+  report.viewer_layer.direct_close = await vstate();
   await go("/docs.html"); await shot("10-docs");
   await viewport(390, 844); await go("/"); await shot("11-phone-home");
   await go("/demo.html"); await sleep(900); await shot("12-phone-demo");
