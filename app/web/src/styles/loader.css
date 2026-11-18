@@ -1,0 +1,54 @@
+/* The loading screen (src/loader.ts): white, a ring that draws itself, is cut across, and folds into a B; a
+   cylinder bottom left that fills with what has really loaded. Every step on the site's curve. Drawn in SVG and
+   CSS. The mark's geometry, in its 160 x 160 box centred on (80, 80):
+   - the ring: radius 52 at the stroke's centre, 16 thick, so 120 across;
+   - the cut: a line 120 long through the centre, edge to edge;
+   - the B: the top half turned a quarter clockwise and the bottom half a quarter the other way, each at half size
+     (radius 26) and moved to (67, 54) and (67, 106), so both bulge right; the cut turned upright at x 67, its ends
+     level with the bowls' outer tops (y 20 and 140). The stroke stays 16 (non-scaling) as the halves shrink. */
+.loader { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: #ffffff; --ld-ease: cubic-bezier(.35, 0, 0, 1); }
+.loader .mark { width: 160px; height: 160px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 16; color: #1f4fd8;
+  animation: ld-ink 800ms var(--ld-ease) 700ms both; }
+.loader .mark path, .loader .mark line, .loader .mark circle { vector-effect: non-scaling-stroke; stroke-linecap: butt; }
+
+/* 0-400 ms: the ring draws itself, clockwise from the top */
+.loader .ring { stroke-dasharray: 1 2; stroke-dashoffset: 1; transform-box: view-box; transform-origin: 80px 80px; transform: rotate(-90deg);
+  animation: ld-draw 400ms var(--ld-ease) both, ld-off 1ms linear 400ms both; }
+/* from 400 ms the ring is its two halves (the same pixels), so they can fold */
+.loader .half { opacity: 0; transform-box: view-box; transform-origin: 80px 80px; }
+.loader .half.ld-top { animation: ld-on 1ms linear 400ms both, ld-fold-top 800ms var(--ld-ease) 700ms both; }
+.loader .half.ld-bottom { animation: ld-on 1ms linear 400ms both, ld-fold-bottom 800ms var(--ld-ease) 700ms both; }
+/* 400-700 ms: the cut draws across, left to right; 700-1500 ms it turns upright and slides to the bowls' left edge */
+.loader .cut { stroke-dasharray: 1 2; stroke-dashoffset: 1; transform-box: view-box; transform-origin: 80px 80px;
+  animation: ld-draw 300ms var(--ld-ease) 400ms both, ld-spine 800ms var(--ld-ease) 700ms both; }
+
+@keyframes ld-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes ld-off { to { opacity: 0; } }
+@keyframes ld-on { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ld-fold-top { from { transform: translate(0, 0) rotate(0deg) scale(1); } to { transform: translate(-13px, -26px) rotate(90deg) scale(0.5); } }
+@keyframes ld-fold-bottom { from { transform: translate(0, 0) rotate(0deg) scale(1); } to { transform: translate(-13px, 26px) rotate(-90deg) scale(0.5); } }
+@keyframes ld-spine { from { transform: translate(0, 0) rotate(0deg); } to { transform: translate(-13px, 0) rotate(-90deg); } }
+@keyframes ld-ink { from { color: #1f4fd8; } to { color: #0b1f4b; } }
+
+/* bottom left: an outlined tube that fills with solid black from the bottom, as much as has really loaded */
+.loader .tube { position: absolute; left: 32px; bottom: 32px; width: 14px; height: 96px; overflow: visible; }
+.loader .tube .wall { fill: none; stroke: #000000; stroke-width: 2; }
+.loader .tube .level { fill: #000000; transform-box: fill-box; transform-origin: 50% 100%; transform: scaleY(var(--ld-p, 0)); }
+
+/* leaving: the white screen, the B and the tube slide up off the page, revealing the site beneath */
+.loader.leaving { animation: ld-leave 600ms var(--ld-ease) both; pointer-events: none; }
+@keyframes ld-leave { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, -100%, 0); } }
+
+/* reduced motion: a still navy B and the tube; then a plain cut to the site */
+@media (prefers-reduced-motion: reduce) {
+  .loader .mark, .loader .ring, .loader .half, .loader .cut, .loader.leaving { animation: none; }
+  .loader .mark { color: #0b1f4b; }
+  .loader .ring { opacity: 0; }
+  .loader .half { opacity: 1; }
+  .loader .half.ld-top { transform: translate(-13px, -26px) rotate(90deg) scale(0.5); }
+  .loader .half.ld-bottom { transform: translate(-13px, 26px) rotate(-90deg) scale(0.5); }
+  .loader .cut { stroke-dashoffset: 0; transform: translate(-13px, 0) rotate(-90deg); }
+}
+
+/* the preview page (loader.html) only */
+.loader-preview { padding: calc(var(--head, 76px) + var(--s9, 64px)) var(--pad-x) var(--pad-y); max-width: 44rem; }
