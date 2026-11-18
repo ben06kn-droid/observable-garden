@@ -52,12 +52,16 @@ export const revealed = new Promise<void>((r) => { revealedNow = r; });
 async function reveal() {
   if (finishing) return; finishing = true;
   snap(); goTo(startSection(), false); toAnchor(location.hash);   // the layout is final: open on the address's section (and anchor)
+  for (const f of beforeReveal) f();   // a layer over the page that the address opens (the viewer at /viewer.html)
   scrub();
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // every scene's first frame is on screen beneath
   await loader.finish();
   performance.mark("qx-revealed");   // the screen has gone (for measurement: work done to revealed is the loader's own time)
   revealedNow();
 }
+const beforeReveal: (() => void)[] = [];
+/** call once the layout is final and the address's section is in place, before the loading screen goes */
+export function onBeforeReveal(f: () => void) { beforeReveal.push(f); }
 /** all the page scripts have registered their work */
 export function start() {
   // each section's colours, read now that every section's script has run: under the dev server a section's
@@ -141,7 +145,11 @@ document.addEventListener("click", (e) => {
   if (!s.hasAttribute("tabindex")) s.setAttribute("tabindex", "-1");
   s.focus({ preventScroll: true });
 });
-addEventListener("popstate", () => { const s = byPath.get(pathOf(location.pathname)); if (!s) return; goTo(s, false); toAnchor(location.hash); });
+// a layer over the page (the viewer) handles the entries that open and close it, leaving the scroll where it was
+let popFirst: (() => boolean) | null = null;
+/** f runs first on Back and Forward; when it returns true the page itself does nothing */
+export function onPopFirst(f: () => boolean) { popFirst = f; }
+addEventListener("popstate", () => { if (popFirst?.()) return; const s = byPath.get(pathOf(location.pathname)); if (!s) return; goTo(s, false); toAnchor(location.hash); });
 
 // ---- the scrub: backdrops and the header, by scroll position; which section is current; which are in view
 const BAND: [number, number] = [0.65, 0.276];   // the next section's top, as a share of the viewport's height: fade starts, ends
@@ -169,6 +177,10 @@ const seen = new Map<string, boolean>(), backdropWatchers = new Map<string, ((v:
 /** call back when a section's backdrop comes into sight or goes (its scene draws only while it can be seen) */
 export function onBackdrop(name: string, f: (v: boolean) => void) { backdropWatchers.set(name, [...(backdropWatchers.get(name) ?? []), f]); f(seen.get(name) ?? false); }
 
+// while a layer covers the whole window (the viewer), nothing on the page counts as seen: every scene pauses
+let covered = false;
+/** the page is (or is no longer) covered by a layer over the whole window */
+export function setCovered(c: boolean) { covered = c; scrub(); }
 let raf = 0;
 function scrub() {
   raf = 0;
@@ -177,7 +189,7 @@ function scrub() {
   let k = 0, p = 1;
   sections.forEach((s, i) => {
     const r = s.getBoundingClientRect();
-    const v = r.bottom > 0 && r.top < vh;
+    const v = !covered && r.bottom > 0 && r.top < vh;
     if (visible.get(s.dataset.section!) !== v) { visible.set(s.dataset.section!, v); for (const f of watchers.get(s.dataset.section!) ?? []) f(v); }
     if (i === 0) return;
     const q = Math.max(0, Math.min(1, (BAND[0] - r.top / vh) / (BAND[0] - BAND[1])));
@@ -187,7 +199,7 @@ function scrub() {
   // which backdrops can be seen: each from when it starts to fade in until the next has fully covered it
   const share = sections.map((s, i) => i === 0 ? 1 : parseFloat(backdrop.get(s.dataset.section!)?.style.opacity || "0"));
   sections.forEach((s, i) => {
-    const v = share[i] > 0 && (i === sections.length - 1 || share[i + 1] < 1), n = s.dataset.section!;
+    const v = !covered && share[i] > 0 && (i === sections.length - 1 || share[i + 1] < 1), n = s.dataset.section!;
     if (seen.get(n) !== v) { seen.set(n, v); for (const f of backdropWatchers.get(n) ?? []) f(v); }
   });
   // the header: the two sections' colours mixed by the same share; their theme (type) from half way
@@ -202,7 +214,7 @@ function scrub() {
   if (lead.dataset.page) headerTheme.dataset.page = lead.dataset.page; else delete headerTheme.dataset.page;
   // the current section: the one under the middle of the screen; the address follows it
   const mid = sections.find((s) => { const r = s.getBoundingClientRect(); return r.top <= vh / 2 && r.bottom > vh / 2; });
-  if (mid && mid !== current && !steering && finishing) mark(mid, "replace");
+  if (mid && mid !== current && !steering && finishing && !covered) mark(mid, "replace");
 }
 const ask = () => { if (!raf) raf = requestAnimationFrame(scrub); };
 addEventListener("scroll", ask, { passive: true });

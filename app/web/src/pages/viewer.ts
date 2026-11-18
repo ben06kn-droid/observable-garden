@@ -1,23 +1,34 @@
 // The viewer: what quixote audit or quixote sancho wrote on the visitor's machine, drawn here without
-// recomputing. A search: its log, its result (quixote audit --json, or the run page's result file),
-// and the panel and class the log names; the package replays the log against them (the worker's
-// search_tree, which refuses a log that does not re-execute) and the scene draws the tree with the
-// verdict on it. Sancho: sancho.json (and its config, if given), drawn as the bonsai in its pot.
+// recomputing. A layer over the one page (src/onepage/viewer.html), opened from the Sancho section; its panels and how
+// they are browsed are src/viewerstrip.ts's. A search: its log, its result (quixote audit --json, or the run page's
+// result file), and the panel and class the log names; the package replays the log against them (the worker's
+// search_tree, which refuses a log that does not re-execute) and the scene draws the tree with the verdict on it.
+// Sancho: sancho.json (and its config, if given), drawn as the bonsai in its pot.
 // Files are read in the page; the panel and the class go through the package's loaders in the worker.
-import "../common";              // the shared stylesheet first, so the theme wins ties
+// Every sentence, label and number below is as the viewer wrote them on its own page; they are only placed in panels,
+// with each number set in the mono face (fill()).
 import "../styles/viewer.css";
-import { h, MEANING, reduceMotion, sha256Hex, word } from "../common";
+import { h, MEANING, sha256Hex, word } from "../common";
 import { drawBonsai } from "../bonsai";
 import { loadGate } from "../gate";
 import { INSTALL } from "../install";
 import { configSha256, DEFAULT, type Values } from "../levers";
 import { makeScene } from "../scene";
+import { makeStrip } from "../viewerstrip";
 import type { AuditResult, InputsInfo } from "../types";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const scene = makeScene();
-scene.notes.entered();
+const layer = $("viewer");
 const list = $("v-list"), errorBox = $("v-error");
+const panel = (name: string) => layer.querySelector<HTMLElement>(`.v-panel[data-name="${name}"]`)!;
+
+// the scene is made on first use (it measures its host, which is hidden until the viewer opens)
+let scene: ReturnType<typeof makeScene> | null = null;
+const getScene = () => (scene ??= (() => {
+  const s = makeScene({ parts: { two: $("v-two"), spot: $("v-spot"), svg: $("v-garden") as unknown as SVGSVGElement } });
+  s.notes.entered(); return s;
+})());
+const strip = makeStrip(layer, { onResize: () => scene?.notes.place() });
 
 type Kind = "log" | "result" | "browser-result" | "sancho" | "config" | "class" | "panel";
 interface Dropped { name: string; kind: Kind; text?: string; json?: Values; bytes?: ArrayBuffer; sha256: string }
@@ -54,15 +65,47 @@ async function take(fl: FileList | File[]) {
   await show();
 }
 
+/** text with every number and hash in the mono face; its text is exactly `text` */
+const NUM = /((?<![A-Za-z_])[0-9a-f]{12,}…?|(?<![A-Za-z_\d])[+\-−]?\d[\d,]*(?:\.\d+)?(?:e[+\-]?\d+)?)/g;
+function fill(el: HTMLElement, text: string) {
+  el.replaceChildren();
+  let at = 0;
+  for (const m of text.matchAll(NUM)) {
+    if (m.index! > at) el.append(text.slice(at, m.index));
+    h("span", "num", m[0], el); at = m.index! + m[0].length;
+  }
+  if (at < text.length) el.append(text.slice(at));
+}
+
 function listFiles() {
   list.replaceChildren();
   for (const d of files.values()) h("li", null, `${d.name}: ${KIND_NAME[d.kind]} · sha256 ${d.sha256.slice(0, 16)}…`, list);
 }
 
 const kv = $("v-kv");
-function rows(r: [string, string][]) { kv.replaceChildren(); for (const [k, v] of r) { h("dt", null, k, kv); h("dd", null, v, kv); } }
+function rows(r: [string, string][]) { kv.replaceChildren(); for (const [k, v] of r) { h("dt", null, k, kv); fill(h("dd", null, null, kv), v); } }
+/** the key figures, large: [label, value, unit] */
+const figs = $("v-figs");
+function figures(r: [string, string, string?][]) {
+  figs.replaceChildren();
+  for (const [k, v, unit] of r) {
+    const row = h("div", "v-fig", null, figs);
+    h("dt", null, k, row);
+    const dd = h("dd", null, null, row);
+    h("span", k === "Config hash" ? "v-hash" : "v-big", v, dd);
+    if (unit) h("span", "v-unit", unit, dd);
+  }
+}
+/** the key figures' heading: a mark and a word, never colour alone */
+function status(mark: string, text: string, kind: string) {
+  $("v-mark").textContent = mark; $("v-status").textContent = text;
+  $("v-fig-h").dataset.kind = kind;
+}
+const MARK: Record<string, string> = { PASS: "✓", FAIL: "✕" };
+
 function clearScene() {
-  scene.svg.replaceChildren(); scene.idleBox(); scene.notes.clear(); scene.notes.entered(); scene.seed.classList.remove("spent");
+  const s = getScene();
+  s.svg.replaceChildren(); s.idleBox(); s.notes.clear(); s.notes.entered(); s.seed.classList.remove("spent");
 }
 
 let shown = "";
@@ -73,6 +116,13 @@ async function show() {
   if (files.has("sancho")) return showSancho();
   if (files.has("log")) return showSearch();
 }
+/** the panels for what was read; then on to the key figures, unless something went wrong */
+function loaded(drawn: boolean) {
+  for (const p of layer.querySelectorAll<HTMLElement>(".v-panel")) p.hidden = false;
+  panel("Drawn").hidden = !drawn;
+  strip.refresh();
+  if (!errorBox.textContent) strip.go(1);
+}
 
 // ---- a search: the log, its result, the panel and the class --------------------------------------
 async function showSearch() {
@@ -80,29 +130,34 @@ async function showSearch() {
   const res = files.get("result") ?? files.get("browser-result");
   const r = (res?.kind === "browser-result" ? res.json!.result : res?.json) as AuditResult | undefined;
   const rec = res?.kind === "browser-result" ? res.json!.record as Values : null;
-  const panel = files.get("panel"), cls = files.get("class");
+  const panelFile = files.get("panel"), cls = files.get("class");
   const notes: string[] = [];
   if (r) {   // the result must be this log's: the same submitted rule, class and number of moves
     const sameRule = JSON.stringify(r.submitted_support) === JSON.stringify((lj.submitted as Values)?.support);
     if (!sameRule || r.class_size !== lj.class_size || r.n_moves !== lj.n_moves)
       errorBox.textContent = `${res!.name} is not the result of ${log.name}: the submitted rule, the class size or the number of moves differ.`;
   } else notes.push("No result dropped: the search is drawn without a verdict. Audit it with the command below.");
-  let info: InputsInfo | null = null;
+  let info: InputsInfo | null = null, drawn = false;
   clearScene();
-  if (panel && cls) {
+  const scene = getScene();
+  $("v-draw-h").textContent = "The search, drawn";
+  if (panelFile && cls) {
     const gate = await loadGate();
-    info = await gate.inspect(panel.bytes!.slice(0), cls.text!);
-    if (info.error) { errorBox.textContent = `${panel.name} and ${cls.name}: ${info.error}`; info = null; }
+    info = await gate.inspect(panelFile.bytes!.slice(0), cls.text!);
+    if (info.error) { errorBox.textContent = `${panelFile.name} and ${cls.name}: ${info.error}`; info = null; }
     else if (info.panel_sha256 !== lj.panel_sha256 || info.class_sha256 !== lj.class_sha256)
-      errorBox.textContent = `The log was written on another ${info.panel_sha256 !== lj.panel_sha256 ? "panel" : "class"} (its hash differs from ${info.panel_sha256 !== lj.panel_sha256 ? panel.name : cls.name}).`;
+      errorBox.textContent = `The log was written on another ${info.panel_sha256 !== lj.panel_sha256 ? "panel" : "class"} (its hash differs from ${info.panel_sha256 !== lj.panel_sha256 ? panelFile.name : cls.name}).`;
     else {
-      const out = await gate.tree(log.text!, panel.bytes!.slice(0), cls.text!);
+      const out = await gate.tree(log.text!, panelFile.bytes!.slice(0), cls.text!);
       if (out.kind === "refused") errorBox.textContent = `The package refused the log: ${out.message}`;
       else {
+        // the drawing's panel is shown first, so the scene can measure where its labels go
+        panel("Drawn").hidden = false;
         const g = scene.draw(out.tree, r && !errorBox.textContent ? r : null, `view-${log.sha256.slice(0, 8)}`);
         scene.seed.classList.add("spent");
         g.setStep(Number.MAX_SAFE_INTEGER);
         if (r && !errorBox.textContent) scene.notes.verdict(g, r, out.tree.evaluations, rec ? Number(rec.seed) : null);
+        drawn = true;
       }
     }
   } else notes.push(`To draw the search, add the panel and the class the log names: ${lj.panel_file} and ${lj.class_file}.`);
@@ -110,8 +165,8 @@ async function showSearch() {
   $("v-rec-h").textContent = "The verdict";
   $("v-meaning").textContent = r ? `${word(r.status)}: ${MEANING[word(r.status)] ?? ""}` : notes.join(" ");
   $("v-reasons-h").hidden = !r;
-  const ul = $("v-reasons"); ul.replaceChildren(); for (const x of r?.reasons ?? []) h("li", null, x, ul);
-  if (r) for (const n of notes) h("li", null, n, ul);
+  const ul = $("v-reasons"); ul.replaceChildren(); for (const x of r?.reasons ?? []) fill(h("li", null, null, ul), x);
+  if (r) for (const n of notes) fill(h("li", null, null, ul), n);
   const out: [string, string][] = [
     ["Log", `${log.name} · sha256 ${log.sha256}`], ["Agent", String(lj.agent)], ["Moves", `${lj.n_moves} of ${lj.max_moves}`],
     ["Panel", `${lj.panel_file} · ${lj.panel_sha256}${info ? " (matches the panel given)" : ""}`],
@@ -122,10 +177,19 @@ async function showSearch() {
     ["Seed", rec ? String(rec.seed) : "not recorded in the result (quixote audit's default is 0)"]);
   if (rec) for (const k of ["provider", "endpoint_host", "model", "effort", "audit_id", "package"]) if (rec[k] !== undefined) out.push([k.replace("_", " "), String(rec[k])]);
   rows(out);
+  // the key figures: the verdict as the gate words it, with a mark; then the numbers it rests on, as in the record
+  if (r) {
+    const w = word(r.status);
+    status(MARK[w] ?? "○", w, w === "PASS" ? "pass" : w === "FAIL" ? "fail" : "other");
+    figures([["p", r.p_replay === null ? "n/a" : r.p_replay.toFixed(4)], ["Bar", r.class_bar.toFixed(3)],
+      ["Submitted", r.submitted_sharpe.toFixed(3), "in-sample Sharpe"], ["B", r.B.toLocaleString("en")], ["α", String(r.alpha)]]);
+  } else {
+    status("○", "No result dropped", "other");
+    figures([["Moves", `${lj.n_moves} of ${lj.max_moves}`], ["Agent", String(lj.agent)]]);
+  }
   const seed = rec ? Number(rec.seed) : 0;
   $("v-cmd").textContent = `quixote audit ${log.name} --panel ${lj.panel_file} --class ${lj.class_file} --B ${r?.B ?? 2000} --seed ${seed} --json > result.json`;
-  $("v-record").hidden = false;
-  scene.two.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+  loaded(drawn);
 }
 
 // ---- Sancho: sancho.json, drawn as the bonsai in its pot -------------------------------------------
@@ -135,7 +199,9 @@ async function showSancho() {
   const hash = String(j.config_sha256), registered = hash === defaultHash && j.is_default === true;
   const sharpe = Number(j.net_sharpe_in_sample), stream = (j.stream as number[] | undefined) ?? [];
   clearScene();
+  const scene = getScene();
   scene.seed.classList.add("spent");
+  $("v-draw-h").textContent = "Sancho, drawn";
   drawBonsai(scene.svg, `Sancho · in-sample net Sharpe ${sharpe >= 0 ? "+" : ""}${sharpe.toFixed(3)}`);
   let cfgLine = "";
   if (cfg) {
@@ -143,7 +209,8 @@ async function showSancho() {
     cfgLine = ch === hash ? `${cfg.name} hashes to the same config` : `${cfg.name} hashes to ${ch}, not this run's config`;
     if (ch !== hash) errorBox.textContent = `${cfg.name} is not the config this output was run with.`;
   }
-  $("v-rec-h").textContent = registered ? "Sancho, the registered model" : "Sancho, tailored";
+  const heading = registered ? "Sancho, the registered model" : "Sancho, tailored";
+  $("v-rec-h").textContent = heading;
   $("v-meaning").textContent = "Sharpe and config hash, not a verdict: Sancho is a fixed model, not a search, so it gets no search verdict. "
     + "There is no search for the gate to replay; what quixote sancho writes is Sancho's stream and its in-sample Sharpe, and that is all there is to show. "
     + (registered ? "This is the registered Sancho (the default levers); its registered tests, priced as one declared strategy, are on the Sancho page."
@@ -161,9 +228,13 @@ async function showSancho() {
     ["Turnover", `${Number(turn.turnover_per_row).toFixed(4)} a row · cost ${Number(turn.cost_per_year).toFixed(4)} a year`],
   ];
   rows(out);
+  // the key figures: registered or tailored, as a word and a mark; the Sharpe, turnover, first scored row and the
+  // config hash, each written as in the record
+  status(registered ? "●" : "○", heading, registered ? "registered" : "tailored");
+  figures([["In-sample net Sharpe", `${sharpe >= 0 ? "+" : ""}${sharpe.toFixed(3)}`], ["Turnover", Number(turn.turnover_per_row).toFixed(4), "a row"],
+    ["First scored row", String(j.first_scored_row)], ["Config hash", hash]]);
   $("v-cmd").textContent = `${INSTALL}\nquixote sancho --panel ${j.panel}${cfg ? ` --config ${cfg.name}` : registered ? "" : " --config <the config with this hash>"} --out sancho_out/`;
-  $("v-record").hidden = false;
-  scene.two.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+  loaded(true);
 }
 
 const input = $<HTMLInputElement>("v-files"), drop = $("v-drop");

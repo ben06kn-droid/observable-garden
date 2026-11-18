@@ -17,7 +17,9 @@ import { Field, startLife } from "./particles";
 import { branchSources, woodTwo } from "./woods";
 import type { AuditResult, SearchTree } from "./types";
 
-export interface SceneOptions { decor?: boolean; throttled?: () => boolean }
+/** parts: the section, the drawing's host and its SVG, given directly (the viewer, in the one page beside the run section's
+ *  own #demo, #spot and #garden); without them they are found by those ids */
+export interface SceneOptions { decor?: boolean; throttled?: () => boolean; parts?: { two: HTMLElement; spot: HTMLElement; svg: SVGSVGElement } }
 
 /** what the page calls on the bed; without decor there is no bed and these do nothing */
 interface BedLike { reset(key: string): void; start(): void; finish(): void; heads(): [number, number][] }
@@ -25,7 +27,7 @@ interface BedLike { reset(key: string): void; start(): void; finish(): void; hea
 export function makeScene(o: SceneOptions = {}) {
   const decor = !!o.decor, throttled = o.throttled ?? (() => false);
   const $ = (id: string) => document.getElementById(id) as HTMLElement;
-  const two = $("demo"), svg = $("garden") as unknown as SVGSVGElement, spot = $("spot");
+  const two = o.parts?.two ?? $("demo"), svg = o.parts?.svg ?? $("garden") as unknown as SVGSVGElement, spot = o.parts?.spot ?? $("spot");
   const seed = $("seed") ?? document.createElement("div");   // without decor: a detached stand-in, never shown
   let bed: BedLike = { reset() {}, start() {}, finish() {}, heads: () => [] };
   const resized: (() => void)[] = [];

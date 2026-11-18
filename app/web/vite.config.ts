@@ -9,7 +9,7 @@ import { LOADER } from "./src/loader-mark";
 // the pinned Pyodide release: its files are served from /pyodide/<version>/
 const PYODIDE = JSON.parse(readFileSync(resolve(import.meta.dirname, "public/pyodide/MANIFEST.json"), "utf8")).pyodide;
 
-const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "loader", "eucalyptus", "contact"];   // eucalyptus.html: a shell of the one page
+const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "loader", "eucalyptus", "contact"];   // eucalyptus.html and viewer.html: shells of the one page
 
 // The menu (src/menu.html) is written into every page at its <!-- menu --> marker (the one page's header.html has one).
 // The one-page site: home, run, docs and Sancho are sections of one document, built once behind the
@@ -31,7 +31,8 @@ function onepage(): Plugin {
       if (at < 0) return html;
       const end = html.indexOf("-->", at) + 3;
       const backdrops = `<div class="backdrops" aria-hidden="true">${SECTIONS.map((n) => `<div class="backdrop" data-for="${n}" data-theme="${n}"${n === "docs" || n === "sancho" ? ` data-page="${n}"` : ""}></div>`).join("")}</div>`;
-      const body = `${LOADER}\n${part("header")}${backdrops}\n<main id="main">\n${SECTIONS.map(part).join("")}</main>\n`;
+      // the viewer: a layer over the sections, outside <main>, opened from the Sancho section (src/onepage/viewer.html)
+      const body = `${LOADER}\n${part("header")}${backdrops}\n<main id="main">\n${SECTIONS.map(part).join("")}</main>\n${part("viewer")}`;
       return (html.slice(0, at) + body + html.slice(end)).replace("<!-- menu -->", () => readFileSync(resolve(import.meta.dirname, "src/menu.html"), "utf8"));
     } },
   };
