@@ -170,7 +170,7 @@ The four chain pages are one document, built once behind a loading screen and ke
 
 Each is a section of that document with its own address. Scrolling simply continues from one into the next. Outside
 the chain, separate documents reached by links: **demo** (`/demo.html`, from the run section's "Try it on three bundled searches" only; home does
-not link to it), **viewer** (`/viewer.html`, from Sancho), **result** (a demo
+not link to it), **Eucalyptus** (`/eucalyptus.html`, from home's last line), **viewer** (`/viewer.html`, from Sancho), **result** (a demo
 verdict on its own page), **share**, **privacy**, **terms**, **404**, and **loader** (`/loader.html`, the loading
 screen on its own with a simulated load, for review).
 
@@ -306,7 +306,9 @@ class table's size) have their room from the start, so its arrival never moves t
   - the address following the scroll through all four sections without adding history;
   - header links, Back, the cue by click and by Enter (focus moves to the section);
   - a docs contents link;
-  - Pyodide on demand: not loaded for a visitor who scrolls past, loaded when the form is on screen.
+  - Pyodide on demand: not loaded for a visitor who scrolls past, loaded when the form is on screen;
+  - out to the demo (from run) and to Eucalyptus (from home), and Back: both return alike (`out_and_back`), and
+    the Eucalyptus page is the home theme with nothing in `<main>`, no canvas and no wake.
 
   `--run-page` runs the run form against the mock providers.
 - `scripts/reference.mjs` takes reference shots of each section (top, middle, end; 1440x900 and 390x844) and
@@ -460,6 +462,10 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     16.8 ms); paused while hidden or off screen.
 - **demo**: the city garden at night in neon tubing (also the result page, which replays a demo verdict). The
   only page with neon, glow or the night palette; `demo.css` is loaded by no other page.
+- **Eucalyptus** (`eucalyptus.html`, `src/pages/eucalyptus.ts`, `src/styles/eucalyptus.css`; 2026-11-18): for now
+  only the site's header and footer in the home theme's colours, nothing between them (the footer at the foot of the
+  screen). A separate document outside the one-page scroll, with no cursor effect; leaving it and coming back
+  behaves as for the demo. To be designed in its own session.
 - **viewer**: a light counterpart to the run page: cool off-white, graphite type, hairlines, one muted
   oxidized-copper green. No illustration, no glow. Reached from Sancho; outside the chain.
 

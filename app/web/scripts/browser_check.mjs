@@ -169,7 +169,7 @@ if (probe) {
 if (process.argv.includes("--analytics")) {
   try {
     await viewport(1440, 900);
-    const pages = ["/", "/demo.html", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html", "/terms.html", "/share.html", "/result.html?ex=" + example];
+    const pages = ["/", "/demo.html", "/eucalyptus.html", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html", "/terms.html", "/share.html", "/result.html?ex=" + example];
     for (const p of pages) { await go(p); await sleep(1500); }
     report.visitor = await evaluate(`({ webdriver: navigator.webdriver, headless_ua: navigator.userAgent.includes("Headless"), storage_keys: Object.keys(localStorage).concat(Object.keys(sessionStorage)), cookies: document.cookie })`);
     await sleep(1500);
@@ -330,7 +330,7 @@ if (process.argv.includes("--pages")) {
     // every page at phone width (375 px): no horizontal scroll, and the header's links inside the header
     await viewport(375, 740);
     report.phone = {};
-    for (const pg of ["/", "/demo.html", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html"]) {
+    for (const pg of ["/", "/demo.html", "/eucalyptus.html", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html"]) {
       await go(pg); await sleep(400);
       report.phone[pg] = await evaluate(`(() => { const t = document.querySelector('.top').getBoundingClientRect(), n = document.querySelector('.top nav').getBoundingClientRect();
         return { page_scrolls_sideways: document.documentElement.scrollWidth > innerWidth, nav_inside: n.right <= innerWidth + 0.5 && n.left >= 0, header_height: Math.round(t.height) }; })()`);
@@ -570,6 +570,28 @@ try {
     const anchor = await evaluate(`(() => { const a = [...document.querySelectorAll('[data-section="docs"] .toc a')].at(-2); a.click(); return a.hash; })()`);
     one.contents_link = { anchor, arrived: await settledAt(`(() => { const h = document.getElementById(decodeURIComponent(location.hash.slice(1))); return !!h && Math.abs(h.getBoundingClientRect().top - (parseFloat(getComputedStyle(h).scrollMarginTop) || 0)) < 3; })()`), url: await evaluate(`location.pathname + location.hash`) };
     await shot(`${tag}-3-docs`);
+    if (tag === "desktop") {
+      // out of the one page to the demo (from the run section) and to Eucalyptus (from home), and Back: the two must
+      // return alike (the page kept or rebuilt the same way, the same loading screen, on the section left from)
+      step("desktop: out to the demo and to Eucalyptus, and Back");
+      const outAndBack = async (from, name, link, to) => {
+        await go(from);
+        await evaluate(`window.__stay = 1; true`);
+        await evaluate(`document.querySelector('[data-section="${name}"] ${link}').click(); true`);
+        const arrived = await settledAt(`location.pathname === "${to}" && document.readyState === "complete"`, 20000); await sleep(800);
+        const there = { arrived, theme: await evaluate(`document.documentElement.dataset.theme`), main_empty: await evaluate(`document.querySelector("main").children.length === 0`),
+          canvases: await evaluate(`document.querySelectorAll("canvas").length`), wake: await evaluate(`!!document.querySelector(".wake-layer")`) };
+        await evaluate(`history.back(); true`);
+        const back = await settledAt(`location.pathname === "${from}" && document.readyState === "complete" && !document.querySelector(".loader")`, 20000); await sleep(800);
+        return { ...there, back: { arrived: back, path: await here(), page_kept: await evaluate(`window.__stay === 1`), loader: await evaluate(`document.documentElement.dataset.loader ?? null`),
+          at_section: await evaluate(`Math.abs(scrollY - ${secTop(name)}) < 2`), title: await evaluate(`document.title`) } };
+      };
+      const demo = await outAndBack("/run.html", "run", 'a[href="/demo.html"]', "/demo.html");
+      const euc = await outAndBack("/", "home", 'a[href="/eucalyptus.html"]', "/eucalyptus.html");
+      one.out_and_back = { demo, eucalyptus: euc,
+        eucalyptus_page: euc.theme === "home" && euc.main_empty && euc.canvases === 0 && !euc.wake,
+        same_return: demo.back.arrived && euc.back.arrived && demo.back.at_section && euc.back.at_section && demo.back.page_kept === euc.back.page_kept && demo.back.loader === euc.back.loader };
+    }
   }
   await viewport(1440, 900);
   await go("/demo.html"); await sleep(500);
@@ -635,7 +657,7 @@ try {
   await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(1600);
   await shot("9-result", true);
   report.header_opaque = {};   // nothing reads through the header: its ground is the page's, fully opaque
-  for (const p of ["/", "/demo.html", "/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html", `/result.html?ex=${example}`]) {
+  for (const p of ["/", "/demo.html", "/eucalyptus.html", "/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html", `/result.html?ex=${example}`]) {
     await go(p);
     report.header_opaque[p] = await evaluate(`(() => { const c = getComputedStyle(document.querySelector('.top')).backgroundColor, m = c.match(/rgba?\\(([^)]+)\\)/); const a = m ? m[1].split(',').map(Number) : []; return a.length === 3 || a[3] === 1; })()`);
   }
@@ -665,7 +687,7 @@ try {
   report.reduced.onepage_jump = await evaluate(`Math.abs(scrollY - Math.round(document.querySelector('[data-section="run"]').getBoundingClientRect().top + scrollY)) < 2`);
 
   report.reduced.still = {};
-  for (const p of ["/", "/run.html", "/docs.html", "/sancho.html", "/demo.html", "/viewer.html"]) {
+  for (const p of ["/", "/run.html", "/docs.html", "/sancho.html", "/demo.html", "/eucalyptus.html", "/viewer.html"]) {
     await go(p); await sleep(600);
     report.reduced.still[p] = await evaluate(`document.getAnimations().filter((a) => a.playState === 'running').length`);
     await shot(`reduced-${p.replace(/\W+/g, "") || "home"}`);
