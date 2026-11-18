@@ -287,7 +287,8 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
   docs: the sky; Sancho: the dusk), plus the fonts. The files fetched before any script ran count as already done.
   So the box jumps to most of the way at once and the rest fills as the scenes are built. It is never full while
   work remains.
-- **The exit**: once the B has formed (1.5 s from the first frame) **and** the box is full, the open section is
+- **The exit**: once the B has formed (the drawing's own animations played to their end: ring, cut and fold, the
+  minimum time; 2026-11-18, a timer from the page's start had cut the fold short by 100-380 ms) **and** the box is full, the open section is
   scrolled into place, two frames pass (every scene's first frame is on screen beneath), and the whole screen
   slides up off the page (600 ms, the same curve). A first visit reveals at about 2.1 s when the work is done
   sooner; it never waits on work nobody can see yet (Pyodide, below). Performance marks `qx-work-done` and

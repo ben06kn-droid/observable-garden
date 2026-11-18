@@ -10,7 +10,7 @@ import "./styles/loader.css";
 import { COUNTER, counterDigits, MARK } from "./loader-mark";
 
 const SEEN = "qx-loader-seen";
-const FORMED_MS = 1500;
+const FORMED_MS = 1500;          // the B's length (ring 0-400 ms, cut 400-700, fold 700-1500)
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 
@@ -41,9 +41,13 @@ export class Loader {
     if (formed) this.el.classList.add("formed");
     this.digits = this.el.querySelector<SVGPathElement>(".count .digits");
     this.snap = formed;
-    // the B takes 1.5 s from the screen's first frame (its animations start with the page); a rebuild has no minimum
-    const left = Math.max(0, FORMED_MS - performance.now());
-    this.formed = reduce || formed ? Promise.resolve() : new Promise((r) => window.setTimeout(r, existing ? left : FORMED_MS));
+    // the minimum time is the whole B: the ring, the cut and the fold, played to their end. It waits on the drawing's
+    // own animations (they start with the screen's first frame, which can come a few hundred ms after the page began:
+    // a timer from the page's start cut the fold short by 100-380 ms, measured 2026-11-18). A backstop of twice the
+    // B's length keeps a stalled animation (a hidden tab) from holding the site. A rebuild has no minimum.
+    const mark = this.el.querySelector(".mark"), drawing = mark?.getAnimations({ subtree: true }) ?? [];
+    this.formed = reduce || formed ? Promise.resolve()
+      : Promise.race([Promise.all(drawing.map((a) => a.finished.catch(() => undefined))).then(() => undefined), new Promise<void>((r) => window.setTimeout(r, 2 * FORMED_MS))]);
     this.full = new Promise((r) => { this.filled = r; });
   }
 
