@@ -14,7 +14,7 @@ import { drawGarden, H as GH, SEED as SEED_AT, W as GW, type GardenHandle } from
 import { colourOf, kindOf } from "./heads";
 import { makeNotes } from "./notes";
 import { Field, startLife } from "./particles";
-import { branchSources, shakeable, woodTwo } from "./woods";
+import { branchSources, woodTwo } from "./woods";
 import type { AuditResult, SearchTree } from "./types";
 
 export interface SceneOptions { decor?: boolean; throttled?: () => boolean }
@@ -44,7 +44,6 @@ export function makeScene(o: SceneOptions = {}) {
     const bgTwo = $("wood2") as unknown as SVGSVGElement;
     fetch("/examples/overview-tree.json").then((r) => r.json()).then((tree: SearchTree) => {
       woodTwo(bgTwo, tree);
-      shakeable(bgTwo, "Tree", (s) => petals.burst(branchSources(bgTwo, two, s), 16));
       petals.setSources(branchSources(bgTwo, two));
     }).catch(() => {});
     resized.push(() => city.draw());

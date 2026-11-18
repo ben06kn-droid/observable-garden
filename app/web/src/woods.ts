@@ -5,9 +5,8 @@
 // nearest the centre further away (smaller, dimmer), all smaller than the run's tree, so none can be
 // mistaken for it and none crosses the animation spot.
 //
-// Every tree can be shaken: a click (or Enter, the trees are focusable) gives its crown a short damped
-// sway and sheds a burst of leaves or petals from its branches. Leaves and petals are released from
-// points spread along every frond, weighted toward the outer canopy (branchSources).
+// The trees do not respond to clicks. Leaves and petals are released from points spread along every
+// frond, weighted toward the outer canopy (branchSources).
 import { drawGarden, type GardenHandle } from "./garden";
 import type { Source } from "./particles";
 import type { SearchTree } from "./types";
@@ -26,7 +25,7 @@ const aspect = (svg: SVGSVGElement) => { const r = svg.getBoundingClientRect(); 
 // ---------- the home page's grove ----------
 // The restart example's logged search as birches standing on one ground line (src/birch.ts). Every twig
 // and leaf was placed at build time (scripts/make_grove.mjs, public/examples/grove.json); here the page
-// only scales and positions the finished drawings, one <svg> per tree so a tree's entrance and sway are
+// only scales and positions the finished drawings, one <svg> per tree so a tree's entrance is
 // composited. Desktop: every restart in search order, the even ones in front, spaced so no two front
 // crowns touch, the odd ones a row behind (smaller, finer, lighter), each midway between its
 // neighbours; a 3 px knockout in the paper's colour under every front stroke keeps the front trees
@@ -103,13 +102,6 @@ export function drawGrove(host: HTMLElement, data: GroveData, box: { w: number; 
   return { stems: svgs, sources, restarts: data.restarts, evaluations: phone ? data.phone_evaluations : data.evaluations, shown: trees.length };
 }
 
-/** A tree's short damped sway about its foot, on the compositor; no sway under reduced motion. */
-export function swayTree(svg: SVGSVGElement) {
-  const k = [0, 1.1, -0.8, 0.5, -0.28, 0.12, 0];
-  svg.getAnimations().forEach((a) => a.cancel());
-  svg.animate(k.map((d) => ({ transform: `rotate(${d}deg)` })), { duration: 1800, easing: "cubic-bezier(.35, 0, 0, 1)" });
-}
-
 export function woodTwo(svg: SVGSVGElement, tree: SearchTree): GardenHandle {
   const width = H * aspect(svg);
   const t = subTree(tree, [0, 1, 3, 5, 7, 6]);
@@ -140,30 +132,4 @@ export function branchSources(svg: SVGSVGElement, box: HTMLElement, stem?: numbe
     }
   }
   return out;
-}
-
-/** A short damped sway of one tree's crown (every copy of it: the strokes, the halo, the core). */
-export function shakeTree(svg: SVGSVGElement, stem: number) {
-  const k = [0, 2.6, -2.0, 1.3, -0.75, 0.35, -0.12, 0];
-  for (const g of svg.querySelectorAll<SVGGElement>(`[data-stem="${stem}"]`)) {
-    g.getAnimations().forEach((a) => a.cancel());
-    g.animate(k.map((d) => ({ transform: `skewX(${d}deg)` })), { duration: 1150, easing: "linear" });
-  }
-}
-
-/** Make each background tree a focusable button that shakes: a transparent hit area over the tree,
- *  click or Enter. `onShake` sheds the burst. */
-export function shakeable(svg: SVGSVGElement, name: string, onShake: (stem: number) => void) {
-  for (const g of svg.querySelectorAll<SVGGElement>(".real .stem")) {
-    const stem = Number(g.dataset.stem), bb = g.getBBox();
-    const hit = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    hit.setAttribute("class", "hit");
-    for (const [k, v] of [["x", bb.x], ["y", bb.y], ["width", bb.width], ["height", bb.height]] as const) hit.setAttribute(k, v.toFixed(1));
-    g.insertBefore(hit, g.firstChild);
-    g.setAttribute("tabindex", "0"); g.setAttribute("role", "button");
-    g.setAttribute("aria-label", `${name} ${stem + 1}: shake it`);
-    const go = () => { shakeTree(svg, stem); onShake(stem); };
-    g.addEventListener("click", go);
-    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
-  }
 }

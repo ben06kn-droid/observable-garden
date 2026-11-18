@@ -509,8 +509,10 @@ try {
     await until(`document.readyState === "complete" && !document.querySelector(".loader")`, 20000);
     Object.assign(one.first_visit, { loader_ms: Date.now() - t0, at_home: await evaluate(`scrollY < 2`), path: await here(), title: await evaluate(`document.title`) });
     await shot(`${tag}-1-home`);
-    if (tag === "desktop") report.shake_home = await evaluate(`(() => { const g = [...document.querySelectorAll('#bg-trees .real .stem')].find((e) => { const r = e.getBoundingClientRect(); return r.left > 800 && r.top < innerHeight; });
-      if (!g) return 'no tree in view'; g.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return g.getAnimations().length > 0; })()`);
+    // the trees do not respond: a click or Enter starts nothing, and they are neither buttons nor under a pointer cursor
+    if (tag === "desktop") report.trees_still_home = await evaluate(`(() => { const g = [...document.querySelectorAll('#bg-trees .real .stem')].find((e) => { const r = e.getBoundingClientRect(); return r.left > 800 && r.top < innerHeight; });
+      if (!g) return 'no tree in view'; g.dispatchEvent(new MouseEvent('click', { bubbles: true })); g.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return { animations: g.getAnimations().length, cursor: getComputedStyle(g).cursor, focusable: g.hasAttribute('tabindex'), role: g.getAttribute('role') }; })()`);
     if (tag === "desktop") {
       // the run page's gate (Pyodide) loads only for a visitor who comes to its form: none for one who scrolls past it
       // to the end and waits there; then the form held on screen starts it (focus and Start: --run-page)
@@ -612,8 +614,10 @@ try {
     twigs: document.querySelectorAll('#garden .real .twig').length })`);
   report.contrast_verdict = await contrast("#spot .note, #verdict-word, #chips .chip, #run");
   // a background tree shakes and sheds; a cable strikes (vibration and a bolt on the effects canvas)
-  report.shake = await evaluate(`(() => { const g = document.querySelector('#wood2 .real .stem'); g.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    return document.querySelectorAll('#wood2 [data-stem="' + g.dataset.stem + '"]')[0].getAnimations().length > 0; })()`);
+  // the background trees do not respond: a click starts nothing, no pointer cursor, not focusable
+  report.trees_still_demo = await evaluate(`(() => { const g = document.querySelector('#wood2 .real .stem'); g.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const all = [...document.querySelectorAll('#wood2 [data-stem="' + g.dataset.stem + '"]')];
+    return { animations: all.reduce((n, e) => n + e.getAnimations().length, 0), cursor: getComputedStyle(g).cursor, focusable: !!document.querySelector('#wood2 [tabindex]'), hit_areas: document.querySelectorAll('#wood2 .hit').length }; })()`);
   await evaluate(`document.querySelector('#city .cable-hit').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 500, clientY: 100 })); true`);
   await sleep(150);
   report.bolt_drawn = await evaluate(`(() => { const c = document.getElementById('fx'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })()`);

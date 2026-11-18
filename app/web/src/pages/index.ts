@@ -8,7 +8,7 @@ import { reduceMotion } from "../common";
 import { BIRCH_LEAF_D } from "../birch";
 import { Field, startLife } from "../particles";
 import { svgPart, WakeLayer } from "../cursorwake";
-import { drawGrove, swayTree, type Grove, type GroveData } from "../woods";
+import { drawGrove, type Grove, type GroveData } from "../woods";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const one = $("overview"), groveBox = $("bg-trees"), host = $("grove");
@@ -37,8 +37,8 @@ const leaves = new Field({ box: one, air: $("air-one") as HTMLCanvasElement, pil
 const life = startLife({ fields: [leaves], paused: () => document.hidden || !inView("home"), throttled: () => false, reduce: reduceMotion, cursor: false });
 
 // ---- the grove (woods.ts): the restart example's search as birches, placed at build time
-// (scripts/make_grove.mjs); desktop shows every restart, the phone its own grove of two. A click (or
-// Enter) sways a tree and sheds a few leaves from it.
+// (scripts/make_grove.mjs); desktop shows every restart, the phone its own grove of two. The trees do not
+// respond to clicks.
 let data: GroveData | null = null, grove: Grove | null = null;
 const draw = () => {
   if (!data) return;
@@ -48,14 +48,6 @@ const draw = () => {
   const again = true;
   grove = drawGrove(host, data, { w: Math.floor(r.width), h: Math.floor(r.height) }, { x: r.left - b.left, y: r.top - b.top }, phone());
   host.classList.toggle("still", again);
-  for (const svg of grove.stems) {
-    const stem = Number(svg.dataset.stem);
-    svg.setAttribute("tabindex", "0"); svg.setAttribute("role", "button");
-    svg.setAttribute("aria-label", `Restart ${stem + 1}: sway it`);
-    const go = () => { if (!reduceMotion) swayTree(svg); leaves.burst(grove!.sources(stem), 4); };
-    svg.addEventListener("click", go);
-    svg.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
-  }
   leaves.setSources(grove.sources());
   if (reduceMotion) leaves.draw();         // no loop under reduced motion: the still frame, drawn once
   host.classList.add("drawn");             // a redraw (a resize) does not play the arrival again
@@ -81,8 +73,6 @@ const wake = new WakeLayer({ host: one,
   // what the trail refracts: the grove, the ground line and the leaves (none of them is bent)
   parts: () => [grovePart, horizonPart, $("air-one") as HTMLCanvasElement, $("pile-one") as HTMLCanvasElement],
   bends: () => false,
-  // a tree swaying or arriving now (finished animations that hold their last frame do not count)
-  moving: () => !!grove?.stems.some((s) => s.getAnimations().some((a) => a.playState === "running")),
   keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *, .legend > span")].map(box),
   // halfway between the narrow line it was and the docs tail (src/sky.ts; 2026-11-18). The fluid's settings, shared
   // with docs, are the midpoints: cell 5 | 8, flow 0.3 | 0.4125, curl 70 | 13.2, force 1 | 0.6, fade 0.45 | 0.54. The
@@ -92,8 +82,6 @@ const wake = new WakeLayer({ host: one,
   scale: { cell: 6.5, flow: 0.35625, curl: 41.6, force: 0.8, fade: 0.495,
            dye: 1.5, dyeWidth: 17.2 / 1.5, dyeGrow: 24 / 1.5, dyeFlow: 0.26625, dyeFade: 0.42 },
   onPush: (x, y, vx, vy, dose) => { const k = 0.5 + 0.9 * Math.sqrt(dose); life.wind.add(x, y, vx * k, vy * k); } });
-
-one.addEventListener("animationend", () => wake.invalidate());   // a tree done arriving or swaying
 
 // drawn once the type has settled, behind the loading screen: the grove's data fetched, then the grove drawn
 const fetched = task("home: grove data"), drawn = task("home: grove drawn");

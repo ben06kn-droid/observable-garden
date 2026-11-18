@@ -354,6 +354,8 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     three of the same trees at the same proportions (the restarts with the best Sharpe: two in front, one
     behind), laid out the same way in a taller grove; the headline, the copy and the tree tops are on the
     first screen and the ground line may fall below the fold; the legend says "3 of 8 restarts".
+  - **The trees do not respond to clicks** (2026-11-18), here or on the demo: no sway, not buttons, no pointer
+    cursor. On the demo the run's tree alone is clickable, to open the run, and it does not shake.
   - **Colour**: leaves on the trees are three greens (lighter in the back row); the falling and fallen leaves
     are the same birch leaf in three ochres, the page's only warm accent. Few and small, depth from size and
     opacity, a slow fall, a light cursor wind; they leave from the trees' leaves, lie along the ground line

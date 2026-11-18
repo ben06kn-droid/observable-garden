@@ -13,7 +13,7 @@ import { Field, startLife } from "../particles";
 import { svgPart, WakeLayer } from "../cursorwake";
 import { makeRunView } from "../runView";
 import { makeNotes } from "../notes";
-import { branchSources, shakeable, woodTwo } from "../woods";
+import { branchSources, woodTwo } from "../woods";
 import type { AuditResult, SearchTree } from "../types";
 
 const SEED = 0;
@@ -90,13 +90,12 @@ const mo = new MutationObserver(() => {
 for (const el of [svg, $("wood2"), $("city")]) mo.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["d"] });
 
 // ---- the background trees (woods.ts): the restart example's search, from its log, six at the edges as
-// dim violet-pink neon. A click (or Enter) shakes one and sheds a burst from its branches.
+// dim violet-pink neon. They do not respond to clicks; their branches shed the petals.
 const bgTwo = $("wood2") as unknown as SVGSVGElement;
 let backdrop: SearchTree | null = null;
 const woods = () => {
   if (!backdrop) return;
   woodTwo(bgTwo, backdrop);
-  shakeable(bgTwo, "Tree", (s) => petals.burst(branchSources(bgTwo, two, s), 16));
   petals.setSources(branchSources(bgTwo, two));
 };
 fetch("/examples/overview-tree.json").then((r) => r.json()).then((tree: SearchTree) => { backdrop = tree; woods(); }).catch(() => {});
