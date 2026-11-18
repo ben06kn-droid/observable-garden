@@ -143,6 +143,9 @@ export class Fan {
   destroy() {
     this.running = false; cancelAnimationFrame(this.raf); removeEventListener("scroll", this.onScroll); removeEventListener("resize", this.onResize);
     this.unfollow(); this.canvas.remove();
+    // the context released at once (it is rebuilt on a resize): left to the collector, contexts piled up until the
+    // browser dropped the oldest (its limit is 16 a page), and their GPU memory with them
+    this.gl?.getExtension("WEBGL_lose_context")?.loseContext(); this.gl = null;
   }
 
   /** read the colours from the page's tokens (after a palette swap, for one) */

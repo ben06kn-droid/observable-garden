@@ -591,7 +591,7 @@ try {
       await evaluate(`document.querySelector('.menu-btn').focus(); true`);
       await key("Enter", "Enter", 13); m.enter_opens = await state();                 // focus on the current item (Quixote)
       await key("ArrowDown", "ArrowDown", 40); m.arrow_down = await state();          // Run
-      await key("End", "End", 35); m.end = await state();                             // Eucalyptus
+      await key("End", "End", 35); m.end = await state();                             // Paper
       await key("Escape", "Escape", 27); m.escape = await state();                    // closed, focus on the button
       await key("ArrowDown", "ArrowDown", 40); m.down_opens = await state();
       await send("Input.dispatchMouseEvent", { type: "mousePressed", x: 900, y: 600, button: "left", clickCount: 1 }, page);
@@ -604,7 +604,7 @@ try {
       for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: d[0], y: d[1], button: "left", clickCount: 1 }, page);
       m.choose_docs = { arrived: await settledAt(`Math.abs(scrollY - ${secTop("docs")}) < 2 && location.pathname === "/docs.html"`), ...(await state()), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent`) };
       m.ok = m.roles.button === "BUTTON" && m.roles.controls && m.roles.items.join() === "Quixote,Run,Docs,Sancho,Eucalyptus,Paper" && m.roles.current === "Quixote"
-        && m.enter_opens.expanded === "true" && m.enter_opens.focus === "Quixote" && m.arrow_down.focus === "Run" && m.end.focus === "Eucalyptus"
+        && m.enter_opens.expanded === "true" && m.enter_opens.focus === "Quixote" && m.arrow_down.focus === "Run" && m.end.focus === "Paper"
         && m.escape.hidden && m.escape.focus?.startsWith("Garden") && m.down_opens.focus === "Quixote" && m.outside_closes.hidden && !m.click_opens.hidden
         && m.choose_docs.arrived && m.choose_docs.hidden && m.choose_docs.current === "Docs";
     }

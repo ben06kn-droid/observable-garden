@@ -113,6 +113,7 @@ export class Hero {
   destroy() {
     cancelAnimationFrame(this.raf); this.raf = 0; this.io.disconnect();
     this.canvas.remove();
+    this.gl?.getExtension("WEBGL_lose_context")?.loseContext(); this.gl = null; this.prog = null;   // released at once (see fan.ts)
   }
   /** the glass drew a frame */
   glassFrame() { this.glassDirty = true; this.kick(); }
