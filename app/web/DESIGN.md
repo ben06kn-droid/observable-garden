@@ -172,8 +172,8 @@ The chain's five sections are one document, built once behind a loading screen a
 Each is a section of that document with its own address. Scrolling simply continues from one into the next. Outside
 the chain, separate documents reached by links: **demo** (`/demo.html`, from the run section's "Try it on three bundled searches" only; home does
 not link to it), **viewer** (`/viewer.html`, from Sancho), **result** (a demo
-verdict on its own page), **share**, **privacy**, **terms**, **404**, and **loader** (`/loader.html`, the loading
-screen on its own with a simulated load, for review).
+verdict on its own page), **contact** (`/contact.html`, from the menu), **share**, **privacy**, **terms**, **404**, and
+**loader** (`/loader.html`, the loading screen on its own with a simulated load, for review).
 
 (Until 2026-11-17 the four were separate documents joined by a "carry": a gesture at a page's end and a
 cross-document view transition. That work stays on the `site-revamp` branch; it is retired here.)
@@ -295,7 +295,7 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
   slides up off the page (600 ms, the same curve). A first visit reveals at about 2.1 s when the work is done
   sooner; it never waits on work nobody can see yet (Pyodide, below). Performance marks `qx-work-done` and
   `qx-revealed` time it.
-- **Later in the session** (back from the demo, the viewer or Eucalyptus with a rebuild): `sessionStorage`
+- **Later in the session** (back from the demo, the viewer, Contact or Eucalyptus with a rebuild): `sessionStorage`
   `qx-loader-seen` is set when the screen first goes. `public/loader-early.js`, a classic render-blocking script,
   then sets `<html data-loader="formed">` before the first frame: the finished B is drawn at once, there is no
   minimum time, the box does not ease, and the screen goes as soon as the rebuild is done.
@@ -320,12 +320,14 @@ class table's size) have their room from the start, so its arrival never moves t
   - header links, Back, the cue by click and by Enter (focus moves to the section);
   - a docs contents link;
   - Pyodide on demand: not loaded for a visitor who scrolls past, loaded when the form is on screen;
-  - the menu by keyboard and pointer, the Contact view included; the author's details in the menu only; the
+  - the menu by keyboard and pointer, ending on Contact; the Contact page (the loading screen in full even later in
+    a session, the four lines, new tabs for other sites, Contact current; the author's details in no footer); the
     footer on every page that has one (its three links, the line on the grid's edge); the paper linked from home
     and docs only;
   - the demo: its idle state, a run's stages, the tree and the bed, the verdict, inside the run by click and Enter,
     the tail inside a run, Escape (and under reduced motion: the finished tree, nothing running);
-  - out to the demo (from run) and Back: the page kept, on its section (`out_and_back`); home's Eucalyptus line
+  - out to the demo (from run) and to Contact (from the menu on home) and Back: the page kept, on its section
+    (`out_and_back`); home's Eucalyptus line
     scrolls to the last section, which holds its two lines and the footer, in its theme, with no canvas
     (`eucalyptus_section`).
 
@@ -538,6 +540,18 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   - **Reduced motion**: the tree drawn finished at once, the bed open, the status lines in turn; nothing animates.
   - Measured (headless Chrome, 1440x900): growing the 377-rule tree with the cursor moving over it, 182 frames in 3 s,
     the longest 16.8 ms.
+- **contact** (`contact.html`, `src/pages/contact.ts`, `src/styles/contact.css`; 2026-11-18): a separate document,
+  outside the one-page scroll, from the menu. Minimal: a plain white ground (#FFFFFF), near-black text (#111111), no
+  scene, no cursor effect, nothing decorative; plain markup, to take animations later. The headline "Let’s work
+  together" in the title face (Bricolage 800 at `--t-hero`, two lines at 1440) on the grid's left edge; under it four
+  lines in a large reading size, each a small mono caps label with its value beside it: Name, Email (written out, a
+  mailto link), LinkedIn and GitHub (new tabs, a small ↗). Links: a thin underline at rest, a full-weight one on hover
+  and focus (the arrow moves), a 2 px ring on focus. The menu (Contact current) and the footer in its colours. It opens
+  behind the loading screen **every time, in full** (the ring, the cut, the fold, the box and the counter, then the
+  slide up), even later in a session that has seen it: the build writes the screen in at a `<!-- loader -->` marker,
+  and the page never loads `public/loader-early.js`, so it never starts formed. The box follows the page's real load
+  (its styles, its fonts, the page). Reduced motion: the still B and a plain cut. Back to the one page behaves as from
+  the demo. Phone: the same content stacked, labels over values, the headline wrapping on its words.
 - **Eucalyptus** (`src/onepage/eucalyptus.html`, `src/pages/eucalyptus.ts`, `src/styles/eucalyptus.css`;
   2026-11-18): the one page's last section, at `/eucalyptus.html`. Its own theme, a lime ground (#C4F042) with ink
   #14210A. The words "Coming soon" large in the title face (Bricolage 800 at `--t-hero`) on the grid's left edge, a
@@ -659,20 +673,16 @@ the pill ends at 58 px, the contents stick at 126 px, a docs heading lands at 10
 - On the one page its colours mix between sections with the scroll as the header's did (`boot.ts`). On a phone
   the same control and panel, sized for touch (a 44 px control and 44 px items).
 - It is written into every page with a menu by the build, at a `<!-- menu -->` marker (`vite.config.ts`): the one
-  page, the demo, the viewer, Eucalyptus, and the legal, shared-verdict, result and 404 pages (their bar's styles
+  page, the demo, the viewer, Eucalyptus, Contact, and the legal, shared-verdict, result and 404 pages (their bar's styles
   are gone).
-- **Contact** (2026-11-18), the last item, does not navigate: it replaces the list in the same panel with a back
-  arrow (back to the list, focus on Contact) and four lines: the author's name as plain text; then Email, LinkedIn
-  and GitHub, each a small mono caps label with its value beside it as a link (the address written out, a mailto
-  link; LinkedIn and GitHub open in a new tab). The menu's rules hold in it: Escape and a click outside close the
-  menu, the arrow keys move within the view, its colours follow the section; on a phone its links are 44 px tall.
-  Reopening the menu shows the list. The author's details are here only, not in the footer.
+- **Contact** (2026-11-18), the last item, in Paper's old place, opens the Contact page (section 3); there it is the
+  current item. The author's details are on that page only, not in the footer or the menu.
 - **The paper** is reached from home's "read the paper" and the docs section's reference only; neither the menu nor
   the footer links to it.
 
 **The footer** (2026-11-18): the line "Quixote · MIT · computed in your browser…" on the grid's left edge and
 Privacy, Terms and Source on the right; on a phone the line, then the three links beneath. The same on every page with
-a footer (Eucalyptus, the demo, the viewer, the legal, shared-verdict and result pages).
+a footer (Eucalyptus, the demo, Contact, the viewer, the legal, shared-verdict and result pages).
 
 ## 5. Where things live
 
