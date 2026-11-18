@@ -256,7 +256,7 @@ The chain's five sections are one document, built once behind a loading screen a
 
 Each is a section of that document with its own address. Scrolling simply continues from one into the next. Outside
 the chain, separate documents reached by links: **demo** (`/demo.html`, from the run section's "Try it on three bundled searches" only; home does
-not link to it), **viewer** (`/viewer.html`, from Sancho), **result** (a demo
+not link to it), **result** (a demo
 verdict on its own page), **contact** (`/contact.html`, from the menu), **share**, **privacy**, **terms**, **404**, and
 **loader** (`/loader.html`, the loading screen on its own with a simulated load, for review).
 
@@ -348,7 +348,8 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
 - Back and Forward (`popstate`) jump to the entry's section, and anchor.
 - A direct link to any of the five addresses opens on its section (and anchor), behind the loading screen:
   `history.scrollRestoration` is manual, and the jump is made once the layout is final, before the screen goes.
-- Links out of the chain (demo, viewer, Eucalyptus, the paper) are plain navigations.
+- Links out of the chain (demo, Contact, the paper) are plain navigations. The viewer is a layer over the chain, not a
+  section (section 3, viewer).
 
 ### The loading screen (src/loader.ts, src/loader-mark.ts, src/styles/loader.css, public/loader-early.js)
 
@@ -431,7 +432,7 @@ Every page has a theme: the chain's sections set it on themselves (`data-theme` 
 other page on `<html data-theme="…">`. Each imports one token block from `src/styles/<theme>.css`. Shared
 components read only semantic tokens (`--ground`, `--ink`, `--muted`, `--faint`, `--rule`, `--header-bg`,
 `--accent`, `--focus`, `--field`, `--field-line`, `--problem`, `--tree`, `--tree-path`, `--tree-bar`). Each page's
-session restyles its own theme; the run, docs, Sancho and viewer tokens set here are interim.
+session restyles its own theme; the docs tokens set here are interim.
 
 - **home**: paper and dark green; the search drawn as a grove of birches beside the overview, their turned
   leaves falling. The headline and the brand mark are Bricolage Grotesque at its heavy weight, and nothing
@@ -530,7 +531,9 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     edge (below it), fading before it. The fan's canvas sits in the page (the viewport and a margin above and
     below, re-anchored to the scroll as it draws), so it scrolls with the text and never drifts from it. Most are faint off-white; about one in six is gold. They draw left
     to right at a pace that follows the scroll and eases to an idle; at the foot they slow and rest. Behind
-    text they dim to 6% (7:1 holds for every text tone over a gold path, both palettes); under
+    text they dim to 6% (7:1 holds for every text tone over a gold path, both palettes): behind the headline and the
+    lead by the letters themselves, not their boxes (2026-11-18: `glyphs` in src/fan.ts, each word drawn in its own font,
+    3 px thicker, into a full-resolution mask over the text), behind the rest of the text by its extent; under
     inputs, selects, text areas and buttons they are removed.
   - **Phone**: composed for itself. Headline, lead, a smaller glass, then the sections stacked; the fan is
     a band between the form and the tree.
@@ -625,21 +628,32 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   - **Reduced motion**: the tree drawn finished at once, the bed open, the status lines in turn; nothing animates.
   - Measured (headless Chrome, 1440x900): growing the 377-rule tree with the cursor moving over it, 182 frames in 3 s,
     the longest 16.8 ms.
-- **contact** (`contact.html`, `src/pages/contact.ts`, `src/styles/contact.css`; 2026-11-18): a separate document,
-  outside the one-page scroll, from the menu. Minimal: a plain white ground (#FFFFFF), near-black text (#111111), no
-  scene, no cursor effect, nothing decorative; plain markup, to take animations later. The headline "Let’s work
-  together" in the title face (Bricolage 800 at `--t-hero`, two lines at 1440) on the grid's left edge; under it four
-  lines in a large reading size, each a small mono caps label with its value beside it: Name, Email (written out, a
-  mailto link), LinkedIn and GitHub (new tabs, a small ↗), Résumé ("Download PDF", which downloads
-  `/Benjamin-Knaster-Resume.pdf` from `public/`, and a smaller "Open in browser" beside it, which opens it in a new tab;
-  Chrome's PDF viewer shows it under the site's CSP, checked with `serve_dist.mjs`, which now serves `.pdf` as
-  `application/pdf`). Links: a thin underline at rest, a full-weight one on hover
-  and focus (the arrow moves), a 2 px ring on focus. The menu (Contact current) and the footer in its colours. It opens
-  behind the loading screen **every time, in full** (the ring, the cut, the fold, the box and the counter, then the
-  slide up), even later in a session that has seen it: the build writes the screen in at a `<!-- loader -->` marker,
-  and the page never loads `public/loader-early.js`, so it never starts formed. The box follows the page's real load
-  (its styles, its fonts, the page). Reduced motion: the still B and a plain cut. Back to the one page behaves as from
-  the demo. Phone: the same content stacked, labels over values, the headline wrapping on its words.
+- **contact** (`contact.html`, `src/pages/contact.ts`, `src/styles/contact.css`; remodelled 2026-11-18): a separate
+  document, outside the one-page scroll, from the menu. One screen on the loading ring's blue (#1F4FD8), white text and
+  links (6.6:1 on the ground).
+  - **Content**: "Hi, I’m Ben, we should work together" in the title face (Bricolage 800) on the grid's left edge; under
+    it three lines in a large reading size: the email address written out (a mailto link), "LinkedIn" (the profile, a
+    new tab, a small ↗), "Résumé" (downloads `/Benjamin-Knaster-Resume.pdf`, a small ↓) with a smaller "Open in browser"
+    beside it (the same PDF in a new tab). No labels, no Name or GitHub line; nothing else but the menu control and the
+    footer, both in the page's colours. Links: a thin underline at 45% at rest, a full-weight white one on hover and
+    focus, the arrow moving (↗ up and right, ↓ down), a 2 px white ring on focus.
+  - **One screen**: the headline is `min(8.4vw, 10.8vh)` (97 px at 1440x900, 78 px at 1280x720); measured, the page and
+    its footer fit the window with no scrolling at both. On a phone it stacks and may scroll.
+  - **The fan behind it**: the run section's (`src/fan.ts`, reused with its `full` option): every path complete across
+    the page and still from the first frame, nothing drawing itself, starting or changing colour; the loop runs only
+    while the tail moves. White where run's paths are white, silver #C9CED6 where they are gold, at run's strength
+    (`--fan-alpha` 0.22). Paths run past the right edge (their fade lies beyond it).
+  - **The tail**: the run section's, through the same fan and `src/cursorwake.ts` (same fluid, steps, push and timing):
+    the paths bend as it passes and settle back (about 3 s). Where run's turn red, these turn rose gold: the white paths
+    take a tone 35% of the way from white to #E8A598 (`--wake-tone` #F7E0DB), with #E8A598 fringes at run's weight and
+    offset; the silver paths bend and keep their colour, as the gold do on run. Frames (headed Chrome, 1440x900, a
+    stroke across the text and the fan): median 16.7 ms, worst 17.7 ms.
+  - **Behind the text**: the paths dim behind the letters themselves, not their boxes (the fan's glyph mask: each word
+    drawn in its own font, 3 px thicker, into a full-resolution mask over the text): to 12% behind the headline, the
+    three lines (and the links' arrows) and the footer, with no glossy trace there. The tail never moves text.
+  - **Loader**: as before, in full every time, its white screen sliding up to the blue page.
+  - **Phone**: the same text stacked, the fan still, no tail. **Reduced motion**: the fan still, no tail, and the
+    loader's still version.
 - **Eucalyptus** (`src/onepage/eucalyptus.html`, `src/pages/eucalyptus.ts`, `src/styles/eucalyptus.css`;
   2026-11-18): the one page's last section, at `/eucalyptus.html`. Its own theme, a lime ground (#C4F042) with ink
   #14210A. The words "Coming soon" large in the title face (Bricolage 800 at `--t-hero`) on the grid's left edge, a
@@ -648,8 +662,48 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   (`src/trace.ts`: the same fluid, the same glossy trace and Sancho's own colours, #f2d7a6 / #14070a / #b5391c),
   drawn in its backdrop over the lime, fading out before the title and the footer; on the lime its pale highlight
   is close to the ground, so it reads mostly by its shade and rim. No tail on a phone or under reduced motion.
-- **viewer**: a light counterpart to the run page: cool off-white, graphite type, hairlines, one muted
-  oxidized-copper green. No illustration, no glow. Reached from Sancho; outside the chain.
+- **viewer** (`src/onepage/viewer.html`, `src/pages/viewer.ts`, `src/viewerstrip.ts`, `src/styles/viewer.css`;
+  2026-11-18): a layer inside the one page, entered only from the Sancho section ("Open the viewer", beside the line on
+  `sancho_out/sancho.json`); in no menu and linked from nowhere else. Browsed sideways, after lukres.dev's project page
+  (section 1).
+  - **The look**: the most minimal page on the site, in the Contact page's family as it was: ground #FFFFFF, text
+    #111111, hairline rules at 12% black, one accent, a muted copper green #2F6B55 (6.3:1), for links and the progress
+    mark. No scene, no cursor effect, no gradients or shadows. The reading face for text; the mono face for every number
+    (every run of digits and every hash is set in mono with tabular figures, its text unchanged); small mono caps for
+    labels (a label of one or two symbols, p, B, α, keeps its case: in capitals α read as A).
+  - **Entering** (1.0 s, `cubic-bezier(.35, 0, 0, 1)`): Sancho's content rises 6vh and fades (0-600 ms); a white ground
+    covers the dusk (100-700 ms); the viewer's bar, its first panel and the mark rise 3vh and fade in (400-1000 ms). Then
+    the page beneath is covered: every scene pauses (`setCovered`), it is inert, it does not scroll, and the menu
+    control is hidden. Closing plays it back in 0.8 s and leaves Sancho exactly where the reader left it.
+  - **Panels**, one window each, left to right, each fitting 1440x900 and 1366x768 with no scrolling of its own
+    (measured): Load (one bordered drop area and one line: "Drop `sancho.json`, written by `quixote sancho --out
+    sancho_out/`, or choose it."; a search's log, result, panel and class are still accepted); Key figures (large, in
+    mono: for Sancho the in-sample net Sharpe, turnover a row, the first scored row and the config hash in full,
+    wrapped, under "● Sancho, the registered model" or "○ Sancho, tailored"; for a search the gate's own word with a mark,
+    ✓ PASS, ✕ FAIL, ○ the others, then p, bar, the submitted in-sample Sharpe, B and α); Drawn (the search's flat tree
+    with the verdict written on it, or Sancho as the bonsai in its pot); What it means; Reasons (a search's, in two
+    columns); The record; Reproduce it (the command and the two disclaimers). Every sentence, label and number is the old
+    viewer's, placed in panels (checked word for word by `browser_check --pages`).
+  - **Browsing**: the wheel (vertical or sideways) moves the strip 1:1 in pixels through lukres.dev's eased follow
+    (`remaining × (1 − e^(−12·dt))` per frame); 150 ms after the last wheel event it eases to the nearest panel. ← and →
+    (and Page Up/Down) move a panel, Home and End to the ends. The mark, bottom left: "02 / 06", the panel's name in mono
+    caps, and a 168 px hairline whose green segment moves with the position.
+  - **Leaving**: scrolling back (up or left) from the first panel leaves at once; so do Escape, Close (top right) and the
+    browser's Back. The first request holds the viewer until it has closed, so one swipe's later wheel events cannot go
+    back further than Sancho (they did, once: seen by the author, fixed and checked with a burst of ten).
+  - **Address**: `/viewer.html` while open (one history entry; Back closes, Forward reopens). `viewer.html` is a sixth
+    shell of the one page (`data-start="sancho"`, `data-viewer`): a direct link opens the viewer behind the loading
+    screen over the Sancho section at its control, and Close then leaves `/sancho.html` in the address.
+  - **Keyboard**: Tab goes Close, then each panel (a focus stop, which brings it into view, its ring inside the window's
+    edge) and what is in it, round again: focus stays inside; it returns to the control on leaving.
+  - **Phone, short windows (under 640 px), touch screens and reduced motion**: the same panels as a plain vertical list in
+    the same layer, scrolled natively, each panel's name as its heading; no sideways movement and no mark; Close, Escape
+    and Back leave. Reduced motion: no animation in or out.
+  - **Frames** (headed Chrome, 1440x900, 60 Hz; entering, two swipes, Home, scrolling out): 560 frames, median 16.7 ms,
+    95th percentile 17.1 ms, worst 17.7 ms.
+  - **Fixtures**: `scripts/make_viewer_fixtures.sh` writes small real outputs to `scripts/fixtures/viewer/` in about 5 s
+    (quixote audit on the scripted and planted example logs, B 500; quixote sancho, tailored and registered configs, on
+    seeded synthetic panels of 6 assets).
 
 ### The cursor's wake (src/cursorwake.ts)
 
@@ -696,7 +750,8 @@ every page; a page gives it the drawn layer it acts on and its colours from its 
   - run: bending, on the fan's white paths: on the dark ground they take a clear red tint (35% of the way from
     their off-white to #FF3B30, `--wake-tone` #f5b1b3) with vivid #FF3B30 fringes at about 95%, 1.5 to 2 px off the
     line (`--wake-fringe-mix`, `--wake-fringe-off`; measured 4.8-5.0:1 on the ground, 2026-11-18); on the light
-    ground silver-grey with fine red fringes, as before; the gold paths bend with it but keep
+    ground a red as strong as the dark ground's (2026-11-18; #FF3B30 read pale there, 2.2:1 measured): a deep red tone
+    #B8141C with #D0101C fringes at the dark ground's offset (1.5 to 2 px) and a stronger mix (3.5 against 2); the gold paths bend with it but keep
     their own gold throughout, with no tone and no fringe, in both palettes (2026-11-18: the shader tones and fringes
     the white channel only and lays the gold over it by its own coverage, so the rule follows a path's colour as it
     fades; the same in the glass, where a pushed gold stroke stays gold, unfringed). Inside the glass the strokes are pushed aside by
@@ -712,7 +767,8 @@ every page; a page gives it the drawn layer it acts on and its colours from its 
     hairline rim), laid over the backdrop, the horizon and the windmill alike. It distorts nothing: the
     horizon and the windmill never bend or change colour under it. It fades out before the sheet's text. The
     windmill's sails are its wind.
-  - **docs and the viewer: not yet.** Each gets the wake in its own session, with its colours
+  - Contact: the run section's form, through the same fan, in rose gold (section 3, contact). The viewer has none.
+  - **docs: not yet.** It gets the wake in its own session, with its colours
     chosen then. Docs will be blue, white and green, in a soft, bubble-like form.
 
 The viewer draws a run's tree without the demo's decoration (the run page draws only the scale, src/runscale.ts): `makeScene()` without `decor`
@@ -747,7 +803,7 @@ loaded by `home.css` alone); emphasis is weight 500.
 
 **The menu** (2026-11-18; `src/menu.html`, `src/menu.ts`, `base.css`): there is no header bar. One control is fixed
 at the top left of the window: the wordmark "Garden" (the display face) with a small "Menu" label (mono caps) on a
-pill in the section's `--header-bg` (the ground itself on home, run, the demo, the viewer and Eucalyptus; on docs
+pill in the section's `--header-bg` (the ground itself on home, run, the demo, Contact and Eucalyptus; on docs
 and Sancho the light glass and sheet their dark ink reads on, with what lies beneath blurred). The wordmark hangs on
 the grid's left edge; the control lies in the band `--head` reserves (76 px, 60 on a phone), which every section,
 the docs contents (sticky at `--head` + `--pad-y`) and every anchor (`scroll-margin-top`) already clear (checked:
@@ -761,7 +817,7 @@ the pill ends at 58 px, the contents stick at 126 px, a docs heading lands at 10
 - On the one page its colours mix between sections with the scroll as the header's did (`boot.ts`). On a phone
   the same control and panel, sized for touch (a 44 px control and 44 px items).
 - It is written into every page with a menu by the build, at a `<!-- menu -->` marker (`vite.config.ts`): the one
-  page, the demo, the viewer, Eucalyptus, Contact, and the legal, shared-verdict, result and 404 pages (their bar's styles
+  page, the demo, Eucalyptus, Contact, and the legal, shared-verdict, result and 404 pages (their bar's styles
   are gone).
 - **Contact** (2026-11-18), the last item, in Paper's old place, opens the Contact page (section 3); there it is the
   current item. The author's details are on that page only, not in the footer or the menu.
@@ -770,7 +826,7 @@ the pill ends at 58 px, the contents stick at 126 px, a docs heading lands at 10
 
 **The footer** (2026-11-18): the line "Quixote · MIT · computed in your browser…" on the grid's left edge and
 Privacy, Terms and Source on the right; on a phone the line, then the three links beneath. The same on every page with
-a footer (Eucalyptus, the demo, Contact, the viewer, the legal, shared-verdict and result pages).
+a footer (Eucalyptus, the demo, Contact, the legal, shared-verdict and result pages).
 
 ## 5. Where things live
 
@@ -790,6 +846,9 @@ a footer (Eucalyptus, the demo, Contact, the viewer, the legal, shared-verdict a
 | `src/scene.ts` | a run's tree in a section; the old demo's decoration only with `decor` (the result page) |
 | `src/runtree.ts`, `src/demotree.ts`, `src/demobed.ts` | the demo's run tree: its geometry from a search, its drawing at any point of the search, the bed |
 | `src/cursorwake.ts` | the cursor's wake: the fluid, the shared shader, the pointer rules, the theme's colours, the trail overlay (`WakeLayer`) and its SVG painter |
+| `src/onepage/viewer.html`, `src/pages/viewer.ts`, `src/viewerstrip.ts`, `src/styles/viewer.css` | the viewer: its layer's markup (written in after `<main>`), what it reads and shows, how it opens, browses and closes, its look |
+| `scripts/make_viewer_fixtures.sh`, `scripts/fixtures/viewer/` | small real outputs for the viewer and `browser_check --pages --fixtures` |
+| `src/fan.ts` | the run section's fan of paths, also behind Contact (`full`: complete and still; `glyphs`: dimmed by letters) |
 | `src/pages/<page>.ts` | each page's script; it imports `../common` first, then its theme. The chain's four (`index`, `run`, `docs`, `sancho`) are imported by `src/onepage/main.ts`, register their work with `task()` and keep to their own section |
 
 ## 6. Standing rules
@@ -823,11 +882,10 @@ a footer (Eucalyptus, the demo, Contact, the viewer, the legal, shared-verdict a
   1.4 GB in Chrome's GPU process, and 1.39 GB in Safari's page process, Pyodide included.
 - **The one-page browser check and the reference comparison** were last run before the loader timing and Pyodide
   on demand changed (2026-11-18). Run both again.
-- **The viewer check** (`browser_check.mjs --pages --fixtures DIR`) needs fixtures from a Sancho fit, too heavy for
-  the development laptop.
+- **The Contact check's `loader_full`** read false in every run before 2026-11-18: it was read after `go()` had waited
+  for the screen to go. It is now read as the page loads.
 - **Run the equivalence script**, `node scripts/equivalence.mjs --python python3`: the gate, worker, wheel and
   examples were not touched by the revamp, and this confirms it.
-- The empty tree area on the viewer before a run is loaded: settled in its session. (The run page has no tree area: its result is the scale alone.)
-- The docs and viewer colours are interim until each page's session (Sancho's are settled).
-- The cursor's wake on docs (blue, white and green, soft and bubble-like) and the viewer: each in its own
-  session (Sancho's is settled).
+- The docs colours are interim until its session (Sancho's and the viewer's are settled).
+- The cursor's wake on docs (blue, white and green, soft and bubble-like), in its own session (Sancho's, run's and
+  Contact's are settled; the viewer has none).
