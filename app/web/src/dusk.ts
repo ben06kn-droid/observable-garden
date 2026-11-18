@@ -136,46 +136,14 @@ void main() {
   o = vec4(col, 1.0);
 }`;
 
-/** The windmill as the dusk's first frame draws it, on a plain 2D canvas: the stand-in from the page's first
- *  frame until the dusk itself starts (after the page has arrived), with no shader to compile. The same eleven
- *  strokes, widths and sail angle; the dry-brush gaps, which open toward each stroke's end, drawn as the ink
- *  thinning there. The gradient, the glow and the hairline under it are sancho.css's. */
-export function millStandIn(host: HTMLElement, ink: string): HTMLCanvasElement {
-  const c = document.createElement("canvas"); c.className = "dusk-standin"; c.setAttribute("aria-hidden", "true");
-  host.prepend(c);
-  const W = Math.max(1, c.clientWidth), H = Math.max(1, c.clientHeight), dpr = Math.min(2, devicePixelRatio || 1);
-  c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
-  const g = c.getContext("2d"); if (!g) return c;
-  g.scale(dpr, dpr); g.fillStyle = ink;
-  const Hw = MILL.h * H, fx = MILL.x * W, fy = HORIZON * H, ang = START_ANGLE;
-  const body = (x: number, y: number): [number, number] => [fx + x * Hw, fy - y * Hw];
-  const smooth = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-  const draw = (st: Stroke, tf: (x: number, y: number) => [number, number]) => {
-    const N = 48, P: [number, number][] = [];
-    for (let j = 0; j <= N; j++) { const t = j / N, m = 1 - t; P.push(tf(m * m * st.a[0] + 2 * m * t * st.c[0] + t * t * st.b[0], m * m * st.a[1] + 2 * m * t * st.c[1] + t * t * st.b[1])); }
-    for (let j = 0; j < N; j++) {
-      const s = (j + 0.5) / N;
-      if (s < 0.004 || s > 0.995) continue;
-      const w = (st.w0 + (st.w1 - st.w0) * Math.pow(s, 0.75)) * Hw * (0.55 + 0.45 * smooth(0, 0.06, s)) * (1 - 0.5 * smooth(0.82, 1, s));
-      const [x0, y0] = P[j], [x1, y1] = P[j + 1], dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1, nx = (-dy / l) * w * 0.5, ny = (dx / l) * w * 0.5;
-      g.globalAlpha = 1 - 0.6 * smooth(0.45, 1, s);
-      g.beginPath(); g.moveTo(x0 + nx, y0 + ny); g.lineTo(x1 + nx * 1.02, y1 + ny * 1.02); g.lineTo(x1 - nx * 1.02, y1 - ny * 1.02); g.lineTo(x0 - nx, y0 - ny); g.fill();
-    }
-  };
-  BODY.forEach((st) => draw(st, body));
-  for (let k = 0; k < 4; k++) {
-    const a = ang + (k * Math.PI) / 2, ca = Math.cos(a), sa = Math.sin(a);
-    draw(SAIL, (x, y) => body(x * ca - y * sa, HUB + x * sa + y * ca));
-  }
-  return c;
-}
-
 export interface DuskOptions {
   reduce: boolean;
   /** a phone: a band at the top, no tail */
   small: () => boolean;
   /** the area behind the text (viewport px): the tail fades before it */
   text?: () => { x: number; y: number; w: number; h: number } | null;
+  /** how far through the page the reader is, 0-1 (the one-page site: through the Sancho section); else the document */
+  progress?: () => number;
 }
 
 export class Dusk {
@@ -234,17 +202,21 @@ export class Dusk {
   /** scroll progress through the page, 0-1 (none under reduced motion: still) */
   private progress() {
     if (this.o.reduce) return 0;
+    if (this.o.progress) return Math.max(0, Math.min(1, this.o.progress()));
     const max = document.documentElement.scrollHeight - innerHeight;
     return Math.max(0, Math.min(1, max > 0 ? scrollY / max : 0));
   }
 
+  private active = true;
+  /** the one-page site: draw only while this section's backdrop can be seen (src/onepage/boot.ts onBackdrop) */
+  setActive(on: boolean) { if (this.active === on) return; this.active = on; if (on) { if (this.o.reduce) this.draw(); else this.kick(); } }
   private kick() {
-    if (this.raf || !this.gl || this.o.reduce || document.hidden || !this.visible) return;
+    if (this.raf || !this.gl || this.o.reduce || document.hidden || !this.visible || !this.active) return;
     this.last = performance.now(); this.raf = requestAnimationFrame(this.frame);
   }
   private frame = (now: number) => {
     this.raf = 0;
-    if (document.hidden || !this.visible) return;
+    if (document.hidden || !this.visible || !this.active) return;
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now; this.t += dt;
     const fast = (2 * Math.PI) / TURN_WIND, rest = (2 * Math.PI) / TURN_REST;
     if (this.t - this.windT < 0.12) this.omega += (fast - this.omega) * (1 - Math.exp(-dt / 0.4));

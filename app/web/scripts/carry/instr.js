@@ -1,4 +1,4 @@
-// The carry profiler's in-page instrument (scripts/carry/os.mjs). Injected first in the <head> of a COPY of the
+// The in-page instrument for measuring with real input (scripts/onepage_measure.mjs; on site-revamp, the carry profiler). Injected first in the <head> of a COPY of the
 // built chain pages, never into dist/ itself. Nothing attached to the browser, so Chrome prerenders as it would for
 // a visitor. Records, on each document: marks (the carry's trigger, pageswap, pagereveal, the view transition's
 // ready and finished, WebGL and Worker creation), every animation frame's time, long animation frames (Chrome),
@@ -26,7 +26,8 @@
     if (vt) { vt.ready.then(function () { mark("vt-ready"); }, function () { mark("vt-ready-rejected"); }); vt.finished.then(function () { mark("vt-finished"); send(); }, function () { mark("vt-finished-rejected"); }); }
   }, true);
   var lastY = -1;
-  var f = function () { var t = T(); if (L.frames.length < 4000) L.frames.push(Math.round(t * 10) / 10); var y = Math.round(scrollY); if (y !== lastY) { L.scroll.push([t, y]); lastY = y; } requestAnimationFrame(f); };
+  // each frame's own time (the callback's timestamp: when the frame began), not when the callback happened to run
+  var f = function (ts) { var t = performance.timeOrigin + ts; if (L.frames.length < 4000) L.frames.push(Math.round(t * 10) / 10); var y = Math.round(scrollY); if (y !== lastY) { L.scroll.push([t, y]); lastY = y; } requestAnimationFrame(f); };
   requestAnimationFrame(f);
   try { new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { L.loaf.push([performance.timeOrigin + e.startTime, Math.round(e.duration), Math.round(e.blockingDuration)]); }); }).observe({ type: "long-animation-frame", buffered: true }); } catch (e) {}
   var send = function () {
@@ -34,6 +35,8 @@
       var n = performance.getEntriesByType("navigation")[0];
       L.activationStart = n ? n.activationStart : null; L.nav = n ? { responseEnd: n.responseEnd, domInteractive: n.domInteractive } : null;
       L.carry = window.__carry ? { dir: window.__carry.dir, viewTransition: window.__carry.viewTransition, landing: window.__carry.landing || null, frames: window.__carry.frames || null } : null;
+      L.pmarks = performance.getEntriesByType("mark").map(function (m) { return [m.name, performance.timeOrigin + m.startTime]; });
+      L.sections = [].slice.call(document.querySelectorAll("[data-section]")).map(function (s) { return [s.getAttribute("data-section"), Math.round(s.getBoundingClientRect().top + scrollY)]; });
       where(); L.sent = T();
       navigator.sendBeacon("/__carry-log", JSON.stringify(L));
     } catch (e) {}

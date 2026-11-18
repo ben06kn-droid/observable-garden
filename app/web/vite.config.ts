@@ -11,12 +11,12 @@ const PYODIDE = JSON.parse(readFileSync(resolve(import.meta.dirname, "public/pyo
 
 const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "loader"];
 
-// The one-page site: home and run (docs and Sancho to follow) are sections of one document, built once behind the
+// The one-page site: home, run, docs and Sancho are sections of one document, built once behind the
 // loading screen and kept alive. Every address of it (/, /run.html) is the same document with its own title,
-// description and starting section (data-start); this writes in what they share, in order: the loading screen
+// description and starting section (data-start; also /docs.html, /sancho.html); this writes in what they share, in order: the loading screen
 // (on screen from the first frame), the header, one backdrop per section (src/onepage/boot.ts crossfades them by
 // scroll position) and the sections, from src/onepage/*.html.
-const SECTIONS = ["home", "run"];
+const SECTIONS = ["home", "run", "docs", "sancho"];
 const part = (n: string) => readFileSync(resolve(import.meta.dirname, "src/onepage", `${n}.html`), "utf8");
 function onepage(): Plugin {
   return {
@@ -25,7 +25,7 @@ function onepage(): Plugin {
       const at = html.indexOf("<!-- onepage");
       if (at < 0) return html;
       const end = html.indexOf("-->", at) + 3;
-      const backdrops = `<div class="backdrops" aria-hidden="true">${SECTIONS.map((n) => `<div class="backdrop" data-for="${n}" data-theme="${n}"></div>`).join("")}</div>`;
+      const backdrops = `<div class="backdrops" aria-hidden="true">${SECTIONS.map((n) => `<div class="backdrop" data-for="${n}" data-theme="${n}"${n === "docs" || n === "sancho" ? ` data-page="${n}"` : ""}></div>`).join("")}</div>`;
       const body = `${LOADER}\n${part("header")}${backdrops}\n<main id="main">\n${SECTIONS.map(part).join("")}</main>\n`;
       return html.slice(0, at) + body + html.slice(end);
     } },

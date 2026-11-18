@@ -1,15 +1,16 @@
-// The Sancho page: the lever editor. A form over sancho/config.json's levers (src/levers.ts); every
+// The Sancho section of the one-page site (src/onepage/): the lever editor. A form over sancho/config.json's levers (src/levers.ts); every
 // change rewrites the config the page would download and its hash, the one `quixote sancho` records.
 // It runs entirely in the page: nothing is sent or stored.
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/docs.css";     // the docs page's structure: the sheet, the panels, the tables
 import "../styles/sancho.css";
-import { fadeIn, settled } from "../chain";
+import { onBackdrop, section, task } from "../onepage/boot";
 import { h, reduceMotion } from "../common";
-import { Dusk, millStandIn } from "../dusk";
+import { Dusk } from "../dusk";
 import { INSTALL } from "../install";
 import { BLOCKS, configSha256, DEFAULT, fileText, firstScored, LEVERS, MEMORY_ROWS, numberList, problems, REGIMES, type Values } from "../levers";
 
+const root = section("sancho");   // everything here is the Sancho section's (the docs section has its own .docs-text, .sheet)
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>("levers");
 const clone = (v: Values): Values => JSON.parse(JSON.stringify(v));
@@ -159,7 +160,7 @@ form.addEventListener("submit", (e) => e.preventDefault());
 }
 // ---- the results table: its roles set explicitly, so a phone's card layout keeps it a table to a reader; each cell
 // carries its column's name for that layout
-for (const t of document.querySelectorAll<HTMLTableElement>(".docs-text table")) {
+for (const t of root.querySelectorAll<HTMLTableElement>(".docs-text table")) {
   t.setAttribute("role", "table");
   const names = [...t.querySelectorAll("thead th")].map((th) => th.textContent ?? "");
   for (const tr of t.querySelectorAll("tr")) {
@@ -173,25 +174,26 @@ for (const t of document.querySelectorAll<HTMLTableElement>(".docs-text table"))
 
 // ---- the dusk behind the page (src/dusk.ts); on a phone a band at the top, the contents folded
 const phone = matchMedia("(max-width: 812px)");
-const contents = document.querySelector<HTMLDetailsElement>(".contents details");
+const contents = root.querySelector<HTMLDetailsElement>(".contents details");
 const fold = () => { if (contents) contents.open = !phone.matches; };
 fold(); phone.addEventListener("change", fold);
-const sheet = document.querySelector<HTMLElement>(".sheet")!;
-// started once the page has arrived (src/chain.ts: after a carry's transition, never in a prerender); until then
-// sancho.css draws the dusk's first frame (the gradient, the glow, the hairline) and millStandIn its windmill, and
-// the dusk fades in over them
-const standIn = phone.matches || reduceMotion ? null : millStandIn(document.body, getComputedStyle(document.documentElement).getPropertyValue("--mill").trim() || "#14070a");
+const sheet = root.querySelector<HTMLElement>(".sheet")!;
+// built behind the loading screen, in the Sancho section's backdrop (it fades in with the scroll, src/onepage/boot.ts);
+// it draws only while that backdrop can be seen, and its light follows the reader through this section
 let dusk: Dusk | null = null;
-const makeDusk = () => new Dusk(document.body, {
+const built = task("sancho: the dusk");
+const makeDusk = () => new Dusk(document.querySelector<HTMLElement>('.backdrop[data-for="sancho"]')!, {
+  progress: () => { const r = root.getBoundingClientRect(), span = r.height - innerHeight; return span > 0 ? -r.top / span : 0; },
   reduce: reduceMotion,
   small: () => phone.matches,
   // the tail runs over the backdrop but never behind the text: the sheet less its padding
   text: () => { const r = sheet.getBoundingClientRect(), pad = parseFloat(getComputedStyle(sheet).paddingLeft) || 0; return { x: r.left + pad, y: r.top + pad, w: r.width - 2 * pad, h: r.height - 2 * pad }; },
 });
-void settled.then(() => {
+void document.fonts.ready.then(() => {
   dusk = makeDusk();
-  void fadeIn(document.querySelector("canvas.dusk")).then(() => standIn?.remove());
+  onBackdrop("sancho", (v) => dusk?.setActive(v));
+  requestAnimationFrame(() => requestAnimationFrame(() => built()));
 });
 let resizeT = 0;
-addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => { standIn?.remove(); dusk?.layout(); }, 150); });
+addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => dusk?.layout(), 150); });
 void document.fonts.ready.then(() => dusk?.layout());

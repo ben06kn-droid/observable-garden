@@ -245,10 +245,13 @@ export class Sky {
     }
   }
 
-  private kick() { if (this.raf || !this.gl || this.o.reduce || document.hidden) return; this.last = performance.now(); this.raf = requestAnimationFrame(this.frame); }
+  private active = true;
+  /** the one-page site: draw only while this section's backdrop can be seen (src/onepage/boot.ts onBackdrop) */
+  setActive(on: boolean) { if (this.active === on) return; this.active = on; if (on) { if (this.o.reduce) this.draw(); else this.kick(); } }
+  private kick() { if (this.raf || !this.gl || this.o.reduce || document.hidden || !this.active) return; this.last = performance.now(); this.raf = requestAnimationFrame(this.frame); }
   private frame = (now: number) => {
     this.raf = 0;
-    if (document.hidden) return;
+    if (document.hidden || !this.active) return;
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now; this.t += dt;
     if (this.lane) this.step(dt);
     this.wake?.step(dt, innerHeight);

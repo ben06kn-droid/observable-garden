@@ -1,116 +1,16 @@
 <!doctype html>
-<html lang="en" data-theme="sancho" data-page="sancho">
+<html lang="en" data-start="sancho">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quixote · Sancho</title>
 <meta name="description" content="Sancho, the fixed model: what it is, its registered result, and its levers, with the command to run it on your own machine.">
-<link rel="stylesheet" href="/carry.css">
-<script src="/carry.js"></script>
-<link rel="expect" href="#chain-end" blocking="render">
+<script src="/loader-early.js"></script>
+<link rel="stylesheet" href="/src/styles/loader.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<script type="module" src="/src/pages/sancho.ts"></script>
+<script type="module" src="/src/onepage/main.ts"></script>
 </head>
 <body>
-<a class="skip" href="#main">Skip to content</a>
-<header class="top">
-  <a class="brand" href="/">Quixote</a>
-  <nav aria-label="Main"><a class="roll" href="/run.html" data-label="Run"><span>Run</span></a><a class="roll" href="/docs.html" data-label="Docs"><span>Docs</span></a><a class="roll" href="/sancho.html" data-label="Sancho" aria-current="page"><span>Sancho</span></a><a class="roll nav-paper" href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559" data-label="Paper" target="_blank" rel="noopener noreferrer"><span>Paper</span></a></nav>
-  <p class="who"><span class="name">Benjamin Knaster</span><a class="roll" href="mailto:ben06knaster@gmail.com" data-label="Contact"><span>Contact</span></a><a class="roll" href="https://www.linkedin.com/in/b-knaster" data-label="LinkedIn" target="_blank" rel="noopener noreferrer"><span>LinkedIn</span></a></p>
-</header>
-<a class="carry-prev" href="/docs.html">↑ Back to docs</a>
-<main class="doc docs sancho" id="main">
-<article class="docs-text">
-<div class="sky-title">
-<p class="label">Sancho · the fixed model</p>
-<h1>Sancho</h1>
-</div>
-<div class="sheet">
-<nav class="glass contents" aria-label="On this page"><details open><summary>On this page</summary>
-<ol><li><a href="#what">What Sancho is</a></li><li><a href="#result">The registered result</a></li><li><a href="#levers-h">The levers</a></li><li><a href="#run">Run it on your machine</a></li></ol>
-</details></nav>
-<p class="lede"><strong>Sancho does not run on this site.</strong> It runs on your own machine with the package.</p>
-<details class="more">
-<summary>Why, and what this page does</summary>
-<p>Its model uses LightGBM, which has no browser build, and a re-implementation would not be the registered Sancho. This page is where
-you tailor it and read its results: set the levers, download the config, copy the command, and open what it writes in the
-<a href="/viewer.html">Viewer</a>.</p>
-</details>
-
-<h2 id="what">What Sancho is</h2>
-<p class="lead">Sancho is the fixed model the agents are compared against: one prediction model, declared in advance, that counts as a
-single strategy, so the gate can test a non-linear strategy at the price of one trial.</p>
-<details class="more">
-<summary>How it was designed and how its stream is built</summary>
-<p>Its design (the penalty grids, the
-training windows) was settled on synthetic returns, without the returns of any panel it was later tested on. Every real test
-was registered first, and its stream is built walk-forward: refit every 252 rows on past rows only, with an embargo of
-h + 1 + d rows between the training rows and the row scored. Inside, ridge regressions and small gradient-boosted trees
-(LightGBM, depth 2) over price, cross-asset and volume inputs, stacked with non-negative weights.</p>
-</details>
-
-<h2 id="result">The registered result</h2>
-<section class="sancho-card" aria-label="Sancho's registered result">
-  <p class="fine">Sancho's stream, with the default levers (config hash <code id="default-hash">…</code>), in the registered real-data tests (the paper's Table 3). Read from the research record; nothing here is recomputed.</p>
-  <div class="glass table results"><table>
-    <thead><tr><th scope="col">Panel</th><th scope="col">Verdict</th><th scope="col">In-sample</th><th scope="col">Holdout</th><th scope="col">Record</th></tr></thead>
-    <tbody>
-      <tr class="certified"><th scope="row">French 49 industries, 1926–1989</th>
-        <td class="verdict"><span class="mark" aria-hidden="true">✓</span> <strong>Certified</strong></td>
-        <td>in-sample under the recency weights at the 96% level: weighted net Sharpe 1.084, p 0.0010, weighted lower bound +0.674.</td>
-        <td>On the holdout, 1990–1995, the bound held: realised net Sharpe +1.646.</td>
-        <td><a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/runs/french_long_b1/2026-10-11/read.txt" target="_blank" rel="noopener noreferrer">read</a>,
-          <a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/runs/french_long_b1_grade/2026-10-11-r2/read.txt" target="_blank" rel="noopener noreferrer">grading</a></td></tr>
-      <tr class="refused"><th scope="row">Liquid ETFs, 2015–2024</th>
-        <td class="verdict"><span class="mark" aria-hidden="true">✕</span> <strong>Refused</strong></td>
-        <td>weighted net Sharpe 0.246, p 0.1970, weighted lower bound −0.123.</td>
-        <td>On the holdout, 2025-01-02 to 2026-10-09 (1.76 years, weak), the bound held.</td>
-        <td><a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/runs/etf_recent/2026-10-11/read.txt" target="_blank" rel="noopener noreferrer">read</a></td></tr>
-      <tr class="refused"><th scope="row">Binance USDT perpetuals, 4h bars, 2021 – Mar 2025</th>
-        <td class="verdict"><span class="mark" aria-hidden="true">✕</span> <strong>Refused</strong></td>
-        <td>(stream at d = 0): net Sharpe 0.198, p 0.3611.</td>
-        <td>The holdout was not opened.</td>
-        <td><a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/runs/binance_insample/2026-10-09/read.txt" target="_blank" rel="noopener noreferrer">read</a></td></tr>
-    </tbody>
-  </table></div>
-  <p class="fine">Each claim, its registration and its commits: <a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/NOTE_MAP.md" target="_blank" rel="noopener noreferrer">research/NOTE_MAP.md</a>, rows 31 and 33 to 35.</p>
-</section>
-
-<h2 id="levers-h">The levers</h2>
-<p class="lead">Every lever Sancho has is in one file, <code>sancho/config.json</code>; the defaults are the registered version 2, and the
-registered results apply to the default only.</p>
-<details class="more">
-<summary>What changing a lever does</summary>
-<p>Change any lever below and the page writes the file <code>quixote sancho</code>
-reads, with its config hash. Nothing you set here leaves this page or is stored.</p>
-</details>
-<form id="levers" class="run-form levers" novalidate></form>
-<p class="problem" id="lever-problems" role="alert"></p>
-<div class="config-out">
-  <p class="fine"><span id="cfg-kind">The registered Sancho.</span> Config hash (SHA-256 of the canonical JSON, the hash the run records): <code id="cfg-hash">…</code></p>
-  <p class="fine">A run with a tailored config is a different model from the registered Sancho, and is labelled by its config hash.</p>
-  <div class="actions">
-    <button type="button" class="run" id="cfg-download">Download config</button>
-    <button type="button" class="run" id="cfg-reset">Reset to the registered levers</button>
-  </div>
-  <h3 id="run">Run it on your machine</h3>
-  <pre class="cmd" id="cfg-cmd"></pre>
-  <p class="fine" id="cfg-rows"></p>
-  <p class="fine">It writes <code>sancho_out/sancho.json</code>: the net stream from the first scored row, its in-sample net Sharpe and
-    turnover, and the config hash. Open it in the <a href="/viewer.html">Viewer</a>.</p>
-</div>
-<section class="statements">
-  <p>Sancho, the fixed model, does not run here; tailor it and get the command on the <a href="/sancho.html">Sancho page</a>.</p>
-  <p>Coming soon: the adaptive phase, in which the agent can modify Sancho as it searches and is not restricted to a fixed feature panel.</p>
-</section>
-</div>
-</article>
-</main>
-<footer class="foot">
-  <p class="who"><span>Benjamin Knaster</span><a href="mailto:ben06knaster@gmail.com">Contact</a><a href="https://www.linkedin.com/in/b-knaster" target="_blank" rel="noopener noreferrer">LinkedIn</a></p>
-  <span>Quixote · MIT · computed in your browser; nothing you load or type is sent to us</span>
-  <nav aria-label="Site"><a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559" target="_blank" rel="noopener noreferrer">Paper</a><a href="/docs.html">Docs</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://github.com/ben06kn-droid/observable-garden">Source</a></nav>
-</footer>
-<div id="chain-end" hidden></div>
+<!-- onepage: the loading screen, the header and every page as a section, written in by vite.config.ts -->
 </body>
 </html>

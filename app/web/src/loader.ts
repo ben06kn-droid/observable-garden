@@ -14,7 +14,7 @@ const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export class Loader {
   readonly el: HTMLElement;
-  private target = 0; private shown = 0; private raf = 0; private last = 0;
+  private target = 0; private shown = 0; private raf = 0; private last = 0; private snap = false;
   private formed: Promise<void>;
   private filled: () => void = () => {}; private full: Promise<void>;
 
@@ -34,6 +34,7 @@ export class Loader {
       document.body.append(this.el);
     }
     if (formed) this.el.classList.add("formed");
+    this.snap = formed;
     // the B takes 3 s from the screen's first frame (its animations start with the page); a rebuild has no minimum
     const left = Math.max(0, FORMED_MS - performance.now());
     this.formed = reduce || formed ? Promise.resolve() : new Promise((r) => window.setTimeout(r, existing ? left : FORMED_MS));
@@ -51,7 +52,8 @@ export class Loader {
     this.raf = 0;
     const dt = Math.min(0.05, (t - this.last) / 1000); this.last = t;
     // the level eases toward what has loaded (about 0.3 s to close the gap), so it rises smoothly between updates
-    this.shown += (this.target - this.shown) * (reduce ? 1 : 1 - Math.exp(-10 * dt));
+    // (a rebuild later in the session lasts only as long as the rebuild: its box does not ease)
+    this.shown += (this.target - this.shown) * (reduce || this.snap ? 1 : 1 - Math.exp(-10 * dt));
     if (this.target - this.shown < 0.002) this.shown = this.target;
     this.el.style.setProperty("--ld-p", this.shown.toFixed(4));
     if (this.shown >= 1) this.filled();

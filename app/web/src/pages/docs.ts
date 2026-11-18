@@ -1,22 +1,23 @@
-// The docs page: reading first, in clear sky and glass (src/styles/docs.css), a link in the scroll chain
-// (home → run → docs → Sancho). The contents sit beside the text on wide screens and fold above it on
+// The docs section of the one-page site (src/onepage/): reading first, in clear sky and glass (src/styles/docs.css). The contents sit beside the text on wide screens and fold above it on
 // narrow ones, the current section marked; each code block has a copy button. Behind everything, the sky
 // (src/sky.ts): a vivid ground with its light, the cursor's tail, and glass bubbles drifting up the margin.
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/docs.css";
-import { fadeIn, settled } from "../chain";
+import { onBackdrop, section, task } from "../onepage/boot";
 import { reduceMotion } from "../common";
 import { Sky } from "../sky";
 
-const text = document.querySelector<HTMLElement>(".docs-text")!;
+const root = section("docs");   // everything here is the docs section's (Sancho's section has its own .docs-text, .sheet)
+
+const text = root.querySelector<HTMLElement>(".docs-text")!;
 const wide = matchMedia("(min-width: 1241px)"), phone = matchMedia("(max-width: 812px)");
 
 // ---- contents: open beside the text on a wide screen; folded above it on a narrow one
-const toc = document.querySelector<HTMLDetailsElement>(".toc details")!;
+const toc = root.querySelector<HTMLDetailsElement>(".toc details")!;
 const fold = () => { toc.open = wide.matches; };
 fold(); wide.addEventListener("change", fold);
 // the current section: the last heading that has passed the top of the reading area
-const links = new Map([...document.querySelectorAll<HTMLAnchorElement>(".toc a")].map((a) => [a.hash.slice(1), a]));
+const links = new Map([...root.querySelectorAll<HTMLAnchorElement>(".toc a")].map((a) => [a.hash.slice(1), a]));
 const heads = [...text.querySelectorAll<HTMLElement>("h2[id], h3[id]")].filter((h) => links.has(h.id));
 let current = "";
 const mark = () => {
@@ -69,11 +70,12 @@ for (const t of text.querySelectorAll("table")) {
 
 // ---- the sky: the ground and its light, the tail, the bubbles in the lane right of the text (none on a phone)
 const head = document.querySelector<HTMLElement>(".top");
-const sheet = document.querySelector<HTMLElement>(".sheet") ?? text;
-// started once the page has arrived (src/chain.ts: after a carry's transition, never in a prerender); until then
-// docs.css draws its first frame (the gradient and the light fields) as the stand-in, and the sky fades in over it
+const sheet = root.querySelector<HTMLElement>(".sheet") ?? text;
+// built behind the loading screen, in the docs section's backdrop (it fades in with the scroll, src/onepage/boot.ts);
+// it draws only while that backdrop can be seen
 let sky: Sky | null = null;
-const makeSky = () => new Sky(document.body, {
+const built = task("docs: the sky");
+const makeSky = () => new Sky(root.ownerDocument.querySelector<HTMLElement>('.backdrop[data-for="docs"]')!, {
   reduce: reduceMotion,
   small: () => phone.matches,
   lane: () => {
@@ -85,10 +87,11 @@ const makeSky = () => new Sky(document.body, {
   // the tail runs behind the glass but never behind the text: the sheet less its padding
   text: () => { const r = sheet.getBoundingClientRect(), pad = parseFloat(getComputedStyle(sheet).paddingLeft) || 0; return { x: r.left + pad, y: r.top + pad, w: r.width - 2 * pad, h: r.height - 2 * pad }; },
 });
-void settled.then(() => {
+void document.fonts.ready.then(() => {
   sky = makeSky();
-  sky.watch(document.querySelector<HTMLElement>(".carry-next"), document.querySelector<HTMLElement>(".foot"));
-  void fadeIn(document.querySelector("canvas.sky"));
+  sky.watch(root.querySelector<HTMLElement>(".cue"), null);   // the bubbles fade before the section's end
+  onBackdrop("docs", (v) => sky?.setActive(v));
+  requestAnimationFrame(() => requestAnimationFrame(() => built()));
 });
 // ---- the light on the glass's edge follows the cursor: within about 250px of it, a soft point of full white
 // slides along the rim (only the border); it settles in 300ms when the cursor goes. Not by touch, not on a

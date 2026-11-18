@@ -1,0 +1,87 @@
+<!-- docs (was docs.html's body) -->
+<div class="section" data-section="docs" data-theme="docs" data-page="docs" data-path="/docs.html" data-title="Quixote · docs">
+<div class="doc docs" id="docs-main">
+<nav class="toc" aria-label="Contents"><details open><summary>Contents</summary>
+<ol>
+<li><a href="#install">Install</a></li>
+<li><a href="#one-minute">One minute</a></li>
+<li><a href="#panel">The panel format</a></li>
+<li><a href="#verdicts">What a verdict means</a></li>
+<li><a href="#in-the-browser">How this site runs it</a></li>
+<li><a href="#record">The record on a result</a></li>
+<li><a href="#paper">The paper</a><ol><li><a href="#where-it-stands">Where it stands</a></li><li><a href="#tracing">Tracing a claim</a></li><li><a href="#licence">Licence</a></li></ol></li>
+</ol></details></nav>
+<article class="docs-text">
+<div class="sky-title">
+<p class="label">Docs</p>
+<h1>Run the gate yourself</h1>
+</div>
+<div class="sheet">
+<h2 id="install">Install <a class="anchor" href="#install" aria-label="Link to this section">#</a></h2>
+<pre class="cmd">git clone --depth 1 https://github.com/ben06kn-droid/observable-garden
+pip install -e .                  # Python 3.10 or later</pre>
+<h2 id="one-minute">One minute <a class="anchor" href="#one-minute" aria-label="Link to this section">#</a></h2>
+<pre class="cmd">quixote example</pre>
+<p>This audits a bundled log, a scripted searcher's moves on a small synthetic panel, and prints the verdict. Every
+verdict on this site comes with the command that reproduces it, for example:</p>
+<pre class="cmd">quixote audit examples/logs/scripted_session.json --panel examples/data/tiny_panel.npz --class examples/class.json --B 2000 --seed 0 --json</pre>
+<h2 id="panel">The panel format <a class="anchor" href="#panel" aria-label="Link to this section">#</a></h2>
+<p>A panel is one <code>.npz</code> file (<code>quixote/panel.py</code>); <code>quixote run</code>, <code>quixote audit</code> and
+<code>quixote sancho</code> all read it.</p>
+<div class="glass table"><table>
+<tr><th>array</th><th>shape</th><th></th></tr>
+<tr><td><code>returns</code></td><td>(T, M)</td><td>simple returns; NaN = not tradable in that row</td></tr>
+<tr><td><code>features</code></td><td>(T, M, K)</td><td>what a rule may use in row t (data up to row t only)</td></tr>
+<tr><td><code>feature_names</code></td><td>(K,)</td><td></td></tr>
+<tr><td><code>periods_per_year</code></td><td>scalar</td><td>252 for daily rows</td></tr>
+<tr><td><code>delay</code></td><td>scalar, default 1</td><td>features at row t earn <code>returns[t + 1 + delay]</code></td></tr>
+<tr><td><code>cost_bps</code></td><td>scalar, default 5</td><td>one-way cost per unit of turnover</td></tr>
+<tr><td><code>borrow_bps_yr</code></td><td>scalar, default 50</td><td>borrow on short weight, a year</td></tr>
+<tr><td><code>row_labels</code>, <code>asset_names</code></td><td>(T,), (M,)</td><td>optional; <code>split</code> accepts a row label</td></tr>
+</table></div>
+<p>A rule's book is dollar-neutral at gross 1 over the tradable assets; <code>quixote.panel.save(...)</code> writes the file.
+<a href="/sancho.html">Sancho</a> reads the same file: it builds its return-structure block from <code>returns</code>, uses
+<code>features</code> as its 40 registered features only when K is 40, and needs a few years of rows (its first scored row is
+763 with the default levers).</p>
+<h2 id="verdicts">What a verdict means <a class="anchor" href="#verdicts" aria-label="Link to this section">#</a></h2>
+<div class="glass table terms"><table>
+<tr><th>PASS</th><td>p is below α: the submitted rule beats what the search would find on noise.</td></tr>
+<tr><th>FAIL</th><td>p is at or above α, and the test had the power to tell: the result is what this search finds by luck.</td></tr>
+<tr><th>INADMISSIBLE</th><td>p is at or above α, and the search was too wide to certify anything.</td></tr>
+<tr><th>UNDECIDABLE</th><td>the record alone cannot license a correction.</td></tr>
+<tr><th>DEGENERATE</th><td>the test statistic broke on this menu. Do not read its p.</td></tr>
+</table></div>
+<p>The code reports a pass as <code>CERTIFIED</code>; this site shows it as PASS.</p>
+<h2 id="in-the-browser">How this site runs it <a class="anchor" href="#in-the-browser" aria-label="Link to this section">#</a></h2>
+<p>Nothing is computed on a server. Your browser downloads Python (Pyodide 314.0.7), numpy and pandas, and the
+observable-garden package built from the repository's own source, all served from this site with their hashes
+recorded. A Web Worker runs <code>quixote.audit.audit_log</code>, the function behind <code>quixote audit</code>.
+Two functions the package takes from compiled libraries are replaced in the browser only, by ports held equal to the
+originals by tests: the Politis–White block length (from <code>arch</code>) and the normal distribution functions
+(from <code>scipy</code>). An equivalence test runs the browser build against the command line on every example.</p>
+<h2 id="record">The record on a result <a class="anchor" href="#record" aria-label="Link to this section">#</a></h2>
+<p>The <strong>audit id</strong> is the SHA-256 of the JSON object, keys in code-point order and no
+spaces, <code>{"B", "alpha", "class_sha256", "log_sha256", "panel_sha256", "seed", "wheel"}</code>: the inputs'
+hashes, the replicate count, the seed, α and the exact package build. Two runs with the same audit id price the same
+search on the same data with the same code. (Sancho's <em>config hash</em> is a different thing: the hash of its
+lever file, shown on the <a href="/sancho.html">Sancho page</a> and by the <a href="/viewer.html">Viewer</a>.)</p>
+<h2 id="paper">The paper: The Observable Garden: fixed and adaptive candidate sets under the DSR <a class="anchor" href="#paper" aria-label="Link to this section">#</a></h2>
+<p>Knaster (2026). On SSRN: <a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559" target="_blank" rel="noopener noreferrer">papers.ssrn.com/sol3/papers.cfm?abstract_id=7616559</a>.</p>
+<p>A backtest is usually the best of many attempts, so its Sharpe ratio has to be judged against what the best of many
+attempts would find on pure noise. When the search is adaptive, testing against the list of strategies it happened to
+try gives the wrong error rate. A class of strategies declared before the search, or a log of every decision that can be
+re-run on noise, restores a valid test. Quixote is the gate built on that answer.</p>
+<h3 id="where-it-stands">Where it stands <a class="anchor" href="#where-it-stands" aria-label="Link to this section">#</a></h3>
+<p>The gate keeps its error rate in every registered test; its limit is power. On real data it refused nearly everything,
+including 240 LLM agent sessions on liquid ETFs, and issued one certificate, on a long history of industry portfolios,
+whose lower bound held on the six years that followed. It is evidence that the gate works, not a source of trading signals.</p>
+<h3 id="tracing">Tracing a claim <a class="anchor" href="#tracing" aria-label="Link to this section">#</a></h3>
+<p>Every claim in the paper maps to its registration, result and read in <a href="https://github.com/ben06kn-droid/observable-garden/blob/main/research/NOTE_MAP.md">research/NOTE_MAP.md</a>.
+The archived release: <a href="https://doi.org/10.5281/zenodo.23332377">doi:10.5281/zenodo.23332377</a>.</p>
+<h3 id="licence">Licence <a class="anchor" href="#licence" aria-label="Link to this section">#</a></h3>
+<p>The paper is licensed CC BY; the code is MIT.</p>
+</div>
+</article>
+</div>
+<a class="cue" href="/sancho.html">Continue <span aria-hidden="true">↓</span></a>
+</div>
