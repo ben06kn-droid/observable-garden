@@ -334,8 +334,11 @@ if (process.argv.includes("--pages")) {
       await go(pg); await sleep(400);
       // the menu on a phone: the control and, open, its panel inside the screen, sized for touch (44 px)
       report.phone[pg] = await evaluate(`(() => { const b = document.querySelector('.menu-btn'); b.click(); const p = document.querySelector('.menu-panel').getBoundingClientRect(), r = b.getBoundingClientRect();
-        const items = [...document.querySelectorAll('.menu-panel a')].map((a) => Math.round(a.getBoundingClientRect().height)); b.click();
-        return { page_scrolls_sideways: document.documentElement.scrollWidth > innerWidth, panel_inside: p.right <= innerWidth + 0.5 && p.left >= 0, control_h: Math.round(r.height), item_h_min: Math.min(...items) }; })()`);
+        const items = [...document.querySelectorAll('.menu-panel ul :is(a, button)')].map((a) => Math.round(a.getBoundingClientRect().height));
+        document.querySelector('.menu-contact-btn').click(); const c = document.querySelector('.menu-panel').getBoundingClientRect();
+        const contact = [...document.querySelectorAll('.menu-contact :is(a, button)')].map((a) => Math.round(a.getBoundingClientRect().height)); b.click();
+        return { page_scrolls_sideways: document.documentElement.scrollWidth > innerWidth, panel_inside: p.right <= innerWidth + 0.5 && p.left >= 0, control_h: Math.round(r.height), item_h_min: Math.min(...items),
+          contact_inside: c.right <= innerWidth + 0.5 && c.left >= 0, contact_h_min: Math.min(...contact) }; })()`);
       if (pg === "/sancho.html") await shot("sancho-phone");
     }
     report.network = { requests: requests.length, elsewhere: [...new Set(requests.map((r) => new URL(r.url).origin).filter((o) => o !== base && !o.startsWith("data:") && !o.startsWith("blob:")))] };
@@ -586,11 +589,20 @@ try {
       // Enter carries its character: Chrome activates a button from it, not from the bare key code
       const key = async (k, code, vk) => { for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: k, code, windowsVirtualKeyCode: vk, ...(type === "keyDown" && k === "Enter" ? { text: "\r" } : {}) }, page); await sleep(80); };
       const state = () => evaluate(`({ expanded: document.querySelector('.menu-btn').getAttribute('aria-expanded'), hidden: document.querySelector('.menu-panel').hidden, focus: document.activeElement?.textContent?.trim() ?? null })`);
-      const m = one.menu = { roles: await evaluate(`({ button: document.querySelector('.menu-btn').tagName, controls: document.querySelector('.menu-btn').getAttribute('aria-controls') === document.querySelector('.menu-panel').id, nav_label: document.querySelector('.menu-panel').getAttribute('aria-label'), items: [...document.querySelectorAll('.menu-panel a')].map((a) => a.textContent), current: document.querySelector('.menu-panel a[aria-current]')?.textContent })`) };
+      const m = one.menu = { roles: await evaluate(`({ button: document.querySelector('.menu-btn').tagName, controls: document.querySelector('.menu-btn').getAttribute('aria-controls') === document.querySelector('.menu-panel').id, nav_label: document.querySelector('.menu-panel').getAttribute('aria-label'), items: [...document.querySelectorAll('.menu-panel ul :is(a, button)')].map((a) => a.textContent), current: document.querySelector('.menu-panel a[aria-current]')?.textContent })`) };
       await evaluate(`document.querySelector('.menu-btn').focus(); true`);
       await key("Enter", "Enter", 13); m.enter_opens = await state();                 // focus on the current item (Quixote)
       await key("ArrowDown", "ArrowDown", 40); m.arrow_down = await state();          // Run
-      await key("End", "End", 35); m.end = await state();                             // Paper
+      await key("End", "End", 35); m.end = await state();                             // Contact
+      // Contact by keyboard: Enter shows the Contact view in place of the list, focus on its back arrow; Down to Email;
+      // the back arrow returns to the list with focus on Contact; Escape from the Contact view closes the menu
+      const view = () => evaluate(`({ list: !document.querySelector('.menu-panel ul').hidden, contact: !document.querySelector('.menu-contact').hidden, expanded: document.querySelector('.menu-contact-btn').getAttribute('aria-expanded'), focus: document.activeElement?.textContent?.trim() ?? null,
+        focus_mail: !!document.activeElement?.getAttribute('href')?.startsWith('mailto:') && document.activeElement.textContent === document.activeElement.getAttribute('href').slice(7), url: location.href })`);
+      await key("Enter", "Enter", 13); m.contact_opens = await view();
+      await key("ArrowDown", "ArrowDown", 40); m.contact_down = await view();
+      await key("ArrowUp", "ArrowUp", 38); await key("Enter", "Enter", 13); m.contact_back = await view();
+      await key("Enter", "Enter", 13); await key("Escape", "Escape", 27); m.contact_escape = { ...(await state()), ...(await view()) };
+      await key("Enter", "Enter", 13); m.reopens_on_list = await view(); await key("Escape", "Escape", 27);
       await key("Escape", "Escape", 27); m.escape = await state();                    // closed, focus on the button
       await key("ArrowDown", "ArrowDown", 40); m.down_opens = await state();
       await send("Input.dispatchMouseEvent", { type: "mousePressed", x: 900, y: 600, button: "left", clickCount: 1 }, page);
@@ -602,8 +614,11 @@ try {
       const d = await evaluate(`(() => { const a = document.querySelector('.menu-panel a[href="/docs.html"]').getBoundingClientRect(); return [a.left + a.width / 2, a.top + a.height / 2]; })()`);
       for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: d[0], y: d[1], button: "left", clickCount: 1 }, page);
       m.choose_docs = { arrived: await settledAt(`Math.abs(scrollY - ${secTop("docs")}) < 2 && location.pathname === "/docs.html"`), ...(await state()), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent`) };
-      m.ok = m.roles.button === "BUTTON" && m.roles.controls && m.roles.items.join() === "Quixote,Run,Docs,Sancho,Eucalyptus,Paper" && m.roles.current === "Quixote"
-        && m.enter_opens.expanded === "true" && m.enter_opens.focus === "Quixote" && m.arrow_down.focus === "Run" && m.end.focus === "Paper"
+      m.ok = m.roles.button === "BUTTON" && m.roles.controls && m.roles.items.join() === "Quixote,Run,Docs,Sancho,Eucalyptus,Contact" && m.roles.current === "Quixote"
+        && m.enter_opens.expanded === "true" && m.enter_opens.focus === "Quixote" && m.arrow_down.focus === "Run" && m.end.focus === "Contact"
+        && !m.contact_opens.list && m.contact_opens.contact && m.contact_opens.expanded === "true" && m.contact_opens.focus?.endsWith("Contact") && m.contact_opens.url.endsWith("/")
+        && m.contact_down.focus_mail && m.contact_back.list && !m.contact_back.contact && m.contact_back.focus === "Contact"
+        && m.contact_escape.hidden && m.contact_escape.focus?.startsWith("Garden") && m.reopens_on_list.list && !m.reopens_on_list.contact
         && m.escape.hidden && m.escape.focus?.startsWith("Garden") && m.down_opens.focus === "Quixote" && m.outside_closes.hidden && !m.click_opens.hidden
         && m.choose_docs.arrived && m.choose_docs.hidden && m.choose_docs.current === "Docs";
     }
@@ -721,11 +736,27 @@ try {
   }
   await go("/nope.html");                                    // on purpose: the 404 page itself, under the CSP
   report.not_found_page = await evaluate(`document.title`);
-  // the author's name, Contact and LinkedIn: in the footer only, never in the menu (a page with both: Eucalyptus)
+  // the author's name, email, LinkedIn and GitHub: in the menu's Contact view only, never in the footer (a page with both: Eucalyptus)
   await go("/eucalyptus.html");
-  report.author = await evaluate(`({ email_not_shown: !document.body.innerText.includes('@'), in_menu: !!document.querySelector('.top .who, .top a[href^="mailto:"], .top a[href*="linkedin.com"]'),
-    name: document.querySelector('.foot .who span')?.textContent, contact: document.querySelector('.foot .who a[href^="mailto:"]')?.textContent, linkedin: document.querySelector('.foot .who a[href*="linkedin.com"]')?.href, safe: document.querySelector('.foot .who a[href*="linkedin.com"]')?.rel })`);
-  report.paper_link = await evaluate(`[...document.querySelectorAll('a')].filter(a => a.textContent === 'Paper').every(a => a.href.startsWith('https://papers.ssrn.com/') && a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer'))`);
+  report.author = await evaluate(`(() => { const c = document.querySelector('.menu-contact'), row = (l) => [...c.querySelectorAll('.mc-row')].find((r) => r.querySelector('.mc-label').textContent === l)?.querySelector('a');
+    const ext = (a) => a?.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer');
+    return { hidden_until_asked: c.hidden && !document.body.innerText.includes('@'), name: c.querySelector('.mc-name')?.textContent,
+      email: row('Email')?.textContent, email_href: row('Email')?.getAttribute('href'), email_same_tab: !row('Email')?.target,
+      linkedin: row('LinkedIn')?.href, github: row('GitHub')?.href, new_tabs: ext(row('LinkedIn')) && ext(row('GitHub')),
+      in_footer: !!document.querySelector('.foot .who, .foot a[href^="mailto:"], .foot a[href*="linkedin.com"]') }; })()`);
+  // the footer on every page with one: the line on the grid's left edge, Privacy, Terms and Source on the right, nothing else;
+  // the paper only from home's line and the docs section, never from the menu or a footer
+  report.footer = {};
+  for (const p of ["/eucalyptus.html", "/demo.html", "/privacy.html", "/terms.html", "/viewer.html", "/share.html", `/result.html?ex=${example}`]) {
+    await go(p);
+    report.footer[p] = await evaluate(`(() => { const f = document.querySelector('.foot'); if (!f) return null; const t = f.querySelector(':scope > span').getBoundingClientRect(), n = f.querySelector('nav').getBoundingClientRect(), fr = f.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(f).paddingLeft);
+      return { links: [...f.querySelectorAll('a')].map((a) => a.textContent).join(), line_on_edge: Math.abs(t.left - fr.left - pad) < 1, links_right: Math.abs(fr.right - pad - n.right) < 1 }; })()`);
+  }
+  await go("/");
+  report.paper_link = await evaluate(`(() => { const p = [...document.querySelectorAll('a[href^="https://papers.ssrn.com/"]')];
+    return { home: p.some((a) => a.closest('[data-section="home"]')), docs: p.some((a) => a.closest('[data-section="docs"]')), in_menu_or_footer: p.some((a) => a.closest('.top, .foot')),
+      safe: p.every((a) => a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer')) }; })()`);
   await go("/docs.html"); await shot("10-docs");
   await viewport(390, 844); await go("/"); await shot("11-phone-home");
   await go("/demo.html"); await sleep(900); await shot("12-phone-demo");

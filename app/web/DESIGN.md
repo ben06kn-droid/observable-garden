@@ -320,6 +320,9 @@ class table's size) have their room from the start, so its arrival never moves t
   - header links, Back, the cue by click and by Enter (focus moves to the section);
   - a docs contents link;
   - Pyodide on demand: not loaded for a visitor who scrolls past, loaded when the form is on screen;
+  - the menu by keyboard and pointer, the Contact view included; the author's details in the menu only; the
+    footer on every page that has one (its three links, the line on the grid's edge); the paper linked from home
+    and docs only;
   - out to the demo (from run) and Back: the page kept, on its section (`out_and_back`); home's Eucalyptus line
     scrolls to the last section, which holds its two lines and the footer, in its theme, with no canvas
     (`eucalyptus_section`).
@@ -610,8 +613,7 @@ the grid's left edge; the control lies in the band `--head` reserves (76 px, 60 
 the docs contents (sticky at `--head` + `--pad-y`) and every anchor (`scroll-margin-top`) already clear (checked:
 the pill ends at 58 px, the contents stick at 126 px, a docs heading lands at 100 px in its own column); the docs bubbles' lane, which had started under the bar, now runs from the top of the screen).
 - A click opens a panel directly beneath, in the same colours with a hairline border: Quixote (the home section),
-  Run, Docs, Sancho (scrolled to, as the header's links were), Eucalyptus (its page, under Sancho), Paper (the
-  paper, a new tab). No demo. The section on screen (on a separate page, that page) is marked with a dot (`aria-current`).
+  Run, Docs, Sancho (scrolled to, as the header's links were), Eucalyptus (its page, under Sancho), Contact. No demo. The section on screen (on a separate page, that page) is marked with a dot (`aria-current`).
 - It closes on choosing an item, on Escape (focus back on the button) and on a click outside, and when focus
   leaves it. A disclosure: a button with `aria-expanded` and `aria-controls`, the panel a labelled `nav` of plain
   links. Enter or Space opens it with focus on the current item; Down and Up open it at the first or last;
@@ -621,7 +623,18 @@ the pill ends at 58 px, the contents stick at 126 px, a docs heading lands at 10
 - It is written into every page with a menu by the build, at a `<!-- menu -->` marker (`vite.config.ts`): the one
   page, the demo, the viewer, Eucalyptus, and the legal, shared-verdict, result and 404 pages (their bar's styles
   are gone).
-- The author's name, Contact (a mailto link; the address is never printed) and LinkedIn are in the footer only.
+- **Contact** (2026-11-18), the last item, does not navigate: it replaces the list in the same panel with a back
+  arrow (back to the list, focus on Contact) and four lines: the author's name as plain text; then Email, LinkedIn
+  and GitHub, each a small mono caps label with its value beside it as a link (the address written out, a mailto
+  link; LinkedIn and GitHub open in a new tab). The menu's rules hold in it: Escape and a click outside close the
+  menu, the arrow keys move within the view, its colours follow the section; on a phone its links are 44 px tall.
+  Reopening the menu shows the list. The author's details are here only, not in the footer.
+- **The paper** is reached from home's "read the paper" and the docs section's reference only; neither the menu nor
+  the footer links to it.
+
+**The footer** (2026-11-18): the line "Quixote · MIT · computed in your browser…" on the grid's left edge and
+Privacy, Terms and Source on the right; on a phone the line, then the three links beneath. The same on every page with
+a footer (Eucalyptus, the demo, the viewer, the legal, shared-verdict and result pages).
 
 ## 5. Where things live
 
