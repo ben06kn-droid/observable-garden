@@ -589,8 +589,8 @@ the grid's left edge; the control lies in the band `--head` reserves (76 px, 60 
 the docs contents (sticky at `--head` + `--pad-y`) and every anchor (`scroll-margin-top`) already clear (checked:
 the pill ends at 58 px, the contents stick at 126 px, a docs heading lands at 100 px in its own column); the docs bubbles' lane, which had started under the bar, now runs from the top of the screen).
 - A click opens a panel directly beneath, in the same colours with a hairline border: Quixote (the home section),
-  Run, Docs, Sancho (scrolled to, as the header's links were), Paper (the paper, a new tab), Eucalyptus (its
-  page). No demo. The section on screen (on a separate page, that page) is marked with a dot (`aria-current`).
+  Run, Docs, Sancho (scrolled to, as the header's links were), Eucalyptus (its page, under Sancho), Paper (the
+  paper, a new tab). No demo. The section on screen (on a separate page, that page) is marked with a dot (`aria-current`).
 - It closes on choosing an item, on Escape (focus back on the button) and on a click outside, and when focus
   leaves it. A disclosure: a button with `aria-expanded` and `aria-controls`, the panel a labelled `nav` of plain
   links. Enter or Space opens it with focus on the current item; Down and Up open it at the first or last;

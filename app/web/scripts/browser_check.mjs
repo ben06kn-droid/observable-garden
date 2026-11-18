@@ -603,7 +603,7 @@ try {
       const d = await evaluate(`(() => { const a = document.querySelector('.menu-panel a[href="/docs.html"]').getBoundingClientRect(); return [a.left + a.width / 2, a.top + a.height / 2]; })()`);
       for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: d[0], y: d[1], button: "left", clickCount: 1 }, page);
       m.choose_docs = { arrived: await settledAt(`Math.abs(scrollY - ${secTop("docs")}) < 2 && location.pathname === "/docs.html"`), ...(await state()), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent`) };
-      m.ok = m.roles.button === "BUTTON" && m.roles.controls && m.roles.items.join() === "Quixote,Run,Docs,Sancho,Paper,Eucalyptus" && m.roles.current === "Quixote"
+      m.ok = m.roles.button === "BUTTON" && m.roles.controls && m.roles.items.join() === "Quixote,Run,Docs,Sancho,Eucalyptus,Paper" && m.roles.current === "Quixote"
         && m.enter_opens.expanded === "true" && m.enter_opens.focus === "Quixote" && m.arrow_down.focus === "Run" && m.end.focus === "Eucalyptus"
         && m.escape.hidden && m.escape.focus?.startsWith("Garden") && m.down_opens.focus === "Quixote" && m.outside_closes.hidden && !m.click_opens.hidden
         && m.choose_docs.arrived && m.choose_docs.hidden && m.choose_docs.current === "Docs";
