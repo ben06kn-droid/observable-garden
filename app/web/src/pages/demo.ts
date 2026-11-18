@@ -315,7 +315,9 @@ function fillInside(r: Run) {
       const sub = r.submitted && named(m[1]) === r.submitted.rule && m[2] === r.submitted.text;
       const stays = m[3] !== m[2] ? ` Its best stays ${m[3]}.` : "";
       best = best === null || Number(m[3]) > Number(best) ? m[3] : best;
-      items.push({ p: [`${tries}${scored} and kept `, ruleSpan(named(m[1]), !!sub), ` at Sharpe ${m[2]}.${stays}`], tool: c.tool });
+      // a restart: the rule it starts again from, chosen among the one-feature rules it scored
+      if (c.tool === "restart") items.push({ p: [`Started again from the ground, as its declared rule says: it scored ${n ?? "the"} one-feature rules and began again from `, ruleSpan(named(m[1]), !!sub), ` at Sharpe ${m[2]}.${stays}`], tool: c.tool });
+      else items.push({ p: [`${tries}${scored} and kept `, ruleSpan(named(m[1]), !!sub), ` at Sharpe ${m[2]}.${stays}`], tool: c.tool });
     } else items.push({ p: [`${tries}: ${text.split(" | ")[0]}`], tool: c.tool });
   }
   const sumP = h("p", "sum", null, panelBody);
