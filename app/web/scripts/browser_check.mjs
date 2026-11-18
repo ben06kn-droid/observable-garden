@@ -613,7 +613,7 @@ try {
       await evaluate(`window.__stay = 1; true`);
       await evaluate(`document.querySelector('[data-section="${name}"] ${link}').click(); true`);
       const arrived = await settledAt(`location.pathname === "${to}" && document.readyState === "complete"`, 20000); await sleep(800);
-      const there = { arrived, theme: await evaluate(`document.documentElement.dataset.theme`), main_empty: await evaluate(`document.querySelector("main").children.length === 0`),
+      const there = { arrived, theme: await evaluate(`document.documentElement.dataset.theme`), main: await evaluate(`[...document.querySelector("main").children].map((e) => e.textContent.trim()).join(" | ")`),
         canvases: await evaluate(`document.querySelectorAll("canvas").length`), wake: await evaluate(`!!document.querySelector(".wake-layer")`) };
       await evaluate(`history.back(); true`);
       const back = await settledAt(`location.pathname === "${from}" && document.readyState === "complete" && !document.querySelector(".loader")`, 20000); await sleep(800);
@@ -623,7 +623,7 @@ try {
     const demo = await outAndBack("/run.html", "run", 'a[href="/demo.html"]', "/demo.html");
     const euc = await outAndBack("/", "home", 'a[href="/eucalyptus.html"]', "/eucalyptus.html");
     one.out_and_back = { demo, eucalyptus: euc,
-      eucalyptus_page: euc.theme === "home" && euc.main_empty && euc.canvases === 0 && !euc.wake,
+      eucalyptus_page: euc.theme === "eucalyptus" && euc.main === "Eucalyptus | Coming soon" && euc.canvases === 0 && !euc.wake,
       same_return: demo.back.arrived && euc.back.arrived && demo.back.at_section && euc.back.at_section && demo.back.page_kept === euc.back.page_kept && demo.back.loader === euc.back.loader };
   }
   await go("/demo.html"); await sleep(500);

@@ -469,10 +469,11 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     16.8 ms); paused while hidden or off screen.
 - **demo**: the city garden at night in neon tubing (also the result page, which replays a demo verdict). The
   only page with neon, glow or the night palette; `demo.css` is loaded by no other page.
-- **Eucalyptus** (`eucalyptus.html`, `src/pages/eucalyptus.ts`, `src/styles/eucalyptus.css`; 2026-11-18): for now
-  only the site's header and footer in the home theme's colours, nothing between them (the footer at the foot of the
-  screen). A separate document outside the one-page scroll, with no cursor effect; leaving it and coming back
-  behaves as for the demo. To be designed in its own session.
+- **Eucalyptus** (`eucalyptus.html`, `src/pages/eucalyptus.ts`, `src/styles/eucalyptus.css`; 2026-11-18): its own
+  theme, a lime ground (#C4F042) with ink #14210A. The words "Coming soon" large in the title face (Bricolage 800 at
+  `--t-hero`) on the grid's left edge, a small mono caps label "Eucalyptus" above; the menu and the footer in the
+  same colours (the pill in the ground). Nothing else. A separate document outside the one-page scroll, with no
+  cursor effect; leaving it and coming back behaves as for the demo.
 - **viewer**: a light counterpart to the run page: cool off-white, graphite type, hairlines, one muted
   oxidized-copper green. No illustration, no glow. Reached from Sancho; outside the chain.
 
