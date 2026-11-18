@@ -29,7 +29,7 @@
     var end = function () { if (c.dir === "up") window.scrollTo(0, h.scrollHeight); };
     var userMoved = false;
     var mark = function () { userMoved = true; };
-    var finish, done = new Promise(function (r) { finish = r; });
+    var finish, arrivedAt = 0, done = new Promise(function (r) { finish = function () { arrivedAt = performance.now(); r(); }; });
     window.__carry = { dir: c.dir, cover: !!c.cover, viewTransition: false, done: done };   // read by chain.ts and the browser check
 
     // The rest of the gesture that made the carry (a trackpad's momentum) arrives here: it must not scroll
@@ -53,8 +53,11 @@
       rise = !first && low < peak * 0.8 && r > Math.max(low * 1.6, low + 4) && r >= 6 ? rise + 1 : 0;
       // the wheel events that come while the browser changes pages reach neither page, so the first one here may
       // follow a gap of a few hundred ms and still be the same gesture: up to 500 ms is allowed for it, 100 after
-      var fresh = dt > (first ? 500 : 100) || (dy !== 0 && (dy > 0 ? 1 : -1) !== sign) || rise >= 2;
-      if (fresh) { window.__carry.landing = { swallowed: swallowed, ended: dt > (first ? 500 : 100) ? "pause " + Math.round(dt) + " ms" : rise >= 2 ? "rise" : "reversal" }; stop(); mark(); return; }
+      // Chrome holds wheel events back while the transition plays and then lets the rest through, so the first one
+      // here also continues the gesture whenever it comes before the arrival is over (and 300 ms after)
+      var held = first && (!arrivedAt || now - arrivedAt < 300);
+      var fresh = (held ? false : dt > (first ? 500 : 100)) || (dy !== 0 && (dy > 0 ? 1 : -1) !== sign) || rise >= 2;
+      if (fresh) { window.__carry.landing = { swallowed: swallowed, ended: !held && dt > (first ? 500 : 100) ? "pause " + Math.round(dt) + " ms" : rise >= 2 ? "rise" : "reversal" }; stop(); mark(); return; }
       first = false; last = now;
       if (r >= peak) { peak = r; low = r; } else low = Math.min(low, r);   // low: the lowest point since the peak
       swallowed++; e.preventDefault();

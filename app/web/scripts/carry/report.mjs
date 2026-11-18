@@ -4,8 +4,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const dir = process.argv[2];
-const docs = JSON.parse(readFileSync(join(dir, "log.json"), "utf8"));
 const mark = (d, p) => d.marks.find(([, n]) => n.startsWith(p))?.[0];
+// in the order the pages were shown: a prerendered page started long before it was activated
+const shown = (d) => mark(d, "activated") ?? d.start;
+const docs = JSON.parse(readFileSync(join(dir, "log.json"), "utf8")).filter((d) => !d.marks.some(([, n]) => n.includes("prerendering")) || mark(d, "activated")).sort((a, b) => shown(a) - shown(b));
 const gaps = (fr, a, b) => { const s = fr.filter((t) => t >= a && t <= b), g = s.slice(1).map((t, i) => t - s[i]); return { frames: s.length, longest: Math.round(Math.max(0, ...g) * 10) / 10, over20: g.filter((x) => x > 20).length, over34: g.filter((x) => x > 34).length }; };
 const rows = [];
 console.log(`pages in order: ${docs.map((d) => d.path).join(" → ")}`);
