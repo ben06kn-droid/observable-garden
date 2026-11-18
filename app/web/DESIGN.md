@@ -570,7 +570,7 @@ pill in the section's `--header-bg` (the ground itself on home, run, the demo, t
 and Sancho the light glass and sheet their dark ink reads on, with what lies beneath blurred). The wordmark hangs on
 the grid's left edge; the control lies in the band `--head` reserves (76 px, 60 on a phone), which every section,
 the docs contents (sticky at `--head` + `--pad-y`) and every anchor (`scroll-margin-top`) already clear (checked:
-the pill ends at 58 px, the contents stick at 126 px, a docs heading lands at 100 px in its own column).
+the pill ends at 58 px, the contents stick at 126 px, a docs heading lands at 100 px in its own column); the docs bubbles' lane, which had started under the bar, now runs from the top of the screen).
 - A click opens a panel directly beneath, in the same colours with a hairline border: Quixote (the home section),
   Run, Docs, Sancho (scrolled to, as the header's links were), Paper (the paper, a new tab), Eucalyptus (its
   page). No demo. The section on screen (on a separate page, that page) is marked with a dot (`aria-current`).

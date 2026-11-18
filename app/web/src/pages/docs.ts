@@ -69,7 +69,6 @@ for (const t of text.querySelectorAll("table")) {
 }
 
 // ---- the sky: the ground and its light, the tail, the bubbles in the lane right of the text (none on a phone)
-const head = document.querySelector<HTMLElement>(".top");
 const sheet = root.querySelector<HTMLElement>(".sheet") ?? text;
 // built behind the loading screen, in the docs section's backdrop (it fades in with the scroll, src/onepage/boot.ts);
 // it draws only while that backdrop can be seen
@@ -81,8 +80,9 @@ const makeSky = () => new Sky(root.ownerDocument.querySelector<HTMLElement>('.ba
   lane: () => {
     if (phone.matches) return null;
     const r = sheet.getBoundingClientRect(), gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gap")) || 24;
+    // the lane runs from the top of the screen: there is no header bar (the menu's control is at the left, outside it)
     // the bubbles may drift 44px in under the pane: behind the glass, within its 48px padding, short of the text
-    return { x0: Math.round(r.right + gap), x1: innerWidth, top: head?.getBoundingClientRect().bottom ?? 76, bottom: innerHeight, under: Math.round(gap + 44) };
+    return { x0: Math.round(r.right + gap), x1: innerWidth, top: 0, bottom: innerHeight, under: Math.round(gap + 44) };
   },
   // the tail runs behind the glass but never behind the text: the sheet less its padding
   text: () => { const r = sheet.getBoundingClientRect(), pad = parseFloat(getComputedStyle(sheet).paddingLeft) || 0; return { x: r.left + pad, y: r.top + pad, w: r.width - 2 * pad, h: r.height - 2 * pad }; },
