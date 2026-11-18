@@ -8,7 +8,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { serve } from "./serve_dist.mjs";
 import { serveLocal } from "./mock_providers.mjs";
 
@@ -133,6 +133,8 @@ async function go(path) {
   await send("Page.navigate", { url: base + path }, page);
   await loaded;
   await evaluate("document.fonts.ready.then(() => true)");
+  // the one-page site (home, run): built behind its loading screen, which goes once everything is drawn
+  for (let i = 0; i < 300 && await evaluate(`!!document.querySelector(".loader")`); i++) await sleep(50);
 }
 async function shot(name, full = false) {
   if (!shots) return;
@@ -167,7 +169,7 @@ if (probe) {
 if (process.argv.includes("--analytics")) {
   try {
     await viewport(1440, 900);
-    const pages = ["/", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html", "/terms.html", "/share.html", "/result.html?ex=" + example];
+    const pages = ["/", "/demo.html", "/eucalyptus.html", "/contact.html", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html", "/terms.html", "/share.html", "/result.html?ex=" + example];
     for (const p of pages) { await go(p); await sleep(1500); }
     report.visitor = await evaluate(`({ webdriver: navigator.webdriver, headless_ua: navigator.userAgent.includes("Headless"), storage_keys: Object.keys(localStorage).concat(Object.keys(sessionStorage)), cookies: document.cookie })`);
     await sleep(1500);
@@ -237,6 +239,46 @@ function decodePng(buf) {
 }
 const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
 const lum = (r, g, b) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+// contrast behind the letters themselves (where the fan is dimmed by its glyph mask, src/fan.ts). The letters' pixels
+// are found once, from a still pair of shots, one with the text and one without (its underlines kept in both, so only
+// the letters count): a pixel the text changed by more than a fifth of the range. Then each sample takes a shot without
+// the text, after `stroke` if given (a cursor crossing the text), and reads the text's colour against the scene at
+// those pixels
+async function glyphContrast(selector, samples = 3, stroke = null) {
+  const els = await evaluate(`[...document.querySelectorAll(${JSON.stringify(selector)})].filter((e) => e.offsetParent !== null && e.textContent.trim()).map((e, i) => {
+    e.dataset.measure = i; const r = e.getBoundingClientRect(), c = getComputedStyle(e).color.match(/[0-9.]+/g).map(Number);
+    return { i, name: (e.className || e.tagName) + ': ' + e.textContent.trim().slice(0, 24), x: r.left, y: r.top, w: r.width, h: r.height, c };
+  })`);
+  const shotPng = async () => decodePng(Buffer.from((await send("Page.captureScreenshot", { format: "png" }, page)).data, "base64"));
+  const hide = (on) => evaluate(on ? `document.querySelectorAll('[data-measure]').forEach((e) => { e.style.setProperty('color', 'transparent', 'important'); e.style.setProperty('text-decoration-color', getComputedStyle(e).textDecorationColor, 'important'); }); true`
+    : `document.querySelectorAll('[data-measure]').forEach((e) => { e.style.removeProperty('color'); e.style.removeProperty('text-decoration-color'); }); true`);
+  // the text's decoration colour is pinned before the text goes transparent (it follows currentColor otherwise)
+  await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => e.style.setProperty('text-decoration-color', getComputedStyle(e).textDecorationColor, 'important')); true`);
+  const a = await shotPng(); await hide(true); const b0 = await shotPng(); await hide(false);
+  await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => e.style.removeProperty('text-decoration-color')); true`);
+  const glyphs = els.map((e) => { const out = [];
+    for (let y = Math.max(0, Math.floor(e.y)); y < Math.min(a.h, Math.ceil(e.y + e.h)); y++)
+      for (let x = Math.max(0, Math.floor(e.x)); x < Math.min(a.w, Math.ceil(e.x + e.w)); x++) {
+        const o = (y * a.w + x) * a.bpp;
+        if (Math.abs(lum(a.px[o], a.px[o + 1], a.px[o + 2]) - lum(b0.px[o], b0.px[o + 1], b0.px[o + 2])) >= 0.2) out.push(o);
+      }
+    return out; });
+  const worst = els.map(() => Infinity), lows = els.map(() => 0);
+  for (let k = 0; k < samples; k++) {
+    let b = b0;
+    if (k > 0 || stroke) { if (stroke) await stroke(k); await hide(true); b = await shotPng(); await hide(false); }
+    els.forEach((e, n) => {
+      const L = lum(e.c[0], e.c[1], e.c[2]);
+      for (const o of glyphs[n]) {
+        const Lb = lum(b.px[o], b.px[o + 1], b.px[o + 2]), r = (Math.max(L, Lb) + 0.05) / (Math.min(L, Lb) + 0.05);
+        if (r < worst[n]) worst[n] = r;
+        if (r < 4.5) lows[n]++;
+      }
+    });
+  }
+  await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => e.removeAttribute('data-measure')); true`);
+  return els.map((e, n) => ({ el: e.name, worst: +worst[n].toFixed(2), px_below_4_5: lows[n], glyph_px: glyphs[n].length }));
+}
 async function contrast(selector, samples = 6) {
   const els = await evaluate(`[...document.querySelectorAll(${JSON.stringify(selector)})].filter((e) => e.offsetParent !== null && e.textContent.trim()).map((e, i) => {
     e.dataset.measure = i; const r = e.getBoundingClientRect(), c = getComputedStyle(e).color.match(/[0-9.]+/g).map(Number);
@@ -245,10 +287,12 @@ async function contrast(selector, samples = 6) {
   const worst = els.map(() => Infinity), lows = els.map(() => []);
   for (let k = 0; k < samples; k++) {
     // the text hidden, and its own underline or marker too, so only the scene behind it is measured
-    await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => { for (const [k, v] of [['color', 'transparent'], ['text-shadow', 'none'], ['border-color', 'transparent'], ['box-shadow', 'none']]) e.style.setProperty(k, v, 'important'); }); true`);
+    // (and its descendants: a span in its own colour, as the demo intro's first sentence, was measured as background;
+    // with no transition: a border fading over 450 ms, as the demo's Start, was still drawn when the shot was taken)
+    await evaluate(`document.querySelectorAll('[data-measure], [data-measure] *').forEach((e) => { for (const [k, v] of [['transition', 'none'], ['color', 'transparent'], ['text-shadow', 'none'], ['border-color', 'transparent'], ['box-shadow', 'none']]) e.style.setProperty(k, v, 'important'); }); true`);
     await sleep(60);
     const { data } = await send("Page.captureScreenshot", { format: "png" }, page);
-    await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => { for (const k of ['color', 'text-shadow', 'border-color', 'box-shadow']) e.style.removeProperty(k); }); true`);
+    await evaluate(`document.querySelectorAll('[data-measure], [data-measure] *').forEach((e) => { for (const k of ['color', 'text-shadow', 'border-color', 'box-shadow', 'transition']) e.style.removeProperty(k); }); true`);
     const img = decodePng(Buffer.from(data, "base64"));
     els.forEach((e, n) => {
       const L = lum(e.c[0], e.c[1], e.c[2]);
@@ -268,16 +312,42 @@ async function contrast(selector, samples = 6) {
 
 // --pages --fixtures DIR: the Sancho page's lever editor and the viewer. DIR holds result.json
 // (quixote audit --json on examples/logs/scripted_session.json, B 500) and sancho_out/sancho.json
-// (quixote sancho on a panel long enough for it); the log, panel and class are examples/'.
+// (quixote sancho on a panel long enough for it): scripts/make_viewer_fixtures.sh writes them to scripts/fixtures/viewer;
+// the log, panel and class are examples/'. Without --fixtures, the Sancho editor alone.
 if (process.argv.includes("--pages")) {
-  const fx = arg("--fixtures", null), ex = join(import.meta.dirname, "..", "..", "..", "examples");
+  // absolute: Chrome's renderer crashed on a relative path given to DOM.setFileInputFiles (2026-11-18)
+  const fx = arg("--fixtures", null) && resolve(arg("--fixtures", null)), ex = join(import.meta.dirname, "..", "..", "..", "examples");
   const setFiles = async (paths) => {
-    const { result } = await send("Runtime.evaluate", { expression: "document.getElementById('v-files')" }, page);
+    const { result } = await send("Runtime.evaluate", { expression: "document.getElementById('v-files')" }, page);   // the viewer's input, inside its layer
     await send("DOM.enable", {}, page);
     await send("DOM.setFileInputFiles", { files: paths, objectId: result.objectId }, page);
   };
   try {
     await viewport(1440, 900);
+    // the viewer needs the fixtures (a result and a Sancho run, made by the package); without them it is skipped
+    if (fx) {
+    // the viewer's text is the old viewer's: its record rows, meaning and command are compared word for word in the report
+    const vtext = () => evaluate(`({ error: document.getElementById('v-error').textContent, files: [...document.querySelectorAll('#v-list li')].map((e) => e.textContent.split(' · ')[0]),
+      panels: [...document.querySelectorAll('.v-panel:not([hidden])')].map((p) => p.dataset.name), status: document.getElementById('v-fig-h').textContent,
+      figures: [...document.querySelectorAll('.v-fig')].map((f) => f.querySelector('dt').textContent + ': ' + f.querySelector('dd').textContent),
+      heading: document.getElementById('v-rec-h').textContent, meaning: document.getElementById('v-meaning').textContent,
+      record: [...document.querySelectorAll('#v-kv dt')].map((d) => d.textContent + ': ' + d.nextElementSibling.textContent), cmd: document.getElementById('v-cmd').textContent,
+      fits: [...document.querySelectorAll('.v-panel:not([hidden])')].every((p) => { const cs = getComputedStyle(p); return p.querySelector('.v-in').scrollHeight <= p.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) + 1; }) })`);
+    const panels = async (name) => { const n = await evaluate(`document.querySelectorAll('.v-panel:not([hidden])').length`);
+      for (let i = 0; i < n; i++) { await evaluate(`document.getElementById('v-count').textContent`); await shot(`${name}-${i + 1}`);
+        for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 }, page); await sleep(900); } };
+    console.error("[pages] viewer: to /viewer.html"); await go("/viewer.html");
+    console.error("[pages] viewer: a search"); await setFiles([join(ex, "logs", "scripted_session.json"), join(fx, "result.json"), join(ex, "data", "tiny_panel.npz"), join(ex, "class.json")]);
+    console.error("[pages] viewer: files set"); await until(`document.getElementById('v-count').textContent.startsWith('02')`, 90000); await sleep(1500);
+    console.error("[pages] viewer: drawn"); report.viewer_search = { ...(await vtext()), word: await evaluate(`document.querySelector('#v-spot .note-word')?.textContent`),
+      labels: await evaluate(`[...document.querySelectorAll('#v-spot .note:not([hidden])')].map((e) => e.textContent)`), twigs: await evaluate(`document.querySelectorAll('#v-garden .real .twig').length`) };
+    await panels("viewer-search");
+    await go("/viewer.html");
+    console.error("[pages] viewer: Sancho"); await setFiles([join(fx, "sancho_out", "sancho.json")]);
+    await until(`document.getElementById('v-count').textContent.startsWith('02')`, 30000); await sleep(800);
+    report.viewer_sancho = { ...(await vtext()), bonsai: await evaluate(`!!document.querySelector('#v-garden .bonsai')`), label: await evaluate(`document.querySelector('#v-garden .bonsai-label')?.textContent`) };
+    await panels("viewer-sancho");
+    } else report.viewer = "skipped: no --fixtures";
     await go("/sancho.html");
     await until(`/^[0-9a-f]{64}$/.test(document.getElementById('cfg-hash').textContent)`, 10000);
     const state = () => evaluate(`({ hash: document.getElementById('cfg-hash').textContent, kind: document.getElementById('cfg-kind').textContent,
@@ -289,13 +359,13 @@ if (process.argv.includes("--pages")) {
     const setLever = (name, value) => evaluate(`(() => { const l = [...document.querySelectorAll('.lever')].find((x) => x.querySelector('.lever-name').textContent === '${name}');
       const c = l.querySelector('input:not([type=checkbox]), select, textarea'); c.value = ${JSON.stringify(value)}; c.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
     await setLever("horizon", "1"); await sleep(300);
-    report.sancho.tailored = await state();
+    console.error("[pages] sancho: levers"); report.sancho.tailored = await state();
     await setLever("rates", "0.3, abc"); await sleep(300);
     report.sancho.bad_rates = await state();
     await evaluate(`document.getElementById('cfg-reset').click(); true`); await sleep(300);
     report.sancho.after_reset = (await state()).hash === report.sancho.registered.hash;
     // the download: the file the page writes, read back; its hash (the page's canonical form) is the one shown
-    const dl = mkdtempSync(join(tmpdir(), "qx-dl-"));
+    console.error("[pages] sancho: the download"); const dl = mkdtempSync(join(tmpdir(), "qx-dl-"));
     await send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: dl, eventsEnabled: true });
     await setLever("horizon", "20"); await sleep(300);
     const shown = (await state()).hash;
@@ -303,31 +373,18 @@ if (process.argv.includes("--pages")) {
     const text = readFileSync(join(dl, "sancho_config.json"), "utf8");
     const L = await import("../src/levers.ts");
     report.sancho.download = { bytes: text.length, horizon: JSON.parse(text).horizon, hash_matches_shown: (await L.configSha256(JSON.parse(text))) === shown };
-    writeFileSync(join(fx, "tailored_config.json"), text);       // for the equivalence check against sancho.config, if wanted
+    if (fx) writeFileSync(join(fx, "tailored_config.json"), text);       // for the equivalence check against sancho.config, if wanted
 
-    await go("/viewer.html");
-    await setFiles([join(ex, "logs", "scripted_session.json"), join(fx, "result.json"), join(ex, "data", "tiny_panel.npz"), join(ex, "class.json")]);
-    await until(`!document.getElementById('v-record').hidden`, 90000); await sleep(1500);
-    report.viewer_search = await evaluate(`({ files: [...document.querySelectorAll('#v-list li')].map((e) => e.textContent.split(' · ')[0]), error: document.getElementById('v-error').textContent,
-      word: document.getElementById('verdict-word')?.textContent, labels: [...document.querySelectorAll('#spot .note:not([hidden])')].map((e) => e.textContent),
-      twigs: document.querySelectorAll('#garden .real .twig').length, meaning: document.getElementById('v-meaning').textContent,
-      record: [...document.querySelectorAll('#v-kv dt')].map((d) => d.textContent + ': ' + d.nextElementSibling.textContent), cmd: document.getElementById('v-cmd').textContent })`);
-    await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); true`); await sleep(500); await shot("viewer-search");
-    await go("/viewer.html");
-    await setFiles([join(fx, "sancho_out", "sancho.json")]);
-    await until(`!document.getElementById('v-record').hidden`, 30000); await sleep(800);
-    report.viewer_sancho = await evaluate(`({ error: document.getElementById('v-error').textContent, bonsai: !!document.querySelector('#garden .bonsai'),
-      label: document.querySelector('#garden .bonsai-label')?.textContent, heading: document.getElementById('v-rec-h').textContent, meaning: document.getElementById('v-meaning').textContent,
-      record: [...document.querySelectorAll('#v-kv dt')].map((d) => d.textContent + ': ' + d.nextElementSibling.textContent), cmd: document.getElementById('v-cmd').textContent })`);
-    await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); true`); await sleep(500); await shot("viewer-sancho");
-    await evaluate(`window.scrollTo(0, 0); true`); await sleep(300); await shot("viewer-sancho-full", true);
     // every page at phone width (375 px): no horizontal scroll, and the header's links inside the header
-    await viewport(375, 740);
+    console.error("[pages] phone"); await viewport(375, 740);
     report.phone = {};
-    for (const pg of ["/", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html"]) {
+    for (const pg of ["/", "/demo.html", "/eucalyptus.html", "/contact.html", "/docs.html", "/sancho.html", "/run.html", "/privacy.html"]) {
       await go(pg); await sleep(400);
-      report.phone[pg] = await evaluate(`(() => { const t = document.querySelector('.top').getBoundingClientRect(), n = document.querySelector('.top nav').getBoundingClientRect();
-        return { page_scrolls_sideways: document.documentElement.scrollWidth > innerWidth, nav_inside: n.right <= innerWidth + 0.5 && n.left >= 0, header_height: Math.round(t.height) }; })()`);
+      // the menu on a phone: the control and, open, its panel inside the screen, sized for touch (44 px)
+      report.phone[pg] = await evaluate(`(() => { const b = document.querySelector('.menu-btn'); b.click(); const p = document.querySelector('.menu-panel').getBoundingClientRect(), r = b.getBoundingClientRect();
+        const items = [...document.querySelectorAll('.menu-panel ul :is(a, button)')].map((a) => Math.round(a.getBoundingClientRect().height));
+b.click();
+        return { page_scrolls_sideways: document.documentElement.scrollWidth > innerWidth, panel_inside: p.right <= innerWidth + 0.5 && p.left >= 0, control_h: Math.round(r.height), item_h_min: Math.min(...items) }; })()`);
       if (pg === "/sancho.html") await shot("sancho-phone");
     }
     report.network = { requests: requests.length, elsewhere: [...new Set(requests.map((r) => new URL(r.url).origin).filter((o) => o !== base && !o.startsWith("data:") && !o.startsWith("blob:")))] };
@@ -344,6 +401,11 @@ if (process.argv.includes("--pages")) {
   process.exit(report.error || report.csp_violations || report.missing.length || analyticsFails(report.analytics) || issues.some((i) => i.kind === "exception") ? 1 : 0);
 }
 
+// the run page's gate loads for a visitor who comes to its form: a field taking focus starts it at once
+async function gateIn() {
+  await evaluate(`(() => { const f = document.getElementById('f-moves'); f.focus({ preventScroll: true }); f.blur(); return true; })()`);
+  await until(`document.getElementById('f-prompt').value.length > 100 && /rows/.test(document.getElementById('in-status').textContent)`, 60000);
+}
 async function wheel(dy) { await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: 400, y: 400, deltaX: 0, deltaY: dy }, page); }
 if (runPage) {
   // The run page end to end, under the production headers, with the provider replaced by the mock:
@@ -354,7 +416,7 @@ if (runPage) {
   try {
     await viewport(1440, 900);
     await go("/run.html?provider=mock");
-    await until(`document.getElementById('f-prompt').value.length > 100 && /rows/.test(document.getElementById('in-status').textContent)`, 60000);
+    await gateIn();
     report.inputs = await evaluate(`({ status: document.getElementById('in-status').textContent, cap: document.getElementById('in-cap').textContent, estimate: document.getElementById('estimate').textContent, start_enabled: !document.getElementById('start').disabled })`);
     await shot("run-1-setup", true);
     const startWith = async (k, moves = 8) => evaluate(`(() => { document.getElementById('f-key').value = ${JSON.stringify(k)}; document.getElementById('f-moves').value = '${moves}'; document.getElementById('f-B').value = '500'; document.getElementById('run-form').requestSubmit(); return true; })()`);
@@ -389,7 +451,8 @@ if (runPage) {
     await sleep(500);
     report.prompt_edited = await evaluate(`[...document.querySelectorAll('#rec-kv dt')].find((d) => d.textContent === 'Prompt')?.nextElementSibling.textContent`);
     report.key_gone = await evaluate(`({ in_text: document.body.innerText.includes(${JSON.stringify(KEY)}), in_html: document.documentElement.outerHTML.includes(${JSON.stringify(KEY)}),
-      in_url: location.href.includes(${JSON.stringify(KEY)}), local: localStorage.length, session: sessionStorage.length, field: document.getElementById('f-key').value })`);
+      in_url: location.href.includes(${JSON.stringify(KEY)}), local: localStorage.length, session: Object.keys(sessionStorage),
+      in_storage: [...Object.values(localStorage), ...Object.values(sessionStorage)].some((v) => v.includes(${JSON.stringify(KEY)})), field: document.getElementById('f-key').value })`);   // session: only the loading screen's "seen" flag
     // the share link: copied (or shown, where the clipboard is not allowed), then opened
     await send("Browser.grantPermissions", { permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"], origin: base }).catch(() => {});
     const shareUrl = await evaluate(`(async () => { document.getElementById('share').click(); await new Promise((r) => setTimeout(r, 400));
@@ -415,7 +478,7 @@ if (runPage) {
       const out = report.providers[id] = {};
       const t0 = Date.now();
       await go("/run.html?provider=mock");
-      await until(`document.getElementById('f-prompt').value.length > 100 && /rows/.test(document.getElementById('in-status').textContent)`, 60000);
+      await gateIn();
       await choose(id);
       out.efforts = await evaluate(`[...document.getElementById('f-effort').options].map((o) => o.value)`);
       out.key_placeholder = await evaluate(`document.getElementById('f-key').placeholder`);
@@ -476,146 +539,336 @@ if (runPage) {
 }
 
 try {
+  // ---- the one-page site (src/onepage/): home, run, docs and Sancho are sections of one document, built once behind
+  // the loading screen; each keeps its address.
+  const step = (s) => process.stderr.write(`[chain] ${s}\n`);   // progress, on stderr
+  const here = () => evaluate(`location.pathname === "/index.html" ? "/" : location.pathname`);
+  const toEnd = () => evaluate(`window.scrollTo(0, document.documentElement.scrollHeight); true`);
+  const within = (p, ms) => Promise.race([p.catch(() => null), sleep(ms).then(() => null)]);   // a page that navigated away never answers
+  const push = async (dy, n = 10) => { for (let i = 0; i < n; i++) { await within(wheel(dy / n), 250); await sleep(16); } };
+  const arrive = async (path) => { const t0 = Date.now(); while (Date.now() - t0 < 8000) { if (await within(here(), 400) === path && await within(evaluate(`document.readyState === "complete" && !document.querySelector(".loader")`), 400)) return true; await sleep(50); } return false; };
+  const runTop = `Math.round(document.querySelector('[data-section="run"]').getBoundingClientRect().top + scrollY)`;
+  const settledAt = async (expr, ms = 5000) => { try { await until(expr, ms); return true; } catch { return false; } };
   for (const [vw, vh, tag] of [[1440, 900, "desktop"], [1366, 768, "laptop"]]) {
     await viewport(vw, vh);
-    await go("/");
-    await sleep(700);
-    await shot(`${tag}-1-overview-top`);
-    if (tag === "desktop") report.shake_page_one = await evaluate(`(() => { const g = [...document.querySelectorAll('#bg-trees .real .stem')].find((e) => { const r = e.getBoundingClientRect(); return r.left > 800 && r.top < innerHeight; });
-      if (!g) return 'no tree in view'; g.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return g.getAnimations().length > 0; })()`);
-    // page one scrolls freely by wheel to its last line; page two stays paper meanwhile
-    const oneEnd = await evaluate(`document.getElementById('demo').offsetTop - innerHeight`);
-    for (let left = oneEnd - 1; left > 0; left -= 100) { await wheel(Math.min(100, left)); await sleep(30); }
-    await sleep(900);
-    report[`${tag}_page_one_scrolls_freely`] = await evaluate(`Math.abs(scrollY - ${Math.max(0, oneEnd)}) < 4`);
-    report[`${tag}_paper_until_snap`] = await evaluate(`document.body.dataset.page === 'one'`);
-    await shot(`${tag}-2-overview-end`);
-    // one more notch carries onto page two; paper until the carry arrives
-    await wheel(100); await sleep(120);
-    report[`${tag}_still_paper_mid_carry`] = await evaluate(`document.body.dataset.page === 'one' && document.getAnimations().some((a) => a.effect?.target?.tagName === 'MAIN')`);
-    // reversing mid-carry is obeyed at once (the wheel is never trapped)
-    await wheel(-100); await sleep(900);
-    report[`${tag}_reverses_mid_carry`] = await evaluate(`Math.abs(scrollY - ${Math.max(0, oneEnd)}) < 4 && document.body.dataset.page === 'one'`);
-    report[`${tag}_carry_profile`] = await frameProfile(`${tag}-carry`, async () => {
-      await wheel(100); await sleep(60);
-      report[`${tag}_carry_is`] = await evaluate(`document.getAnimations().filter((a) => a.effect?.target?.tagName === 'MAIN').map((a) => ({ props: [...new Set(a.effect.getKeyframes().flatMap((k) => Object.keys(k).filter((x) => !['offset', 'easing', 'composite', 'computedOffset'].includes(x))))], duration: a.effect.getTiming().duration, easing: a.effect.getTiming().easing }))`);
-    }, 1300);
-    await until(`document.body.dataset.page === 'two'`, 5000);
-    await sleep(200);
-    report[`${tag}_snapped`] = await evaluate(`Math.abs(scrollY - document.getElementById('demo').offsetTop) < 3`);
-    // the header's name from page two: the carry back to the top of page one, no reload
+    // a first visit in the session: the whole loading screen (at least the 1.5 s of the B), then the site, at home
+    await evaluate(`sessionStorage.clear(); true`);
+    const t0 = Date.now();
+    await send("Page.navigate", { url: base + "/" }, page);
+    await sleep(300);
+    const one = report[`${tag}_onepage`] = { first_visit: { loader_shown: await evaluate(`!!document.querySelector(".loader") && !document.documentElement.dataset.loader`) } };
+    await until(`document.readyState === "complete" && !document.querySelector(".loader")`, 20000);
+    Object.assign(one.first_visit, { loader_ms: Date.now() - t0, at_home: await evaluate(`scrollY < 2`), path: await here(), title: await evaluate(`document.title`) });
+    await shot(`${tag}-1-home`);
+    // the trees do not respond: a click or Enter starts nothing, and they are neither buttons nor under a pointer cursor
+    if (tag === "desktop") report.trees_still_home = await evaluate(`(() => { const g = [...document.querySelectorAll('#bg-trees .real .stem')].find((e) => { const r = e.getBoundingClientRect(); return r.left > 800 && r.top < innerHeight; });
+      if (!g) return 'no tree in view'; g.dispatchEvent(new MouseEvent('click', { bubbles: true })); g.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return { animations: g.getAnimations().length, cursor: getComputedStyle(g).cursor, focusable: g.hasAttribute('tabindex'), role: g.getAttribute('role') }; })()`);
     if (tag === "desktop") {
-      await evaluate(`window.__noReload = 1; document.querySelector('.top .brand').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); true`);
-      await sleep(80);
-      const carrying = await evaluate(`document.getAnimations().some((a) => a.effect?.target?.tagName === 'MAIN')`);
-      await until(`document.body.dataset.page === 'one' && scrollY < 2`, 5000);
-      report.home_link = { carried: carrying, no_reload: await evaluate(`window.__noReload === 1`), at_top: await evaluate(`scrollY < 2`) };
-      for (let left = oneEnd - 1; left > 0; left -= 100) { await wheel(Math.min(100, left)); await sleep(30); }   // down page one again,
-      await sleep(900); await wheel(100); await until(`document.body.dataset.page === 'two'`, 5000); await sleep(400);   // and on to page two
+      // the run page's gate (Pyodide) loads only for a visitor who comes to its form: none for one who scrolls past it
+      // to the end and waits there; then the form held on screen starts it (focus and Start: --run-page)
+      step("desktop: the gate loads on demand");
+      const end = await evaluate(`document.documentElement.scrollHeight - innerHeight`);
+      for (let y = 0; y <= end + 240; y += 240) { await evaluate(`scrollTo(0, ${Math.min(y, end)}); true`); await sleep(60); }
+      await sleep(2500);
+      one.gate_scrolled_past = await evaluate(`performance.getEntriesByType("mark").map((m) => m.name).filter((n) => n.startsWith("qx-gate"))`);
+      await evaluate(`document.getElementById('run-form').scrollIntoView({ block: 'center' }); true`);
+      one.gate_on_view = await settledAt(`performance.getEntriesByName("qx-gate-start:view").length > 0`, 6000);
+      await evaluate(`scrollTo(0, 0); true`); await sleep(500);
     }
-    // the leeway: a small nudge up stays on page two; a nudge, a pause and another goes back; so does
-    // one gesture of 40% of the viewport
-    const onTwo = `document.body.dataset.page === 'two' && Math.abs(scrollY - document.getElementById('demo').offsetTop) < 3`;
-    const onOne = `document.body.dataset.page === 'one' && Math.abs(scrollY - ${Math.max(0, oneEnd)}) < 4`;
-    await sleep(500); await wheel(-60); await sleep(60); await wheel(-60); await sleep(900);
-    report[`${tag}_small_up_stays`] = await evaluate(onTwo);
-    await wheel(-60); await sleep(1500);
-    report[`${tag}_nudge_pause_nudge_leaves`] = await evaluate(onOne);
-    await wheel(100); await until(`document.body.dataset.page === 'two'`, 5000); await sleep(800);
-    for (let left = Math.ceil(vh * 0.42); left > 0; left -= 80) { await wheel(-Math.min(80, left)); await sleep(30); }
-    await sleep(1500);
-    report[`${tag}_big_gesture_leaves`] = await evaluate(onOne);
-    await wheel(100); await until(`document.body.dataset.page === 'two'`, 5000); await sleep(800);
-    await sleep(500);
-    await shot(`${tag}-3-demo-ready`);
-    if (tag === "desktop") report.contrast_ready = await contrast("#chips .chip, #run");
+    step(`${tag}: addresses follow the scroll`);
+    const h0 = await evaluate(`history.length`);
+    await evaluate(`scrollTo(0, ${runTop} + 200); true`); await sleep(400);
+    one.scroll_into_run = { path: await here(), title: await evaluate(`document.title`), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent ?? null`) };
+    await evaluate(`scrollTo(0, 0); true`); await sleep(400);
+    one.scroll_back_home = { path: await here(), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent ?? null`), history_unchanged: (await evaluate(`history.length`)) === h0 };
+    step(`${tag}: a header link, Back, the cue, the keyboard`);
+    await evaluate(`document.querySelector('.menu-panel a[href="/run.html"]').click(); true`);
+    one.header_link = { arrived: await settledAt(`Math.abs(scrollY - ${runTop}) < 2`), path: await here(), history_added: (await evaluate(`history.length`)) === h0 + 1, y: await evaluate(`Math.round(scrollY)`), run_top: await evaluate(runTop) };
+    await evaluate(`history.back(); true`);
+    one.back = { home: await settledAt(`scrollY < 2 && location.pathname === "/"`) };
+    await evaluate(`document.querySelector('[data-section="home"] a.cue').click(); true`);
+    one.cue = { arrived: await settledAt(`Math.abs(scrollY - ${runTop}) < 2`), path: await here(), y: await evaluate(`Math.round(scrollY)`), run_top: await evaluate(runTop) };
+    await evaluate(`history.back(); true`); await settledAt(`scrollY < 2 && location.pathname === "/"`); await sleep(300);
+    await evaluate(`document.querySelector('[data-section="home"] a.cue').focus(); true`); await sleep(200);
+    await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page);
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page);
+    one.enter_on_cue = await settledAt(`Math.abs(scrollY - ${runTop}) < 2 && location.pathname === "/run.html"`);
+    one.focus_moved = await evaluate(`document.activeElement?.dataset?.section ?? document.activeElement?.className ?? null`);
+    step(`${tag}: a direct link, later in the session`);
+    const t1 = Date.now();
+    await send("Page.navigate", { url: base + "/run.html" }, page); await sleep(200);
+    one.direct_run = { formed: await evaluate(`document.documentElement.dataset.loader === "formed"`) };
+    await until(`document.readyState === "complete" && !document.querySelector(".loader")`, 20000);
+    Object.assign(one.direct_run, { loader_ms: Date.now() - t1, at_run: await evaluate(`Math.abs(scrollY - ${runTop}) < 2`), title: await evaluate(`document.title`) });
+    await shot(`${tag}-2-run`);
+    // every address, as a direct link later in the session: the finished B, then its own section
+    const secTop = (n) => `Math.round(document.querySelector('[data-section="${n}"]').getBoundingClientRect().top + scrollY)`;
+    one.direct = {};
+    for (const [n, path] of [["docs", "/docs.html"], ["sancho", "/sancho.html"], ["eucalyptus", "/eucalyptus.html"]]) {
+      await go(path);
+      one.direct[n] = { at_section: await evaluate(`Math.abs(scrollY - ${secTop(n)}) < 2`), title: await evaluate(`document.title`), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent ?? null`) };
+    }
+    // the address follows the scroll through every section, adding no history
+    const h1 = await evaluate(`history.length`), seenPaths = [];
+    for (const n of ["home", "run", "docs", "sancho", "eucalyptus"]) { await evaluate(`scrollTo(0, ${secTop(n)} + 100); true`); await sleep(400); seenPaths.push(await here()); }
+    one.scroll_through = { paths: seenPaths, history_unchanged: (await evaluate(`history.length`)) === h1 };
+    // the header's Docs and Sancho links scroll in place; a link in the contents lands on its heading, its anchor kept
+    await evaluate(`scrollTo(0, 0); true`); await sleep(400);
+    await evaluate(`document.querySelector('.menu-panel a[href="/docs.html"]').click(); true`);
+    one.header_docs = await settledAt(`Math.abs(scrollY - ${secTop("docs")}) < 2 && location.pathname === "/docs.html"`);
+    await evaluate(`document.querySelector('.menu-panel a[href="/sancho.html"]').click(); true`);
+    one.header_sancho = await settledAt(`Math.abs(scrollY - ${secTop("sancho")}) < 2 && location.pathname === "/sancho.html"`);
+    await go("/docs.html");
+    const anchor = await evaluate(`(() => { const a = [...document.querySelectorAll('[data-section="docs"] .toc a')].at(-2); a.click(); return a.hash; })()`);
+    one.contents_link = { anchor, arrived: await settledAt(`(() => { const h = document.getElementById(decodeURIComponent(location.hash.slice(1))); return !!h && Math.abs(h.getBoundingClientRect().top - (parseFloat(getComputedStyle(h).scrollMarginTop) || 0)) < 3; })()`), url: await evaluate(`location.pathname + location.hash`) };
+    await shot(`${tag}-3-docs`);
   }
   await viewport(1440, 900);
-  await go("/");
-  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop)`); await sleep(500);
+  {
+    // after both passes: their history checks count entries, and Chrome keeps at most 50
+    const one = report.desktop_onepage, secTop = (n) => `Math.round(document.querySelector('[data-section="${n}"]').getBoundingClientRect().top + scrollY)`;
+    // out of the one page to the demo (from the run section), and Back: the page kept, on the section left from
+    step("desktop: the menu by keyboard and pointer");
+    {
+      await go("/");
+      // Enter carries its character: Chrome activates a button from it, not from the bare key code
+      const key = async (k, code, vk) => { for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: k, code, windowsVirtualKeyCode: vk, ...(type === "keyDown" && k === "Enter" ? { text: "\r" } : {}) }, page); await sleep(80); };
+      const state = () => evaluate(`({ expanded: document.querySelector('.menu-btn').getAttribute('aria-expanded'), hidden: document.querySelector('.menu-panel').hidden, focus: document.activeElement?.textContent?.trim() ?? null })`);
+      const m = one.menu = { roles: await evaluate(`({ button: document.querySelector('.menu-btn').tagName, controls: document.querySelector('.menu-btn').getAttribute('aria-controls') === document.querySelector('.menu-panel').id, nav_label: document.querySelector('.menu-panel').getAttribute('aria-label'), items: [...document.querySelectorAll('.menu-panel a')].map((a) => a.textContent), current: document.querySelector('.menu-panel a[aria-current]')?.textContent })`) };
+      await evaluate(`document.querySelector('.menu-btn').focus(); true`);
+      await key("Enter", "Enter", 13); m.enter_opens = await state();                 // focus on the current item (Quixote)
+      await key("ArrowDown", "ArrowDown", 40); m.arrow_down = await state();          // Run
+      await key("End", "End", 35); m.end = await state();                             // Contact
+      await key("Escape", "Escape", 27); m.escape = await state();                    // closed, focus on the button
+      await key("ArrowDown", "ArrowDown", 40); m.down_opens = await state();
+      await send("Input.dispatchMouseEvent", { type: "mousePressed", x: 900, y: 600, button: "left", clickCount: 1 }, page);
+      await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 900, y: 600, button: "left", clickCount: 1 }, page); await sleep(150);
+      m.outside_closes = await state();
+      const r = await evaluate(`(() => { const b = document.querySelector('.menu-btn').getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()`);
+      for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: r[0], y: r[1], button: "left", clickCount: 1 }, page);
+      await sleep(200); m.click_opens = await state();
+      const d = await evaluate(`(() => { const a = document.querySelector('.menu-panel a[href="/docs.html"]').getBoundingClientRect(); return [a.left + a.width / 2, a.top + a.height / 2]; })()`);
+      for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: d[0], y: d[1], button: "left", clickCount: 1 }, page);
+      m.choose_docs = { arrived: await settledAt(`Math.abs(scrollY - ${secTop("docs")}) < 2 && location.pathname === "/docs.html"`), ...(await state()), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent`) };
+      m.ok = m.roles.button === "BUTTON" && m.roles.controls && m.roles.items.join() === "Quixote,Run,Docs,Sancho,Eucalyptus,Contact" && m.roles.current === "Quixote"
+        && m.enter_opens.expanded === "true" && m.enter_opens.focus === "Quixote" && m.arrow_down.focus === "Run" && m.end.focus === "Contact"
+        && m.escape.hidden && m.escape.focus?.startsWith("Garden") && m.down_opens.focus === "Quixote" && m.outside_closes.hidden && !m.click_opens.hidden
+        && m.choose_docs.arrived && m.choose_docs.hidden && m.choose_docs.current === "Docs";
+    }
+    step("desktop: the hourglass's switch");
+    {
+      await go("/run.html");
+      const st = () => evaluate(`({ hg: document.querySelector('[data-section="run"]').dataset.hg ?? "dark", label: document.querySelector('.hg-mark')?.getAttribute('aria-label'), tag: document.querySelector('.hg-mark')?.tagName,
+        glass_focusable: document.querySelector('[data-section="run"] .glass')?.hasAttribute('tabindex') })`);
+      const h = one.hourglass = { start: await st() };
+      await evaluate(`document.querySelector('.hg-mark').click(); true`); await sleep(1400);
+      h.switched = await st();
+      await go("/demo.html"); await go("/run.html"); await sleep(400);
+      h.after_demo = await st();
+      await evaluate(`document.querySelector('.hg-mark').click(); true`); await sleep(1400);
+      h.back = await st();
+      h.ok = h.start.tag === "BUTTON" && !h.start.glass_focusable && h.start.hg === "dark" && h.start.label === "Switch to light mode"
+        && h.switched.hg === "light" && h.switched.label === "Switch to dark mode" && h.after_demo.hg === "light" && h.back.hg === "dark";
+    }
+    step("desktop: out to the demo and Back; Eucalyptus as the last section");
+    const outAndBack = async (from, name, link, to, anywhere = false) => {
+      await go(from);
+      await evaluate(`window.__stay = 1; true`);
+      await evaluate(`document.querySelector('${anywhere ? "" : `[data-section="${name}"] `}${link}').click(); true`);
+      const arrived = await settledAt(`location.pathname === "${to}" && document.readyState === "complete"`, 20000); await sleep(800);
+      const there = { arrived, theme: await evaluate(`document.documentElement.dataset.theme`), main: await evaluate(`[...document.querySelector("main").children].map((e) => e.textContent.trim()).join(" | ")`),
+        canvases: await evaluate(`document.querySelectorAll("canvas").length`), wake: await evaluate(`!!document.querySelector(".wake-layer")`) };
+      await evaluate(`history.back(); true`);
+      const back = await settledAt(`location.pathname === "${from}" && document.readyState === "complete" && !document.querySelector(".loader")`, 20000); await sleep(800);
+      return { ...there, back: { arrived: back, path: await here(), page_kept: await evaluate(`window.__stay === 1`), loader: await evaluate(`document.documentElement.dataset.loader ?? null`),
+        at_section: await evaluate(`Math.abs(scrollY - ${secTop(name)}) < 2`), title: await evaluate(`document.title`) } };
+    };
+    const demo = await outAndBack("/run.html", "run", 'a[href="/demo.html"]', "/demo.html");
+    // the Contact page, from the menu on home: out, then Back, as from the demo
+    const contact = await outAndBack("/", "home", '.menu-panel a[href="/contact.html"]', "/contact.html", true);
+    one.out_and_back = { demo, contact, same_return: demo.back.arrived && demo.back.at_section && demo.back.page_kept,
+      contact_same_return: contact.back.arrived && contact.back.at_section && contact.back.page_kept };
+    // Eucalyptus is the one page's last section: home's line scrolls to it in place, and it holds its two lines and
+    // the footer, in its theme, with no canvas
+    await go("/");
+    await evaluate(`document.querySelector('[data-section="home"] a[href="/eucalyptus.html"]').click(); true`);
+    one.eucalyptus_section = { arrived: await settledAt(`Math.abs(scrollY - ${secTop("eucalyptus")}) < 2 && location.pathname === "/eucalyptus.html"`, 6000),
+      ...(await evaluate(`(() => { const e = document.querySelector('[data-section="eucalyptus"]'); return { theme: e.dataset.theme, text: [...e.querySelectorAll('.euc-label, .euc-title')].map((x) => x.textContent).join(' | '),
+        canvases: e.querySelectorAll('canvas').length, footer: !!e.querySelector('.foot'), sancho_footer: !!document.querySelector('[data-section="sancho"] .foot'), current: document.querySelector('.menu-panel a[aria-current]')?.textContent }; })()`)) };
+    one.eucalyptus_section.ok = one.eucalyptus_section.arrived && one.eucalyptus_section.theme === "eucalyptus" && one.eucalyptus_section.text === "Eucalyptus | Coming soon"
+      && one.eucalyptus_section.canvases === 0 && one.eucalyptus_section.footer && !one.eucalyptus_section.sancho_footer && one.eucalyptus_section.current === "Eucalyptus";
+  }
+  // the demo (DESIGN.md 3, demo): the three searches as rows and one Start; the stages told in the status lines; the
+  // run's tree growing in search order, then the pink path; the bed for the repeated searches; the verdict; inside the run
+  await go("/demo.html"); await sleep(500);
+  await until(`document.querySelectorAll('.dm-row').length >= 3`, 10000);
+  report.contrast_ready = await contrast(".dm-row .t, .dm-row .a, .dm-intro, .dm-start, #say");
   const idx = { nothing: 0, planted: 1, restart: 2 }[example];
-  await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
-  await evaluate(`document.querySelectorAll('#chips .chip')[${idx}].click(); document.getElementById('run').click(); true`);
+  report.demo_idle = await evaluate(`({ rows: [...document.querySelectorAll('.dm-row .n')].map((n) => n.textContent).join(), start: document.getElementById('start').textContent,
+    say: document.getElementById('say').textContent, tree_clickable: document.getElementById('tree').classList.contains('ready'), no_city: !document.getElementById('city') && !document.getElementById('wood2') })`);
+  await evaluate(`document.querySelectorAll('.dm-row')[${idx}].click(); document.getElementById('start').click(); true`);
   const t0 = Date.now();
-  report.timings.gate_loaded_and_search_started_ms = await until(`!!document.querySelector('#spot .note-line:not([hidden])') && /of /.test(document.querySelector('#spot .note-line').textContent)`, 120000);
-  await sleep(1500); await shot("4-demo-search");
-  report.search = await evaluate(`({ tree_stems: document.querySelectorAll('#garden .stem').length, bed_drawn: (() => { const c = document.querySelector('.bed-cv'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })() })`);
-  await until(`/^replay/.test(document.querySelector('#spot .note-line')?.textContent ?? '')`, 120000); await sleep(1200); await shot("5-demo-null");
-  await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000);
+  const stages = [];
+  const watch = setInterval(async () => { try { const s = await evaluate(`document.getElementById('say').textContent`); if (stages[stages.length - 1] !== s) stages.push(s); } catch {} }, 150);
+  report.timings.gate_loaded_and_search_started_ms = await until(`/^Move \\d+ of \\d+ · rule [1-9]/.test(document.getElementById('count').textContent)`, 120000);
+  await sleep(800); await shot("4-demo-search");
+  report.search = await evaluate(`({ running: document.getElementById('start').disabled && document.getElementById('start').textContent === 'Running', rows_disabled: [...document.querySelectorAll('.dm-row')].every((b) => b.disabled),
+    stems: document.querySelectorAll('#tree .stems path').length, twigs: document.querySelectorAll('#tree .twigs path').length, bloom: !!document.querySelector('#tree .bloom')?.getAttribute('d') })`);
+  await until(`/repeats the same search/.test(document.getElementById('say').textContent)`, 120000); await sleep(1500); await shot("5-demo-null");
+  report.null_stage = await evaluate(`({ pink_on: document.querySelector('#tree .pinkpath').classList.contains('on'), bed_drawn: (() => { const c = document.getElementById('bed'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })() })`);
+  await until(`!document.getElementById('verdict').hidden && !document.getElementById('start').disabled`, 180000);
+  clearInterval(watch);
   report.timings.click_to_verdict_ms = Date.now() - t0;
-  await sleep(1600); await shot("6-demo-verdict");
-  report.verdict = await evaluate(`({ word: document.getElementById('verdict-word').textContent, labels: [...document.querySelectorAll('#spot .note:not([hidden])')].map((d) => d.textContent),
-    blossoms_open: document.querySelectorAll('#garden .blossom.open').length, blossoms: document.querySelectorAll('#garden .blossom').length,
-    twigs: document.querySelectorAll('#garden .real .twig').length })`);
-  report.contrast_verdict = await contrast("#spot .note, #verdict-word, #chips .chip, #run");
-  // a background tree shakes and sheds; a cable strikes (vibration and a bolt on the effects canvas)
-  report.shake = await evaluate(`(() => { const g = document.querySelector('#wood2 .real .stem'); g.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    return document.querySelectorAll('#wood2 [data-stem="' + g.dataset.stem + '"]')[0].getAnimations().length > 0; })()`);
-  await evaluate(`document.querySelector('#city .cable-hit').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 500, clientY: 100 })); true`);
-  await sleep(150);
-  report.bolt_drawn = await evaluate(`(() => { const c = document.getElementById('fx'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })()`);
-  await sleep(1200);
-  // the cursor as wind: a fast swipe across the bed's ground (nothing is spawned; pieces only move)
-  for (let x = 200; x <= 1240; x += 40) { await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y: 780 }, page); await sleep(8); }
-  await sleep(300); await shot("6b-wind");
-  // into the run: the ring turns the scene blue from the tree out, then the zoom; out with Esc (via
-  // history), the colour draining back; then in by the bed and out with Back
-  report.zoom_profile = await frameProfile("enter-run", async () => { await evaluate(`document.querySelector('#garden .real .stem').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`); }, 1500);
-  await until(`!document.getElementById('inside').hidden && !document.getElementById('scene').getAnimations().length`, 6000);
-  report.zoom_is = await evaluate(`({ scene_transform: getComputedStyle(document.getElementById('scene')).transform, motion_ms: getComputedStyle(document.getElementById('demo')).getPropertyValue('--T'),
-    front_last_ms: Math.max(...[...document.querySelectorAll('#demo [data-tide]')].map((e) => parseFloat(e.style.getPropertyValue('--d')) || 0)), ring_drawn: false })`);
-  await sleep(600); await shot("7-inside-run");
-  report.inside = await evaluate(`({ in_run: document.getElementById('demo').classList.contains('in-run'), title: document.getElementById('run-title')?.textContent,
-    moves: document.querySelectorAll('#inside li').length, focus_in: document.activeElement?.id === 'run-title', hash: location.hash,
-    tree_blue: getComputedStyle(document.querySelector('#garden .real .twig')).stroke, wood_blue: getComputedStyle(document.querySelector('#wood2 .real .twig')).stroke,
-    cable_pink: getComputedStyle(document.querySelector('#city .cable .lit')).stroke })`);
-  // a run with several trees: the far left first and lit, the arrow keys and a click on a tree move between them
-  report.trees = await evaluate(`(async () => {
-    const where = () => document.querySelector('#inside .where').textContent, lit = () => document.querySelectorAll('#garden .real [data-stem]:not(.dimmed)').length;
-    const nav = !document.querySelector('#inside .trees').hidden, out = { nav, first: nav ? where() : null, lit_first: lit() };
-    if (!nav) return out;
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); out.after_right = where();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); out.wraps_left = where();
-    document.querySelector('#garden .real .stem[data-stem="4"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 100));
-    out.after_click = where(); out.still_open = !document.getElementById('inside').hidden; out.lit_one = lit();
-    return out; })()`);
-  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
-  await until(`document.getElementById('inside').hidden && !document.getElementById('demo').classList.contains('tiding') && !document.body.classList.contains('inside-open')`, 8000); await sleep(200);
-  report.trees.undimmed_after = await evaluate(`document.querySelectorAll('#garden .dimmed').length === 0`);
-  report.inside.closed_by_esc = await evaluate(`document.body.dataset.page === 'two' && location.hash === '' && !document.getElementById('demo').classList.contains('in-run')`);
-  await evaluate(`document.getElementById('bed').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
-  await until(`!document.getElementById('inside').hidden && !document.getElementById('scene').getAnimations().length`, 8000); await sleep(400);
-  await evaluate(`history.back(); true`);
-  await until(`document.getElementById('inside').hidden && !document.body.classList.contains('inside-open')`, 8000);
-  report.inside.closed_by_back = true;
+  await sleep(800); await shot("6-demo-verdict");
+  report.verdict = await evaluate(`({ word: document.getElementById('v-word').textContent, nums: document.getElementById('v-nums').textContent, row_tag: document.querySelectorAll('.dm-row .r')[${idx}].textContent,
+    start: document.getElementById('start').textContent, tree_clickable: document.getElementById('tree').classList.contains('ready') && document.getElementById('tree').getAttribute('tabindex') === '0' })`);
+  report.verdict.stages = stages;
+  report.contrast_verdict = await contrast("#say, #v-word, #v-nums, .dm-row .t");
+  // inside the run: a click on the tree opens the panel beside it (never over it), focus on its title; the cursor's tail
+  // still draws over the tree; Escape closes and focus returns to the tree; Enter on the tree opens it again
+  await evaluate(`document.getElementById('tree').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
+  await until(`!document.getElementById('inside').hidden`, 4000); await sleep(400); await shot("7-inside-run");
+  report.inside = await evaluate(`(() => { const p = document.getElementById('inside').getBoundingClientRect(), t = document.getElementById('tree').getBoundingClientRect(), b = document.getElementById('in-body');
+    return { title: document.getElementById('in-h').textContent, focus_in: document.activeElement?.id === 'in-h', moves: document.querySelectorAll('#inside li').length,
+      summary: document.querySelector('#inside .sum')?.textContent, beside: p.right <= t.left + 1, scrolls: getComputedStyle(b).overflowY === 'auto', text_hidden: getComputedStyle(document.getElementById('dm-text')).visibility === 'hidden' }; })()`);
+  { const r = await evaluate(`(() => { const b = document.getElementById('tree').getBoundingClientRect(); return [b.left + b.width * 0.3, b.top + b.height * 0.5, b.width]; })()`);
+    for (let k = 0; k < 30; k++) { await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: r[0] + k * r[2] * 0.015, y: r[1] + 25 * Math.sin(k / 4) }, page); await sleep(16); }
+    await sleep(60);
+    report.inside.tail_draws = await evaluate(`!!document.querySelector('canvas.wake-layer') && getComputedStyle(document.querySelector('canvas.wake-layer')).visibility !== 'hidden'`); }
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`); await sleep(200);
+  report.inside.closed_by_esc = await evaluate(`document.getElementById('inside').hidden && document.activeElement?.id === 'tree' && getComputedStyle(document.getElementById('dm-text')).visibility === 'visible'`);
+  await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" }, page);
+  await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page); await sleep(300);
+  report.inside.opened_by_enter = await evaluate(`!document.getElementById('inside').hidden`);
+  await evaluate(`document.getElementById('in-close').click(); true`); await sleep(200);
   await evaluate(`window.scrollTo(0, document.getElementById('record').offsetTop); true`); await sleep(400); await shot("8-record");
   await go(`/result.html?ex=${example}`);
   await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(1600);
   await shot("9-result", true);
-  for (const p of ["/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html"]) { await go(p); }
+  // the menu's pill on every page: its ground (alpha 1 is the page's own ground; docs and Sancho their glass and sheet,
+  // with what lies beneath blurred), its ink, and no full-width bar
+  report.menu_pill = {};
+  for (const p of ["/", "/demo.html", "/eucalyptus.html", "/contact.html", "/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/share.html", `/result.html?ex=${example}`]) {
+    await go(p);
+    report.menu_pill[p] = await evaluate(`(() => { const b = document.querySelector('.menu-btn'), cs = getComputedStyle(b), t = document.querySelector('.top').getBoundingClientRect();
+      return { ground: cs.backgroundColor, ink: cs.color, blur: cs.backdropFilter !== 'none', width: Math.round(t.width), no_bar: t.width < innerWidth / 3 }; })()`);
+  }
   await go("/nope.html");                                    // on purpose: the 404 page itself, under the CSP
   report.not_found_page = await evaluate(`document.title`);
-  report.author = await evaluate(`({ name: document.querySelector('.who span.by')?.textContent, mail: document.querySelector('.who a[href^="mailto:"]')?.getAttribute('href'), linkedin: document.querySelector('.who a[href*="linkedin.com"]')?.href, safe: document.querySelector('.who a[href*="linkedin.com"]')?.rel })`);
-  report.paper_link = await evaluate(`[...document.querySelectorAll('a')].filter(a => a.textContent === 'Paper').every(a => a.href.startsWith('https://papers.ssrn.com/') && a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer'))`);
+  // the Contact page (contact.html): the loading screen in full every time (not formed, even later in a session that has
+  // seen it: read as the page loads, before the screen goes), the headline and the three lines, the links (mailto,
+  // LinkedIn in a new tab, the résumé downloading and 'Open in browser' in a new tab), no labels, Contact current in the
+  // menu; one screen at 1440x900 and 1280x720; the blue ground and white text; the fan behind it complete and still
+  // (two frames apart, nothing changes); white text at 4.5:1 or more behind its letters, at rest and with the cursor's
+  // tail crossing it
+  await go("/privacy.html"); await evaluate(`sessionStorage.setItem('qx-loader-seen', '1'); true`);
+  {
+    const loaded = new Promise((r) => { const f = (ev) => { const m = JSON.parse(ev.data); if (m.method === "Page.domContentEventFired" && m.sessionId === page) { ws.removeEventListener("message", f); r(); } }; ws.addEventListener("message", f); });
+    await send("Page.enable", {}, page); await send("Page.navigate", { url: base + "/contact.html" }, page); await loaded;
+    const early = await evaluate(`(() => { const l = document.querySelector('.loader'); return { loader_present: !!l, loader_full: !!l && !l.classList.contains('formed') && document.documentElement.dataset.loader === undefined }; })()`);
+    report.contact = { ...early, revealed_ms: await until(`!document.querySelector('.loader')`, 12000) };
+  }
+  Object.assign(report.contact, await evaluate(`(() => { const ext = (a) => a?.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer');
+    const li = [...document.querySelectorAll('.ct-list li')], a = (i) => [...(li[i]?.querySelectorAll('a') ?? [])];
+    return { headline: document.querySelector('.ct-h').textContent, lines: li.map((l) => [...l.querySelectorAll('a')].map((x) => x.textContent).join(' | ')),
+      labels: document.querySelectorAll('.ct dt, .ct-row').length,
+      email_is_mailto: a(0)[0]?.getAttribute('href') === 'mailto:' + a(0)[0]?.textContent, email_same_tab: !a(0)[0]?.target,
+      linkedin: a(1)[0]?.href, linkedin_new_tab: ext(a(1)[0]),
+      resume: a(2).map((x) => ({ text: x.textContent, href: x.getAttribute('href'), download: x.hasAttribute('download'), new_tab: x.target === '_blank' })),
+      current: document.querySelector('.menu-panel a[aria-current]')?.textContent, ground: getComputedStyle(document.body).backgroundColor, ink: getComputedStyle(document.querySelector('.ct-h')).color,
+      pill: getComputedStyle(document.querySelector('.menu-btn')).backgroundColor, footer_ink: getComputedStyle(document.querySelector('.foot')).color,
+      fan: !!document.querySelector('canvas.fan'), main_text: document.querySelector('main').innerText.replace(/\\s+/g, ' ').trim() }; })()`));
+  report.contact.one_screen = {};
+  for (const [w, h] of [[1440, 900], [1280, 720]]) {
+    await viewport(w, h); await sleep(500);
+    report.contact.one_screen[`${w}x${h}`] = await evaluate(`({ scroll: document.documentElement.scrollHeight - innerHeight, footer_in: document.querySelector('.foot').getBoundingClientRect().bottom <= innerHeight + 0.5 })`);
+    await shot(`contact-${w}x${h}`);
+  }
+  await viewport(1440, 900); await sleep(600);
+  // still: two screenshots a second apart with no input are the same
+  { const s1 = (await send("Page.captureScreenshot", { format: "png" }, page)).data; await sleep(1000); const s2 = (await send("Page.captureScreenshot", { format: "png" }, page)).data; report.contact.fan_still = s1 === s2; }
+  report.contact.contrast_still = await glyphContrast(".ct-h, .ct-list a, .foot > span, .foot a", 1);
+  const across = async (k) => { for (let i = 0; i <= 30; i++) { await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 60 + i * 26, y: 250 + k * 140 + Math.sin(i / 4) * 60 }, page); await sleep(16); } await sleep(80); };
+  report.contact.contrast_tail = await glyphContrast(".ct-h, .ct-list a", 3, across);
+  // the footer on every page with one: the line on the grid's left edge, Privacy, Terms and Source on the right, nothing else;
+  // the paper only from home's line and the docs section, never from the menu or a footer
+  report.footer = {};
+  for (const p of ["/eucalyptus.html", "/demo.html", "/contact.html", "/privacy.html", "/terms.html", "/share.html", `/result.html?ex=${example}`]) {
+    await go(p);
+    report.footer[p] = await evaluate(`(() => { const f = document.querySelector('.foot'); if (!f) return null; const t = f.querySelector(':scope > span').getBoundingClientRect(), n = f.querySelector('nav').getBoundingClientRect(), fr = f.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(f).paddingLeft);
+      return { links: [...f.querySelectorAll('a')].map((a) => a.textContent).join(), line_on_edge: Math.abs(t.left - fr.left - pad) < 1, links_right: Math.abs(fr.right - pad - n.right) < 1 }; })()`);
+  }
+  await go("/");
+  report.paper_link = await evaluate(`(() => { const p = [...document.querySelectorAll('a[href^="https://papers.ssrn.com/"]')];
+    return { home: p.some((a) => a.closest('[data-section="home"]')), docs: p.some((a) => a.closest('[data-section="docs"]')), in_menu_or_footer: p.some((a) => a.closest('.top, .foot')),
+      safe: p.every((a) => a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer')) }; })()`);
+  // the viewer (src/viewerstrip.ts): a layer over the one page, entered only from the Sancho section's control; the only
+  // link to /viewer.html on the site is that control, and the menu has none. Open by click: /viewer.html and its title,
+  // one history entry, the page beneath inert and its scroll kept; the arrows and the wheel move panels; scrolling back
+  // from the first panel, Escape, Close and Back leave, focus back on the control; Forward opens it again; a direct link
+  // opens it behind the loading screen, and Close then leaves /sancho.html in the address.
+  await viewport(1440, 900);
+  await go("/sancho.html");
+  const vstate = () => evaluate(`({ path: location.pathname, title: document.title, open: !document.getElementById('viewer').hidden, y: Math.round(scrollY),
+    inert: document.getElementById('main').inert, focus_on_control: document.activeElement === document.querySelector('[data-open-viewer]'), count: document.getElementById('v-count').textContent })`);
+  const vkey = async (k, vk) => { for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: k, code: k, windowsVirtualKeyCode: vk }, page); };
+  report.viewer_links = await evaluate(`({ to_viewer: [...document.querySelectorAll('a[href$="viewer.html"]')].map((a) => (a.closest('[data-section]')?.dataset.section ?? (a.closest('.top') ? 'menu' : 'elsewhere')) + ':' + a.textContent.trim()),
+    in_menu: [...document.querySelectorAll('.menu-panel a')].some((a) => /viewer/i.test(a.href + a.textContent)) })`);
+  await evaluate(`document.querySelector('[data-open-viewer]').scrollIntoView({ block: 'center' }); true`); await sleep(400);
+  const y0 = await evaluate("Math.round(scrollY)");
+  await evaluate(`document.querySelector('[data-open-viewer]').click(); true`); await sleep(1300);
+  report.viewer_layer = { opened: await vstate(), own_entry: await evaluate("history.state?.viewer === 1"), y0 };   // (history.length stops growing at 50 in a long run)
+  // a burst of wheel events back from the first panel, all before Back arrives: it closes on Sancho, never further
+  await evaluate(`(() => { const v = document.getElementById('viewer'); for (let i = 0; i < 10; i++) v.dispatchEvent(new WheelEvent('wheel', { deltaY: -60, bubbles: true })); return true; })()`);
+  await sleep(1500);
+  report.viewer_layer.burst_out = await vstate();
+  await evaluate(`document.querySelector('[data-open-viewer]').click(); true`); await sleep(1300);
+  await shot("viewer-open");
+  await vkey("ArrowRight", 39); await sleep(700);
+  report.viewer_layer.arrow_without_file = (await vstate()).count;
+  await vkey("Escape", 27); await sleep(1200);
+  report.viewer_layer.escape = await vstate();
+  await evaluate("history.forward(); true"); await sleep(1300);
+  report.viewer_layer.forward = await vstate();
+  await evaluate("history.back(); true"); await sleep(1300);
+  report.viewer_layer.back = await vstate();
+  await evaluate(`document.querySelector('[data-open-viewer]').click(); true`); await sleep(1300);
+  for (let i = 0; i < 12; i++) { await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: 720, y: 450, deltaX: 0, deltaY: -40 }, page); await sleep(17); }
+  await sleep(1300);
+  report.viewer_layer.scroll_up_out = await vstate();
+  await go("/viewer.html");
+  report.viewer_layer.direct = await vstate();
+  await evaluate(`document.getElementById('v-close').click(); true`); await sleep(1300);
+  report.viewer_layer.direct_close = await vstate();
   await go("/docs.html"); await shot("10-docs");
-  await viewport(390, 844); await go("/"); await shot("11-phone-overview");
-  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop)`); await sleep(900); await shot("12-phone-demo");
+  await viewport(390, 844); await go("/"); await shot("11-phone-home");
+  await go("/demo.html"); await sleep(900); await shot("12-phone-demo");
   report.phone_overflow = await evaluate(`document.documentElement.scrollWidth > innerWidth`);
   // reduced motion: still pieces, the run entered and left as a cross-fade, a strike without travel
   await viewport(1440, 900);
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, page);
-  await go("/");
-  await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); document.body.dataset.page = 'two'; true`); await sleep(500);
-  await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
-  await evaluate(`document.getElementById('run').click(); true`);
-  await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(400);
-  await evaluate(`document.querySelector('#garden .real .stem').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
-  await until(`!document.getElementById('inside').hidden && document.getElementById('demo').classList.contains('in-run')`, 4000); await sleep(400);
+  await go("/demo.html"); await sleep(500);
+  await until(`document.querySelectorAll('.dm-row').length >= 3`, 10000);
+  await evaluate(`document.getElementById('start').click(); true`);
+  await until(`!document.getElementById('verdict').hidden && !document.getElementById('start').disabled`, 180000); await sleep(400);
+  await evaluate(`document.getElementById('tree').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
+  await until(`!document.getElementById('inside').hidden`, 4000); await sleep(400);
   await shot("13-reduced-inside");
+  report.reduced = await evaluate(`({ tree_whole: document.querySelectorAll('#tree .twigs path').length > 0, running: document.getAnimations().filter((a) => a.playState === 'running').length })`);
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
-  await until(`document.getElementById('inside').hidden && !document.body.classList.contains('inside-open')`, 4000);
-  report.reduced = await evaluate(`({ out: !document.getElementById('demo').classList.contains('in-run'), scene: getComputedStyle(document.getElementById('scene')).transform })`);
+  await until(`document.getElementById('inside').hidden`, 4000);
+  // reduced motion on the one page: a link to a section jumps there at once
+  await go("/"); await evaluate(`document.querySelector('.menu-panel a[href="/run.html"]').click(); true`); await sleep(120);
+  report.reduced.onepage_jump = await evaluate(`Math.abs(scrollY - Math.round(document.querySelector('[data-section="run"]').getBoundingClientRect().top + scrollY)) < 2`);
+
+  report.reduced.still = {};
+  for (const p of ["/", "/run.html", "/docs.html", "/sancho.html", "/demo.html", "/eucalyptus.html", "/viewer.html"]) {
+    await go(p); await sleep(600);
+    report.reduced.still[p] = await evaluate(`document.getAnimations().filter((a) => a.playState === 'running').length`);
+    await shot(`reduced-${p.replace(/\W+/g, "") || "home"}`);
+  }
   await send("Emulation.setEmulatedMedia", { features: [] }, page);
 } catch (e) {
   report.error = String(e.message ?? e);

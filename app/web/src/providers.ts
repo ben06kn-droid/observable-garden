@@ -30,7 +30,7 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
     effortParam: "output_config.effort", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "medium",
     keyPlaceholder: "sk-ant-…", keyRequired: true,
     models: [
-      { id: "claude-fable-5-1", name: "Claude Fable 5.1", price: [10, 50] },
+      { id: "claude-fable-5-2", name: "Claude Fable 5.2", price: [8, 40] },
       { id: "claude-opus-5-5", name: "Claude Opus 5.5", price: [4, 20] },
       { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5", price: [2, 10] },
       { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", price: [0.1, 0.5] },
@@ -64,7 +64,7 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
 export const OPENROUTER_MODELS = "https://openrouter.ai/api/v1/models";
 
 /** Anthropic's server-side fallbacks ("default") are offered on these models only. */
-export const FALLBACK_MODELS = new Set(["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5"]);
+export const FALLBACK_MODELS = new Set(["claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5"]);
 
 /** A local server's URL, if it is one the content security policy lets the page reach: http on
  *  localhost or 127.0.0.1, any port (connect-src allows exactly http://localhost:* and http://127.0.0.1:*). Returns the chat-completions endpoint and the host, or a reason. */

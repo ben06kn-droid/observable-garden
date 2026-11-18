@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+import { LOADER } from "./src/loader-mark";
 
 // A static export. Every page is its own HTML entry; Vite emits external module scripts only
 // (no inline scripts, which the content security policy forbids), and nothing is inlined as a
@@ -8,9 +9,37 @@ import { defineConfig } from "vite";
 // the pinned Pyodide release: its files are served from /pyodide/<version>/
 const PYODIDE = JSON.parse(readFileSync(resolve(import.meta.dirname, "public/pyodide/MANIFEST.json"), "utf8")).pyodide;
 
-const pages = ["index", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404"];
+const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "eucalyptus", "contact"];   // eucalyptus.html and viewer.html: shells of the one page
+
+// The menu (src/menu.html) is written into every page at its <!-- menu --> marker (the one page's header.html has one).
+// The one-page site: home, run, docs and Sancho are sections of one document, built once behind the
+// loading screen and kept alive. Every address of it (/, /run.html) is the same document with its own title,
+// description and starting section (data-start; also /docs.html, /sancho.html); this writes in what they share, in order: the loading screen
+// (on screen from the first frame), the header, one backdrop per section (src/onepage/boot.ts crossfades them by
+// scroll position) and the sections, from src/onepage/*.html.
+const SECTIONS = ["home", "run", "docs", "sancho", "eucalyptus"];
+const part = (n: string) => readFileSync(resolve(import.meta.dirname, "src/onepage", `${n}.html`), "utf8");
+function onepage(): Plugin {
+  return {
+    name: "onepage",
+    transformIndexHtml: { order: "pre", handler(html) {
+      html = html.replace("<!-- menu -->", () => readFileSync(resolve(import.meta.dirname, "src/menu.html"), "utf8"));
+      // a separate page that opens behind the loading screen (contact.html) has it written in at its marker, so it is on
+      // screen from the first frame
+      html = html.replace("<!-- loader -->", () => LOADER);
+      const at = html.indexOf("<!-- onepage");
+      if (at < 0) return html;
+      const end = html.indexOf("-->", at) + 3;
+      const backdrops = `<div class="backdrops" aria-hidden="true">${SECTIONS.map((n) => `<div class="backdrop" data-for="${n}" data-theme="${n}"${n === "docs" || n === "sancho" ? ` data-page="${n}"` : ""}></div>`).join("")}</div>`;
+      // the viewer: a layer over the sections, outside <main>, opened from the Sancho section (src/onepage/viewer.html)
+      const body = `${LOADER}\n${part("header")}${backdrops}\n<main id="main">\n${SECTIONS.map(part).join("")}</main>\n${part("viewer")}`;
+      return (html.slice(0, at) + body + html.slice(end)).replace("<!-- menu -->", () => readFileSync(resolve(import.meta.dirname, "src/menu.html"), "utf8"));
+    } },
+  };
+}
 
 export default defineConfig({
+  plugins: [onepage()],
   base: "/",
   define: { __PYODIDE_VERSION__: JSON.stringify(PYODIDE) },
   build: {

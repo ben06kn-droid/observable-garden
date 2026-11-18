@@ -23,7 +23,7 @@ export function makeNotes(spot: HTMLElement, section: HTMLElement, flowers: () =
   const sub = h("p", "note note-sub", null, spot), bar = h("p", "note note-bar", null, spot), big = h("p", "note-word", null, spot);
   const line = h("p", "note note-line", null, spot);
   const invite = h("p", "note note-invite", "click a tree to enter the search", spot);
-  line.setAttribute("aria-live", "polite"); big.id = "verdict-word";
+  line.setAttribute("aria-live", "polite"); if (!document.getElementById("verdict-word")) big.id = "verdict-word";   // the first drawing on a page keeps the id
   for (const e of [tick, sub, bar, big, line, invite]) { e.dataset.tide = ""; e.hidden = true; }
   let entered = false;
   let g: GardenHandle | null = null, mode: "off" | "search" | "verdict" | "refused" = "off", step = 0, barValue: number | null = null, subValue: number | null = null;
@@ -36,7 +36,7 @@ export function makeNotes(spot: HTMLElement, section: HTMLElement, flowers: () =
   // what a label must not sit on: the run's branches and twigs, the flowers' heads, and the other labels
   function obstacles(): Box[] {
     const r = sp(), out: Box[] = [];
-    for (const e of spot.querySelectorAll("#garden .real .twig, #garden .real .trunk, #garden .real .bud")) {
+    for (const e of spot.querySelectorAll("svg .real .twig, svg .real .trunk, svg .real .bud")) {
       const b = e.getBoundingClientRect(); out.push({ x: b.left - r.left, y: b.top - r.top, w: b.width, h: b.height });
     }
     const s = section.getBoundingClientRect();

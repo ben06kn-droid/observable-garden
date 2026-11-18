@@ -1,6 +1,8 @@
 // A shared result: the verdict and the hashes, read from the URL's fragment (which the browser never
 // sends to a server), inflated and shown as plain type. It is unverified, and the page says so: it
 // shows what the link claims and how to check it with the log, the panel, the class and the CLI.
+import "../common";              // the shared stylesheet first, so the theme wins ties
+import "../styles/docs.css";
 import { h, MEANING, word } from "../common";
 
 const body = document.getElementById("sh-body") as HTMLElement;

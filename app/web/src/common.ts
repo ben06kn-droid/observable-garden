@@ -1,7 +1,8 @@
 // What every page shares: the fonts and styles, the header's colour over paper or night, and the
 // two sentences on result pages.
-import "./styles.css";
+import "./styles/base.css";
 import { inject } from "@vercel/analytics";
+import "./menu";                 // the menu, on the pages that have one (src/menu.html)
 
 // Vercel Web Analytics: page views only, no cookies. The script and its beacon are this site's own
 // /_vercel/insights/ route, so the CSP's script-src and connect-src stay 'self'. The mode is fixed
@@ -10,14 +11,6 @@ import { inject } from "@vercel/analytics";
 inject({ mode: "production" });
 
 export const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-export function headerOverPaper(paper: Element | null) {
-  const top = document.querySelector(".top");
-  if (!top || !paper) return;
-  const io = new IntersectionObserver(([e]) => top.classList.toggle("on-paper", e.isIntersecting && e.intersectionRatio > 0.06),
-                                      { threshold: [0, 0.06, 0.5, 1] });
-  io.observe(paper);
-}
 
 export const WORD: Record<string, string> = { CERTIFIED: "PASS" };
 export const MEANING: Record<string, string> = {
@@ -29,12 +22,6 @@ export const MEANING: Record<string, string> = {
   DEPENDS_ON_JUDGMENT: "the search changed a declared rule mid-run; the decision after the change cannot be priced.",
 };
 export const word = (status: string) => WORD[status] ?? status;
-
-/** L_0.90, which the audit reports only inside its confidence reason line. */
-export function lowerBound(reasons: string[]): number | null {
-  const m = /L_0\.90 ([+-]?\d+\.\d+)/.exec(reasons.join(" "));
-  return m ? Number(m[1]) : null;
-}
 
 export function countUp(node: HTMLElement, to: number, decimals: number, sign = false) {
   const fmt = (x: number) => (sign && x > 0 ? "+" : "") + x.toFixed(decimals);

@@ -1,10 +1,16 @@
-// The Sancho page: the lever editor. A form over sancho/config.json's levers (src/levers.ts); every
+// The Sancho section of the one-page site (src/onepage/): the lever editor. A form over sancho/config.json's levers (src/levers.ts); every
 // change rewrites the config the page would download and its hash, the one `quixote sancho` records.
 // It runs entirely in the page: nothing is sent or stored.
-import { h } from "../common";
+import "../common";              // the shared stylesheet first, so the theme wins ties
+import "../styles/docs.css";     // the docs page's structure: the sheet, the panels, the tables
+import "../styles/sancho.css";
+import { onBackdrop, section, task } from "../onepage/boot";
+import { h, reduceMotion } from "../common";
+import { Dusk } from "../dusk";
 import { INSTALL } from "../install";
 import { BLOCKS, configSha256, DEFAULT, fileText, firstScored, LEVERS, MEMORY_ROWS, numberList, problems, REGIMES, type Values } from "../levers";
 
+const root = section("sancho");   // everything here is the Sancho section's (the docs section has its own .docs-text, .sheet)
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>("levers");
 const clone = (v: Values): Values => JSON.parse(JSON.stringify(v));
@@ -112,9 +118,9 @@ async function update() {
   $("cfg-cmd").textContent = `${INSTALL}\nquixote sancho --panel my_panel.npz --config ${CONFIG_FILE} --out sancho_out/`;
   const first = firstScored(current);
   $("cfg-rows").replaceChildren(registered
-    ? `Sancho's first scored row is ${first} after the embargo, so it needs about three years of daily rows and refuses the 600-row bundled panel by design; the `
-    : `With these levers Sancho's first scored row is ${first} after the embargo (for a panel whose delay is 1), so the panel needs more rows than that; the `,
-    Object.assign(h("a", null, "Docs page"), { href: "/docs.html#panel" }), " shows the panel format.");
+    ? `Sancho's first scored row is ${first} after the embargo, so it needs about three years of daily rows. It refuses the 600-row sample panel by design. The `
+    : `With these levers, Sancho's first scored row is ${first} after the embargo (for a panel whose delay is 1), so the panel needs more rows than that. The `,
+    Object.assign(h("a", null, "Docs section"), { href: "/docs.html#panel" }), " shows the panel format.");
 }
 
 $("cfg-download").addEventListener("click", () => {
@@ -135,3 +141,60 @@ form.addEventListener("submit", (e) => e.preventDefault());
   build();
   await update();
 })();
+
+// ---- the code panel: the command on a flat panel with a copy button, as on the docs page (the command itself is
+// rewritten by update(), so the button copies whatever it says now)
+{
+  const pre = $<HTMLPreElement>("cfg-cmd");
+  const panel = document.createElement("div"); panel.className = "glass code";
+  pre.replaceWith(panel); panel.append(pre);
+  const b = document.createElement("button"); b.type = "button"; b.className = "copy"; b.textContent = "Copy";
+  b.setAttribute("aria-label", "Copy this command");
+  let t = 0;
+  b.addEventListener("click", async () => {
+    const done = (msg: string) => { b.textContent = msg; window.clearTimeout(t); t = window.setTimeout(() => { b.textContent = "Copy"; }, 1400); };
+    try { await navigator.clipboard.writeText(pre.textContent ?? ""); done("Copied"); }
+    catch { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s?.removeAllRanges(); s?.addRange(r); done("Selected"); }
+  });
+  panel.append(b);
+}
+// ---- the results table: its roles set explicitly, so a phone's card layout keeps it a table to a reader; each cell
+// carries its column's name for that layout
+for (const t of root.querySelectorAll<HTMLTableElement>(".docs-text table")) {
+  t.setAttribute("role", "table");
+  const names = [...t.querySelectorAll("thead th")].map((th) => th.textContent ?? "");
+  for (const tr of t.querySelectorAll("tr")) {
+    tr.setAttribute("role", "row");
+    [...tr.children].forEach((c, i) => {
+      c.setAttribute("role", c.tagName === "TH" ? (tr.parentElement?.tagName === "THEAD" ? "columnheader" : "rowheader") : "cell");
+      if (c.tagName === "TD" && names[i]) c.setAttribute("data-label", names[i]);
+    });
+  }
+}
+
+// ---- the dusk behind the page (src/dusk.ts); on a phone a band at the top, the contents folded
+const phone = matchMedia("(max-width: 812px)");
+const contents = root.querySelector<HTMLDetailsElement>(".contents details");
+const fold = () => { if (contents) contents.open = !phone.matches; };
+fold(); phone.addEventListener("change", fold);
+const sheet = root.querySelector<HTMLElement>(".sheet")!;
+// built behind the loading screen, in the Sancho section's backdrop (it fades in with the scroll, src/onepage/boot.ts);
+// it draws only while that backdrop can be seen, and its light follows the reader through this section
+let dusk: Dusk | null = null;
+const built = task("sancho: the dusk");
+// (on a phone the dusk is a band at the top of the section, scrolling with it, as at the top of its page)
+const makeDusk = () => new Dusk(phone.matches ? root : document.querySelector<HTMLElement>('.backdrop[data-for="sancho"]')!, {
+  progress: () => { const r = root.getBoundingClientRect(), span = r.height - innerHeight; return span > 0 ? -r.top / span : 0; },
+  reduce: reduceMotion,
+  small: () => phone.matches,
+  // the tail runs over the backdrop but never behind the text: the sheet less its padding
+  text: () => { const r = sheet.getBoundingClientRect(), pad = parseFloat(getComputedStyle(sheet).paddingLeft) || 0; return { x: r.left + pad, y: r.top + pad, w: r.width - 2 * pad, h: r.height - 2 * pad }; },
+});
+void document.fonts.ready.then(() => {
+  dusk = makeDusk();
+  onBackdrop("sancho", (v) => dusk?.setActive(v));
+  requestAnimationFrame(() => requestAnimationFrame(() => built()));
+});
+let resizeT = 0;
+addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => dusk?.layout(), 150); });
+void document.fonts.ready.then(() => dusk?.layout());

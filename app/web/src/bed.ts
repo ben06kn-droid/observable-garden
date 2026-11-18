@@ -68,7 +68,7 @@ export function makeBed(svg: SVGSVGElement, page: HTMLElement, n = 230): BedHand
     }
     flowers.sort((a, b) => a.base - b.base || b.h - a.h);   // higher up the slope behind
     // the ground: the dark ground below the line; the line itself a lit hairline in short segments, so
-    // colour can travel along it (runView.ts); its glow is a wider faint stroke under it, not a filter
+    // colour can travel along it; its glow is a wider faint stroke under it, not a filter
     let d = "";
     for (let k = 0; k <= 64; k++) { const x = (k / 64) * W; d += `${k ? "L" : "M"}${f(x)} ${f(ground(x) + 4)}`; }
     el("path", { d: `${d} L${f(W)} ${f(Hb)} L0 ${f(Hb)} Z`, class: "ground-fill", "data-tide": "" }, svg);

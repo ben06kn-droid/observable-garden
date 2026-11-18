@@ -1,0 +1,39 @@
+/* The one-page site (src/onepage/boot.ts): its sections share one document, each in its own theme
+   (data-theme on the section, not on <html>). */
+/* the backdrops, one per section in its theme's ground, behind everything; boot.ts fades each next one in by scroll
+   position. The body is clear so they show (its background would paint over them) */
+html[data-start] body { background: transparent; }
+.backdrops { position: fixed; inset: 0; z-index: -2; pointer-events: none; }
+.backdrop { position: absolute; inset: 0; background: var(--ground); }
+.backdrop ~ .backdrop { opacity: 0; }
+/* what <body> gave each page, now each section's own */
+.section { color: var(--ink); font: 400 var(--t-body)/1.5 var(--sans); }
+/* a section takes focus when a link brings the reader to it (boot.ts); the section itself shows no ring */
+.section:focus { outline: none; }
+/* between sections: one small line, the way on for a keyboard (and a click); scrolling simply continues. The
+   footer is the last section's only */
+.cue { display: inline-flex; gap: 0.6em; align-items: baseline; margin: var(--s7, 48px) var(--pad-x) var(--s8, 64px);
+  font: 500 var(--t-micro)/1.3 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); text-decoration: none; }
+.cue:hover, .cue:focus-visible { color: var(--ink); }
+/* home painted its own paper; here the backdrop is the ground, so the change of ground covers the whole screen */
+[data-section="home"] .one { background: transparent; }
+/* home's cursor tail covers the whole section, the cue's band included (src/pages/index.ts): the section holds it, and
+   the cue stays above it */
+[data-section="home"] { position: relative; }
+[data-section="home"] > .cue { position: relative; z-index: 2; }
+/* docs and Sancho painted their own gradient (the stand-in for their scene) on the page; on the one page that is
+   their backdrop's, and the scene's canvas lies in the backdrop, above its gradient, fading with it */
+.section[data-page] { background: none; }
+.backdrop > canvas.sky, .backdrop > canvas.dusk { z-index: auto; }
+/* the menu: in a wrapper that carries the current section's theme (boot.ts); its ground is a variable so the colours
+   mix across a boundary (docs and Sancho gave theirs as fixed values on their page) */
+:is(.section, .backdrop, .top-theme)[data-page="docs"] { --header-bg: rgba(255, 255, 255, 0.6); }
+:is(.section, .backdrop, .top-theme)[data-page="sancho"] { --header-bg: rgba(250, 238, 220, 0.9); }
+/* on a phone the dusk is a band at the top of the Sancho section (sancho.css places it at its container's top) */
+/* (and docs: on a phone its contents are not positioned, so their soft cloud is placed from the nearest positioned
+   ancestor; on the docs page that was the page, here it is the section, the same place on the content) */
+@media (max-width: 812px) { .section:is([data-section="sancho"], [data-section="docs"]) { position: relative; } }
+/* nothing in a section reaches past the screen's sides: the docs title's soft cloud did (160px, from the docs page),
+   and on a phone it widened the whole document, every section with it. clip, not hidden: no scroll box, so the
+   docs contents stay sticky */
+.section { overflow-x: clip; }

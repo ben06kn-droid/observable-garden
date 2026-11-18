@@ -1,3 +1,5 @@
+import "../common";              // the shared stylesheet first, so the theme wins ties
+import "../styles/demo.css";
 import { auditId, h, reduceMotion, sha256Hex, word } from "../common";
 import { command, demos, loadDemo } from "../demos";
 import { drawGarden } from "../garden";

@@ -6,9 +6,17 @@
 // message, and cleared (the variable and the field) when the run ends in any way or the page is left.
 // The panel and the class are read by the package's own loaders in the worker (np.load with
 // allow_pickle=False) and checked before the key is used; their errors are shown word for word.
+import "../common";              // the shared stylesheet first, so the theme wins ties
+import "../styles/run.css";
+import { idle, refreshThemes, revealed, section, task } from "../onepage/boot";
 import { auditId, h, MEANING, reduceMotion, sha256Hex, word } from "../common";
 import { cancelGate, loadGate, type RunOutcome } from "../gate";
 import { makeScene } from "../scene";
+import { drawRunScale } from "../runscale";
+import type { GardenHandle } from "../garden";
+import { Glass, type Interior } from "../glass";
+import { Hero } from "../hero";
+import { Fan, type FanRect } from "../fan";
 import { FALLBACK_MODELS, localEndpoint, NOT_SENT, OPENROUTER_MODELS, PROVIDERS, routerModels, type RouterModel } from "../providers";
 import type { AuditResult, InputsInfo, ProviderId, RunEvent, RunUsage, SearchTree } from "../types";
 
@@ -32,25 +40,161 @@ let panel: ArrayBuffer | null = null, cls = "", panelName = "", className = "", 
 let schemas: Record<string, unknown> = {}, defaultPrompt = "";
 let key = "", running = false;
 
-// ---- the scene: the demo's page two (src/scene.ts), the petals slowed while a run computes
-const scene = makeScene(() => running);
-const { two, svg, seed, bed, notes, idleBox, draw } = scene;
-notes.entered();                                             // no "click a tree" here: the record is below
-let shownSteps = 0;
-/** the tree as the search so far, its new evaluations growing in one by one */
-function grow(t: SearchTree, runId: string, move: string, moves: number) {
-  const g = draw(t, null, runId);
-  seed.classList.add("spent");
-  if (reduceMotion) { g.setStep(g.total); shownSteps = g.total; }
-  else {
-    g.grow(); g.setStep(shownSteps);
-    const from = shownSteps, to = g.total, t0 = performance.now();
-    const tick = (now: number) => { const k = Math.min(to, from + Math.ceil(((now - t0) / 40))); g.setStep(k); if (k < to && scene.current() === g) requestAnimationFrame(tick); };
-    requestAnimationFrame(tick);
-    shownSteps = to;
-  }
-  notes.search(g, g.total, move, `${moves} moves · ${t.evaluations} evaluations`);
+// ---- the result (src/scene.ts for the notes, src/runscale.ts for the scale): no tree on this page. Before
+// and during a run the result area is hidden; during a run a counter above the moves says how far the
+// search has come; after it, the gate's numbers on a scale, drawn large.
+const scene = makeScene({ throttled: () => running });
+const { two, svg, bed, notes, idleBox, spot } = scene;
+let shown: { t: SearchTree; r: AuditResult } | null = null;
+function drawResult(t: SearchTree, r: AuditResult): GardenHandle {
+  const wordH = parseFloat(getComputedStyle($("verdict-word")).fontSize) * 0.92 || 90;
+  const g = drawRunScale(svg, spot, t, r, { wordH });
+  shown = { t, r };
+  relayout();
+  return g;
 }
+let scaleT = 0;
+window.addEventListener("resize", () => { window.clearTimeout(scaleT); scaleT = window.setTimeout(() => {
+  if (!shown || two.hidden) return;
+  drawResult(shown.t, shown.r); notes.place();
+}, 250); });
+notes.entered();                                             // no "click a tree" here: the record is below
+const counter = $("move-count");
+
+// ---- the glass (src/glass.ts) and the fan of paths (src/fan.ts): two independent elements
+// The glass: a still hourglass in the right-hand columns from the opening screen down to the rule above
+// 03 Key, scrolling with the page, an abstract flow pouring through it at one steady rate. Inside it, the page's
+// other mode; the sun or moon at its neck switches the page's mode, spreading from the neck. The headline's last letters pass
+// through its upper bulb, bent. On a phone it is a glass of its own size under the headline.
+// The fan: random paths down the whole left of the page, from the top to above "Continue to docs",
+// running right until the glass (beside it) or the page's right edge (below it); dimmed behind text,
+// never under a field; its last paths come to rest at the foot. On a phone: a band between sections.
+// the palette is the run section's (its theme), mirrored on its backdrop so the ground behind it turns too; the
+// view transition that reveals the change is the document's
+const root = section("run"), doc = document.documentElement, ground = document.querySelector<HTMLElement>('.backdrop[data-for="run"]');
+const phone = () => matchMedia("(max-width: 812px)").matches;
+const keySect = () => document.querySelectorAll<HTMLElement>(".run-form .sect")[2];
+let glass: Glass | null = null, glassPhone: boolean | null = null, glassH = 0;
+// the page's mode, and the other one's colours (the glass's inside): read from a hidden element carrying the other
+// mode, so they are always the stylesheet's own. The mode chosen lasts for the visit (sessionStorage).
+const HG = "qx-hg-mode";
+const mode = (): "dark" | "light" => (root.dataset.hg === "light" ? "light" : "dark");
+const probe = document.createElement("i"); probe.hidden = true; probe.dataset.theme = "run"; document.body.append(probe);
+function interior(): Interior {
+  probe.dataset.hg = mode() === "light" ? "dark" : "light";
+  const cs = getComputedStyle(probe), v = (k: string) => cs.getPropertyValue(k).trim();
+  // the inside's ground is the page's own --hg-inside (the other mode's ground, on the dark page a little greyer)
+  const inside = getComputedStyle(root).getPropertyValue("--hg-inside").trim();
+  return { ground: inside || v("--ground"), line: v("--hg-line") || v("--ink"), ink: v("--ink"), tone: v("--wake-tone"), fringe: v("--wake-fringe"), fringeA: Number(v("--wake-fringe-alpha")) || 1 };
+}
+function setMode(m: "dark" | "light") { root.dataset.hg = m; if (ground) ground.dataset.hg = m; }
+try { if (sessionStorage.getItem(HG) === "light") setMode("light"); } catch { /* private mode: the default */ }
+/** switch the page's mode, spreading from a viewport point (the switch at the glass's neck) */
+function invert(at: { x: number; y: number }) {
+  const swap = () => {
+    setMode(mode() === "light" ? "dark" : "light");
+    try { sessionStorage.setItem(HG, mode()); } catch { /* the visit only */ }
+    refreshThemes(); glass?.setMode(mode()); glass?.refreshPalette(); fan?.refreshPalette(); hero?.layout();
+  };
+  const d = document as Document & { startViewTransition?: (f: () => void) => { finished: Promise<void> } };
+  if (reduceMotion || !d.startViewTransition) { swap(); return; }
+  doc.style.setProperty("--vx", `${at.x}px`); doc.style.setProperty("--vy", `${at.y}px`);
+  doc.dataset.hgSwap = "";
+  d.startViewTransition(swap).finished.finally(() => { delete doc.dataset.hgSwap; });
+}
+function buildGlass() {
+  const ph = phone(), host = $("hg-host");
+  // measured as if the disclosure above were closed, so opening it never resizes or rebuilds the glass
+  const about = document.querySelector<HTMLDetailsElement>(".hero .about"), sum = about?.querySelector("summary");
+  const opened = about?.open && sum ? about.getBoundingClientRect().height - sum.getBoundingClientRect().height : 0;
+  const H = ph ? Math.round(Math.max(420, Math.min(640, innerHeight * 0.76)))
+    : Math.round(keySect().getBoundingClientRect().top - host.getBoundingClientRect().top - opened);
+  if (glass && glassPhone === ph && Math.abs(H - glassH) < 24) { placeGlass(); hero?.layout(); return; }
+  glass?.destroy(); hero?.destroy(); hero = null; $("run-main").querySelector(".hero")!.classList.remove("painted");
+  glassPhone = ph; glassH = H;
+  // on a desktop with motion, the hero layer draws the glass and the opening text (the wake bends them)
+  const layered = !ph && !reduceMotion;
+  glass = new Glass(host, { height: H, reduce: reduceMotion, composited: layered, interior, onSwitch: invert, onHover: () => hero?.glassFrame(), onFrame: () => hero?.glassFrame() });
+  glass.setMode(mode());
+  placeGlass();
+  if (layered) {
+    const veil = $("run-main").querySelector<HTMLElement>(".hero")!;
+    const h = new Hero({ host: $("run-main"), glass, veil, interior, textBottom: () => document.querySelector(".run-form .sect")!.getBoundingClientRect().top + scrollY,
+      text: () => [...veil.querySelectorAll<HTMLElement>(".label, h1, .lead, .about summary, .about[open] p, .to-demo a")] });
+    if (h.ok) { hero = h; veil.classList.add("painted"); hero.layout(); }
+    else { h.destroy(); glass.el.classList.remove("composited"); }
+  }
+}
+let hero: Hero | null = null;
+// the hero layer follows any change to the page's layout in the same frame, before it is painted (a
+// ResizeObserver's callback runs after layout and before paint), so the drawn text never lags the page
+new ResizeObserver(() => hero?.layout()).observe(document.querySelector(".hero")!);
+/** across: on a desktop its bulbs clear the form's columns (and may be cropped by the page's right edge) */
+// dev only: the largest offset the cursor's push leaves on any stroke (0: the flow exactly as if untouched)
+if (import.meta.env.DEV) (window as unknown as { __glassDev?: () => number }).__glassDev = () => glass?.maxOffset() ?? -1;
+function placeGlass() {
+  if (!glass) return;
+  const m = glass.measures(), host = $("hg-host").getBoundingClientRect();
+  const cx = glassPhone ? host.left + host.width / 2 : Math.max($("run-form").getBoundingClientRect().right + m.R + 20, host.left + host.width / 2);
+  glass.el.style.setProperty("--g-x", `${(cx - host.left - m.W / 2).toFixed(1)}px`);
+}
+
+let fan: Fan | null = null, fanPhone: boolean | null = null;
+// the page's shape for the fan, taken once per layout (page px)
+let geom = { bottom: 0, right: 0, glass: [0, 0, Infinity] as [number, number, number], masks: [] as FanRect[] };
+// the headline and the lead dim the paths by their letters alone (GLYPHS); the rest of the text by its extent
+const GLYPHS = ".hero h1, .hero .lead";
+const TEXT = ".hero .label, .hero .about, .hero .to-demo, "
+  + ".run-form .sect-h, .run-form .fine, .run-form label:not(.file), .run-form .status, .run-form .estimate, .run-form details, .run-go .run-error, "
+  + ".move-count, #spot .note, #spot .note-word, .below h2, .below p, .run-log, #record .meaning, #record .reasons-d, #record h2, #record h3, #record .kv, #record pre, "
+  + ".run-notes p, .cue";
+const FIELDS = ".run-form input:not([type=file]), .run-form select, .run-form textarea, .run-form label.file, .run-form button, #record button";
+function measure() {
+  const y = scrollY, rect = (e: Element) => e.getBoundingClientRect(), next = root.querySelector(".cue");
+  geom.bottom = (next ? rect(next).top : document.documentElement.scrollHeight - y) + y - 32;
+  geom.right = innerWidth - parseFloat(getComputedStyle($("run-main").querySelector(".run-grid")!).paddingRight || "72");
+  if (glass && !glassPhone) { const g = rect(glass.el), m = glass.measures(); geom.glass = [g.top + y, g.bottom + y, g.left + g.width / 2 - m.R - 28]; }
+  else geom.glass = [0, 0, Infinity];
+  const list: FanRect[] = [], range = document.createRange(), pad = 6;
+  // behind text: the text's own extent (a grid cell may stretch an element far past its words). At 6% of
+  // the lines' strength, every text tone keeps 7.8:1 or more over a gold path, in both palettes
+  for (const e of root.querySelectorAll(TEXT)) {
+    range.selectNodeContents(e); const r = range.getBoundingClientRect();
+    if (r.width && r.height) list.push({ x: r.left - pad, y: r.top + y - pad, w: r.width + 2 * pad, h: r.height + 2 * pad, keep: 0.06 });
+  }
+  const tree = svg.querySelector(".real"); if (tree) { const r = rect(tree); if (r.width) list.push({ x: r.left - 10, y: r.top + y - 10, w: r.width + 20, h: r.height + 20, keep: 0.15 }); }
+  for (const e of root.querySelectorAll(FIELDS)) { const r = rect(e); if (r.width && r.height) list.push({ x: r.left - 6, y: r.top + y - 6, w: r.width + 12, h: r.height + 12, keep: 0 }); }
+  geom.masks = list;
+}
+function buildFan() {
+  const ph = phone();
+  if (fan && fanPhone === ph) { measure(); fan.layout(); return; }
+  fan?.destroy(); fan = null; fanPhone = ph;
+  if (ph) {
+    const band = $("fan-band");
+    fan = new Fan(root, { reduce: reduceMotion, seed: 7,
+      region: () => { const r = band.getBoundingClientRect(); return { top: r.top + scrollY + 1, bottom: r.bottom + scrollY }; },
+      reach: () => innerWidth - 12 });
+    return;
+  }
+  measure();
+  fan = new Fan(root, { reduce: reduceMotion, foot: 280, seed: 5, wake: true,
+    region: () => ({ top: root.getBoundingClientRect().top + scrollY, bottom: geom.bottom }),   // from the section's top
+    reach: (y) => (y >= geom.glass[0] && y <= geom.glass[1] ? geom.glass[2] : geom.right),
+    masks: () => geom.masks,
+    glyphs: () => [...root.querySelectorAll(GLYPHS)].map((el) => ({ el, keep: 0.06 })) });
+}
+let relayT = 0, started = false;
+const relayout = () => { if (!started) return; window.clearTimeout(relayT); relayT = window.setTimeout(() => { buildGlass(); buildFan(); }, 150); };
+new ResizeObserver(relayout).observe($("run-main"));
+// built behind the loading screen once the type has settled: the glass, the hero layer and the fan, their first
+// frames drawn before the site is shown
+const built = task("run: glass, hero layer and fan");
+void document.fonts.ready.then(() => {
+  started = true;
+  buildGlass(); buildFan();
+  requestAnimationFrame(() => requestAnimationFrame(() => built()));
+});
 
 // ---- inputs: the bundled pair to start, or the visitor's files; checked by the package's loaders
 async function useBundled() {
@@ -61,6 +205,7 @@ async function useBundled() {
 }
 async function check() {
   info = null; refresh();
+  $("f-panel-name").textContent = panelName || "none"; $("f-class-name").textContent = className || "none";
   if (!panel || !cls) return;
   status.textContent = `Reading ${panelName} and ${className}…`;
   try {
@@ -75,7 +220,7 @@ async function check() {
   const cells = (info.size ?? 0) * (info.rows ?? 0);
   capLine.textContent = info.error ? "" : cells > CLASS_CAP
     ? `This class is too large for a browser: ${info.size!.toLocaleString("en")} members × ${info.rows!.toLocaleString("en")} rows is more than the ${(CLASS_CAP / 1e6).toFixed(0)} million cells this page takes (a class table of ${(CLASS_CAP * 8 / 1e6).toFixed(0)} MB). Run it locally: quixote run --agent examples.llm_agent:Agent --panel ${panelName} --class ${className} --out log.json`
-    : `Class table: ${(cells * 8 / 1e6).toFixed(1)} MB (${info.size!.toLocaleString("en")} members × ${info.rows!.toLocaleString("en")} rows), within the ${(CLASS_CAP / 1e6).toFixed(0)} million cells a browser takes.`;
+    : `Class table: ${(cells * 8 / 1e6).toFixed(1)} MB (${info.size!.toLocaleString("en")} members × ${info.rows!.toLocaleString("en")} rows), within the browser's limit of ${(CLASS_CAP / 1e6).toFixed(0)} million cells.`;
   refresh();
 }
 const readFile = (f: File) => new Promise<ArrayBuffer>((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as ArrayBuffer); r.onerror = () => rej(r.error); r.readAsArrayBuffer(f); });
@@ -113,7 +258,7 @@ function onProvider() {
   fModelId.placeholder = p.id === "local" ? "e.g. qwen3:32b" : "as the provider names it";
   fKey.placeholder = p.keyPlaceholder;
   $("provider-note").textContent = `Sent to the ${p.shape} as ${p.effortParam}${p.id === "local" ? " (only if a level is chosen)" : ""}. `
-    + "Every level the provider documents is offered for every model; a model that refuses one answers with the provider's error, shown word for word."
+    + "All documented levels are offered for every model. If a model rejects one, the provider's error is shown word for word."
     + (p.id === "openrouter" ? " The list is OpenRouter's models that take tools." : "");
   $("key-host").textContent = endpoint().host;
   void loadRouted();
@@ -159,12 +304,12 @@ function estimate() {
   const input = n * (base + obs) + ((obs + reply) * n * (n - 1)) / 2;   // each turn resends the history so far
   const output = n * out;
   const pr = price(), id = modelId() || "the model";
-  const tokensLine = `Rough estimate for up to ${n - 3} moves: about ${Math.round(input / 1000)}k input and ${Math.round(output / 1000)}k output tokens`;
-  const real = " The output figure is a guess by effort level, not a measurement: once the run starts, the token count under “The model's moves” is the real figure, from the provider's own usage.";
+  const tokensLine = `Estimate for up to ${n - 3} moves: about ${Math.round(input / 1000)}k input and ${Math.round(output / 1000)}k output tokens`;
+  const real = " The output figure is a guess; once the run starts, the real token count appears under “The model's moves”.";
   if (!pr) { $("estimate").textContent = `${tokensLine}; cost unknown (${provider().id === "local" ? "a local server has no list price" : `no list price known for ${id}`}).${real}`; return; }
   const dollars = (input * pr[0] + output * pr[1]) / 1e6;
-  $("estimate").textContent = `${tokensLine}, at most about $${dollars < 0.1 ? dollars.toFixed(3) : dollars.toFixed(2)} at ${provider().label}'s list prices for ${id} `
-    + `(less where the provider's prompt cache applies; a model that stops early costs less).${real}`;
+  $("estimate").textContent = `${tokensLine}, at most about $${dollars < 0.1 ? dollars.toFixed(3) : dollars.toFixed(2)} at ${provider().label}'s list prices for ${id}. `
+    + `Prompt caching or an early stop lowers it.${real}`;
 }
 for (const el of [fMoves, fModel, fModelId, fEffort, fPrompt]) el.addEventListener("input", estimate);
 
@@ -176,12 +321,15 @@ function refresh() {
 }
 
 // ---- the run
-const logLine = (cls: string, parts: (string | Node)[]) => { const li = h("li", cls, null, logList); li.append(...parts); li.scrollIntoView?.({ block: "nearest" }); return li; };
+// the list follows its newest line by scrolling itself only, so the page stays where the visitor put it
+const logLine = (cls: string, parts: (string | Node)[]) => { const li = h("li", cls, null, logList); li.append(...parts); logList.scrollTop = logList.scrollHeight; return li; };
 const fmtUsage = (u: RunUsage) => `${u.requests} model calls · ${u.input_tokens.toLocaleString("en")} input tokens (${u.cache_read_input_tokens.toLocaleString("en")} from cache) · ${u.output_tokens.toLocaleString("en")} output tokens`;
 function endKey() { key = ""; fKey.value = ""; }
 window.addEventListener("pagehide", () => { endKey(); if (running) cancelGate(); });
 
-form.addEventListener("submit", (e) => { e.preventDefault(); void start(); });
+// Start before the gate and the bundled inputs have loaded: they start loading (if they had not), and the run starts
+// once they are in
+form.addEventListener("submit", (e) => { e.preventDefault(); if (inputsIn) void start(); else { wantGate("start"); void booted.then(() => start()); } });
 cancelBtn.addEventListener("click", () => {
   if (!running) return;
   cancelGate();                                              // the worker ends; nothing it held survives
@@ -199,11 +347,12 @@ async function start() {
   if (!key && p.keyRequired) { errorBox.textContent = "Enter your API key to start."; fKey.focus(); return; }
   running = true; refresh();
   $("record").hidden = true; logList.replaceChildren(); tokens.textContent = "Starting…";
-  runId = `run-${Date.now().toString(36)}`; shownSteps = 0;
-  svg.replaceChildren(); idleBox(); notes.clear(); notes.entered(); seed.classList.remove("spent");
+  runId = `run-${Date.now().toString(36)}`;
+  two.hidden = true; svg.replaceChildren(); idleBox(); shown = null; notes.clear(); notes.entered();
   bed.reset(runId); bed.start();
-  two.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
   const moves = Math.max(1, Math.min(60, Math.round(Number(fMoves.value) || 20)));
+  counter.textContent = `move 0 of ${moves}`; counter.hidden = false;
+  $("log-h").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
   const B = Math.max(100, Math.min(10000, Math.round(Number(fB.value) || 2000)));
   const effort = fEffort.value === NOT_SENT ? undefined : fEffort.value;
   const maxOut = p.id === "openrouter" ? routed.find((m) => m.id === model)?.maxOut : undefined;
@@ -211,23 +360,23 @@ async function start() {
                  system: fPrompt.value.trim() && fPrompt.value !== defaultPrompt ? fPrompt.value : undefined,
                  max_tokens: maxOut ? Math.min(16000, maxOut) : undefined };
   const run = { provider: p.id, label: p.label, effort: effort ?? NOT_SENT, host: where.host };
-  let lastMove = "", nMoves = 0, served = model, out: RunOutcome;
+  let nMoves = 0, served = model, out: RunOutcome;
   try {
     const gate = await loadGate();
     const runKey = key;
     out = await gate.run({ panel: panel.slice(0), cls, key: runKey, provider: p.id, url: where.url, opts, B, seed: SEED }, {
       onEvent: (ev: RunEvent) => {
         if (ev.type === "move") {
-          if (ev.tool) { lastMove = ev.tool; nMoves++; }
+          if (ev.tool) { nMoves++; counter.textContent = `move ${nMoves} of ${moves}`; }
           logLine("move", [h("b", null, ev.tool ?? "(no move)"), " ", Object.keys(ev.args).length ? JSON.stringify(ev.args) : "", ev.text ? h("span", "say", ` ${ev.text}`) : ""]);
         } else if (ev.type === "result") {
-          logLine(ev.last.refused ? "refused" : "result", [ev.last.refused ? `refused: ${ev.last.refused}` : (ev.last.text ?? "")]);
+          logLine(ev.last.refused ? "refused" : "result", ev.last.refused ? [h("span", "tag", "refused"), ev.last.refused] : [ev.last.text ?? ""]);
         } else if (ev.type === "usage") {
           if (ev.model) served = ev.model;
           tokens.textContent = fmtUsage(ev.usage);
-        } else if (ev.type === "tree") grow(ev.tree, runId, lastMove, nMoves);
+        }
       },
-      onProgress: (p) => { if (p.stage === "replay") notes.replay(`replay · ${p.done.toLocaleString("en")} of ${p.total.toLocaleString("en")}`); },
+      onProgress: (p) => { if (p.stage === "replay") counter.textContent = `replay · ${p.done.toLocaleString("en")} of ${p.total.toLocaleString("en")}`; },
     });
   } catch (e) {
     const msg = String((e as Error).message ?? e);
@@ -242,7 +391,8 @@ async function start() {
   if (!out.result) { finish(`The gate refused the log: ${out.refused ?? "no reason given"}`); return; }
   const r = out.result, t = out.tree;
   bed.finish();
-  if (t) { draw(t, r, runId).setStep(Number.MAX_SAFE_INTEGER); notes.verdict(scene.current()!, r, t.evaluations, SEED); }
+  counter.hidden = true;
+  if (t) { two.hidden = false; const g = drawResult(t, r); notes.verdict(g, r, t.evaluations, SEED); }
   // the prompt actually sent: the adapter's own, or the visitor's edit (a different search)
   const prompt = { edited: opts.system !== undefined, sha256: await sha256Hex(opts.system ?? defaultPrompt) };
   await showRecord(r, out.log as Record<string, unknown>, model, served, moves, prompt, run);
@@ -253,8 +403,8 @@ function finish(message: string, usage?: RunUsage | null) {
   running = false; refresh();
   if (usage) tokens.textContent = fmtUsage(usage);
   errorBox.textContent = message;
-  logLine("refused", [message]);
-  bed.finish();
+  logLine("refused", [h("span", "tag", "stopped"), message]);
+  bed.finish(); counter.hidden = true;
 }
 
 // ---- the result: the record, the CLI command, the downloads, the share link
@@ -271,6 +421,7 @@ async function showRecord(r: AuditResult, log: Record<string, unknown>, model: s
   lastResult = JSON.stringify({ format: "quixote-browser-result/1", result: r, record }, null, 1);
   $("rec-meaning").textContent = `${word(r.status)}: ${MEANING[word(r.status)] ?? ""}`;
   const ul = $("rec-reasons"); ul.replaceChildren(); for (const x of r.reasons) h("li", null, x, ul);
+  ($("rec-reasons-d") as HTMLDetailsElement).open = !phone();          // open on a desktop, closed on a phone
   const kv = $("rec-kv"); kv.replaceChildren();
   const rows: [string, string][] = [["Panel", `${panelName} · ${record.panel_sha256}`], ["Class", `${className} · ${record.class_sha256}`],
     ["Provider", `${run.label} · ${run.host}`],
@@ -309,13 +460,36 @@ async function shareLink(r: AuditResult, record: Record<string, unknown>): Promi
 }
 
 // ---- start: the prompt from the CLI adapter, the bundled inputs
-(async () => {
+// Pyodide and the package (about 23 MB) load in a worker only for a visitor who comes to the form: when the form
+// is first on screen and the page has been still for a moment (no scrolling for 0.8 s, then the browser idle), or
+// at once when a field in the form takes focus or Start is pressed. Never behind the loading screen, and never for
+// a visitor who only scrolls past (its compiling competes with the scroll for the processor). Start pressed before
+// it has loaded waits for it (start() awaits loadGate, with its status). Each step is marked (performance marks
+// qx-gate-*) for measurement.
+let gateWanted = false;
+function wantGate(why: string) {
+  if (gateWanted) return; gateWanted = true;
+  performance.mark(`qx-gate-start:${why}`);
+  window.removeEventListener("scroll", still); formSeen.disconnect(); window.clearTimeout(stillT);
+  void bootGate();
+}
+let formOnScreen = false, stillT = 0;
+const still = () => { window.clearTimeout(stillT); if (formOnScreen) stillT = window.setTimeout(() => void idle().then(() => { if (formOnScreen) wantGate("view"); }), 800); };
+const formSeen = new IntersectionObserver(([e]) => { formOnScreen = e.isIntersecting; still(); });
+void revealed.then(() => { if (gateWanted) return; formSeen.observe(form); window.addEventListener("scroll", still, { passive: true }); });
+form.addEventListener("focusin", () => wantGate("focus"));
+let inputsIn = false, bootedNow: () => void = () => {};
+const booted = new Promise<void>((r) => { bootedNow = r; });
+async function bootGate() {
   try {
     const gate = await loadGate();
     const p = await gate.prompt();
     defaultPrompt = p.system; schemas = p.schemas;
     fPrompt.value = p.system; $("f-tools").textContent = JSON.stringify(p.schemas, null, 1);
+    performance.mark("qx-gate-ready");
   } catch (e) { errorBox.textContent = `The gate did not load: ${String((e as Error).message ?? e)}`; }
   onProvider();
   await useBundled();
-})();
+  performance.mark("qx-gate-inputs");
+  inputsIn = true; bootedNow();
+}

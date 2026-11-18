@@ -8,8 +8,7 @@
 //
 // The cables answer a click (or Enter: each is focusable): the cable vibrates at that point, a damped
 // oscillation of under a second, and one bolt leaves along it toward its farther end (fx.ts). Hovering
-// brightens a cable. Each cable is drawn in short segments so that colour can travel along it when the
-// visitor enters a run (runView.ts reads them by [data-tide]).
+// brightens a cable. Each cable is drawn in short segments.
 //
 // The pulses animate stroke-dashoffset on one short path at a time (a small repaint, a few times a
 // minute), and none runs while the page is covered or a carry or zoom is playing.
