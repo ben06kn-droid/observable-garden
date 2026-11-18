@@ -83,6 +83,9 @@ function diff(A, B, shift) {
 // ---- capture
 const out = arg("--out"), root = arg("--root", join(import.meta.dirname, "..", "dist"));
 const pages = arg("--pages", "home,run,docs,sancho").split(","), motion = process.argv.includes("--motion");
+// --at DIR: take each shot at the same offset into the page (or section) as DIR's shots were (its offsets.json), so a
+// page whose length changed is still compared content for content; this run's own offsets go to offsets.json
+const at0 = arg("--at", null), given = at0 ? JSON.parse(readFileSync(join(at0, "offsets.json"), "utf8")) : null, offsets = {};
 mkdirSync(out, { recursive: true });
 const port = 5600 + Math.floor(Math.random() * 300);
 const srv = await serve(port, { root });
@@ -110,10 +113,11 @@ for (const [tag, w, h, dpr, mobile] of [["desktop", 1440, 900, 1, false], ["phon
     if (page === "run") for (let i = 0; i < 600; i++) { if (await evaluate(`(document.getElementById("f-prompt")?.value.length ?? 1) > 0`)) break; await sleep(100); }
     await sleep(motion ? 5000 : 1500);
     for (const at of ["top", "middle", "end"]) {
-      await evaluate(`(() => { const s = document.querySelector('[data-section="${page}"]');
+      const name = `${page}-${at}-${tag}`, want = given ? given[name] : null;
+      offsets[name] = await evaluate(`(() => { const s = document.querySelector('[data-section="${page}"]');
         const top = s ? s.getBoundingClientRect().top + scrollY : 0, len = s ? s.offsetHeight : document.documentElement.scrollHeight;
-        const span = Math.max(0, len - innerHeight), y = top + ({ top: 0, middle: Math.round(span / 2), end: span })["${at}"];
-        scrollTo(0, y); return true; })()`);
+        const span = Math.max(0, len - innerHeight), off = ${want ?? "null"} ?? ({ top: 0, middle: Math.round(span / 2), end: span })["${at}"];
+        scrollTo(0, top + off); return off; })()`);
       await sleep(motion ? 800 : 500);
       const s = await send("Page.captureScreenshot", { format: "png" });
       writeFileSync(join(out, `${page}-${at}-${tag}.png`), Buffer.from(s.result.data, "base64"));
@@ -121,4 +125,5 @@ for (const [tag, w, h, dpr, mobile] of [["desktop", 1440, 900, 1, false], ["phon
     console.log(tag, page);
   }
 }
+writeFileSync(join(out, "offsets.json"), JSON.stringify(offsets, null, 1));
 ws.close(); chrome.kill(); srv.close(); setTimeout(() => rmSync(profile, { recursive: true, force: true }), 1000);

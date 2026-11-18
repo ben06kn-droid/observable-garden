@@ -47,15 +47,17 @@ void main() {
 
   // the text, never moved: plain outside the glass; through it, seen through a thick cylinder (x magnified
   // toward the middle, compressed toward the walls, y untouched), each channel bent a little differently
-  vec3 col = uGround; float t;
+  // every layer here is premultiplied over nothing, so the layer lies on whatever ground is beneath it (the page's,
+  // or on the one-page site the backdrop, which changes with the scroll); on the page's own ground it is as before
+  vec3 col = vec3(0.0); float t;
   if (inside) {
     float a = clamp(q.x / r, -1.0, 1.0), e = a * a, sx = (a * 0.9 + 0.1 * a * a * a) * r, ta = 0.0;
     for (int k = 0; k < 3; k++) {
       vec4 tk = text(vec2(c.x + q.x + (sx - q.x) * (1.0 + (float(k) - 1.0) * 0.05 * e), p.y));
-      col[k] = mix(uGround[k], tk.rgb[k], tk.a); ta = max(ta, tk.a);
+      col[k] = tk.rgb[k] * tk.a; ta = max(ta, tk.a);
     }
     t = ta;
-  } else { vec4 tk = text(p); col = mix(uGround, tk.rgb, tk.a); t = tk.a; }
+  } else { vec4 tk = text(p); col = tk.rgb * tk.a; t = tk.a; }
 
   // the flow inside the glass: the one thing here the wake moves; it stays within the outline, and where it
   // flows it turns the tone (silver-white) with fine fringes (red)
@@ -70,15 +72,16 @@ void main() {
       fc = mix(fc, uFringe, clamp(fr * 0.6 * uFringeA / max(fa + fr, 1e-3) * fr, 0.0, 1.0)); fa = max(fa, clamp(fr * 0.6 * uFringeA, 0.0, 1.0));
     }
     fa *= 1.0 - 0.8 * t;                           // the flow fades across the letters
-    col = mix(col, fc, fa);
+    col = fc * fa + col * (1.0 - fa);              // over the text
+    t = fa + t * (1.0 - fa);
   }
   // the outline, never moved
   vec4 g = inGlass(uEdge, p);
-  col = mix(col, g.rgb, g.a);
-  float alpha = max(max(t, fa), max(g.a, inside ? 1.0 : 0.0));
+  col = g.rgb * g.a + col * (1.0 - g.a);
+  float alpha = g.a + t * (1.0 - g.a);
 
   // (the wake in the blank space is the fan's, drawn under this layer, which is clear there)
-  o = vec4(col * alpha, alpha);                      // premultiplied
+  o = vec4(col, alpha);                              // premultiplied
 }`;
 
 export interface HeroOptions {

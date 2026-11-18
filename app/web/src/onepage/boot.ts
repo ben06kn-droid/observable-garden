@@ -51,14 +51,14 @@ let revealedNow: () => void = () => {};
 export const revealed = new Promise<void>((r) => { revealedNow = r; });
 async function reveal() {
   if (finishing) return; finishing = true;
-  goTo(startSection(), false);        // the layout is final: open on the address's section
+  snap(); goTo(startSection(), false);        // the layout is final: open on the address's section
   scrub();
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // every scene's first frame is on screen beneath
   await loader.finish();
   revealedNow();
 }
 /** all the page scripts have registered their work */
-export function start() { started = true; goTo(startSection(), false); scrub(); if (done === total) void reveal(); }
+export function start() { started = true; snap(); goTo(startSection(), false); scrub(); if (done === total) void reveal(); }
 const startSection = () => byPath.get(pathOf(location.pathname)) ?? byName.get(html.dataset.start ?? "") ?? sections[0];
 
 /** idle time, for work nobody is waiting on (the run page's Pyodide) */
@@ -66,6 +66,19 @@ export const idle = (timeout = 1500) => new Promise<void>((r) => {
   const w = window as Window & { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number };
   if (w.requestIdleCallback) w.requestIdleCallback(() => r(), { timeout }); else window.setTimeout(r, 300);
 });
+
+// ---- each section starts on a whole pixel: the sections above it need not end on one, and a section a fraction of
+// a pixel off would render every glyph and line a little differently from its page (under 1 px of space is added)
+function snap() {
+  let shift = 0;
+  for (const s of sections.slice(1)) {
+    s.style.removeProperty("margin-top");
+    const t = s.getBoundingClientRect().top + window.scrollY, f = t - Math.floor(t);
+    if (f > 0.001) { s.style.setProperty("margin-top", `${(1 - f).toFixed(3)}px`); shift++; }
+  }
+  return shift;
+}
+new ResizeObserver(() => { snap(); }).observe(sections[0]);
 
 // ---- addresses
 let current: HTMLElement | null = null, steering = 0;   // steering: a scroll to a section is under way (no address updates)

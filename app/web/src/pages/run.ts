@@ -123,10 +123,10 @@ let geom = { bottom: 0, right: 0, glass: [0, 0, Infinity] as [number, number, nu
 const TEXT = ".hero .label, .hero h1, .hero .lead, .hero .about, .hero .to-demo, "
   + ".run-form .sect-h, .run-form .fine, .run-form label:not(.file), .run-form .status, .run-form .estimate, .run-form details, .run-go .run-error, "
   + ".move-count, #spot .note, #spot .note-word, .below h2, .below p, .run-log, #record .meaning, #record .reasons-d, #record h2, #record h3, #record .kv, #record pre, "
-  + ".run-notes p, .carry-next .k, .carry-next .to";
+  + ".run-notes p, .cue";
 const FIELDS = ".run-form input:not([type=file]), .run-form select, .run-form textarea, .run-form label.file, .run-form button, #record button";
 function measure() {
-  const y = scrollY, rect = (e: Element) => e.getBoundingClientRect(), next = root.querySelector(".carry-next .k");
+  const y = scrollY, rect = (e: Element) => e.getBoundingClientRect(), next = root.querySelector(".cue");
   geom.bottom = (next ? rect(next).top : document.documentElement.scrollHeight - y) + y - 32;
   geom.right = innerWidth - parseFloat(getComputedStyle($("run-main").querySelector(".run-grid")!).paddingRight || "72");
   if (glass && !glassPhone) { const g = rect(glass.el), m = glass.measures(); geom.glass = [g.top + y, g.bottom + y, g.left + g.width / 2 - m.R - 28]; }

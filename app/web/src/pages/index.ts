@@ -43,7 +43,9 @@ let data: GroveData | null = null, grove: Grove | null = null;
 const draw = () => {
   if (!data) return;
   const r = groveBox.getBoundingClientRect(), b = one.getBoundingClientRect();
-  const again = host.classList.contains("drawn");
+  // drawn finished, with no arrival: it is built behind the loading screen, where an arrival could not be seen (and
+  // its end would repaint the trail's picture after the work had been counted done)
+  const again = true;
   grove = drawGrove(host, data, { w: Math.floor(r.width), h: Math.floor(r.height) }, { x: r.left - b.left, y: r.top - b.top }, phone());
   host.classList.toggle("still", again);
   for (const svg of grove.stems) {
@@ -91,7 +93,7 @@ one.addEventListener("animationend", () => wake.invalidate());   // a tree done 
 // drawn once the type has settled, behind the loading screen: the grove's data fetched, then the grove drawn
 const fetched = task("home: grove data"), drawn = task("home: grove drawn");
 Promise.all([fetch("/examples/grove.json").then((r) => r.json()).finally(fetched), document.fonts.ready])
-  .then(([g]) => { data = g as GroveData; avoid = text(); draw(); requestAnimationFrame(() => drawn()); }).catch(() => drawn());
+  .then(([g]) => { data = g as GroveData; avoid = text(); draw(); requestAnimationFrame(() => requestAnimationFrame(() => drawn())); }).catch(() => drawn());
 // redrawn whenever the grove's box changes size (fonts arriving, a resize), never stretched
 let resizeT = 0, size = "";
 new ResizeObserver(([e]) => {

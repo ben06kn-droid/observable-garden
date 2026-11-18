@@ -514,10 +514,10 @@ try {
     one.header_link = { arrived: await settledAt(`Math.abs(scrollY - ${runTop}) < 2`), path: await here(), history_added: (await evaluate(`history.length`)) === h0 + 1, y: await evaluate(`Math.round(scrollY)`), run_top: await evaluate(runTop) };
     await evaluate(`history.back(); true`);
     one.back = { home: await settledAt(`scrollY < 2 && location.pathname === "/"`) };
-    await evaluate(`document.querySelector('[data-section="home"] a.carry-next').click(); true`);
+    await evaluate(`document.querySelector('[data-section="home"] a.cue').click(); true`);
     one.cue = { arrived: await settledAt(`Math.abs(scrollY - ${runTop}) < 2`), path: await here(), y: await evaluate(`Math.round(scrollY)`), run_top: await evaluate(runTop) };
     await evaluate(`history.back(); true`); await settledAt(`scrollY < 2 && location.pathname === "/"`); await sleep(300);
-    await evaluate(`document.querySelector('[data-section="home"] a.carry-next').focus(); true`); await sleep(200);
+    await evaluate(`document.querySelector('[data-section="home"] a.cue').focus(); true`); await sleep(200);
     await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page);
     await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page);
     one.enter_on_cue = await settledAt(`Math.abs(scrollY - ${runTop}) < 2 && location.pathname === "/run.html"`);
