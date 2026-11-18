@@ -83,14 +83,16 @@ function listFiles() {
 }
 
 const kv = $("v-kv");
-function rows(r: [string, string][]) { kv.replaceChildren(); for (const [k, v] of r) { h("dt", null, k, kv); fill(h("dd", null, null, kv), v); } }
+// a label of a symbol or two (p, B, α) keeps its case: in capitals α would read as A
+const label = (k: string, parent: Element) => h("dt", k.length <= 2 ? "sym" : null, k, parent);
+function rows(r: [string, string][]) { kv.replaceChildren(); for (const [k, v] of r) { label(k, kv); fill(h("dd", null, null, kv), v); } }
 /** the key figures, large: [label, value, unit] */
 const figs = $("v-figs");
 function figures(r: [string, string, string?][]) {
   figs.replaceChildren();
   for (const [k, v, unit] of r) {
     const row = h("div", "v-fig", null, figs);
-    h("dt", null, k, row);
+    label(k, row);
     const dd = h("dd", null, null, row);
     h("span", k === "Config hash" ? "v-hash" : "v-big", v, dd);
     if (unit) h("span", "v-unit", unit, dd);
@@ -120,6 +122,7 @@ async function show() {
 function loaded(drawn: boolean) {
   for (const p of layer.querySelectorAll<HTMLElement>(".v-panel")) p.hidden = false;
   panel("Drawn").hidden = !drawn;
+  panel("Reasons").hidden = !$("v-reasons").childElementCount;
   strip.refresh();
   if (!errorBox.textContent) strip.go(1);
 }

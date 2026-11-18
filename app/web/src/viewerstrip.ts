@@ -132,8 +132,10 @@ export function makeStrip(layer: HTMLElement, o: { onResize?: () => void } = {})
     if (!instant) {
       pageAnims = [anim(main, [{ opacity: 1, transform: "translate3d(0, 0, 0)" }, { opacity: 0, transform: "translate3d(0, -6vh, 0)" }], 0, 600)];
       layerAnims = [anim(ground, [{ opacity: 0 }, { opacity: 1 }], 100, 600),
-        ...chrome.map((c) => anim(c, [{ opacity: 0, transform: "translate3d(0, 3vh, 0)" }, { opacity: 1, transform: "translate3d(0, 0, 0)" }], 400, 600))];
+        // the separate translate property, not transform: the strip's own transform is its position
+        ...chrome.map((c) => anim(c, [{ opacity: 0, translate: "0 3vh" }, { opacity: 1, translate: "0 0" }], 400, 600))];
       await done([...pageAnims, ...layerAnims]);
+      layerAnims = clearAnims(layerAnims);   // their end is the layer's own state
     } else pageAnims = [anim(main, [{ opacity: 0 }, { opacity: 0 }], 0, 1)];
     setCovered(true);   // the page beneath is hidden: its scenes pause
     layer.focus({ preventScroll: true });
@@ -149,7 +151,7 @@ export function makeStrip(layer: HTMLElement, o: { onResize?: () => void } = {})
     document.title = titleBefore && titleBefore !== TITLE ? titleBefore : "Quixote · Sancho";
     if (!(instant || reduceMotion)) {
       layerAnims = clearAnims(layerAnims); const back = pageAnims; pageAnims = [];
-      const out = [...chrome.map((c) => anim(c, [{ opacity: 1, transform: "translate3d(0, 0, 0)" }, { opacity: 0, transform: "translate3d(0, 2vh, 0)" }], 0, 400)),
+      const out = [...chrome.map((c) => anim(c, [{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: "0 2vh" }], 0, 400)),
         anim(ground, [{ opacity: 1 }, { opacity: 0 }], 200, 500),
         anim(main, [{ opacity: 0, transform: "translate3d(0, -6vh, 0)" }, { opacity: 1, transform: "translate3d(0, 0, 0)" }], 300, 500)];
       clearAnims(back);
