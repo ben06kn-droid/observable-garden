@@ -85,7 +85,7 @@
     // The motion, continued: lukres.dev's eased scroll, each frame closing 1 - e^(-12 dt) of the way. Memoryless,
     // so taking it up from wherever the page being left was captured keeps its speed. Run over 0.6 s (by then
     // under 0.1% of the way is left), as a linear() easing. The header holds still and turns to the new page's
-    // colours over 0.25 s once the moving edge is halfway up the screen; the headline's words rise once it is in view.
+    // as the moving edge passes under it; the headline's words rise once it is in view.
     var K = 12, D = 0.6, norm = 1 - Math.exp(-K * D);
     var pts = []; for (var i = 0; i <= 24; i++) { var x = i / 24; pts.push(((1 - Math.exp(-K * D * x)) / norm).toFixed(4)); }
     var EASE = "linear(" + pts.join(", ") + ")";
@@ -98,9 +98,12 @@
         var opts = function (p) { return { duration: ms, easing: EASE, fill: "both", pseudoElement: p }; };
         h.animate([{ transform: "translate3d(0, 0, 0)" }, { transform: "translate3d(0, " + (sgn * rest).toFixed(1) + "px, 0)" }], opts("::view-transition-old(root)"));
         h.animate([{ transform: "translate3d(0, " + (-sgn * rest).toFixed(1) + "px, 0)" }, { transform: "translate3d(0, 0, 0)" }], opts("::view-transition-new(root)"));
-        var flip = at(1 - vh / (2 * Math.max(1, rest))) * 1000;
-        h.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 250, delay: flip, easing: "linear", fill: "both", pseudoElement: "::view-transition-new(top)" });
-        h.animate([{ opacity: 1 }, { opacity: 1 }], { duration: Math.max(ms, flip + 250), fill: "both", pseudoElement: "::view-transition-old(top)" });
+        // the header turns in one frame, as the moving edge passes under it: everything below it is then the new
+        // page (a cross-fade between two opaque headers, one light and one dark, passes through grey)
+        var head = document.querySelector(".top"), hh = head ? head.getBoundingClientRect().bottom : 0;
+        var flip = at(c.dir === "down" ? 1 - hh / Math.max(1, rest) : 1 - (vh - hh) / Math.max(1, rest)) * 1000;
+        h.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 1, delay: flip, fill: "both", pseudoElement: "::view-transition-new(top)" });
+        h.animate([{ opacity: 1 }, { opacity: 1 }], { duration: Math.max(ms, flip + 1), fill: "both", pseudoElement: "::view-transition-old(top)" });
       }, function () {});
       return wordsDone;
     }
