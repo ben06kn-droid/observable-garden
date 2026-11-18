@@ -517,7 +517,10 @@ every page; a page gives it the drawn layer it acts on and its colours from its 
     moment the fluid takes each stretch of the cursor's path in, and are lifted off the ground. The
     overlay repaints a picture of the layer from its SVG (replayed into a canvas) and its canvases.
 - **Per page**:
-  - run: bending, silver-white with red fringes, on the fan. Inside the glass the strokes are pushed aside by
+  - run: bending, silver-white with red fringes, on the fan's white paths; the gold paths bend with it but keep
+    their own gold throughout, with no tone and no fringe, in both palettes (2026-11-18: the shader tones and fringes
+    the white channel only and lays the gold over it by its own coverage, so the rule follows a path's colour as it
+    fades; the same in the glass, where a pushed gold stroke stays gold, unfringed). Inside the glass the strokes are pushed aside by
     the cursor as by a round obstacle, not bent by the fluid (section 3, run, "The cursor in the glass").
   - home: a trail, the grove's green with a pale green highlight, over the grove, the ground line and the
     open paper, and behind the text (the overlay lies under it). The leaves are its wind.

@@ -20,7 +20,8 @@
 // its target, quickly as the cursor comes near, and back to zero over about 500 ms (exponential, no overshoot)
 // as it moves away or leaves; below a hundredth of a pixel it is exactly zero, and the flow is drawn exactly as
 // if it had never been touched. A pushed stroke is held inside the outline, and turns the wake's silver-white
-// tone (--wake-tone) with fine red fringes (--wake-fringe), in proportion to how far it is pushed. Only cursor
+// tone (--wake-tone) with fine red fringes (--wake-fringe), in proportion to how far it is pushed; a gold stroke
+// keeps its own gold, with no fringe. Only cursor
 // movement (no touch), only where the wake is wanted (a fine pointer, motion allowed).
 //
 // The glass draws into its own 2D canvas. With `composited`, that canvas is not shown: the page's hero
@@ -91,7 +92,7 @@ export class Glass {
   private front: HTMLCanvasElement; private edge: HTMLCanvasElement;   // the flow (each frame); the outline (once)
   private line: [number, number, number] = [240, 241, 250];
   private sand = "#d6b27b"; private lineA = 0.72;
-  private tone: [number, number, number] = [221, 227, 240]; private fringe = "#ef4b55"; private fringeA = 1; private sandRGB: [number, number, number] = [214, 178, 123];
+  private tone: [number, number, number] = [221, 227, 240]; private fringe = "#ef4b55"; private fringeA = 1;
   // the cursor (viewport px) and the glass's top left on the page when it was last seen; whether any offset is not zero
   private cursor: { x: number; y: number } | null = null; private gpage: [number, number] = [0, 0]; private pushed = false; private pdt = 0;
   private pushes = wakeWanted(); private ac = new AbortController();   // the page-wide listeners, removed with the glass
@@ -128,7 +129,7 @@ export class Glass {
     const cs = getComputedStyle(this.el);
     const l = cs.getPropertyValue("--hg-line");
     if (l) this.line = rgb(l);
-    this.sand = cs.getPropertyValue("--fan-sand").trim() || "#d6b27b"; this.sandRGB = rgb(this.sand);
+    this.sand = cs.getPropertyValue("--fan-sand").trim() || "#d6b27b";
     this.tone = rgb(cs.getPropertyValue("--wake-tone") || "#dde3f0");
     this.fringe = cs.getPropertyValue("--wake-fringe").trim() || "#ef4b55";
     this.fringeA = Number(cs.getPropertyValue("--wake-fringe-alpha")) || 1;
@@ -254,7 +255,7 @@ export class Glass {
         for (let q = 1; q <= steps; q++) {
           const v = vt + (vh - vt) * (q / steps), p = pt(q), b = bin(thin(v - (vh - vt) / steps / 2));
           const path = P(g, lvl, b); path.moveTo(prev[0], prev[1]); path.lineTo(p[0], p[1]);
-          if (lvl) { const fp = F(lvl, b); fp.moveTo(prev[0] + nx, prev[1] + ny); fp.lineTo(p[0] + nx, p[1] + ny); fp.moveTo(prev[0] - nx, prev[1] - ny); fp.lineTo(p[0] - nx, p[1] - ny); }
+          if (lvl && !it.gold) { const fp = F(lvl, b); fp.moveTo(prev[0] + nx, prev[1] + ny); fp.lineTo(p[0] + nx, p[1] + ny); fp.moveTo(prev[0] - nx, prev[1] - ny); fp.lineTo(p[0] - nx, p[1] - ny); }   // gold strokes take no fringe
           prev = p;
         }
       } else {
@@ -289,7 +290,8 @@ export class Glass {
         const a = (b + 0.5) / BINS;
         x.lineWidth = g ? 1.1 : 0.9;
         x.globalAlpha = (g ? 0.95 : this.lineA) * a;
-        x.strokeStyle = l ? mix(g ? this.sandRGB : this.line, t) : (g ? this.sand : `rgb(${this.line.join(",")})`);
+        // a pushed white stroke takes the tone; a gold one keeps its own gold
+        x.strokeStyle = g ? this.sand : l ? mix(this.line, t) : `rgb(${this.line.join(",")})`;
         x.stroke(path);
       }
     }

@@ -16,7 +16,8 @@
 // The cursor's wake (src/cursorwake.ts, the site's shared effect, after lukres.dev): moving the pointer
 // stirs a small fluid; where it flows, the paths bend along it, turn the page's tone (--wake-tone: a cool
 // silver-white, a steel grey on the light ground) and split into fine fringes in --wake-fringe (red) on
-// either side, the split following the flow; as it fades they return to their own white and gold. Only
+// either side, the split following the flow; as it fades they return to their own white. The gold paths bend
+// with it but keep their own gold throughout: no tone and no fringe on them, in either palette. Only
 // cursor movement drives it (not touch, not a drag); it touches the paths only (the fan is behind the
 // page's text).
 //
@@ -77,14 +78,19 @@ void main() {
   vec3 col = mix(mix(uGround, uLine, a.x), uSand, a.y);
   float alpha = max(a.x, a.y);
   if (s > 0.0) {
-    // the lines: the tone where it flows, a thin fringe each side, across them along the flow
-    float line = max(a.x * 2.4, a.y * 1.2);
-    col = mix(col, mix(uGround, uTone, clamp(line, 0.0, 1.0)), s);
+    // the white lines: the tone where it flows, a thin fringe each side, across them along the flow. The gold
+    // lines keep their own colour (they bend, but take no tone and no fringe): the white is toned and fringed
+    // first, then the gold laid over it by its own coverage, so a gold line stays gold along its whole length,
+    // over or beside a toned white one, and as it fades in or out
+    float lw = clamp(a.x * 2.4, 0.0, 1.0);
+    vec3 cw = mix(mix(uGround, uLine, a.x), mix(uGround, uTone, lw), s);
     vec2 n = wakeAcross(d, s);
     vec2 f0 = cov(pc - d - n), f1 = cov(pc - d + n);
-    float fr = clamp(max(max(f0.x * 2.4, f0.y * 1.2), max(f1.x * 2.4, f1.y * 1.2)) - line, 0.0, 1.0) * s;
-    col = mix(col, uFringe, clamp(fr * 0.6 * uFringeA, 0.0, 1.0));
-    alpha = max(alpha, max(line * s, fr));
+    float fr = clamp(max(f0.x, f1.x) * 2.4 - lw, 0.0, 1.0) * s;
+    cw = mix(cw, uFringe, clamp(fr * 0.6 * uFringeA, 0.0, 1.0));
+    col = mix(cw, uSand, a.y);
+    float line = max(lw, clamp(a.y * 1.2, 0.0, 1.0));
+    alpha = max(alpha, max(lw * s, fr));
     // the blank space: the wake itself, a glossy trace (wakeTrace). Never under a field.
     float blank = (1.0 - clamp(line, 0.0, 1.0)) * maskAt(pc).g;
     vec2 gr = vec2(length(flowAt(pc + vec2(6.0, 0.0))) - length(flowAt(pc - vec2(6.0, 0.0))),
