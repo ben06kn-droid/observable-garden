@@ -72,7 +72,13 @@ const wake = new WakeLayer({ host: scene, ground: groundOf,
   active: () => !inside.isOpen(),
   moving: () => busy,
   minRepaint: 250,
-  scale: { cell: 5, flow: 0.3, curl: 70, dye: 1.5, dyeFlow: 0.12, dyeWidth: 1.6, dyeFade: 0.45 },
+  // halfway between the narrow line it was and the docs tail (src/sky.ts; 2026-11-18). The fluid's settings, shared
+  // with docs, are the midpoints: cell 5 | 8, flow 0.3 | 0.4125, curl 70 | 13.2, force 1 | 0.6, fade 0.45 | 0.54. The
+  // dye has no docs counterpart (docs draws the fluid itself): its width is the midpoint of the line's (2.4px) and
+  // the docs push's (32 + 48·√dose px), its carry the midpoint of 0.12 and the docs flow; its fade, 0.42 s, was set
+  // by measurement so the tail's visible area 0.9 s after a stroke is halfway between the two (about 8k px)
+  scale: { cell: 6.5, flow: 0.35625, curl: 41.6, force: 0.8, fade: 0.495,
+           dye: 1.5, dyeWidth: 17.2 / 1.5, dyeGrow: 24 / 1.5, dyeFlow: 0.26625, dyeFade: 0.42 },
   onPush: (x, y, vx, vy, dose) => { const k = 0.5 + 0.9 * Math.sqrt(dose); life.wind.add(x, y, vx * k, vy * k); } });
 // a change to the drawings: painted again in idle time
 const mo = new MutationObserver(() => {

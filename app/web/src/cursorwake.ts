@@ -143,6 +143,8 @@ export interface WakeScale {
   /** the dye line's half width in dye texels (0.7) and its fade's time constant in s (0.55) */
   dyeWidth?: number;
   dyeFade?: number;
+  /** how much wider the dye line grows with the cursor's speed: dye texels per √dose (0: a fixed width) */
+  dyeGrow?: number;
   /** the force the cursor puts in, × the run page's (1) */
   force?: number;
   /** the fluid's fade's time constant, s (0.45): longer lives longer */
@@ -158,13 +160,13 @@ export class Wake {
   /** pointer movement still waiting to be pushed in (the wake's delay) */
   get pending() { return this.queue.length > 0; }
 
-  private cell: number; private flow: number; private eps: number; private dyeCell: number; private dyeFlow: number; private dyeWidth: number; private dyeFade: number; private dyeDose = 0; private force: number; private fadeT: number;
+  private cell: number; private flow: number; private eps: number; private dyeCell: number; private dyeFlow: number; private dyeWidth: number; private dyeGrow: number; private dyeFade: number; private dyeDose = 0; private force: number; private fadeT: number;
   private dye: [Target, Target] | null = null; private dw = 0; private dh = 0; private vw = 1; private vh = 1;
   /** each stretch of the cursor's path as it is pushed in (after the delay): viewport css px, its velocity
    *  in px/s and its dose (0-1, how strongly it stirs the fluid) */
   onPush: ((x: number, y: number, vx: number, vy: number, dose: number) => void) | null = null;
   constructor(gl: WebGL2RenderingContext, scale: WakeScale = {}) {
-    this.gl = gl; this.cell = scale.cell ?? CELL; this.flow = scale.flow ?? FLOW; this.eps = scale.curl ?? 22; this.dyeCell = scale.dye ?? 0; this.dyeFlow = scale.dyeFlow ?? 0.1; this.dyeWidth = scale.dyeWidth ?? 0.7; this.dyeFade = scale.dyeFade ?? DYE_FADE; this.force = scale.force ?? 1; this.fadeT = scale.fade ?? FADE;
+    this.gl = gl; this.cell = scale.cell ?? CELL; this.flow = scale.flow ?? FLOW; this.eps = scale.curl ?? 22; this.dyeCell = scale.dye ?? 0; this.dyeFlow = scale.dyeFlow ?? 0.1; this.dyeWidth = scale.dyeWidth ?? 0.7; this.dyeGrow = scale.dyeGrow ?? 0; this.dyeFade = scale.dyeFade ?? DYE_FADE; this.force = scale.force ?? 1; this.fadeT = scale.fade ?? FADE;
     if (!gl.getExtension("EXT_color_buffer_float")) return;
     const sh = (t: number, src: string) => { const s = gl.createShader(t)!; gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
     const vs = sh(gl.VERTEX_SHADER, VERT); if (!vs) return;
@@ -277,7 +279,7 @@ export class Wake {
         this.pass("dyeSplat", D[1], (u) => {
           gl.uniform1i(u.uVel, this.bind(0, D[0]));
           gl.uniform2f(u.uA, P0[0], P0[1]); gl.uniform2f(u.uB, P1[0], P1[1]);
-          gl.uniform2f(u.uForce, amt, 0); gl.uniform1f(u.uR, this.dyeWidth);
+          gl.uniform2f(u.uForce, amt, 0); gl.uniform1f(u.uR, this.dyeWidth + this.dyeGrow * Math.sqrt(this.dyeDose));
         }, this.dw, this.dh);
         const t = D[0]; D[0] = D[1]; D[1] = t; this.idle = 0;
       }
