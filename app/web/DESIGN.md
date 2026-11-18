@@ -368,6 +368,18 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     and nothing about it changes with the scroll. White with about one gold stroke in eight; where the
     strokes crowd into the neck each is drawn fainter, so it stays a bundle of lines. The headline's last
     letters pass through the upper bulb (drawn by the hero layer, below).
+  - **The cursor in the glass** (src/glass.ts, 2026-11-18): a smooth, round obstacle in the stream. Every stroke
+    within 140px is moved straight away from the cursor by an amount set only by its distance (22px at the
+    cursor, `22·(1 − (d/140)²)²`, nothing at 140px). The push is an offset added when a stroke is drawn, kept at
+    five points along it: it never changes where a stroke is on its streamline or how fast it goes, and never
+    accumulates. Each offset eases in quickly (60 ms) and back to zero with a 120 ms time constant (about 500 ms,
+    no overshoot); under a hundredth of a pixel it is exactly zero (checked: two seconds after the cursor
+    leaves, the largest offset is 0). Pushed strokes and shapes are held inside the outline. A pushed stroke
+    turns the wake's silver-white tone and takes fine red fringes, in proportion to how far it actually moves
+    (one pressed against a wall barely moves and barely changes). Only cursor movement, a fine pointer and
+    motion allowed. Cost: about 0.1 ms a frame in Chrome while the cursor is near; in Safari at 1440x900 frame
+    times with the cursor sweeping the glass matched those before (median 54–55 ms against 53 ms, p95 58–59 ms
+    against 57–77 ms; this machine's Safari ran the run section at about 18 fps either way).
   - **The hero layer** (src/hero.ts): on a desktop with motion, the opening text (down to 01 Data) and the
     glass are drawn in one WebGL canvas that scrolls with the page; the page's own text stays, transparent,
     for selection, search and screen readers. Through the glass the headline is seen gently magnified
@@ -376,9 +388,9 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     cursor's wake never moves the letters or the glass's outline: in the blank space around them it shows
     as a glossy trace (a soft highlight toward an upper-left light, a faint shade, a hairline red rim;
     drawn by the fan's pass so it runs the whole page, never under a field). It follows the cursor 70 ms
-    behind on purpose, and its strength rises steeply with the cursor's speed (a slow drift barely stirs it), and inside the glass it bends the flow, which
-    stays within the outline (silver-white, fine red fringes). Phones and reduced motion keep the plain
-    page text and a glass without the lens.
+    behind on purpose, and its strength rises steeply with the cursor's speed (a slow drift barely stirs it).
+    Inside the glass the cursor pushes the strokes aside instead (above); the hero layer runs no fluid of its
+    own. Phones and reduced motion keep the plain page text and a glass without the lens.
   - **Inversion**: a click on the glass (or Enter) inverts the palette from the click
     (html[data-hg="light"]); both palettes meet AA.
   - **The fan** (src/fan.ts): random-walk hairlines down the whole left of the page, from the top to above
@@ -478,7 +490,8 @@ every page; a page gives it the drawn layer it acts on and its colours from its 
     moment the fluid takes each stretch of the cursor's path in, and are lifted off the ground. The
     overlay repaints a picture of the layer from its SVG (replayed into a canvas) and its canvases.
 - **Per page**:
-  - run: unchanged; bending, silver-white with red fringes, on the fan and inside the glass.
+  - run: bending, silver-white with red fringes, on the fan. Inside the glass the strokes are pushed aside by
+    the cursor as by a round obstacle, not bent by the fluid (section 3, run, "The cursor in the glass").
   - home: a trail, the grove's green with a pale green highlight, over the grove, the ground line and the
     open paper, and behind the text (the overlay lies under it). The leaves are its wind.
   - demo: a trail in neon blue with pink edges, a little more vivid; over the scenery and the run's tree,

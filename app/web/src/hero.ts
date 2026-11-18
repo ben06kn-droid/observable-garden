@@ -10,11 +10,12 @@
 // stay on their line), each colour channel bent a little differently toward the walls. The glass's flow
 // fades where it crosses the letters, so they stay legible.
 //
-// The wake (src/cursorwake.ts, the site's shared effect): the letters and the glass's outline never move; inside the glass it bends the
-// flow (which stays within the outline), silver-white with fine red fringes. In the blank space the wake
-// is the fan's (src/fan.ts), drawn under this layer, which is clear there. Only cursor movement drives it.
+// The cursor: the letters and the glass's outline never move. Inside the glass the cursor pushes the flow's
+// strokes aside, which the glass itself draws (src/glass.ts); this layer only takes its frames. In the blank
+// space the cursor's wake is the fan's (src/fan.ts), drawn under this layer, which is clear there. This layer
+// runs no fluid of its own.
 import { GLSL_PROFILE, type Glass } from "./glass";
-import { followPointer, rgb, STILL, Wake, WAKE_GLSL, wakeColours, type RGB } from "./cursorwake";
+import { rgb, type RGB } from "./cursorwake";
 
 const VERT = `#version 300 es
 in vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }`;
@@ -22,28 +23,22 @@ const FRAG = `#version 300 es
 precision highp float;
 uniform vec2 uSize; uniform float uDpr;            // the canvas, css px
 uniform vec2 uOrigin, uScroll, uView;              // its page position; the page's scroll; the viewport
-uniform vec3 uGround, uTone, uFringe;
+uniform vec3 uGround;
 uniform sampler2D uText; uniform float uTextH;     // the text, painted in the canvas's coordinates, to uTextH
 uniform sampler2D uGlass, uEdge; uniform vec4 uGlassBox;   // the glass's flow and outline, and where it sits
 uniform float uH, uGy;
-uniform sampler2D uVel; uniform float uWake, uFringeA;
 out vec4 o;
 ${GLSL_PROFILE}
-${WAKE_GLSL}
 vec4 text(vec2 p) { return (p.y < 0.0 || p.y > uTextH) ? vec4(0.0) : texture(uText, p / vec2(uSize.x, uTextH)); }
 vec4 inGlass(sampler2D t, vec2 p) {
   vec2 gu = (p - uGlassBox.xy) / uGlassBox.zw;
   return (gu.x >= 0.0 && gu.x <= 1.0 && gu.y >= 0.0 && gu.y <= 1.0) ? texture(t, gu) : vec4(0.0);
 }
-// the wake's displacement at a point of the canvas (css px)
-vec2 flowAt(vec2 p) { return wakeFlow(uVel, uOrigin + p - uScroll, uView); }
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uSize.y * uDpr - gl_FragCoord.y) / uDpr;
   vec2 c = uGlassBox.xy + uGlassBox.zw * 0.5, q = p - c;
   float v = q.y / uGy, r = abs(v) < 1.0 ? halfWidth(v, uH) : 0.0;
   bool inside = abs(v) < 1.0 && abs(q.x) < r;
-  vec2 d = uWake > 0.0 ? flowAt(p) : vec2(0.0);
-  float s = uWake * wakeStrength(d);
 
   // the text, never moved: plain outside the glass; through it, seen through a thick cylinder (x magnified
   // toward the middle, compressed toward the walls, y untouched), each channel bent a little differently
@@ -59,18 +54,11 @@ void main() {
     t = ta;
   } else { vec4 tk = text(p); col = tk.rgb * tk.a; t = tk.a; }
 
-  // the flow inside the glass: the one thing here the wake moves; it stays within the outline, and where it
-  // flows it turns the tone (silver-white) with fine fringes (red)
+  // the flow inside the glass, as the glass drew it (the cursor's push included)
   float fa = 0.0;
   if (inside) {
-    vec4 f = inGlass(uGlass, p - d);
+    vec4 f = inGlass(uGlass, p);
     vec3 fc = f.rgb; fa = f.a;
-    if (s > 0.0) {
-      fc = mix(fc, uTone, s);
-      vec2 n = wakeAcross(d + 1e-5, s);
-      float fr = clamp(max(inGlass(uGlass, p - d - n).a, inGlass(uGlass, p - d + n).a) - fa, 0.0, 1.0) * s;
-      fc = mix(fc, uFringe, clamp(fr * 0.6 * uFringeA / max(fa + fr, 1e-3) * fr, 0.0, 1.0)); fa = max(fa, clamp(fr * 0.6 * uFringeA, 0.0, 1.0));
-    }
     fa *= 1.0 - 0.8 * t;                           // the flow fades across the letters
     col = fc * fa + col * (1.0 - fa);              // over the text
     t = fa + t * (1.0 - fa);
@@ -101,25 +89,21 @@ export class Hero {
   private o: HeroOptions; private gl: WebGL2RenderingContext | null = null; private prog: WebGLProgram | null = null;
   private u: Record<string, WebGLUniformLocation | null> = {};
   private texT: WebGLTexture | null = null; private texG: WebGLTexture | null = null; private texE: WebGLTexture | null = null; private paintCv = document.createElement("canvas");
-  private wake: Wake | null = null; private dpr = 1; private w = 0; private h = 0; private textH = 0; private origin = [0, 0]; private glassBox = [0, 0, 1, 1];
-  private ground: RGB = [0, 0, 0]; private tone: RGB = [1, 1, 1]; private fringe: RGB = [1, 0, 0]; private fringeA = 1;
-  private raf = 0; private last = 0; private glassDirty = true; private visible = true; private io: IntersectionObserver;
-  private unfollow = () => {};
+  private dpr = 1; private w = 0; private h = 0; private textH = 0; private origin = [0, 0]; private glassBox = [0, 0, 1, 1];
+  private ground: RGB = [0, 0, 0];
+  private raf = 0; private glassDirty = true; private visible = true; private io: IntersectionObserver;
 
   constructor(o: HeroOptions) {
     this.o = o;
     this.canvas = document.createElement("canvas"); this.canvas.className = "hero-layer"; this.canvas.setAttribute("aria-hidden", "true");
     o.host.prepend(this.canvas);
     this.initGL();
-    // the cursor, while the layer is on screen
-    this.unfollow = followPointer((x, y) => { if (this.wake) { this.wake.move(x, y); this.kick(); } }, () => this.wake?.lift(), () => this.visible);
     this.io = new IntersectionObserver((es) => { this.visible = es.some((e) => e.isIntersecting); if (this.visible) this.kick(); });
     this.io.observe(this.canvas);
   }
   get ok() { return !!this.prog; }
   destroy() {
     cancelAnimationFrame(this.raf); this.raf = 0; this.io.disconnect();
-    this.unfollow();
     this.canvas.remove();
   }
   /** the glass drew a frame */
@@ -134,13 +118,12 @@ export class Hero {
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uOrigin", "uScroll", "uView", "uGround", "uTone", "uFringe", "uText", "uTextH", "uGlass", "uEdge", "uGlassBox", "uH", "uGy", "uVel", "uWake", "uFringeA"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uSize", "uDpr", "uOrigin", "uScroll", "uView", "uGround", "uText", "uTextH", "uGlass", "uEdge", "uGlassBox", "uH", "uGy"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
     this.texT = tex(); this.texG = tex(); this.texE = tex();
     this.gl = gl; this.prog = p;
-    const w = new Wake(gl); this.wake = w;
   }
 
   /** sizes and places the layer, and paints the text: call after a layout change, a font load, a palette
@@ -158,8 +141,6 @@ export class Hero {
     this.glassBox = [g.left - host.left, g.top - host.top, g.width, g.height];
     const cs = getComputedStyle(this.canvas);
     this.ground = rgb(cs.getPropertyValue("--ground") || "#121416");
-    const wc = wakeColours(this.canvas); this.tone = wc.tone; this.fringe = wc.fringe; this.fringeA = wc.fringeA;
-    this.wake?.resize(innerWidth, innerHeight);
     this.paint(host);
     gl.bindTexture(gl.TEXTURE_2D, this.texE); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.o.glass.outline);
@@ -204,18 +185,10 @@ export class Hero {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
   }
 
-  // ---------- drawing: only when something changed (the glass's frame, the wake, a layout), and only the
-  // part of the layer in view
-  private kick() { if (this.raf || !this.gl) return; this.last = performance.now(); this.raf = requestAnimationFrame(this.frame); }
-  private frame = (now: number) => {
-    this.raf = 0;
-    const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
-    const w = this.wake;
-    w?.step(dt, innerHeight);
-    const waking = !!w?.ready && w.idle < STILL;
-    this.draw(false);
-    if (waking || w?.pending) this.kick();             // and through the delay before a push lands
-  };
+  // ---------- drawing: only when something changed (the glass's frame, a layout), and only the part of the
+  // layer in view
+  private kick() { if (this.raf || !this.gl) return; this.raf = requestAnimationFrame(this.frame); }
+  private frame = () => { this.raf = 0; this.draw(false); };
   private draw(all: boolean) {
     const gl = this.gl; if (!gl || !this.prog) return;
     const top = Math.max(0, scrollY - this.origin[1]), bot = Math.min(this.h, scrollY + innerHeight - this.origin[1]);
@@ -231,16 +204,15 @@ export class Hero {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.o.glass.canvas);
       this.glassDirty = false;
     }
-    const m = this.o.glass.measures(), w = this.wake, on = !!w?.ready && w.idle < STILL;
+    const m = this.o.glass.measures();
     gl.uniform2f(this.u.uSize, this.w, this.h); gl.uniform1f(this.u.uDpr, k);
     gl.uniform2f(this.u.uOrigin, this.origin[0], this.origin[1]); gl.uniform2f(this.u.uScroll, scrollX, scrollY); gl.uniform2f(this.u.uView, innerWidth, innerHeight);
-    gl.uniform3f(this.u.uGround, ...this.ground); gl.uniform3f(this.u.uTone, ...this.tone); gl.uniform3f(this.u.uFringe, ...this.fringe);
+    gl.uniform3f(this.u.uGround, ...this.ground);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.texT); gl.uniform1i(this.u.uText, 0); gl.uniform1f(this.u.uTextH, this.textH);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.texG); gl.uniform1i(this.u.uGlass, 1);
     gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.texE); gl.uniform1i(this.u.uEdge, 3);
     gl.uniform4f(this.u.uGlassBox, this.glassBox[0], this.glassBox[1], this.glassBox[2], this.glassBox[3]);
     gl.uniform1f(this.u.uH, m.H); gl.uniform1f(this.u.uGy, m.gy);
-    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, on ? w!.texture : null); gl.uniform1i(this.u.uVel, 2); gl.uniform1f(this.u.uWake, on ? 1 : 0); gl.uniform1f(this.u.uFringeA, this.fringeA);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disable(gl.SCISSOR_TEST);

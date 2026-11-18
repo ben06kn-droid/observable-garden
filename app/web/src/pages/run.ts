@@ -110,6 +110,8 @@ let hero: Hero | null = null;
 // ResizeObserver's callback runs after layout and before paint), so the drawn text never lags the page
 new ResizeObserver(() => hero?.layout()).observe(document.querySelector(".hero")!);
 /** across: on a desktop its bulbs clear the form's columns (and may be cropped by the page's right edge) */
+// dev only: the largest offset the cursor's push leaves on any stroke (0: the flow exactly as if untouched)
+if (import.meta.env.DEV) (window as unknown as { __glassDev?: () => number }).__glassDev = () => glass?.maxOffset() ?? -1;
 function placeGlass() {
   if (!glass) return;
   const m = glass.measures(), host = $("hg-host").getBoundingClientRect();
