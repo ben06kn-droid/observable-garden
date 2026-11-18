@@ -323,6 +323,8 @@ class table's size) have their room from the start, so its arrival never moves t
   - the menu by keyboard and pointer, the Contact view included; the author's details in the menu only; the
     footer on every page that has one (its three links, the line on the grid's edge); the paper linked from home
     and docs only;
+  - the demo: its idle state, a run's stages, the tree and the bed, the verdict, inside the run by click and Enter,
+    the tail inside a run, Escape (and under reduced motion: the finished tree, nothing running);
   - out to the demo (from run) and Back: the page kept, on its section (`out_and_back`); home's Eucalyptus line
     scrolls to the last section, which holds its two lines and the footer, in its theme, with no canvas
     (`eucalyptus_section`).
@@ -373,8 +375,8 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     three of the same trees at the same proportions (the restarts with the best Sharpe: two in front, one
     behind), laid out the same way in a taller grove; the headline, the copy and the tree tops are on the
     first screen and the ground line may fall below the fold; nothing is written under it.
-  - **The trees do not respond to clicks** (2026-11-18), here or on the demo: no sway, not buttons, no pointer
-    cursor. On the demo the run's tree alone is clickable, to open the run, and it does not shake.
+  - **The trees do not respond to clicks** (2026-11-18): no sway, not buttons, no pointer cursor. On the demo the
+    run's tree alone is clickable, after its verdict, to open the run, and it does not shake.
   - **Colour**: leaves on the trees are three greens (lighter in the back row); the falling and fallen leaves
     are the same birch leaf in three ochres, the page's only warm accent. Few and small, depth from size and
     opacity, a slow fall, a light cursor wind; they leave from the trees' leaves, lie along the ground line
@@ -497,8 +499,45 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   - **Phone**: the backdrop as a band at the top (the gradient, the glow, a small windmill), then the sheet; no
     tail. **Reduced motion**: drawn once, still. 60 fps while scrolling with the tail active (worst frame
     16.8 ms); paused while hidden or off screen.
-- **demo**: the city garden at night in neon tubing (also the result page, which replays a demo verdict). The
-  only page with neon, glow or the night palette; `demo.css` is loaded by no other page.
+- **demo** (rebuilt 2026-11-18; `demo.html`, `src/pages/demo.ts`, `src/styles/demo-page.css`): the site's pattern at
+  night. A plain, rich backdrop, one drawn element (the run's tree), the shared cursor tail, clean content on the grid.
+  The only page with neon, kept sparing: the theme's blue (#44b8ff) and pink (#ff3fd2) appear only as thin lines and
+  small marks; the only glow is a tight bloom (a 1.6 px blur) on the element active at the moment (the twig being
+  scored, then the submitted rule). The result page keeps the old look and `demo.css`; the new stylesheet is loaded by
+  the demo alone.
+  - **Backdrop**: #07060B with one very soft light field in the blue at 10% behind the tree. No city, cables, glows,
+    halos, gradient wash or background trees (the page is stronger with the one tree).
+  - **Desktop**, on the grid as the run section: columns 1-5 hold the label, the headline ("The best of many tries"),
+    one paragraph, the three searches as numbered rows (01-03: name, one line on what it is and what to watch; the chosen
+    row marked by a short blue line; a finished one carries its verdict and p) with one Start (Start, Running, Start
+    again), the status lines and the verdict. Columns 7-12 hold the tree, filling the viewport and sticky beside the
+    text. Type as the run section: Inter for reading, Plex Mono caps for small labels. Everything fits 1440x900.
+  - **The tree** (`src/runtree.ts`, approved 2026-11-18; drawn by `src/demotree.ts`): one search as one tree in fine
+    lines, on the birch's strokes and crossing test. The first start is the trunk (1.5 times as wide at the foot,
+    narrowing fast); each restart a limb leaving it low, a later one lower and further out; each kept move a length
+    of stem with a small ring where it ends; each run of rules a move scored that add one feature family a branch;
+    each rule a twig, its length the rule's in-sample Sharpe in three steps. Height grows with the rules scored. It
+    grows rule by rule in search order (the growing tip narrows to a point); the submitted rule's twig and the stem
+    and branch below it turn pink when the search submits. No crossings on the three searches. Nothing shakes or sways.
+  - **The bed** (`src/demobed.ts`): the repeated searches as small flowers in the tree's lines along its ground, on the
+    old bed's own clock (decoration; reads nothing from the gate).
+  - **Status lines**, one fixed place: loading ("The first time takes a few seconds"); "The agent searches. Every rule
+    it scores is recorded." with Move m of M · rule k of N; what was submitted (rule and in-sample Sharpe from the
+    log's submit call); "The gate now repeats the same search B times, on resampled data where no rule has a real
+    edge." with Search i of B; the level ("To pass, the submitted Sharpe must beat what at least 95 in 100 of those
+    searches reach.", 1 - alpha); then the verdict word and its MEANING. Checked against the gate: the replay tier
+    re-runs the logged procedure on stationary-bootstrap resamples of the demeaned columns (`quixote/certify.py`);
+    p is the share reaching the submitted score; PASS when p < alpha.
+  - **Inside a run**: after the verdict the tree is a button (click, Enter or Space); a panel opens over the text
+    column, beside the tree, never over it: a summary line, each logged call as a sentence with its tool name in small
+    mono (what it tried, how many rules, what it kept and at what Sharpe, or refused and why; rule counts from the
+    gate's re-execution, every other number the log's own text), how the search ended and what the gate decided (p,
+    alpha, B; the class tier beside it). Escape or Close closes it, focus back on the tree. On a phone it sits in the
+    flow under the tree.
+  - **Phone**: text first, then the tree (as tall as 118vw, at most 560 px), then the panel when open; no tail.
+  - **Reduced motion**: the tree drawn finished at once, the bed open, the status lines in turn; nothing animates.
+  - Measured (headless Chrome, 1440x900): growing the 377-rule tree with the cursor moving over it, 182 frames in 3 s,
+    the longest 16.8 ms.
 - **Eucalyptus** (`src/onepage/eucalyptus.html`, `src/pages/eucalyptus.ts`, `src/styles/eucalyptus.css`;
   2026-11-18): the one page's last section, at `/eucalyptus.html`. Its own theme, a lime ground (#C4F042) with ink
   #14210A. The words "Coming soon" large in the title face (Bricolage 800 at `--t-hero`) on the grid's left edge, a
@@ -562,11 +601,10 @@ every page; a page gives it the drawn layer it acts on and its colours from its 
     the cursor as by a round obstacle, not bent by the fluid (section 3, run, "The cursor in the glass").
   - home: a trail, the grove's green with a pale green highlight, over the grove, the ground line and the
     open paper, and behind the text (the overlay lies under it). The leaves are its wind.
-  - demo: a trail in neon blue with pink edges, a little more vivid; over the scenery and the run's tree,
-    under the verdict, the stage notes, the bed and the panels (its canvas sits in `#spot` after the
-    tree). The petals are its wind. Paused inside a run. While the tree grows its picture is refreshed at
-    most four times a second; if a refresh costs more than 4 ms the trail keeps clear of the tree until
-    it has grown.
+  - demo: a trail in neon blue with pink edges, as before; over the backdrop, the run's tree and the bed, under the
+    text (its canvas sits in the tree's column, under the text column). It stays on inside a run, acting on the tree
+    and the backdrop exactly as outside, and keeps off the panel (`keep`). While the tree grows its picture is
+    refreshed at most four times a second.
   - Sancho: the run page's form over the docs page's toned-down fluid (force 60%, swirl 60%, its own motion
     75%, life +20%): only the glossy trace (`wakeTrace`: a #F2D7A6 highlight, a #14070A shade, a #B5391C
     hairline rim), laid over the backdrop, the horizon and the windmill alike. It distorts nothing: the
@@ -651,7 +689,8 @@ a footer (Eucalyptus, the demo, the viewer, the legal, shared-verdict and result
 | `src/styles/onepage.css` | backdrops, `.section`, the cue, the header's mixed ground |
 | `src/loader.ts`, `src/loader-mark.ts`, `src/styles/loader.css`, `public/loader-early.js` | the loading screen |
 | `loader.html`, `src/pages/loader-preview.ts` | the loading screen alone, for review |
-| `src/scene.ts` | a run's tree in a section; the demo's decoration only with `decor` |
+| `src/scene.ts` | a run's tree in a section; the old demo's decoration only with `decor` (the result page) |
+| `src/runtree.ts`, `src/demotree.ts`, `src/demobed.ts` | the demo's run tree: its geometry from a search, its drawing at any point of the search, the bed |
 | `src/cursorwake.ts` | the cursor's wake: the fluid, the shared shader, the pointer rules, the theme's colours, the trail overlay (`WakeLayer`) and its SVG painter |
 | `src/pages/<page>.ts` | each page's script; it imports `../common` first, then its theme. The chain's four (`index`, `run`, `docs`, `sancho`) are imported by `src/onepage/main.ts`, register their work with `task()` and keep to their own section |
 
