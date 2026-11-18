@@ -31,7 +31,7 @@ export function serve(port = 4173, { mock = false } = {}) {
         if (h.key === "Strict-Transport-Security") continue;
         res.setHeader(h.key, h.key === "Content-Security-Policy" ? h.value.replace(/;\s*upgrade-insecure-requests/, "") : h.value);
       }
-      res.setHeader("Content-Type", TYPES[extname(file)] ?? "application/octet-stream");
+      if (!res.hasHeader("Content-Type")) res.setHeader("Content-Type", TYPES[extname(file)] ?? "application/octet-stream");   // vercel.json may set it (the speculation rules)
       res.end(readFileSync(file));
     });
     srv.listen(port, "127.0.0.1", () => resolve(srv));
