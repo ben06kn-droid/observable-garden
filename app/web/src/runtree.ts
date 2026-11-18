@@ -144,8 +144,9 @@ export function buildRunTree(tree: SearchTree, o: RunTreeOptions = {}): RunTree 
       const C: P = [cx - sg * d * 0.04, lerp(A[1], -Hs, 0.42)];
       axis = cubic(A, B, C, [cx, -Hs], 72);
     }
-    const wb = s === 0 ? (S > 1 ? 2.7 : 2.6) : 1.45 - 0.05 * k, wt = s === 0 ? 0.5 : 0.42;
-    const w = (u: number) => lerp(wb, wt, Math.pow(u, 0.8));
+    const wb = s === 0 ? (S > 1 ? 4.05 : 3.9) : 1.45 - 0.05 * k, wt = s === 0 ? 0.75 : 0.42;   // the trunk 1.5x the first draft
+    // the trunk: 1.5 times as wide at the foot, narrowing fastest near it, back to the limbs' taper by mid-height
+    const w = s === 0 ? (u: number) => wt + (wb * 1.5 - wt) * Math.pow(1 - u, 2.2) : (u: number) => lerp(wb, wt, Math.pow(u, 0.8));
     // lengths per move: the bare foot is the first move's; the rest shared by the moves' rules
     const ms = stemMoves[s], bare = bareOf(s);
     const need = ms.map((i) => Math.pow(moves[i].candidates.length, 0.7) + 1.2), tot = need.reduce((a, v) => a + v, 0);
