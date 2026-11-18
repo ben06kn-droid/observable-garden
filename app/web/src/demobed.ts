@@ -19,12 +19,15 @@ export function makeBed(cv: HTMLCanvasElement, frame: () => ((x: number, y: numb
 
   function reset(id: string, half: number) {
     flowers = [];
+    // one seeded stream for the whole bed (mulberry32 from the run's id), so neighbouring flowers are independent
+    let st = hash(id) >>> 0;
+    const rnd = () => { st = (st + 0x6d2b79f5) >>> 0; let t = st; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     for (let i = 0; i < n; i++) {
-      const hs = hash(`${id}:${i}`), q = (k: number) => ((hs >>> k) % 1000) / 1000;
+      const v = [rnd(), rnd(), rnd(), rnd(), rnd(), rnd(), rnd()], hs = v[6] < 0.5 ? 0 : 1, q = (k: number) => v[[3, 10, 7, 16, 4, 13].indexOf(k)];
       // spread along the ground either side of the foot, thinning toward the ends; nothing within 22 units of the trunk
       const side = hs % 2 ? 1 : -1, au = Math.pow(q(3), 1.25), x = side * (22 + au * (half - 34));
       flowers.push({ x, h: (9 + 17 * q(10)) * (1 - 0.45 * au), lean: side * (2 + 9 * q(7)) * au, r: 1.6 + 1.3 * q(16),
-        s0: q(4) * START, open: 1.2 + 0.8 * q(13), petals: 5 + (hs % 2) });
+        s0: q(4) * START, open: 1.2 + 0.8 * q(13), petals: 5 + (i % 2) });
     }
     state = "off"; running = false; clear();
   }
@@ -63,11 +66,11 @@ export function makeBed(cv: HTMLCanvasElement, frame: () => ((x: number, y: numb
       const op = smooth((t - fl.s0 - fl.open) / OPEN);
       const top: [number, number] = [fl.x + fl.lean * g, -fl.h * g];
       // the stem: a fine curve, a little bowed
-      c.globalAlpha = 0.5; c.lineWidth = 0.55 / 1;
+      c.globalAlpha = 0.42; c.lineWidth = 0.5;
       c.beginPath(); c.moveTo(fl.x, 0); c.quadraticCurveTo(fl.x + fl.lean * 0.15 * g, -fl.h * 0.55 * g, top[0], top[1]); c.stroke();
       // the head: a ring of small petal loops, opening from a closed bud
-      const rr = fl.r * (0.35 + 0.65 * op);
-      c.globalAlpha = 0.55 + 0.35 * op; c.lineWidth = 0.5;
+      const rr = fl.r * 0.8 * (0.35 + 0.65 * op);
+      c.globalAlpha = 0.5 + 0.3 * op; c.lineWidth = 0.45;
       if (op <= 0.02) { c.beginPath(); c.arc(top[0], top[1], 0.9, 0, Math.PI * 2); c.stroke(); continue; }
       for (let p = 0; p < fl.petals; p++) {
         const a = (p / fl.petals) * Math.PI * 2 - Math.PI / 2, cx = top[0] + Math.cos(a) * rr * 0.62, cy = top[1] + Math.sin(a) * rr * 0.62;

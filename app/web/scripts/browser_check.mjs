@@ -662,66 +662,49 @@ try {
     one.eucalyptus_section.ok = one.eucalyptus_section.arrived && one.eucalyptus_section.theme === "eucalyptus" && one.eucalyptus_section.text === "Eucalyptus | Coming soon"
       && one.eucalyptus_section.canvases === 0 && one.eucalyptus_section.footer && !one.eucalyptus_section.sancho_footer && one.eucalyptus_section.current === "Eucalyptus";
   }
+  // the demo (DESIGN.md 3, demo): the three searches as rows and one Start; the stages told in the status lines; the
+  // run's tree growing in search order, then the pink path; the bed for the repeated searches; the verdict; inside the run
   await go("/demo.html"); await sleep(500);
-  report.contrast_ready = await contrast("#chips .chip, #run");
+  await until(`document.querySelectorAll('.dm-row').length >= 3`, 10000);
+  report.contrast_ready = await contrast(".dm-row .t, .dm-row .a, .dm-intro, .dm-start, #say");
   const idx = { nothing: 0, planted: 1, restart: 2 }[example];
-  await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
-  await evaluate(`document.querySelectorAll('#chips .chip')[${idx}].click(); document.getElementById('run').click(); true`);
+  report.demo_idle = await evaluate(`({ rows: [...document.querySelectorAll('.dm-row .n')].map((n) => n.textContent).join(), start: document.getElementById('start').textContent,
+    say: document.getElementById('say').textContent, tree_clickable: document.getElementById('tree').classList.contains('ready'), no_city: !document.getElementById('city') && !document.getElementById('wood2') })`);
+  await evaluate(`document.querySelectorAll('.dm-row')[${idx}].click(); document.getElementById('start').click(); true`);
   const t0 = Date.now();
-  report.timings.gate_loaded_and_search_started_ms = await until(`!!document.querySelector('#spot .note-line:not([hidden])') && /of /.test(document.querySelector('#spot .note-line').textContent)`, 120000);
-  await sleep(1500); await shot("4-demo-search");
-  report.search = await evaluate(`({ tree_stems: document.querySelectorAll('#garden .stem').length, bed_drawn: (() => { const c = document.querySelector('.bed-cv'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })() })`);
-  await until(`/^replay/.test(document.querySelector('#spot .note-line')?.textContent ?? '')`, 120000); await sleep(1200); await shot("5-demo-null");
-  await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000);
+  const stages = [];
+  const watch = setInterval(async () => { try { const s = await evaluate(`document.getElementById('say').textContent`); if (stages[stages.length - 1] !== s) stages.push(s); } catch {} }, 150);
+  report.timings.gate_loaded_and_search_started_ms = await until(`/^Move \\d+ of \\d+ · rule [1-9]/.test(document.getElementById('count').textContent)`, 120000);
+  await sleep(800); await shot("4-demo-search");
+  report.search = await evaluate(`({ running: document.getElementById('start').disabled && document.getElementById('start').textContent === 'Running', rows_disabled: [...document.querySelectorAll('.dm-row')].every((b) => b.disabled),
+    stems: document.querySelectorAll('#tree .stems path').length, twigs: document.querySelectorAll('#tree .twigs path').length, bloom: !!document.querySelector('#tree .bloom')?.getAttribute('d') })`);
+  await until(`/repeats the same search/.test(document.getElementById('say').textContent)`, 120000); await sleep(1500); await shot("5-demo-null");
+  report.null_stage = await evaluate(`({ pink_on: document.querySelector('#tree .pinkpath').classList.contains('on'), bed_drawn: (() => { const c = document.getElementById('bed'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })() })`);
+  await until(`!document.getElementById('verdict').hidden && !document.getElementById('start').disabled`, 180000);
+  clearInterval(watch);
   report.timings.click_to_verdict_ms = Date.now() - t0;
-  await sleep(1600); await shot("6-demo-verdict");
-  report.verdict = await evaluate(`({ word: document.getElementById('verdict-word').textContent, labels: [...document.querySelectorAll('#spot .note:not([hidden])')].map((d) => d.textContent),
-    blossoms_open: document.querySelectorAll('#garden .blossom.open').length, blossoms: document.querySelectorAll('#garden .blossom').length,
-    twigs: document.querySelectorAll('#garden .real .twig').length })`);
-  report.contrast_verdict = await contrast("#spot .note, #verdict-word, #chips .chip, #run");
-  // a background tree shakes and sheds; a cable strikes (vibration and a bolt on the effects canvas)
-  // the background trees do not respond: a click starts nothing, no pointer cursor, not focusable
-  report.trees_still_demo = await evaluate(`(() => { const g = document.querySelector('#wood2 .real .stem'); g.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    const all = [...document.querySelectorAll('#wood2 [data-stem="' + g.dataset.stem + '"]')];
-    return { animations: all.reduce((n, e) => n + e.getAnimations().length, 0), cursor: getComputedStyle(g).cursor, focusable: !!document.querySelector('#wood2 [tabindex]'), hit_areas: document.querySelectorAll('#wood2 .hit').length }; })()`);
-  await evaluate(`document.querySelector('#city .cable-hit').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 500, clientY: 100 })); true`);
-  await sleep(150);
-  report.bolt_drawn = await evaluate(`(() => { const c = document.getElementById('fx'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })()`);
-  await sleep(1200);
-  // the cursor as wind: a fast swipe across the bed's ground (nothing is spawned; pieces only move)
-  for (let x = 200; x <= 1240; x += 40) { await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y: 780 }, page); await sleep(8); }
-  await sleep(300); await shot("6b-wind");
-  // into the run: the ring turns the scene blue from the tree out, then the zoom; out with Esc (via
-  // history), the colour draining back; then in by the bed and out with Back
-  report.zoom_profile = await frameProfile("enter-run", async () => { await evaluate(`document.querySelector('#garden .real .stem').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`); }, 1500);
-  await until(`!document.getElementById('inside').hidden && !document.getElementById('scene').getAnimations().length`, 6000);
-  report.zoom_is = await evaluate(`({ scene_transform: getComputedStyle(document.getElementById('scene')).transform, motion_ms: getComputedStyle(document.getElementById('demo')).getPropertyValue('--T'),
-    front_last_ms: Math.max(...[...document.querySelectorAll('#demo [data-tide]')].map((e) => parseFloat(e.style.getPropertyValue('--d')) || 0)), ring_drawn: false })`);
-  await sleep(600); await shot("7-inside-run");
-  report.inside = await evaluate(`({ in_run: document.getElementById('demo').classList.contains('in-run'), title: document.getElementById('run-title')?.textContent,
-    moves: document.querySelectorAll('#inside li').length, focus_in: document.activeElement?.id === 'run-title', hash: location.hash,
-    tree_blue: getComputedStyle(document.querySelector('#garden .real .twig')).stroke, wood_blue: getComputedStyle(document.querySelector('#wood2 .real .twig')).stroke,
-    cable_pink: getComputedStyle(document.querySelector('#city .cable .lit')).stroke })`);
-  // a run with several trees: the far left first and lit, the arrow keys and a click on a tree move between them
-  report.trees = await evaluate(`(async () => {
-    const where = () => document.querySelector('#inside .where').textContent, lit = () => document.querySelectorAll('#garden .real [data-stem]:not(.dimmed)').length;
-    const nav = !document.querySelector('#inside .trees').hidden, out = { nav, first: nav ? where() : null, lit_first: lit() };
-    if (!nav) return out;
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); out.after_right = where();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); out.wraps_left = where();
-    document.querySelector('#garden .real .stem[data-stem="4"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 100));
-    out.after_click = where(); out.still_open = !document.getElementById('inside').hidden; out.lit_one = lit();
-    return out; })()`);
-  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
-  await until(`document.getElementById('inside').hidden && !document.getElementById('demo').classList.contains('tiding') && !document.body.classList.contains('inside-open')`, 8000); await sleep(200);
-  report.trees.undimmed_after = await evaluate(`document.querySelectorAll('#garden .dimmed').length === 0`);
-  report.inside.closed_by_esc = await evaluate(`location.hash === '' && !document.getElementById('demo').classList.contains('in-run')`);
-  await evaluate(`document.getElementById('bed').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
-  await until(`!document.getElementById('inside').hidden && !document.getElementById('scene').getAnimations().length`, 8000); await sleep(400);
-  await evaluate(`history.back(); true`);
-  await until(`document.getElementById('inside').hidden && !document.body.classList.contains('inside-open')`, 8000);
-  report.inside.closed_by_back = true;
+  await sleep(800); await shot("6-demo-verdict");
+  report.verdict = await evaluate(`({ word: document.getElementById('v-word').textContent, nums: document.getElementById('v-nums').textContent, row_tag: document.querySelectorAll('.dm-row .r')[${idx}].textContent,
+    start: document.getElementById('start').textContent, tree_clickable: document.getElementById('tree').classList.contains('ready') && document.getElementById('tree').getAttribute('tabindex') === '0' })`);
+  report.verdict.stages = stages;
+  report.contrast_verdict = await contrast("#say, #v-word, #v-nums, .dm-row .t");
+  // inside the run: a click on the tree opens the panel beside it (never over it), focus on its title; the cursor's tail
+  // still draws over the tree; Escape closes and focus returns to the tree; Enter on the tree opens it again
+  await evaluate(`document.getElementById('tree').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
+  await until(`!document.getElementById('inside').hidden`, 4000); await sleep(400); await shot("7-inside-run");
+  report.inside = await evaluate(`(() => { const p = document.getElementById('inside').getBoundingClientRect(), t = document.getElementById('tree').getBoundingClientRect(), b = document.getElementById('in-body');
+    return { title: document.getElementById('in-h').textContent, focus_in: document.activeElement?.id === 'in-h', moves: document.querySelectorAll('#inside li').length,
+      summary: document.querySelector('#inside .sum')?.textContent, beside: p.right <= t.left + 1, scrolls: getComputedStyle(b).overflowY === 'auto', text_hidden: getComputedStyle(document.getElementById('dm-text')).visibility === 'hidden' }; })()`);
+  { const r = await evaluate(`(() => { const b = document.getElementById('tree').getBoundingClientRect(); return [b.left + b.width * 0.3, b.top + b.height * 0.5, b.width]; })()`);
+    for (let k = 0; k < 30; k++) { await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: r[0] + k * r[2] * 0.015, y: r[1] + 25 * Math.sin(k / 4) }, page); await sleep(16); }
+    await sleep(60);
+    report.inside.tail_draws = await evaluate(`!!document.querySelector('canvas.wake-layer') && getComputedStyle(document.querySelector('canvas.wake-layer')).visibility !== 'hidden'`); }
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`); await sleep(200);
+  report.inside.closed_by_esc = await evaluate(`document.getElementById('inside').hidden && document.activeElement?.id === 'tree' && getComputedStyle(document.getElementById('dm-text')).visibility === 'visible'`);
+  await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" }, page);
+  await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page); await sleep(300);
+  report.inside.opened_by_enter = await evaluate(`!document.getElementById('inside').hidden`);
+  await evaluate(`document.getElementById('in-close').click(); true`); await sleep(200);
   await evaluate(`window.scrollTo(0, document.getElementById('record').offsetTop); true`); await sleep(400); await shot("8-record");
   await go(`/result.html?ex=${example}`);
   await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(1600);
@@ -765,15 +748,15 @@ try {
   await viewport(1440, 900);
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, page);
   await go("/demo.html"); await sleep(500);
-  await until(`document.querySelectorAll('#chips .chip').length >= 3`, 10000);
-  await evaluate(`document.getElementById('run').click(); true`);
-  await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(400);
-  await evaluate(`document.querySelector('#garden .real .stem').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
-  await until(`!document.getElementById('inside').hidden && document.getElementById('demo').classList.contains('in-run')`, 4000); await sleep(400);
+  await until(`document.querySelectorAll('.dm-row').length >= 3`, 10000);
+  await evaluate(`document.getElementById('start').click(); true`);
+  await until(`!document.getElementById('verdict').hidden && !document.getElementById('start').disabled`, 180000); await sleep(400);
+  await evaluate(`document.getElementById('tree').dispatchEvent(new MouseEvent('click', { bubbles: true })); true`);
+  await until(`!document.getElementById('inside').hidden`, 4000); await sleep(400);
   await shot("13-reduced-inside");
+  report.reduced = await evaluate(`({ tree_whole: document.querySelectorAll('#tree .twigs path').length > 0, running: document.getAnimations().filter((a) => a.playState === 'running').length })`);
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
-  await until(`document.getElementById('inside').hidden && !document.body.classList.contains('inside-open')`, 4000);
-  report.reduced = await evaluate(`({ out: !document.getElementById('demo').classList.contains('in-run'), scene: getComputedStyle(document.getElementById('scene')).transform })`);
+  await until(`document.getElementById('inside').hidden`, 4000);
   // reduced motion on the one page: a link to a section jumps there at once
   await go("/"); await evaluate(`document.querySelector('.menu-panel a[href="/run.html"]').click(); true`); await sleep(120);
   report.reduced.onepage_jump = await evaluate(`Math.abs(scrollY - Math.round(document.querySelector('[data-section="run"]').getBoundingClientRect().top + scrollY)) < 2`);

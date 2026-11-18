@@ -25,9 +25,9 @@ const fmtB = (n: number) => n.toLocaleString("en");
 
 // what each search is, and what to watch for
 const ABOUT: Record<string, string> = {
-  nothing: "A short search on a small panel whose only edge is weak. Watch whether its best rule stands apart from the repeats.",
-  planted: "The same search on a panel with a known rule planted in it. Watch a real edge stand clear of what luck reaches.",
-  restart: "A longer search, with swaps, flips and seven restarts. Watch the repeats search just as widely, and so reach higher.",
+  nothing: "Two moves on a panel with a weak edge. Does it stand out?",
+  planted: "The same two moves, a strong rule planted. Watch it stand clear.",
+  restart: "Swaps, flips, seven restarts. Watch luck reach higher too.",
 };
 
 interface Run { demo: Demo; tree: SearchTree | null; rt: RunTree | null; result: AuditResult | null; refused?: string; log: any; submitted: { rule: string; sharpe: number; text: string } | null }
@@ -40,10 +40,10 @@ function say(text: string | (string | Node)[], count = "") {
   sayEl.replaceChildren(...(typeof text === "string" ? [text] : text));
   countEl.textContent = count;
 }
-const ruleSpan = (r: string) => { const s = document.createElement("span"); s.className = "rule"; s.textContent = r; return s; };
+const ruleSpan = (r: string, sub = true) => { const s = document.createElement("span"); s.className = sub ? "rule sub" : "rule"; s.textContent = r; return s; };
 
 // ---- the bed, in the tree's frame
-const bed = makeBed(bedCv, () => treeFrame(svg, stage));
+const bed = makeBed(bedCv, () => treeFrame(svg, stage), 64);
 let half = 330;
 
 // ---- the cursor's tail: the trail over the tree, the bed and the backdrop, under the text, never on the panel
@@ -206,7 +206,7 @@ function grow(rt: RunTree, t: SearchTree): Promise<void> {
 function showVerdict(r: Run) {
   const res = r.result!, w = word(res.status), alpha = res.alpha;
   const meaning = MEANING[w] ?? "";
-  say(`${w}: ${meaning}`, `p ${res.p_replay?.toFixed(4) ?? "n/a"} · α ${alpha} · ${fmtB(res.B)} searches`);
+  say(`${w}. ${meaning.replace(/^./, (x) => (x === "p" ? x : x.toUpperCase()))}`);
   $("v-word").textContent = w;
   $("v-nums").textContent = `p ${res.p_replay?.toFixed(4) ?? "n/a"} against α ${alpha}, over ${fmtB(res.B)} repeated searches`;
   verdictEl.hidden = false;
@@ -292,7 +292,11 @@ function fillInside(r: Run) {
       items.push({ p: [`Declared its rule before searching: ${tr}.`], tool: c.tool });
       continue;
     }
-    if (c.tool === "predict") { pred = c.args; items.push({ p: [`Recorded a prediction for its rule: ${c.args?.mean} (sd ${c.args?.sd}).`], tool: c.tool }); continue; }
+    if (c.tool === "predict") {
+      const m = /prediction (-?[\d.]+) \(sd ([\d.]+)\)/.exec(text);
+      pred = m ? { mean: m[1], sd: m[2] } : { mean: c.args?.mean, sd: c.args?.sd };
+      items.push({ p: [`Recorded a prediction for its rule: ${pred.mean} (sd ${pred.sd}).`], tool: c.tool }); continue;
+    }
     if (c.tool === "submit") {
       const m = /submitted \[([^\]]*)\] sharpe (-?[\d.]+)/.exec(text);
       items.push({ p: ["Submitted ", ruleSpan(m ? named(m[1]) : r.submitted?.rule ?? ""), ` at in-sample Sharpe ${m ? m[2] : ""}.`], tool: c.tool });
@@ -305,13 +309,13 @@ function fillInside(r: Run) {
     let m = /kept: \[([^\]]*)\] sharpe (-?[\d.]+) \(best (-?[\d.]+)/.exec(text);
     const rs = /restarted on (.+?): \[([^\]]*)\] sharpe (-?[\d.]+) \(best (-?[\d.]+)\)/.exec(text);
     const tries = c.tool === "flip" ? `Flipped the sign of ${names[c.args?.feature] ?? "a feature"}` : TRIES[c.tool] ?? c.tool.replace(/_/g, " ");
-    const scored = n !== null ? `${n} rule${n === 1 ? "" : "s"}` : "";
+    const scored = n !== null ? ` (${n} rule${n === 1 ? "" : "s"})` : "";
     if (rs) m = [rs[0], rs[2], rs[3], rs[4]] as unknown as RegExpExecArray;
     if (m) {
       const sub = r.submitted && named(m[1]) === r.submitted.rule && m[2] === r.submitted.text;
       const stays = m[3] !== m[2] ? ` Its best stays ${m[3]}.` : "";
       best = best === null || Number(m[3]) > Number(best) ? m[3] : best;
-      items.push({ p: [`${tries}: scored ${scored}, kept `, sub ? ruleSpan(named(m[1])) : named(m[1]), ` at Sharpe ${m[2]}.${stays}`], tool: c.tool });
+      items.push({ p: [`${tries}${scored} and kept `, ruleSpan(named(m[1]), !!sub), ` at Sharpe ${m[2]}.${stays}`], tool: c.tool });
     } else items.push({ p: [`${tries}: ${text.split(" | ")[0]}`], tool: c.tool });
   }
   const sumP = h("p", "sum", null, panelBody);
@@ -335,7 +339,8 @@ function fillInside(r: Run) {
   h("h3", null, "What the gate decided", end);
   if (r.result) {
     const res = r.result, w = word(res.status);
-    h("p", null, `It repeated the search ${fmtB(res.B)} times on resampled data where no rule has a real edge. p is ${res.p_replay?.toFixed(4) ?? "n/a"}, against α ${res.alpha}: ${w}. ${(MEANING[w] ?? "").replace(/^./, (x) => x.toUpperCase())}`, end);
+    h("p", null, `It repeated the search ${fmtB(res.B)} times on resampled data where no rule has a real edge. Its verdict is ${w}: ${MEANING[w] ?? ""}`, end);
+    h("p", "nums", `p ${res.p_replay?.toFixed(4) ?? "n/a"} against α ${res.alpha}, over ${fmtB(res.B)} repeated searches.`, end);
     h("p", "nums", `Class tier, beside it: p ${res.p_class.toFixed(4)}; the class's bar ${res.class_bar.toFixed(3)} over all ${fmtB(res.class_size)} rules.`, end);
   } else h("p", null, `The gate refused the run: ${r.refused}`, end);
   panelBody.tabIndex = 0;
