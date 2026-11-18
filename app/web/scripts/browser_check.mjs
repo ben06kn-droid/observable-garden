@@ -270,7 +270,8 @@ async function contrast(selector, samples = 6) {
 
 // --pages --fixtures DIR: the Sancho page's lever editor and the viewer. DIR holds result.json
 // (quixote audit --json on examples/logs/scripted_session.json, B 500) and sancho_out/sancho.json
-// (quixote sancho on a panel long enough for it); the log, panel and class are examples/'.
+// (quixote sancho on a panel long enough for it); the log, panel and class are examples/'. Without --fixtures, the
+// Sancho editor alone.
 if (process.argv.includes("--pages")) {
   const fx = arg("--fixtures", null), ex = join(import.meta.dirname, "..", "..", "..", "examples");
   const setFiles = async (paths) => {
@@ -305,8 +306,10 @@ if (process.argv.includes("--pages")) {
     const text = readFileSync(join(dl, "sancho_config.json"), "utf8");
     const L = await import("../src/levers.ts");
     report.sancho.download = { bytes: text.length, horizon: JSON.parse(text).horizon, hash_matches_shown: (await L.configSha256(JSON.parse(text))) === shown };
-    writeFileSync(join(fx, "tailored_config.json"), text);       // for the equivalence check against sancho.config, if wanted
+    if (fx) writeFileSync(join(fx, "tailored_config.json"), text);       // for the equivalence check against sancho.config, if wanted
 
+    // the viewer needs the fixtures (a result and a Sancho run, made by the package); without them it is skipped
+    if (fx) {
     await go("/viewer.html");
     await setFiles([join(ex, "logs", "scripted_session.json"), join(fx, "result.json"), join(ex, "data", "tiny_panel.npz"), join(ex, "class.json")]);
     await until(`!document.getElementById('v-record').hidden`, 90000); await sleep(1500);
@@ -323,6 +326,7 @@ if (process.argv.includes("--pages")) {
       record: [...document.querySelectorAll('#v-kv dt')].map((d) => d.textContent + ': ' + d.nextElementSibling.textContent), cmd: document.getElementById('v-cmd').textContent })`);
     await evaluate(`window.scrollTo(0, document.getElementById('demo').offsetTop); true`); await sleep(500); await shot("viewer-sancho");
     await evaluate(`window.scrollTo(0, 0); true`); await sleep(300); await shot("viewer-sancho-full", true);
+    } else report.viewer = "skipped: no --fixtures";
     // every page at phone width (375 px): no horizontal scroll, and the header's links inside the header
     await viewport(375, 740);
     report.phone = {};
@@ -479,9 +483,8 @@ if (runPage) {
 }
 
 try {
-  // ---- the one-page site (src/onepage/): home and run are sections of one document, built once behind the loading
-  // screen; each keeps its address. Then the pages not yet in it (docs, Sancho), still carried between as before.
-  const CHAIN = [...readFileSync(join(import.meta.dirname, "..", "src", "chain.ts"), "utf8").matchAll(/\{ path: "([^"]+)", name: "[^"]+", ground: "(#[0-9a-f]{6})"/g)].map((m) => ({ path: m[1], ground: m[2] }));
+  // ---- the one-page site (src/onepage/): home, run, docs and Sancho are sections of one document, built once behind
+  // the loading screen; each keeps its address.
   const step = (s) => process.stderr.write(`[chain] ${s}\n`);   // progress, on stderr
   const here = () => evaluate(`location.pathname === "/index.html" ? "/" : location.pathname`);
   const toEnd = () => evaluate(`window.scrollTo(0, document.documentElement.scrollHeight); true`);
@@ -529,20 +532,27 @@ try {
     await until(`document.readyState === "complete" && !document.querySelector(".loader")`, 20000);
     Object.assign(one.direct_run, { loader_ms: Date.now() - t1, at_run: await evaluate(`Math.abs(scrollY - ${runTop}) < 2`), title: await evaluate(`document.title`) });
     await shot(`${tag}-2-run`);
-    // a page not yet in the one page is an ordinary navigation
+    // every address, as a direct link later in the session: the finished B, then its own section
+    const secTop = (n) => `Math.round(document.querySelector('[data-section="${n}"]').getBoundingClientRect().top + scrollY)`;
+    one.direct = {};
+    for (const [n, path] of [["docs", "/docs.html"], ["sancho", "/sancho.html"]]) {
+      await go(path);
+      one.direct[n] = { at_section: await evaluate(`Math.abs(scrollY - ${secTop(n)}) < 2`), title: await evaluate(`document.title`), current: await evaluate(`document.querySelector('.top nav a[aria-current]')?.textContent ?? null`) };
+    }
+    // the address follows the scroll through every section, adding no history
+    const h1 = await evaluate(`history.length`), seenPaths = [];
+    for (const n of ["home", "run", "docs", "sancho"]) { await evaluate(`scrollTo(0, ${secTop(n)} + 100); true`); await sleep(400); seenPaths.push(await here()); }
+    one.scroll_through = { paths: seenPaths, history_unchanged: (await evaluate(`history.length`)) === h1 };
+    // the header's Docs and Sancho links scroll in place; a link in the contents lands on its heading, its anchor kept
+    await evaluate(`scrollTo(0, 0); true`); await sleep(400);
     await evaluate(`document.querySelector('.top nav a[href="/docs.html"]').click(); true`);
-    one.to_docs = await arrive("/docs.html");
-    // docs and Sancho, still separate pages, carried between as before
-    const chain = report[`${tag}_chain`] = { grounds: {} };
-    for (const c of CHAIN.filter((c) => ["/docs.html", "/sancho.html"].includes(c.path))) { await go(c.path); chain.grounds[c.path] = (await evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--ground').trim()`)) === c.ground; }
-    await go("/docs.html"); await toEnd(); await sleep(600);
-    await push(vh * 0.5, 12);
-    chain.down = { arrived: await arrive("/sancho.html") }; await sleep(1300);
-    Object.assign(chain.down, { at_top: await evaluate(`scrollY < 3`), view_transition: await evaluate(`window.__carry?.viewTransition ?? null`) });
-    await evaluate(`window.scrollTo(0, 0); true`); await sleep(600);
-    await push(-vh * 0.5, 12);
-    chain.up = { arrived: await arrive("/docs.html") }; await sleep(1000);
-    chain.up.at_end = await evaluate(`Math.abs(scrollY - (document.documentElement.scrollHeight - innerHeight)) < 4`);
+    one.header_docs = await settledAt(`Math.abs(scrollY - ${secTop("docs")}) < 2 && location.pathname === "/docs.html"`);
+    await evaluate(`document.querySelector('.top nav a[href="/sancho.html"]').click(); true`);
+    one.header_sancho = await settledAt(`Math.abs(scrollY - ${secTop("sancho")}) < 2 && location.pathname === "/sancho.html"`);
+    await go("/docs.html");
+    const anchor = await evaluate(`(() => { const a = [...document.querySelectorAll('[data-section="docs"] .toc a')].at(-2); a.click(); return a.hash; })()`);
+    one.contents_link = { anchor, arrived: await settledAt(`(() => { const h = document.getElementById(decodeURIComponent(location.hash.slice(1))); return !!h && Math.abs(h.getBoundingClientRect().top - (parseFloat(getComputedStyle(h).scrollMarginTop) || 0)) < 3; })()`), url: await evaluate(`location.pathname + location.hash`) };
+    await shot(`${tag}-3-docs`);
   }
   await viewport(1440, 900);
   await go("/demo.html"); await sleep(500);
@@ -633,16 +643,10 @@ try {
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
   await until(`document.getElementById('inside').hidden && !document.body.classList.contains('inside-open')`, 4000);
   report.reduced = await evaluate(`({ out: !document.getElementById('demo').classList.contains('in-run'), scene: getComputedStyle(document.getElementById('scene')).transform })`);
-  // reduced motion on the one page: a link to a section jumps there at once; on docs and Sancho the gesture carries,
-  // as an immediate navigation (no view transition)
+  // reduced motion on the one page: a link to a section jumps there at once
   await go("/"); await evaluate(`document.querySelector('.top nav a[href="/run.html"]').click(); true`); await sleep(120);
   report.reduced.onepage_jump = await evaluate(`Math.abs(scrollY - Math.round(document.querySelector('[data-section="run"]').getBoundingClientRect().top + scrollY)) < 2`);
-  await go("/docs.html"); await toEnd(); await sleep(600);
-  const vh0 = 900; await push(vh0 * 0.5, 12);
-  report.reduced.chain = { arrived: await arrive("/sancho.html") };
-  await sleep(400);
-  report.reduced.chain.view_transition = await evaluate(`window.__carry?.viewTransition ?? null`);
-  report.reduced.chain.at_top = await evaluate(`scrollY < 3`);
+
   report.reduced.still = {};
   for (const p of ["/", "/run.html", "/docs.html", "/sancho.html", "/demo.html", "/viewer.html"]) {
     await go(p); await sleep(600);
