@@ -413,8 +413,24 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     behind on purpose, and its strength rises steeply with the cursor's speed (a slow drift barely stirs it).
     Inside the glass the cursor pushes the strokes aside instead (above); the hero layer runs no fluid of its
     own. Phones and reduced motion keep the plain page text and a glass without the lens.
-  - **Inversion**: a click on the glass (or Enter) inverts the palette from the click
-    (html[data-hg="light"]); both palettes meet AA.
+  - **The other mode, and the switch** (2026-11-18): inside its outline the glass is the page's other colour mode:
+    on the dark page a light ground (`--hg-inside` #dcdee5, the light ground pushed a little toward grey) with the
+    flow in the light palette's line, tone and fringe colours; on the light page the dark ground and the dark
+    palette's. Gold strokes stay the page's gold; the outline stays the page's line colour. The headline where it
+    passes through the upper bulb takes the inside's ink, so it changes as it enters (13.7:1 inside on the dark page,
+    16.4:1 on the light; 16.4:1 outside). The colours are read from a hidden element carrying the other mode, so they
+    are the stylesheet's own.
+    - The switch: a 28 px line icon at the neck, a sun while the page is dark and a moon while it is light, on a
+      40 px disc of the page's ground (16.4:1), a real button (Tab, Enter, Space; "Switch to light mode" / "Switch
+      to dark mode"; 44 px on a phone). Clicking it switches the page: the new palette spreads from the neck as a
+      growing circle (1 s), after which the glass holds the mode just left; the mark changes at the midpoint (its own
+      view-transition group). Clicking elsewhere on the glass does nothing. Reduced motion: an instant change.
+    - The preview: while the cursor is over the glass or the mark, the inside's ground leaks about 40 px out from
+      the neck with a soft edge, under any text (none is near), and draws back within 300 ms (the hero layer;
+      none on a phone or under reduced motion).
+    - The mode lasts for the visit (sessionStorage `qx-hg-mode`): scrolling away and back, or returning from the
+      demo, keeps it. Frame rate: Chrome 60 fps with the cursor in the glass, as before; Safari 53-56 ms against
+      52-53 ms before (two clean pairs; within this machine's run-to-run spread).
   - **The fan** (src/fan.ts): random-walk hairlines down the whole left of the page, from the top to above
     "Continue to docs", behind everything. They run right until the glass (beside it) or the page's right
     edge (below it), fading before it. The fan's canvas sits in the page (the viewport and a margin above and

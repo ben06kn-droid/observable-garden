@@ -14,7 +14,7 @@ import { cancelGate, loadGate, type RunOutcome } from "../gate";
 import { makeScene } from "../scene";
 import { drawRunScale } from "../runscale";
 import type { GardenHandle } from "../garden";
-import { Glass } from "../glass";
+import { Glass, type Interior } from "../glass";
 import { Hero } from "../hero";
 import { Fan, type FanRect } from "../fan";
 import { FALLBACK_MODELS, localEndpoint, NOT_SENT, OPENROUTER_MODELS, PROVIDERS, routerModels, type RouterModel } from "../providers";
@@ -63,8 +63,8 @@ const counter = $("move-count");
 
 // ---- the glass (src/glass.ts) and the fan of paths (src/fan.ts): two independent elements
 // The glass: a still hourglass in the right-hand columns from the opening screen down to the rule above
-// 03 Key, scrolling with the page, an abstract flow pouring through it at one steady rate. A click on it
-// inverts the page's palette, spreading from where it was clicked. The headline's last letters pass
+// 03 Key, scrolling with the page, an abstract flow pouring through it at one steady rate. Inside it, the page's
+// other mode; the sun or moon at its neck switches the page's mode, spreading from the neck. The headline's last letters pass
 // through its upper bulb, bent. On a phone it is a glass of its own size under the headline.
 // The fan: random paths down the whole left of the page, from the top to above "Continue to docs",
 // running right until the glass (beside it) or the page's right edge (below it); dimmed behind text,
@@ -75,8 +75,27 @@ const root = section("run"), doc = document.documentElement, ground = document.q
 const phone = () => matchMedia("(max-width: 812px)").matches;
 const keySect = () => document.querySelectorAll<HTMLElement>(".run-form .sect")[2];
 let glass: Glass | null = null, glassPhone: boolean | null = null, glassH = 0;
+// the page's mode, and the other one's colours (the glass's inside): read from a hidden element carrying the other
+// mode, so they are always the stylesheet's own. The mode chosen lasts for the visit (sessionStorage).
+const HG = "qx-hg-mode";
+const mode = (): "dark" | "light" => (root.dataset.hg === "light" ? "light" : "dark");
+const probe = document.createElement("i"); probe.hidden = true; probe.dataset.theme = "run"; document.body.append(probe);
+function interior(): Interior {
+  probe.dataset.hg = mode() === "light" ? "dark" : "light";
+  const cs = getComputedStyle(probe), v = (k: string) => cs.getPropertyValue(k).trim();
+  // the inside's ground is the page's own --hg-inside (the other mode's ground, on the dark page a little greyer)
+  const inside = getComputedStyle(root).getPropertyValue("--hg-inside").trim();
+  return { ground: inside || v("--ground"), line: v("--hg-line") || v("--ink"), ink: v("--ink"), tone: v("--wake-tone"), fringe: v("--wake-fringe"), fringeA: Number(v("--wake-fringe-alpha")) || 1 };
+}
+function setMode(m: "dark" | "light") { root.dataset.hg = m; if (ground) ground.dataset.hg = m; }
+try { if (sessionStorage.getItem(HG) === "light") setMode("light"); } catch { /* private mode: the default */ }
+/** switch the page's mode, spreading from a viewport point (the switch at the glass's neck) */
 function invert(at: { x: number; y: number }) {
-  const swap = () => { root.dataset.hg = root.dataset.hg === "light" ? "dark" : "light"; if (ground) ground.dataset.hg = root.dataset.hg; refreshThemes(); glass?.refreshPalette(); fan?.refreshPalette(); hero?.layout(); };
+  const swap = () => {
+    setMode(mode() === "light" ? "dark" : "light");
+    try { sessionStorage.setItem(HG, mode()); } catch { /* the visit only */ }
+    refreshThemes(); glass?.setMode(mode()); glass?.refreshPalette(); fan?.refreshPalette(); hero?.layout();
+  };
   const d = document as Document & { startViewTransition?: (f: () => void) => { finished: Promise<void> } };
   if (reduceMotion || !d.startViewTransition) { swap(); return; }
   doc.style.setProperty("--vx", `${at.x}px`); doc.style.setProperty("--vy", `${at.y}px`);
@@ -95,11 +114,12 @@ function buildGlass() {
   glassPhone = ph; glassH = H;
   // on a desktop with motion, the hero layer draws the glass and the opening text (the wake bends them)
   const layered = !ph && !reduceMotion;
-  glass = new Glass(host, { height: H, reduce: reduceMotion, composited: layered, onClick: invert, onFrame: () => hero?.glassFrame() });
+  glass = new Glass(host, { height: H, reduce: reduceMotion, composited: layered, interior, onSwitch: invert, onHover: () => hero?.glassFrame(), onFrame: () => hero?.glassFrame() });
+  glass.setMode(mode());
   placeGlass();
   if (layered) {
     const veil = $("run-main").querySelector<HTMLElement>(".hero")!;
-    const h = new Hero({ host: $("run-main"), glass, veil, textBottom: () => document.querySelector(".run-form .sect")!.getBoundingClientRect().top + scrollY,
+    const h = new Hero({ host: $("run-main"), glass, veil, interior, textBottom: () => document.querySelector(".run-form .sect")!.getBoundingClientRect().top + scrollY,
       text: () => [...veil.querySelectorAll<HTMLElement>(".label, h1, .lead, .about summary, .about[open] p, .to-demo a")] });
     if (h.ok) { hero = h; veil.classList.add("painted"); hero.layout(); }
     else { h.destroy(); glass.el.classList.remove("composited"); }

@@ -608,6 +608,21 @@ try {
         && m.escape.hidden && m.escape.focus?.startsWith("Garden") && m.down_opens.focus === "Quixote" && m.outside_closes.hidden && !m.click_opens.hidden
         && m.choose_docs.arrived && m.choose_docs.hidden && m.choose_docs.current === "Docs";
     }
+    step("desktop: the hourglass's switch");
+    {
+      await go("/run.html");
+      const st = () => evaluate(`({ hg: document.querySelector('[data-section="run"]').dataset.hg ?? "dark", label: document.querySelector('.hg-mark')?.getAttribute('aria-label'), tag: document.querySelector('.hg-mark')?.tagName,
+        glass_focusable: document.querySelector('[data-section="run"] .glass')?.hasAttribute('tabindex') })`);
+      const h = one.hourglass = { start: await st() };
+      await evaluate(`document.querySelector('.hg-mark').click(); true`); await sleep(1400);
+      h.switched = await st();
+      await go("/demo.html"); await go("/run.html"); await sleep(400);
+      h.after_demo = await st();
+      await evaluate(`document.querySelector('.hg-mark').click(); true`); await sleep(1400);
+      h.back = await st();
+      h.ok = h.start.tag === "BUTTON" && !h.start.glass_focusable && h.start.hg === "dark" && h.start.label === "Switch to light mode"
+        && h.switched.hg === "light" && h.switched.label === "Switch to dark mode" && h.after_demo.hg === "light" && h.back.hg === "dark";
+    }
     step("desktop: out to the demo and to Eucalyptus, and Back");
     const outAndBack = async (from, name, link, to) => {
       await go(from);

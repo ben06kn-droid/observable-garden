@@ -26,10 +26,21 @@
 //
 // The glass draws into its own 2D canvas. With `composited`, that canvas is not shown: the page's hero
 // layer (src/hero.ts) draws it, together with the headline seen through the glass and the cursor's wake,
-// and is told after each frame (onFrame). A click (or Enter) on the glass calls onClick: the page inverts
-// its palette. Reduced motion: one still frame of the flow.
+// and is told after each frame (onFrame).
+//
+// The other mode (2026-11-18): inside its outline the glass is the page's other colour mode: the other palette's
+// ground (filled here only when the glass is not composited; the hero layer fills it otherwise), the flow in that
+// palette's line, tone and fringe colours, the gold strokes gold; the outline in the page's own line colour. At
+// the neck, the switch: a sun while the page is dark, a moon while it is light, a real button on a disc of the
+// page's ground; it calls onSwitch. The glass itself does nothing when clicked. Reduced motion: one still frame.
 
 import { wakeWanted } from "./cursorwake";
+
+/** the other mode's colours (css colour strings) */
+export interface Interior { ground: string; line: string; ink: string; tone: string; fringe: string; fringeA: number }
+// the switch's two marks, line icons on a 28 px box in the page's line weight
+const SUN = `<svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><circle cx="14" cy="14" r="5"/>${Array.from({ length: 8 }, (_, i) => { const a = (i * Math.PI) / 4, c = Math.cos(a), s = Math.sin(a); return `<line x1="${(14 + 8 * c).toFixed(2)}" y1="${(14 + 8 * s).toFixed(2)}" x2="${(14 + 11 * c).toFixed(2)}" y2="${(14 + 11 * s).toFixed(2)}"/>`; }).join("")}</svg>`;
+const MOON = `<svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><path d="M17.6 5.6A9 9 0 1 0 22.4 18.6A7 7 0 0 1 17.6 5.6Z"/></svg>`;
 
 export interface GlassOptions {
   height: number;
@@ -38,8 +49,12 @@ export interface GlassOptions {
   composited?: boolean;
   /** after each frame the glass draws */
   onFrame?: () => void;
-  /** a click on the glass (or Enter / Space while it has focus), at a viewport point */
-  onClick?: (at: { x: number; y: number }) => void;
+  /** the other mode's colours, for the inside of the glass (the page's own when absent) */
+  interior?: () => Interior | null;
+  /** the switch at the neck was pressed: switch the page's mode, spreading from this viewport point */
+  onSwitch?: (at: { x: number; y: number }) => void;
+  /** the cursor came over the glass or its switch, or left */
+  onHover?: (over: boolean) => void;
 }
 
 // the outline: the neck's half width, the rim's, and the short straight neck (× height, v from -1 to 1)
@@ -92,6 +107,8 @@ export class Glass {
   private front: HTMLCanvasElement; private edge: HTMLCanvasElement;   // the flow (each frame); the outline (once)
   private line: [number, number, number] = [240, 241, 250];
   private sand = "#d6b27b"; private lineA = 0.72;
+  // the switch; the inside's ground and its flow's line colour (the other mode's), the page's mode
+  readonly mark: HTMLButtonElement; private iGround = ""; private flowLine: [number, number, number] = [240, 241, 250]; private hover = false;
   private tone: [number, number, number] = [221, 227, 240]; private fringe = "#ef4b55"; private fringeA = 1;
   // the cursor (viewport px) and the glass's top left on the page when it was last seen; whether any offset is not zero
   private cursor: { x: number; y: number } | null = null; private gpage: [number, number] = [0, 0]; private pushed = false; private pdt = 0;
@@ -104,12 +121,13 @@ export class Glass {
     this.o = o; this.H = o.height; this.gy = this.H / 2; this.R = PROFILE.rim * this.H;
     this.W = Math.ceil(2 * this.R + 8);
     this.el = document.createElement("div"); this.el.className = "glass";
-    this.el.tabIndex = 0; this.el.setAttribute("role", "button");
-    this.el.setAttribute("aria-label", "Hourglass: press to invert the page's colours");
     this.front = document.createElement("canvas"); this.front.className = "glass-front"; this.front.setAttribute("aria-hidden", "true");
     if (o.composited) this.el.classList.add("composited");
     this.edge = document.createElement("canvas"); this.edge.className = "glass-edge"; this.edge.setAttribute("aria-hidden", "true");
     this.el.append(this.front, this.edge);
+    // the switch, centred on the neck
+    this.mark = document.createElement("button"); this.mark.type = "button"; this.mark.className = "hg-mark";
+    this.el.append(this.mark);
     host.append(this.el);
     this.layout(); this.readPalette(); this.drawEdge(); this.initFlow(); this.bind();
     this.io = new IntersectionObserver((es) => { this.visible = es.some((e) => e.isIntersecting); if (this.visible) this.start(); });
@@ -123,17 +141,28 @@ export class Glass {
   /** half width at a height within the glass (v from -1 at the top rim to 1 at the bottom) */
   halfWidthAt(v: number) { return halfWidth(v, this.H); }
 
+  /** whether the cursor is over the glass or its switch */
+  get over() { return this.hover; }
   /** read the colours from the page's tokens (after a palette swap) and redraw */
   refreshPalette() { this.readPalette(); this.drawEdge(); this.render(); }
   private readPalette() {
     const cs = getComputedStyle(this.el);
     const l = cs.getPropertyValue("--hg-line");
-    if (l) this.line = rgb(l);
-    this.sand = cs.getPropertyValue("--fan-sand").trim() || "#d6b27b";
-    this.tone = rgb(cs.getPropertyValue("--wake-tone") || "#dde3f0");
-    this.fringe = cs.getPropertyValue("--wake-fringe").trim() || "#ef4b55";
-    this.fringeA = Number(cs.getPropertyValue("--wake-fringe-alpha")) || 1;
+    if (l) this.line = rgb(l);                            // the outline: the page's own line colour
+    this.sand = cs.getPropertyValue("--fan-sand").trim() || "#d6b27b";   // gold stays the page's gold
     this.lineA = Number(cs.getPropertyValue("--flow-alpha")) || 0.72;
+    // the inside: the other mode's ground, line, tone and fringe (the page's own when there is no other)
+    const io = this.o.interior?.() ?? null;
+    this.iGround = io?.ground ?? "";
+    this.flowLine = io ? rgb(io.line) : this.line;
+    this.tone = rgb(io?.tone || cs.getPropertyValue("--wake-tone") || "#dde3f0");
+    this.fringe = io?.fringe || cs.getPropertyValue("--wake-fringe").trim() || "#ef4b55";
+    this.fringeA = io?.fringeA ?? (Number(cs.getPropertyValue("--wake-fringe-alpha")) || 1);
+  }
+  /** the page's mode, for the switch's mark and its label */
+  setMode(mode: "dark" | "light") {
+    this.mark.innerHTML = mode === "dark" ? SUN : MOON;
+    this.mark.setAttribute("aria-label", mode === "dark" ? "Switch to light mode" : "Switch to dark mode");
   }
 
   private layout() {
@@ -209,6 +238,13 @@ export class Glass {
     x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, this.front.width, this.front.height);
     x.setTransform(k, 0, 0, k, 0, 0); x.translate(this.W / 2, this.H / 2);
     // the flow, inside the glass's height (it enters and leaves through the open rims)
+    // the inside's ground, when the glass is shown as itself (composited, the hero layer fills it)
+    if (!this.o.composited && this.iGround) {
+      x.beginPath();
+      for (let q = 0; q <= 120; q++) { const v = -1 + (2 * q) / 120, r = halfWidth(v, this.H); q ? x.lineTo(-r, v * gy) : x.moveTo(-r, v * gy); }
+      for (let q = 120; q >= 0; q--) { const v = -1 + (2 * q) / 120; x.lineTo(halfWidth(v, this.H), v * gy); }
+      x.closePath(); x.fillStyle = this.iGround; x.fill();
+    }
     x.save(); x.beginPath(); x.rect(-this.W / 2, -gy, this.W, 2 * gy); x.clip();
     x.lineCap = "round"; x.lineJoin = "round";
     // the lines crowd together where the glass narrows; each piece of a stroke is drawn as faint as the
@@ -291,7 +327,7 @@ export class Glass {
         x.lineWidth = g ? 1.1 : 0.9;
         x.globalAlpha = (g ? 0.95 : this.lineA) * a;
         // a pushed white stroke takes the tone; a gold one keeps its own gold
-        x.strokeStyle = g ? this.sand : l ? mix(this.line, t) : `rgb(${this.line.join(",")})`;
+        x.strokeStyle = g ? this.sand : l ? mix(this.flowLine, t) : `rgb(${this.flowLine.join(",")})`;
         x.stroke(path);
       }
     }
@@ -340,13 +376,12 @@ export class Glass {
     return m;
   }
 
-  // ---------- the click
+  // ---------- the switch, and the cursor over the glass
   private inGlass(e: { clientX: number; clientY: number }) {
     const b = this.front.getBoundingClientRect(), lx = e.clientX - b.left - b.width / 2, ly = e.clientY - b.top - b.height / 2, v = ly / this.gy;
     return Math.abs(v) < 1 && Math.abs(lx) < halfWidth(v, this.H) + 4;
   }
   private bind() {
-    let down: { x: number; y: number } | null = null;
     // the cursor, for its push: only its movement, never touch; where the glass is on the page, read as it moves
     if (this.pushes) {
       window.addEventListener("pointermove", (e: PointerEvent) => {
@@ -357,17 +392,12 @@ export class Glass {
       document.documentElement.addEventListener("pointerleave", () => { this.cursor = null; }, { passive: true, signal: this.ac.signal });
       addEventListener("blur", () => { this.cursor = null; }, { signal: this.ac.signal });
     }
-    this.el.addEventListener("pointermove", (e) => { this.el.classList.toggle("over", this.inGlass(e)); }, { passive: true });
-    this.el.addEventListener("pointerleave", () => this.el.classList.remove("over"), { passive: true });
-    this.el.addEventListener("pointerdown", (e) => { down = this.inGlass(e) ? { x: e.clientX, y: e.clientY } : null; }, { passive: true });
-    this.el.addEventListener("pointerup", (e) => {
-      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6 && this.inGlass(e)) this.o.onClick?.({ x: e.clientX, y: e.clientY });
-      down = null;
-    }, { passive: true });
-    this.el.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      e.preventDefault(); const b = this.front.getBoundingClientRect(); this.o.onClick?.({ x: b.left + b.width / 2, y: b.top + b.height / 2 });
-    });
+    // the switch: a real button (Tab, Enter, Space by the browser); it switches from its own centre
+    this.mark.addEventListener("click", () => { const r = this.mark.getBoundingClientRect(); this.o.onSwitch?.({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); });
+    // over the glass or the switch (a mouse or pen only; a tap gets no preview)
+    const hover = (on: boolean) => { if (on !== this.hover) { this.hover = on; this.o.onHover?.(on); } };
+    this.el.addEventListener("pointermove", (e) => { if (e.pointerType !== "touch") hover(this.inGlass(e) || e.target === this.mark || this.mark.contains(e.target as Node)); }, { passive: true });
+    this.el.addEventListener("pointerleave", () => hover(false), { passive: true });
   }
 
   // ---------- the loop: runs while the glass is on screen; its own clock pauses with it

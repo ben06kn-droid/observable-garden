@@ -7,7 +7,7 @@
 
 /* The run page: lukres.dev's measured near-black and off-white, hairline rules, one warm sand for the sand
    itself and one accent (the Start button, the submitted branch, focus). No glows, halos or gradients.
-   A click on the glass inverts the palette (html[data-hg="light"]); both meet AA.
+   The sun or moon at the glass's neck switches the palette (data-hg="light"); both meet AA.
 
    Desktop, on the shared grid: the hero and the form in columns 1–8 (each section's name in 1–2, its
    fields in 3–8); the glass, still and very large, in 9–12 from the opening screen to the rule above
@@ -37,6 +37,8 @@
   --tree-path: var(--sand);
   --tree-bar: #a7a9b4;
   --hg-ground: var(--ground);      /* the glass reads its colours from these */
+  --hg-inside: #dcdee5;            /* the glass's inside on the dark page: the light mode, its ground pushed a little
+                                      toward a light grey (the light page's own is #f0f1fa) */
   --hg-line: var(--ink);
   --fan-ground: var(--ground);     /* and the fan of paths below it (src/fan.ts) */
   --fan-line: var(--ink);
@@ -56,6 +58,7 @@
 }
 [data-theme="run"][data-hg="light"] {   /* on the run section (the one-page site), its backdrop and the header */
   --ground: #f0f1fa;
+  --hg-inside: #121416;            /* the glass's inside on the light page: the dark mode's own ground */
   --ink: #121416;                  /* 16.9:1 */
   --muted: #3c3e45;                /* 9.5:1; 9.0:1 over a gold path */
   --faint: #45474f;                /* 8.2:1; 7.8:1 over a gold path */
@@ -242,12 +245,24 @@
 /* ---------- the glass ---------- */
 .glass { position: relative; width: var(--glass-w); height: var(--glass-h); translate: var(--g-x, 0px) 0; outline: none; }
 .glass canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.glass.over { cursor: pointer; }
-.glass:focus-visible { outline: 1px solid var(--focus); outline-offset: 8px; }
+/* the switch at the neck: a sun while the page is dark, a moon while it is light (src/glass.ts), a 28 px line icon in
+   the page's line colour and weight on a disc of the page's ground; a real button */
+.hg-mark { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; padding: 6px; z-index: 3;
+  border: 0; border-radius: 50%; background: var(--ground); color: var(--hg-line); cursor: pointer; display: grid; place-items: center;
+  view-transition-name: hg-mark; }
+.hg-mark svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
+.hg-mark:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+@media (max-width: 812px) { .hg-mark { width: 44px; height: 44px; margin: -22px 0 0 -22px; } }   /* a tap target */
 /* the palette swap, revealed as a circle growing from the neck (same-document view transition) */
 html[data-hg-swap]::view-transition-old(root) { animation: none; }
 html[data-hg-swap]::view-transition-new(root) { animation: hg-reveal 1000ms cubic-bezier(.35, 0, 0, 1) both; }
 @keyframes hg-reveal { from { clip-path: circle(0 at var(--vx) var(--vy)); } to { clip-path: circle(160vmax at var(--vx) var(--vy)); } }
+/* the switch's mark changes between sun and moon at the spread's midpoint */
+html[data-hg-swap]::view-transition-group(hg-mark) { animation: none; }
+html[data-hg-swap]::view-transition-old(hg-mark) { animation: hg-mark-out 1000ms step-end both; mix-blend-mode: normal; }
+html[data-hg-swap]::view-transition-new(hg-mark) { animation: hg-mark-in 1000ms step-end both; mix-blend-mode: normal; }
+@keyframes hg-mark-out { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+@keyframes hg-mark-in { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 1; } }
 
 /* the headline wraps beside the glass when nothing may pass behind it (reduced motion) */
 @media (prefers-reduced-motion: reduce) {

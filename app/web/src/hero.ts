@@ -14,7 +14,7 @@
 // strokes aside, which the glass itself draws (src/glass.ts); this layer only takes its frames. In the blank
 // space the cursor's wake is the fan's (src/fan.ts), drawn under this layer, which is clear there. This layer
 // runs no fluid of its own.
-import { GLSL_PROFILE, type Glass } from "./glass";
+import { GLSL_PROFILE, halfWidth, type Glass, type Interior } from "./glass";
 import { rgb, type RGB } from "./cursorwake";
 
 const VERT = `#version 300 es
@@ -27,6 +27,7 @@ uniform vec3 uGround;
 uniform sampler2D uText; uniform float uTextH;     // the text, painted in the canvas's coordinates, to uTextH
 uniform sampler2D uGlass, uEdge; uniform vec4 uGlassBox;   // the glass's flow and outline, and where it sits
 uniform float uH, uGy;
+uniform vec3 uIGround, uIInk; uniform float uLeak, uNeckR;   // the other mode's ground and ink (the inside); the preview's reach, the neck's half width
 out vec4 o;
 ${GLSL_PROFILE}
 vec4 text(vec2 p) { return (p.y < 0.0 || p.y > uTextH) ? vec4(0.0) : texture(uText, p / vec2(uSize.x, uTextH)); }
@@ -46,22 +47,26 @@ void main() {
   // or on the one-page site the backdrop, which changes with the scroll); on the page's own ground it is as before
   vec3 col = vec3(0.0); float t;
   if (inside) {
+    // the inside is the page's other mode: its ground, and the text through the glass in its ink (each channel
+    // still bent a little differently), so the headline changes as it enters the glass
     float a = clamp(q.x / r, -1.0, 1.0), e = a * a, sx = (a * 0.9 + 0.1 * a * a * a) * r, ta = 0.0;
     for (int k = 0; k < 3; k++) {
       vec4 tk = text(vec2(c.x + q.x + (sx - q.x) * (1.0 + (float(k) - 1.0) * 0.05 * e), p.y));
-      col[k] = tk.rgb[k] * tk.a; ta = max(ta, tk.a);
+      col[k] = mix(uIGround[k], uIInk[k], tk.a); ta = max(ta, tk.a);
     }
-    t = ta;
-  } else { vec4 tk = text(p); col = tk.rgb * tk.a; t = tk.a; }
-
-  // the flow inside the glass, as the glass drew it (the cursor's push included)
-  float fa = 0.0;
-  if (inside) {
+    // the flow, as the glass drew it in the other mode's colours (the cursor's push included), fading across the letters
     vec4 f = inGlass(uGlass, p);
-    vec3 fc = f.rgb; fa = f.a;
-    fa *= 1.0 - 0.8 * t;                           // the flow fades across the letters
-    col = fc * fa + col * (1.0 - fa);              // over the text
-    t = fa + t * (1.0 - fa);
+    float fa = f.a * (1.0 - 0.8 * ta);
+    col = mix(col, f.rgb, fa);
+    t = 1.0;                                         // the inside is opaque
+  } else {
+    vec4 tk = text(p); col = tk.rgb * tk.a; t = tk.a;
+    // the preview: the other mode's ground leaking a short way out from the neck (about 40 px past the outline), soft,
+    // under the text and never over it
+    if (uLeak > 0.0) {
+      float rr = uNeckR + 40.0 * uLeak, la = (1.0 - smoothstep(rr - 14.0, rr, length(q))) * uLeak * (1.0 - smoothstep(0.0, 0.05, tk.a));
+      col = col + uIGround * la * (1.0 - t); t = t + la * (1.0 - t);
+    }
   }
   // the outline, never moved
   vec4 g = inGlass(uEdge, p);
@@ -82,6 +87,8 @@ export interface HeroOptions {
   /** where the text ends (page px): nothing is painted below it */
   textBottom: () => number;
   glass: Glass;
+  /** the page's other mode's colours: the inside of the glass */
+  interior: () => Interior;
 }
 
 export class Hero {
@@ -90,7 +97,8 @@ export class Hero {
   private u: Record<string, WebGLUniformLocation | null> = {};
   private texT: WebGLTexture | null = null; private texG: WebGLTexture | null = null; private texE: WebGLTexture | null = null; private paintCv = document.createElement("canvas");
   private dpr = 1; private w = 0; private h = 0; private textH = 0; private origin = [0, 0]; private glassBox = [0, 0, 1, 1];
-  private ground: RGB = [0, 0, 0];
+  private ground: RGB = [0, 0, 0]; private iGround: RGB = [0.94, 0.95, 0.98]; private iInk: RGB = [0.07, 0.08, 0.09];
+  private leak = 0; private leakT = 0;            // the preview's reach (0-1), and when it was last stepped
   private raf = 0; private glassDirty = true; private visible = true; private io: IntersectionObserver;
 
   constructor(o: HeroOptions) {
@@ -118,7 +126,7 @@ export class Hero {
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uSize", "uDpr", "uOrigin", "uScroll", "uView", "uGround", "uText", "uTextH", "uGlass", "uEdge", "uGlassBox", "uH", "uGy"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uSize", "uDpr", "uOrigin", "uScroll", "uView", "uGround", "uText", "uTextH", "uGlass", "uEdge", "uGlassBox", "uH", "uGy", "uIGround", "uIInk", "uLeak", "uNeckR"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
@@ -141,6 +149,7 @@ export class Hero {
     this.glassBox = [g.left - host.left, g.top - host.top, g.width, g.height];
     const cs = getComputedStyle(this.canvas);
     this.ground = rgb(cs.getPropertyValue("--ground") || "#121416");
+    const io = this.o.interior(); this.iGround = rgb(io.ground); this.iInk = rgb(io.ink);
     this.paint(host);
     gl.bindTexture(gl.TEXTURE_2D, this.texE); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.o.glass.outline);
@@ -205,6 +214,10 @@ export class Hero {
       this.glassDirty = false;
     }
     const m = this.o.glass.measures();
+    // the preview eases out as the cursor comes over the glass (about 250 ms) and draws back within 300 ms
+    const nowT = performance.now(), ldt = Math.min(0.1, (nowT - (this.leakT || nowT)) / 1000), want = this.o.glass.over ? 1 : 0; this.leakT = nowT;
+    this.leak += (want - this.leak) * (1 - Math.exp(-ldt / (want > this.leak ? 0.08 : 0.065)));
+    if (Math.abs(want - this.leak) < 0.004) this.leak = want;
     gl.uniform2f(this.u.uSize, this.w, this.h); gl.uniform1f(this.u.uDpr, k);
     gl.uniform2f(this.u.uOrigin, this.origin[0], this.origin[1]); gl.uniform2f(this.u.uScroll, scrollX, scrollY); gl.uniform2f(this.u.uView, innerWidth, innerHeight);
     gl.uniform3f(this.u.uGround, ...this.ground);
@@ -213,6 +226,8 @@ export class Hero {
     gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.texE); gl.uniform1i(this.u.uEdge, 3);
     gl.uniform4f(this.u.uGlassBox, this.glassBox[0], this.glassBox[1], this.glassBox[2], this.glassBox[3]);
     gl.uniform1f(this.u.uH, m.H); gl.uniform1f(this.u.uGy, m.gy);
+    gl.uniform3f(this.u.uIGround, ...this.iGround); gl.uniform3f(this.u.uIInk, ...this.iInk);
+    gl.uniform1f(this.u.uLeak, this.leak); gl.uniform1f(this.u.uNeckR, halfWidth(0, m.H));
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disable(gl.SCISSOR_TEST);
