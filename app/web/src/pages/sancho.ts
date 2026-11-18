@@ -182,7 +182,8 @@ const sheet = root.querySelector<HTMLElement>(".sheet")!;
 // it draws only while that backdrop can be seen, and its light follows the reader through this section
 let dusk: Dusk | null = null;
 const built = task("sancho: the dusk");
-const makeDusk = () => new Dusk(document.querySelector<HTMLElement>('.backdrop[data-for="sancho"]')!, {
+// (on a phone the dusk is a band at the top of the section, scrolling with it, as at the top of its page)
+const makeDusk = () => new Dusk(phone.matches ? root : document.querySelector<HTMLElement>('.backdrop[data-for="sancho"]')!, {
   progress: () => { const r = root.getBoundingClientRect(), span = r.height - innerHeight; return span > 0 ? -r.top / span : 0; },
   reduce: reduceMotion,
   small: () => phone.matches,

@@ -187,7 +187,7 @@ export class Sky {
   /** sizes, colours and the lane: after a layout change */
   layout() {
     const gl = this.gl; if (!gl) return;
-    const cs = getComputedStyle(document.documentElement);
+    const cs = getComputedStyle(this.canvas);   // its theme where it lies (the page, or on the one page its backdrop)
     this.stops = ["--g0", "--g1", "--g2", "--g3", "--g4"].map((k) => rgb(cs.getPropertyValue(k) || "#4f8fc0"));
     const w = wakeColours(document.documentElement); this.tone = w.tone; this.fringe = w.fringe;
     this.dpr = Math.min(2, devicePixelRatio || 1);
