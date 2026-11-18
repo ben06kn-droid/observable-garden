@@ -3,7 +3,7 @@
 // (chain.ts) carries the visitor on to the run page from the end of this one.
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/home.css";
-import "../chain";
+import { settled } from "../chain";
 import { reduceMotion } from "../common";
 import { BIRCH_LEAF_D } from "../birch";
 import { Field, startLife } from "../particles";
@@ -86,8 +86,9 @@ const wake = new WakeLayer({ host: one,
 
 one.addEventListener("animationend", () => wake.invalidate());   // a tree done arriving or swaying
 
-// drawn once the type has settled, so the arrival plays once on the final layout
-Promise.all([fetch("/examples/grove.json").then((r) => r.json()), document.fonts.ready])
+// drawn once the type has settled and the page has arrived (src/chain.ts: never in a prerender, never under a
+// carry's transition), so the grove's arrival plays once, on the final layout, where it can be seen
+Promise.all([fetch("/examples/grove.json").then((r) => r.json()), document.fonts.ready, settled])
   .then(([g]) => { data = g as GroveData; avoid = text(); draw(); }).catch(() => {});
 // redrawn whenever the grove's box changes size (fonts arriving, a resize), never stretched
 let resizeT = 0, size = "";

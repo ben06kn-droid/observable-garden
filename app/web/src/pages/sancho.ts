@@ -4,9 +4,9 @@
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/docs.css";     // the docs page's structure: the sheet, the panels, the tables
 import "../styles/sancho.css";
-import "../chain";
+import { fadeIn, settled } from "../chain";
 import { h, reduceMotion } from "../common";
-import { Dusk } from "../dusk";
+import { Dusk, millStandIn } from "../dusk";
 import { INSTALL } from "../install";
 import { BLOCKS, configSha256, DEFAULT, fileText, firstScored, LEVERS, MEMORY_ROWS, numberList, problems, REGIMES, type Values } from "../levers";
 
@@ -177,12 +177,21 @@ const contents = document.querySelector<HTMLDetailsElement>(".contents details")
 const fold = () => { if (contents) contents.open = !phone.matches; };
 fold(); phone.addEventListener("change", fold);
 const sheet = document.querySelector<HTMLElement>(".sheet")!;
-const dusk = new Dusk(document.body, {
+// started once the page has arrived (src/chain.ts: after a carry's transition, never in a prerender); until then
+// sancho.css draws the dusk's first frame (the gradient, the glow, the hairline) and millStandIn its windmill, and
+// the dusk fades in over them
+const standIn = phone.matches || reduceMotion ? null : millStandIn(document.body, getComputedStyle(document.documentElement).getPropertyValue("--mill").trim() || "#14070a");
+let dusk: Dusk | null = null;
+const makeDusk = () => new Dusk(document.body, {
   reduce: reduceMotion,
   small: () => phone.matches,
   // the tail runs over the backdrop but never behind the text: the sheet less its padding
   text: () => { const r = sheet.getBoundingClientRect(), pad = parseFloat(getComputedStyle(sheet).paddingLeft) || 0; return { x: r.left + pad, y: r.top + pad, w: r.width - 2 * pad, h: r.height - 2 * pad }; },
 });
+void settled.then(() => {
+  dusk = makeDusk();
+  void fadeIn(document.querySelector("canvas.dusk")).then(() => standIn?.remove());
+});
 let resizeT = 0;
-addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => dusk.layout(), 150); });
-void document.fonts.ready.then(() => dusk.layout());
+addEventListener("resize", () => { window.clearTimeout(resizeT); resizeT = window.setTimeout(() => { standIn?.remove(); dusk?.layout(); }, 150); });
+void document.fonts.ready.then(() => dusk?.layout());

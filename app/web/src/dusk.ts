@@ -25,6 +25,7 @@ const STOPS = [0, 0.3, 0.55, 0.72, 0.73, 1];
 const GLOW = { x: 0.7, w: 0.6, a: 0.3, line: 0.35, sink: 0.06 };   // centre (of the width), width and sink (of the height)
 const MILL = { x: 0.84, h: 0.16 };                               // foot (of the width, on the horizon), height (of the height)
 const HUB = 0.56;                                                // the hub's height, of the windmill's
+const START_ANGLE = 0.35;                                         // the sails' angle on the first frame
 const TURN_REST = 14, TURN_WIND = 3, EASE_BACK = 4, NEAR_MILL = 200;
 const HEAT = 1.5, RISE = 10;                                     // px; px/s
 // the docs page's tail: the run page's, toned down (force 60%, swirl 60%, its own motion 75%, life +20%)
@@ -135,6 +136,40 @@ void main() {
   o = vec4(col, 1.0);
 }`;
 
+/** The windmill as the dusk's first frame draws it, on a plain 2D canvas: the stand-in from the page's first
+ *  frame until the dusk itself starts (after the page has arrived), with no shader to compile. The same eleven
+ *  strokes, widths and sail angle; the dry-brush gaps, which open toward each stroke's end, drawn as the ink
+ *  thinning there. The gradient, the glow and the hairline under it are sancho.css's. */
+export function millStandIn(host: HTMLElement, ink: string): HTMLCanvasElement {
+  const c = document.createElement("canvas"); c.className = "dusk-standin"; c.setAttribute("aria-hidden", "true");
+  host.prepend(c);
+  const W = Math.max(1, c.clientWidth), H = Math.max(1, c.clientHeight), dpr = Math.min(2, devicePixelRatio || 1);
+  c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+  const g = c.getContext("2d"); if (!g) return c;
+  g.scale(dpr, dpr); g.fillStyle = ink;
+  const Hw = MILL.h * H, fx = MILL.x * W, fy = HORIZON * H, ang = START_ANGLE;
+  const body = (x: number, y: number): [number, number] => [fx + x * Hw, fy - y * Hw];
+  const smooth = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const draw = (st: Stroke, tf: (x: number, y: number) => [number, number]) => {
+    const N = 48, P: [number, number][] = [];
+    for (let j = 0; j <= N; j++) { const t = j / N, m = 1 - t; P.push(tf(m * m * st.a[0] + 2 * m * t * st.c[0] + t * t * st.b[0], m * m * st.a[1] + 2 * m * t * st.c[1] + t * t * st.b[1])); }
+    for (let j = 0; j < N; j++) {
+      const s = (j + 0.5) / N;
+      if (s < 0.004 || s > 0.995) continue;
+      const w = (st.w0 + (st.w1 - st.w0) * Math.pow(s, 0.75)) * Hw * (0.55 + 0.45 * smooth(0, 0.06, s)) * (1 - 0.5 * smooth(0.82, 1, s));
+      const [x0, y0] = P[j], [x1, y1] = P[j + 1], dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1, nx = (-dy / l) * w * 0.5, ny = (dx / l) * w * 0.5;
+      g.globalAlpha = 1 - 0.6 * smooth(0.45, 1, s);
+      g.beginPath(); g.moveTo(x0 + nx, y0 + ny); g.lineTo(x1 + nx * 1.02, y1 + ny * 1.02); g.lineTo(x1 - nx * 1.02, y1 - ny * 1.02); g.lineTo(x0 - nx, y0 - ny); g.fill();
+    }
+  };
+  BODY.forEach((st) => draw(st, body));
+  for (let k = 0; k < 4; k++) {
+    const a = ang + (k * Math.PI) / 2, ca = Math.cos(a), sa = Math.sin(a);
+    draw(SAIL, (x, y) => body(x * ca - y * sa, HUB + x * sa + y * ca));
+  }
+  return c;
+}
+
 export interface DuskOptions {
   reduce: boolean;
   /** a phone: a band at the top, no tail */
@@ -148,7 +183,7 @@ export class Dusk {
   private o: DuskOptions; private gl: WebGL2RenderingContext | null = null; private prog: WebGLProgram | null = null;
   private u: Record<string, WebGLUniformLocation | null> = {}; private wake: Wake | null = null;
   private W = 1; private H = 1; private dpr = 1; private raf = 0; private last = 0; private t = 0; private visible = true;
-  private ang = 0.35; private omega = (2 * Math.PI) / TURN_REST; private windT = -99;
+  private ang = START_ANGLE; private omega = (2 * Math.PI) / TURN_REST; private windT = -99;
   private pal: Record<string, RGB> = {};
 
   constructor(host: HTMLElement, o: DuskOptions) {

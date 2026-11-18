@@ -54,6 +54,18 @@ export const settled: Promise<void> = new Promise((resolve) => {
   if ((document as Document & { prerendering?: boolean }).prerendering) document.addEventListener("prerenderingchange", go, { once: true });
   else go();
 });
+/** A page's graphics, started after it has arrived, come in over its CSS stand-in: 450 ms, linear (a change
+ *  of colour, as the site's colour changes are). Under reduced motion they are simply there. */
+export function fadeIn(...els: (Element | null | undefined)[]): Promise<void> {
+  const list = els.filter((e): e is Element => !!e);
+  if (reduceMotion || !list.length) return Promise.resolve();
+  return Promise.all(list.map((e) => e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: "linear" }).finished.catch(() => {}))).then(() => {});
+}
+/** idle time after `settled`, for work nobody is waiting on (the run page's Pyodide) */
+export const idle = (timeout = 1500) => new Promise<void>((r) => {
+  const w = window as Window & { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number };
+  if (w.requestIdleCallback) w.requestIdleCallback(() => r(), { timeout }); else window.setTimeout(r, 300);
+});
 let ready = false;
 void settled.then(() => { ready = true; });
 

@@ -8,7 +8,7 @@
 // allow_pickle=False) and checked before the key is used; their errors are shown word for word.
 import "../common";              // the shared stylesheet first, so the theme wins ties
 import "../styles/run.css";
-import "../chain";
+import { fadeIn, idle, settled } from "../chain";
 import { auditId, h, MEANING, reduceMotion, sha256Hex, word } from "../common";
 import { cancelGate, loadGate, type RunOutcome } from "../gate";
 import { makeScene } from "../scene";
@@ -157,10 +157,19 @@ function buildFan() {
     reach: (y) => (y >= geom.glass[0] && y <= geom.glass[1] ? geom.glass[2] : geom.right),
     masks: () => geom.masks });
 }
-let relayT = 0;
-const relayout = () => { window.clearTimeout(relayT); relayT = window.setTimeout(() => { buildGlass(); buildFan(); }, 150); };
+let relayT = 0, started = false;
+const relayout = () => { if (!started) return; window.clearTimeout(relayT); relayT = window.setTimeout(() => { buildGlass(); buildFan(); }, 150); };
 new ResizeObserver(relayout).observe($("main"));
-void document.fonts.ready.then(() => { buildGlass(); buildFan(); });
+// started once the page has arrived (src/chain.ts): never in a prerender, never under a carry's transition. Until
+// then the page is its plain ground (run.css) and its text; the glass and the fan fade in over it, and the lensed
+// headline cross-fades with the page's own (.hero.arriving: the text goes transparent over the same 450 ms)
+void Promise.all([document.fonts.ready, settled]).then(() => {
+  started = true;
+  const veil = $("main").querySelector<HTMLElement>(".hero")!;
+  if (!reduceMotion) { veil.classList.add("arriving"); window.setTimeout(() => veil.classList.remove("arriving"), 600); }
+  buildGlass(); buildFan();
+  void fadeIn(glass?.el, document.querySelector("canvas.hero-layer"), document.querySelector("canvas.fan"));
+});
 
 // ---- inputs: the bundled pair to start, or the visitor's files; checked by the package's loaders
 async function useBundled() {
@@ -424,7 +433,10 @@ async function shareLink(r: AuditResult, record: Record<string, unknown>): Promi
 }
 
 // ---- start: the prompt from the CLI adapter, the bundled inputs
+// Pyodide and the package (about 23 MB) load in a worker once the page has arrived and the browser is idle:
+// never in a prerender, never while a carry's transition plays
 (async () => {
+  await settled; await idle();
   try {
     const gate = await loadGate();
     const p = await gate.prompt();
