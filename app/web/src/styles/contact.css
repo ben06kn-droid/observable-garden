@@ -1,48 +1,72 @@
-/* The Contact page (contact.html): minimal. A plain white ground (#FFFFFF), near-black text (#111111), nothing
-   decorative; the headline in the title face on the grid's left edge, four lines under it, each a small mono caps
-   label with its value beside it in a large reading size. Plain structure, to take animations later. */
+/* The Contact page (contact.html; DESIGN.md 3, contact): one screen on the loading ring's blue (#1F4FD8), white text and
+   links. The headline in the title face; three lines under it in a large reading size (the email, LinkedIn, the
+   résumé with "Open in browser" beside it); the menu control and the footer in the page's colours. Behind it the run
+   section's fan of paths (src/fan.ts), complete and still, in white and silver, with the run section's cursor tail
+   turning paths rose gold (contact.ts). */
 
 [data-theme="contact"] {
-  --ground: #ffffff;
-  --ink: #111111;              /* 18.9:1 on the ground */
-  --muted: #555555;            /* 7.5:1: the labels, the footer */
-  --faint: #6b6b6b;            /* 5.3:1 */
-  --rule: #e6e6e6;
+  --ground: #1f4fd8;
+  --ink: #ffffff;              /* 6.6:1 on the ground; 4.5:1 or more over the fan where it is dimmed behind text */
+  --muted: #e4eaf9;            /* 5.4:1: the footer */
+  --faint: #dbe3f7;
+  --rule: rgba(255, 255, 255, 0.28);
   --header-bg: var(--ground);
-  --accent: var(--ink);
-  --focus: var(--ink);
-  --problem: #9b1c2c;
+  --accent: #ffffff;
+  --focus: #ffffff;
+  --problem: #ffd7d0;
+  /* the fan (src/fan.ts): the run section's, white where its paths are white, silver where they are gold */
+  --fan-ground: var(--ground);
+  --fan-line: #ffffff;
+  --fan-sand: #c9ced6;
+  --fan-alpha: 0.22;           /* the run section's */
+  /* the cursor's tail, the run section's at the same strength, rose gold where run's is red: the white paths take a
+     tint 35% of the way from white to #E8A598 (run: 35% from its off-white to #FF3B30), with #E8A598 fringes at the
+     same weight and offset; the silver paths bend but keep their colour, as the gold do on run */
+  --wake-tone: #f7e0db;
+  --wake-fringe: #e8a598;
+  --wake-fringe-alpha: 1;
+  --wake-fringe-mix: 2;
+  --wake-fringe-off: 1.5 2;
+  --wake-hi: #ffffff;
+  --wake-shade: #000000;
 }
 
-.ct { min-height: calc(100vh - 120px); min-height: calc(100svh - 120px); box-sizing: border-box; padding: calc(var(--head) + var(--pad-y) * 2) var(--pad-x) var(--s9);
-  display: flex; flex-direction: column; }
-.ct-h { margin: 0; max-width: 12ch; font: 800 var(--t-hero)/0.94 var(--display); letter-spacing: -0.035em; color: var(--ink); text-wrap: balance; }
+/* one screen: the content and the footer in the window's height */
+html[data-theme="contact"] body { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; position: relative; }
+.ct-fan { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.ct-fan .fan { position: absolute; left: 0; top: 0; width: 100%; height: var(--fan-h, 100vh); display: block; z-index: -1; will-change: transform; }
+.ct, [data-theme="contact"] .foot { position: relative; z-index: 1; }
+[data-theme="contact"] .foot { border-top-color: transparent; }
 
-/* the four lines: a label column, then the value, one line each */
-.ct-list { margin: auto 0 0; padding-top: var(--s8); max-width: 60rem; }
-.ct-row { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); align-items: baseline; column-gap: var(--s5); padding: var(--s4) 0; border-top: 1px solid var(--rule); }
-.ct-row:last-child { border-bottom: 1px solid var(--rule); }
-.ct-row dt { font: 500 var(--t-micro)/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
-.ct-row dd { margin: 0; font: 400 clamp(1.35rem, 2.2vw, 2.25rem)/1.25 var(--sans); letter-spacing: -0.01em; color: var(--ink); overflow-wrap: anywhere; }
+.ct { flex: 1 0 auto; box-sizing: border-box; padding: calc(var(--head) + var(--pad-y)) var(--pad-x) var(--s7);
+  display: flex; flex-direction: column; justify-content: center; }
+/* the headline sized by the window's width and height both, so the page is one screen at 1440x900 and 1280x720 */
+.ct-h { margin: 0; max-width: 14ch; font: 800 min(8.4vw, 10.8vh)/0.94 var(--display); letter-spacing: -0.035em; color: var(--ink); text-wrap: balance; }
+
+.ct-list { list-style: none; margin: min(5vh, var(--s8)) 0 0; padding: 0; }
+.ct-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2em 1.1em; padding: min(1.4vh, var(--s3)) 0;
+  font: 400 clamp(1.35rem, min(2.3vw, 3.9vh), 2.4rem)/1.25 var(--sans); letter-spacing: -0.01em; }
 
 /* links: a thin underline at rest; on hover a full-weight one and the arrow moves; on focus a ring */
-.ct-row a { color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.18em;
-  text-decoration-color: rgba(17, 17, 17, 0.3); transition: text-decoration-color var(--dur-ui) var(--ease-ui); }
-.ct-row a[target="_blank"]::after { content: " ↗"; display: inline-block; font-size: 0.7em; vertical-align: 0.25em; color: var(--muted);
-  transition: transform var(--dur-ui) var(--ease-ui), color var(--dur-ui) var(--ease-ui); }
-.ct-row a:hover, .ct-row a:focus-visible { text-decoration-color: var(--ink); text-decoration-thickness: 2px; }
-.ct-row a:hover::after, .ct-row a:focus-visible::after { transform: translate3d(3px, -3px, 0); color: var(--ink); }
-.ct-row a:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 2px; }
+.ct-list a { color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.2em;
+  text-decoration-color: rgba(255, 255, 255, 0.45); transition: text-decoration-color var(--dur-ui) var(--ease-ui); }
+.ct-list a[target="_blank"]::after, .ct-list a.ct-dl::after { display: inline-block; margin-left: 0.25em; font-size: 0.7em; vertical-align: 0.2em;
+  transition: transform var(--dur-ui) var(--ease-ui); }
+.ct-list a[target="_blank"]::after { content: "↗"; }
+.ct-list a.ct-dl::after { content: "↓"; }
+.ct-list a:hover, .ct-list a:focus-visible { text-decoration-color: var(--ink); text-decoration-thickness: 2px; }
+.ct-list a[target="_blank"]:hover::after, .ct-list a[target="_blank"]:focus-visible::after { transform: translate3d(3px, -3px, 0); }
+.ct-list a.ct-dl:hover::after, .ct-list a.ct-dl:focus-visible::after { transform: translate3d(0, 3px, 0); }
+.ct-list a:focus-visible { outline: 2px solid var(--focus); outline-offset: 5px; border-radius: 2px; }
 /* the résumé's second link, to read it in the browser: smaller, beside the first */
-.ct-row .ct-sec { margin-left: 1.1em; font-size: 0.6em; vertical-align: 0.18em; color: var(--muted); text-decoration-color: rgba(85, 85, 85, 0.35); }
-.ct-row .ct-sec:hover, .ct-row .ct-sec:focus-visible { color: var(--ink); text-decoration-color: var(--ink); }
+.ct-list .ct-sec { font-size: 0.6em; text-decoration-color: rgba(255, 255, 255, 0.45); }
+[data-theme="contact"] .foot a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 
 @media (max-width: 812px) {
-  .ct { min-height: 0; padding-top: calc(var(--head) + var(--s7)); padding-bottom: var(--s8); }
-  .ct-h { font-size: clamp(2.9rem, 15vw, 4.5rem); max-width: none; }
-  .ct-list { margin-top: var(--s7); padding-top: 0; }
-  .ct-row { grid-template-columns: 1fr; row-gap: var(--s2); }
-  .ct-row dd { font-size: clamp(1.2rem, 5.4vw, 1.5rem); }
-  .ct-row .ct-sec { display: inline-block; padding: 12px 0; font-size: 0.72em; vertical-align: baseline; }   /* a touch-sized target */
+  .ct { justify-content: flex-start; padding-top: calc(var(--head) + var(--s7)); padding-bottom: var(--s8); }
+  .ct-h { font-size: clamp(2.6rem, 13.5vw, 4.5rem); max-width: none; }
+  .ct-list { margin-top: var(--s7); }
+  .ct-list li { font-size: clamp(1.2rem, 5.6vw, 1.5rem); }
+  .ct-list .ct-sec { display: inline-block; padding: 12px 0; font-size: 0.72em; }   /* a touch-sized target */
 }
-@media (prefers-reduced-motion: reduce) { .ct-row a, .ct-row a::after { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .ct-list a, .ct-list a::after { transition: none; } }

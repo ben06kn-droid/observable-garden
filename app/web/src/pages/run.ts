@@ -142,7 +142,9 @@ function placeGlass() {
 let fan: Fan | null = null, fanPhone: boolean | null = null;
 // the page's shape for the fan, taken once per layout (page px)
 let geom = { bottom: 0, right: 0, glass: [0, 0, Infinity] as [number, number, number], masks: [] as FanRect[] };
-const TEXT = ".hero .label, .hero h1, .hero .lead, .hero .about, .hero .to-demo, "
+// the headline and the lead dim the paths by their letters alone (GLYPHS); the rest of the text by its extent
+const GLYPHS = ".hero h1, .hero .lead";
+const TEXT = ".hero .label, .hero .about, .hero .to-demo, "
   + ".run-form .sect-h, .run-form .fine, .run-form label:not(.file), .run-form .status, .run-form .estimate, .run-form details, .run-go .run-error, "
   + ".move-count, #spot .note, #spot .note-word, .below h2, .below p, .run-log, #record .meaning, #record .reasons-d, #record h2, #record h3, #record .kv, #record pre, "
   + ".run-notes p, .cue";
@@ -179,7 +181,8 @@ function buildFan() {
   fan = new Fan(root, { reduce: reduceMotion, foot: 280, seed: 5, wake: true,
     region: () => ({ top: root.getBoundingClientRect().top + scrollY, bottom: geom.bottom }),   // from the section's top
     reach: (y) => (y >= geom.glass[0] && y <= geom.glass[1] ? geom.glass[2] : geom.right),
-    masks: () => geom.masks });
+    masks: () => geom.masks,
+    glyphs: () => [...root.querySelectorAll(GLYPHS)].map((el) => ({ el, keep: 0.06 })) });
 }
 let relayT = 0, started = false;
 const relayout = () => { if (!started) return; window.clearTimeout(relayT); relayT = window.setTimeout(() => { buildGlass(); buildFan(); }, 150); };

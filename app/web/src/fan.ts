@@ -25,7 +25,10 @@
 
 import { followPointer, rgb, STILL, Wake, WAKE_GLSL, wakeColours, type RGB } from "./cursorwake";
 
-export interface FanRect { x: number; y: number; w: number; h: number; keep: number }   // page px; keep 0 = no lines there
+// page px; keep 0 = no lines there; trace: the share of the wake's glossy trace kept there (default 1, 0 where keep is 0)
+export interface FanRect { x: number; y: number; w: number; h: number; keep: number; trace?: number }
+/** text whose letters dim the paths behind them (and only its letters, a few px around each, not its box) */
+export interface FanGlyphs { el: Element; keep: number; trace?: number }
 export interface FanOptions {
   /** the fan's vertical extent, in page px */
   region: () => { top: number; bottom: number };
@@ -33,12 +36,17 @@ export interface FanOptions {
   reach: (y: number) => number;
   /** text and fields over the fan: the lines are dimmed (keep ~0.3) or removed (keep 0) there */
   masks?: () => FanRect[];
+  /** text over the fan whose letters themselves dim the lines (keep) and the wake's trace (trace, default keep) */
+  glyphs?: () => FanGlyphs[];
   reduce?: boolean;
   seed?: number;
   /** the cursor's wake (off on a phone) */
   wake?: boolean;
   /** the last `foot` px of the region: paths that start there slow, stop, and stay */
   foot?: number;
+  /** every path complete and still from the first frame: none grows, starts or fades; the loop runs only while the
+   *  wake moves (the Contact page) */
+  full?: boolean;
 }
 
 interface Path {
@@ -56,10 +64,16 @@ uniform vec2 uVp; uniform float uVpOff;            // the viewport, and the canv
 uniform vec3 uGround, uLine, uSand, uTone, uFringe, uHi, uShade; uniform float uWA, uSA, uFringeA, uFringeMix; uniform vec2 uFringeOff;
 uniform sampler2D uPaths; uniform float uFanW;
 uniform sampler2D uMask; uniform vec4 uMaskBox;
+uniform sampler2D uGlyph; uniform vec4 uGlyphBox;   // the letters' mask: full resolution, over the text's extent only
 uniform sampler2D uVel; uniform float uWake;
 out vec4 o;
 ${WAKE_GLSL}
-vec2 maskAt(vec2 p) { return texture(uMask, (vec2(p.x, p.y + uScroll) - uMaskBox.xy) / uMaskBox.zw).rg; }
+vec2 glyphAt(vec2 q) {
+  if (uGlyphBox.z <= 0.0) return vec2(1.0);
+  vec2 uv = (q - uGlyphBox.xy) / uGlyphBox.zw;
+  return any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0))) ? vec2(1.0) : texture(uGlyph, uv).rg;
+}
+vec2 maskAt(vec2 p) { vec2 q = vec2(p.x, p.y + uScroll); return texture(uMask, (q - uMaskBox.xy) / uMaskBox.zw).rg * glyphAt(q); }
 // the lines' coverage at a canvas point: (white, gold), faded before the fields and dimmed behind text
 vec2 cov(vec2 p) {
   if (p.x < 0.0 || p.x > uFanW || p.y < 0.0 || p.y > uView.y) return vec2(0.0);
@@ -107,7 +121,8 @@ export class Fan {
   readonly canvas: HTMLCanvasElement;
   private o: FanOptions; private gl: WebGL2RenderingContext | null = null; private u: Record<string, WebGLUniformLocation | null> = {};
   private paths: Path[] = []; private ctx: CanvasRenderingContext2D; private pcv: HTMLCanvasElement;
-  private texP: WebGLTexture | null = null; private texM: WebGLTexture | null = null;
+  private texP: WebGLTexture | null = null; private texM: WebGLTexture | null = null; private texG: WebGLTexture | null = null;
+  private glyphBox = [0, 0, 0, 0];
   private maskBox = [0, 0, 1, 1]; private fanW = 300; private dpr = 1; private vw = 0; private vh = 0;
   // the canvas sits in the page (it scrolls with the text, so the two never drift apart): the viewport and
   // a margin above and below, re-anchored to the scroll each frame it draws
@@ -137,8 +152,9 @@ export class Fan {
     this.lastScroll = scrollY; this.lastScrollT = performance.now();
     addEventListener("scroll", this.onScroll, { passive: true });
     addEventListener("resize", this.onResize);
-    if (this.wake) { const w = this.wake; this.unfollow = followPointer((x, y) => w.move(x, y), () => w.lift()); }
-    if (o.reduce) this.still(); else this.wakeUp();
+    if (this.wake) { const w = this.wake; this.unfollow = followPointer((x, y) => { w.move(x, y); this.wakeUp(); }, () => w.lift()); }
+    if (o.full) this.fill();
+    if (o.reduce) this.still(); else if (o.full) this.render(); else this.wakeUp();
   }
   destroy() {
     this.running = false; cancelAnimationFrame(this.raf); removeEventListener("scroll", this.onScroll); removeEventListener("resize", this.onResize);
@@ -189,11 +205,61 @@ export class Fan {
     for (const m of this.o.masks?.() ?? []) {
       const i0 = Math.max(0, Math.floor(m.x * k)), i1 = Math.min(W - 1, Math.ceil((m.x + m.w) * k));
       const j0 = Math.max(0, Math.floor((m.y - r.top) * k)), j1 = Math.min(H - 1, Math.ceil((m.y + m.h - r.top) * k));
-      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const o = (j * W + i) * 4; data[o] = Math.round(data[o] * m.keep); if (m.keep === 0) data[o + 1] = 0; }
+      const tr = m.trace ?? (m.keep === 0 ? 0 : 1);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const o = (j * W + i) * 4; data[o] = Math.round(data[o] * m.keep); data[o + 1] = Math.round(data[o + 1] * tr); }
     }
     gl.bindTexture(gl.TEXTURE_2D, this.texM);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
     this.maskBox = [0, r.top, W / k, H / k];
+    this.buildGlyphs();
+  }
+
+  // ---------- the letters' mask: each word drawn in its own font where it lies, a few px thicker, at full resolution,
+  // over the text's extent only (outside it the shader reads 1). The paths dim behind the letters, not the boxes
+  private buildGlyphs() {
+    const gl = this.gl; if (!gl) return;
+    const items = this.o.glyphs?.() ?? [], y0 = scrollY, SPREAD = 3;
+    type Word = { text: string; x: number; y: number; h: number; font: string; ls: string; colour: string };
+    const words: Word[] = [], range = document.createRange();
+    let x0 = Infinity, x1 = -Infinity, t0 = Infinity, t1 = -Infinity;
+    for (const g of items) {
+      const colour = `rgb(${Math.round(g.keep * 255)}, ${Math.round((g.trace ?? g.keep) * 255)}, 0)`;
+      const walk = document.createTreeWalker(g.el, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode() as Text | null; n; n = walk.nextNode() as Text | null) {
+        const cs = getComputedStyle(n.parentElement!);
+        if (cs.visibility === "hidden" || cs.display === "none") continue;
+        const font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        for (const m of n.data.matchAll(/\S+/g)) {
+          range.setStart(n, m.index!); range.setEnd(n, m.index! + m[0].length);
+          // a word broken across lines (a hyphen, an address) gives a rect per line: draw it per rect, by its share
+          const rs = [...range.getClientRects()].filter((r) => r.width > 0);
+          if (rs.length !== 1) { for (let i = 0; i < m[0].length; i++) {   // letter by letter
+            range.setStart(n, m.index! + i); range.setEnd(n, m.index! + i + 1); const r = range.getBoundingClientRect(); if (!r.width) continue;
+            words.push({ text: m[0][i], x: r.left, y: r.top + y0, h: r.height, font, ls: cs.letterSpacing, colour });
+            x0 = Math.min(x0, r.left); x1 = Math.max(x1, r.right); t0 = Math.min(t0, r.top + y0); t1 = Math.max(t1, r.bottom + y0); } continue; }
+          const r = rs[0];
+          words.push({ text: m[0], x: r.left, y: r.top + y0, h: r.height, font, ls: cs.letterSpacing, colour });
+          x0 = Math.min(x0, r.left); x1 = Math.max(x1, r.right); t0 = Math.min(t0, r.top + y0); t1 = Math.max(t1, r.bottom + y0);
+        }
+      }
+    }
+    if (!words.length) { this.glyphBox = [0, 0, 0, 0]; return; }
+    const pad = SPREAD + 4, bx = Math.floor(x0 - pad), by = Math.floor(t0 - pad);
+    const W = Math.max(1, Math.ceil(x1 - x0 + 2 * pad)), H = Math.max(1, Math.ceil(t1 - t0 + 2 * pad));
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    const x = c.getContext("2d")!;
+    x.fillStyle = "#fff"; x.fillRect(0, 0, W, H);
+    x.lineJoin = "round"; x.lineWidth = 2 * SPREAD; x.textBaseline = "alphabetic";
+    for (const w of words) {
+      x.font = w.font; (x as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = w.ls === "normal" ? "0px" : w.ls;
+      const fm = x.measureText(w.text), asc = fm.fontBoundingBoxAscent, desc = fm.fontBoundingBoxDescent;
+      const base = w.y - by + (w.h - (asc + desc)) / 2 + asc;   // the line box's content area, centred as the browser does
+      x.fillStyle = x.strokeStyle = w.colour;
+      x.strokeText(w.text, w.x - bx, base); x.fillText(w.text, w.x - bx, base);
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.texG);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+    this.glyphBox = [bx, by, W, H];
   }
 
   private initGL() {
@@ -206,11 +272,11 @@ export class Fan {
     gl.useProgram(p); this.prog = p;
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uView", "uDpr", "uScroll", "uRegion", "uVp", "uVpOff", "uFringeA", "uHi", "uShade", "uGround", "uLine", "uSand", "uTone", "uFringe", "uWA", "uSA", "uFringeMix", "uFringeOff", "uPaths", "uFanW", "uMask", "uMaskBox", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uView", "uDpr", "uScroll", "uRegion", "uVp", "uVpOff", "uFringeA", "uHi", "uShade", "uGround", "uLine", "uSand", "uTone", "uFringe", "uWA", "uSA", "uFringeMix", "uFringeOff", "uPaths", "uFanW", "uMask", "uMaskBox", "uGlyph", "uGlyphBox", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
-    this.texP = tex(); this.texM = tex();
+    this.texP = tex(); this.texM = tex(); this.texG = tex();
     this.gl = gl;
     // steps of 1/20 s: Safari's look here (about 20 frames a second)
     if (this.o.wake && !this.o.reduce) { const w = new Wake(gl, { step: 1 / 20 }); if (w) this.wake = w; }
@@ -237,6 +303,7 @@ export class Fan {
   }
   private visibleBand() { const r = this.o.region(); return [Math.max(r.top + 20, scrollY - this.vh * 0.1), Math.min(r.bottom - 20, scrollY + this.vh * 1.05)]; }
   private step(dt: number) {
+    if (this.o.full) return;   // complete and still: nothing grows, starts or fades
     // the pace: a slow idle, quicker while the page scrolls, easing back
     this.scrollV *= Math.exp(-dt / 0.25);
     const target = 55 + Math.min(1300, Math.abs(this.scrollV) * 1.4);
@@ -304,6 +371,8 @@ export class Fan {
     gl.uniform1f(this.u.uFanW, this.fanW);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.texM); gl.uniform1i(this.u.uMask, 1);
     gl.uniform4f(this.u.uMaskBox, this.maskBox[0], this.maskBox[1], this.maskBox[2], this.maskBox[3]);
+    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.texG); gl.uniform1i(this.u.uGlyph, 3);
+    gl.uniform4f(this.u.uGlyphBox, this.glyphBox[0], this.glyphBox[1], this.glyphBox[2], this.glyphBox[3]);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
@@ -315,9 +384,17 @@ export class Fan {
     const r = this.o.region(), inView = r.bottom > scrollY && r.top < scrollY + this.vh;
     if (!inView) { this.render(); this.running = false; return; }
     this.step(dt); this.wake?.step(dt, this.vh); this.render();
+    // a full fan draws only while the wake moves; the next pointer move wakes it again
+    if (this.o.full && !(this.wake && this.wake.idle < STILL)) { this.running = false; return; }
     this.raf = requestAnimationFrame(this.frame);
   };
 
+  /** every path complete across the region, at once (full) */
+  private fill() {
+    const r = this.o.region();
+    for (let y = r.top + 60; y < r.bottom - 40; y += 150 + this.rnd() * 60) this.spawn(y);
+    for (const p of this.paths) { p.delay = 0; p.head = p.ys.length - 1; p.rest = true; }
+  }
   /** reduced motion: the fan drawn once, its paths complete and still; redrawn on scroll */
   private still() {
     if (!this.paths.length) {
