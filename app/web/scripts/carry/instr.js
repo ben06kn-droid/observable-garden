@@ -29,7 +29,8 @@
   // each frame's own time (the callback's timestamp: when the frame began), not when the callback happened to run
   var f = function (ts) { var t = performance.timeOrigin + ts; if (L.frames.length < 4000) L.frames.push(Math.round(t * 10) / 10); var y = Math.round(scrollY); if (y !== lastY) { L.scroll.push([t, y]); lastY = y; } requestAnimationFrame(f); };
   requestAnimationFrame(f);
-  try { new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { L.loaf.push([performance.timeOrigin + e.startTime, Math.round(e.duration), Math.round(e.blockingDuration)]); }); }).observe({ type: "long-animation-frame", buffered: true }); } catch (e) {}
+  try { new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { L.loaf.push([performance.timeOrigin + e.startTime, Math.round(e.duration), Math.round(e.blockingDuration),
+    e.scripts.map(function (x) { return [(x.sourceURL || "").split("/").pop(), x.sourceFunctionName, x.sourceCharPosition, Math.round(x.duration), x.invokerType, String(x.invoker).slice(0, 60)]; }), Math.round(scrollY)]); }); }).observe({ type: "long-animation-frame", buffered: true }); } catch (e) {}
   var send = function () {
     try {
       var n = performance.getEntriesByType("navigation")[0];

@@ -27,7 +27,7 @@ function instrumented(src, name) {
   const site = join(out, name); rmSync(site, { recursive: true, force: true });
   cpSync(src, site, { recursive: true });
   cpSync(join(here, "carry", "instr.js"), join(site, "carry-instr.js"));
-  for (const f of ["index.html", "run.html"]) { const p = join(site, f); writeFileSync(p, readFileSync(p, "utf8").replace("<head>", '<head>\n<script src="/carry-instr.js"></script>')); }
+  for (const f of ["index.html", "run.html", "docs.html", "sancho.html"]) { const p = join(site, f); writeFileSync(p, readFileSync(p, "utf8").replace("<head>", '<head>\n<script src="/carry-instr.js"></script>')); }
   return site;
 }
 const swipeBin = join(out, "swipe");
@@ -52,7 +52,7 @@ function osaKeyUrl(url) {   // Chrome without a debugger: type the address (Cmd-
   osa('tell application "System Events" to keystroke "l" using command down'); execFileSync("sleep", ["0.2"]);
   osa(`tell application "System Events" to keystroke "${url}"`); osa('tell application "System Events" to key code 36');
 }
-function front() { if (browser === "chrome") osa(`tell application "System Events" to set frontmost of (first process whose unix id is ${chrome.pid}) to true`); else osa('tell application "Safari" to activate'); }
+function front() { if (browser === "chrome") osa(`tell application "System Events" to set frontmost of (first process whose unix id is ${chrome.pid}) to true`); else { osa('tell application "System Events" to set frontmost of process "Safari" to true'); execFileSync("sleep", ["0.3"]); } }   // ("activate" can leave another app in front; the swipes would go to it)
 async function fitSafari() {
   if (browser !== "safari") return; const L = latest(); if (!L || L.vh === H) return;
   const b = osa('tell application "Safari" to get bounds of front window').split(", ").map(Number);
@@ -82,7 +82,7 @@ async function visit(site, path, { first = true } = {}) {
   const srv = await serve(port, { root: site, carryLog: (b) => { try { const L = JSON.parse(b); docs.set(`${L.path}@${L.start}`, L); } catch { /* */ } } });
   let before = null, gpu0 = null;
   if (browser === "chrome") openChrome(base + path);
-  else { before = webContent(); gpu0 = footprintMB(safariGpu()); osa(`tell application "Safari" to make new document with properties {URL:"${base + path}"}`, `tell application "Safari" to set bounds of front window to {0, 30, ${W}, ${30 + H + 80}}`); }
+  else { before = new Map([...webContent()].map((pid) => [pid, footprintMB(pid)])); gpu0 = footprintMB(safariGpu()); osa(`tell application "Safari" to make new document with properties {URL:"${base + path}"}`, `tell application "Safari" to set bounds of front window to {0, 30, ${W}, ${30 + H + 80}}`); }
   const shown = await until(() => { const L = latest(); return L && (pmark(L, "qx-revealed") || !L.sections?.length); }, 30000);
   await fitSafari();
   return { srv, base, before, gpu0, shown };
@@ -93,11 +93,31 @@ async function memoryAfter(v, sections) {
   if (sections) for (const k of [1, 2, 3, 4, 5, 6]) { swipe(-1, 60, 8, 0.94); await sleep(400); }
   await sleep(10000);
   if (browser === "chrome") return chromeProcs();
-  const mine = [...webContent()].filter((p) => !v.before.has(p));
-  return { webcontent_mb: mine.length ? Math.max(...mine.map(footprintMB)) : null, new_webcontent_processes: mine.length, gpu_delta_mb: +(footprintMB(safariGpu()) - v.gpu0).toFixed(1) };
+  // the page's Web Content process: the one that grew most since before it opened (Safari often puts a page in a
+  // process it started earlier, so "the new one" is not reliable)
+  const now = [...webContent()].map((pid) => ({ pid, mb: footprintMB(pid), was: v.before.get(pid) ?? 0 })).sort((a, b) => (b.mb - b.was) - (a.mb - a.was));
+  return { webcontent_mb: now[0]?.mb ?? null, gpu_delta_mb: +(footprintMB(safariGpu()) - v.gpu0).toFixed(1) };
 }
 async function leave(v) { if (browser === "chrome") closeChrome(); else osa('tell application "Safari" to close front window'); v.srv.close(); await sleep(2500); }
 
+const stat = (g) => { if (!g.length) return null; const s = [...g].sort((a, b) => a - b); return { frames: g.length, median_ms: +s[Math.floor(s.length / 2)].toFixed(1), p95_ms: +s[Math.floor(s.length * 0.95)].toFixed(1), longest_ms: +s.at(-1).toFixed(1), over_20ms: g.filter((x) => x > 20).length, over_34ms: g.filter((x) => x > 34).length }; };
+/** frame gaps while scrolling (from t0), and those while each boundary is on screen (the next section's top inside the viewport) */
+function frameStats(Q, t0) {
+  const yAt = (t) => { let y = 0; for (const [ts, yy] of Q.scroll) { if (ts > t) break; y = yy; } return y; };
+  const fr = Q.frames.filter((t) => t > t0), all = [], per = {};
+  const bounds = (Q.sections ?? []).slice(1);
+  for (let i = 1; i < fr.length; i++) {
+    const g = fr[i] - fr[i - 1], y = yAt(fr[i]); all.push(g);
+    for (const [n, top] of bounds) if (y > top - Q.vh && y < top) (per[n] ??= []).push(g);
+  }
+  return { all_scrolling: stat(all), ...Object.fromEntries(Object.entries(per).map(([n, g]) => [`boundary_into_${n}`, stat(g)])) };
+}
+async function scrollThrough(down = 14, up = 14) {
+  for (let i = 0; i < down; i++) { swipe(+1, 45, 6, 0.93); await sleep(150); }
+  await sleep(800);
+  for (let i = 0; i < up; i++) { swipe(-1, 45, 6, 0.93); await sleep(150); }
+  await sleep(1500);
+}
 const result = { browser, viewport: `${W}x${H}`, when: new Date().toISOString() };
 const one = instrumented(root, "site-onepage");
 
@@ -107,36 +127,29 @@ const one = instrumented(root, "site-onepage");
   const L = latest();
   result.first_visit = { work_done_ms: Math.round(pmark(L, "qx-work-done") - L.start), revealed_ms: Math.round(pmark(L, "qx-revealed") - L.start) };
   await sleep(3000);
-  // frames: swipes down until the run section's top has passed the top of the screen, then up again, twice
-  const marks = [];
-  for (let k = 0; k < 2; k++) {
-    marks.push(["down", Date.now()]);
-    for (let i = 0; i < 12; i++) { swipe(+1); await sleep(250); const Q = latest(); const run = Q.sections.find(([n]) => n === "run")[1]; if (Q.scroll.at(-1)?.[1] > run + 200) break; }
-    await sleep(800); marks.push(["up", Date.now()]);
-    for (let i = 0; i < 12; i++) { swipe(-1); await sleep(250); const Q = latest(); if ((Q.scroll.at(-1)?.[1] ?? 0) < 5) break; }
-    await sleep(800);
-  }
-  await sleep(1200);
-  const Q = latest(), run = Q.sections.find(([n]) => n === "run")[1], vh = Q.vh;
-  // the frames while the boundary is on screen: the run section's top between the bottom and the top of the viewport
-  const yAt = (t) => { let y = 0; for (const [ts, yy] of Q.scroll) { if (ts > t) break; y = yy; } return y; };
-  const fr = Q.frames.filter((t) => t > marks[0][1] - 500), crossing = [], all = [];
-  for (let i = 1; i < fr.length; i++) { const g = fr[i] - fr[i - 1], y = yAt(fr[i]); all.push(g); if (y > run - vh && y < run) crossing.push(g); }
-  const stat = (g) => { const s = [...g].sort((a, b) => a - b); return { frames: g.length, median_ms: s[Math.floor(s.length / 2)], p95_ms: s[Math.floor(s.length * 0.95)], longest_ms: Math.round(s.at(-1) * 10) / 10, over_20ms: g.filter((x) => x > 20).length, over_34ms: g.filter((x) => x > 34).length }; };
-  result.scrolling = { across_boundary: stat(crossing), all_scrolling: stat(all), long_frames_main_thread: (Q.loaf ?? []).filter(([t]) => t > marks[0][1]).map(([, d, b]) => [d, b]) };
+  // frames: one scroll down through all four sections and back up, real trackpad swipes
+  const t0 = Date.now(); await scrollThrough();
+  const Q = latest();
+  const ys = Q.scroll.filter(([t]) => t > t0).map(([, y]) => y);
+  result.scrolling = { scrolled_px: ys.length ? [Math.min(...ys), Math.max(...ys)] : null, sections: Q.sections, ...frameStats(Q, t0), long_main_thread_frames: (Q.loaf ?? []).filter(([t]) => t > t0).map(([, d, bl, sc, y]) => ({ ms: d, blocking: bl, at_scroll: y, scripts: sc })) };
   // a later visit in the session: the address of the run section, typed
   docs = new Map(); navigate(v.base + "/run.html");
-  await until(() => { const R = latest(); return R && pmark(R, "qx-revealed"); }, 20000);
+  await until(() => { const R = latest(); return R && R.path === "/run.html" && pmark(R, "qx-revealed"); }, 20000);
   const R = latest();
   result.later_visit = { path: R.path, work_done_ms: Math.round(pmark(R, "qx-work-done") - R.start), revealed_ms: Math.round(pmark(R, "qx-revealed") - R.start), at_run: Math.abs((R.scroll.at(-1)?.[1] ?? 0) - R.sections.find(([n]) => n === "run")[1]) < 3 };
   await leave(v);
 }
 // 2. memory: the one page, then each page of the multi-page build on its own
-{
+if (!process.argv.includes("--no-memory")) {
   const v = await visit(one, "/"); result.memory = { onepage: await memoryAfter(v, true) }; await leave(v);
   if (baseline) {
     const mp = instrumented(baseline, "site-multipage");
-    for (const p of ["/", "/run.html"]) { const w = await visit(mp, p); result.memory[`multipage ${p}`] = await memoryAfter(w, false); await leave(w); }
+    result.baseline_scrolling = {};
+    for (const p of ["/", "/run.html", "/docs.html", "/sancho.html"]) {
+      const w = await visit(mp, p); await sleep(3000);
+      const t0 = Date.now(); await scrollThrough(8, 8); result.baseline_scrolling[p] = frameStats(latest(), t0).all_scrolling;
+      result.memory[`multipage ${p}`] = await memoryAfter(w, false); await leave(w);
+    }
   }
 }
 writeFileSync(join(out, `result-${browser}.json`), JSON.stringify(result, null, 1));
