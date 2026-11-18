@@ -14,7 +14,7 @@ import { serve } from "./serve_dist.mjs";
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const PATHS = { home: "/", run: "/run.html", docs: "/docs.html", sancho: "/sancho.html" };
+const PATHS = { home: "/", run: "/run.html", docs: "/docs.html", sancho: "/sancho.html", eucalyptus: "/eucalyptus.html" };
 
 // ---- compare: PNG decode (8-bit RGB/RGBA, no interlace, as Chrome writes them) and a per-pixel difference
 function png(file) {

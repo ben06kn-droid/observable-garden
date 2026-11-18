@@ -9,7 +9,7 @@ import { LOADER } from "./src/loader-mark";
 // the pinned Pyodide release: its files are served from /pyodide/<version>/
 const PYODIDE = JSON.parse(readFileSync(resolve(import.meta.dirname, "public/pyodide/MANIFEST.json"), "utf8")).pyodide;
 
-const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "loader", "eucalyptus"];
+const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "loader", "eucalyptus"];   // eucalyptus.html: a shell of the one page
 
 // The menu (src/menu.html) is written into every page at its <!-- menu --> marker (the one page's header.html has one).
 // The one-page site: home, run, docs and Sancho are sections of one document, built once behind the
@@ -17,7 +17,7 @@ const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "sh
 // description and starting section (data-start; also /docs.html, /sancho.html); this writes in what they share, in order: the loading screen
 // (on screen from the first frame), the header, one backdrop per section (src/onepage/boot.ts crossfades them by
 // scroll position) and the sections, from src/onepage/*.html.
-const SECTIONS = ["home", "run", "docs", "sancho"];
+const SECTIONS = ["home", "run", "docs", "sancho", "eucalyptus"];
 const part = (n: string) => readFileSync(resolve(import.meta.dirname, "src/onepage", `${n}.html`), "utf8");
 function onepage(): Plugin {
   return {

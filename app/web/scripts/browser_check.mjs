@@ -556,13 +556,13 @@ try {
     // every address, as a direct link later in the session: the finished B, then its own section
     const secTop = (n) => `Math.round(document.querySelector('[data-section="${n}"]').getBoundingClientRect().top + scrollY)`;
     one.direct = {};
-    for (const [n, path] of [["docs", "/docs.html"], ["sancho", "/sancho.html"]]) {
+    for (const [n, path] of [["docs", "/docs.html"], ["sancho", "/sancho.html"], ["eucalyptus", "/eucalyptus.html"]]) {
       await go(path);
       one.direct[n] = { at_section: await evaluate(`Math.abs(scrollY - ${secTop(n)}) < 2`), title: await evaluate(`document.title`), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent ?? null`) };
     }
     // the address follows the scroll through every section, adding no history
     const h1 = await evaluate(`history.length`), seenPaths = [];
-    for (const n of ["home", "run", "docs", "sancho"]) { await evaluate(`scrollTo(0, ${secTop(n)} + 100); true`); await sleep(400); seenPaths.push(await here()); }
+    for (const n of ["home", "run", "docs", "sancho", "eucalyptus"]) { await evaluate(`scrollTo(0, ${secTop(n)} + 100); true`); await sleep(400); seenPaths.push(await here()); }
     one.scroll_through = { paths: seenPaths, history_unchanged: (await evaluate(`history.length`)) === h1 };
     // the header's Docs and Sancho links scroll in place; a link in the contents lands on its heading, its anchor kept
     await evaluate(`scrollTo(0, 0); true`); await sleep(400);
@@ -579,8 +579,7 @@ try {
   {
     // after both passes: their history checks count entries, and Chrome keeps at most 50
     const one = report.desktop_onepage, secTop = (n) => `Math.round(document.querySelector('[data-section="${n}"]').getBoundingClientRect().top + scrollY)`;
-    // out of the one page to the demo (from the run section) and to Eucalyptus (from home), and Back: the two must
-    // return alike (the page kept or rebuilt the same way, the same loading screen, on the section left from)
+    // out of the one page to the demo (from the run section), and Back: the page kept, on the section left from
     step("desktop: the menu by keyboard and pointer");
     {
       await go("/");
@@ -623,7 +622,7 @@ try {
       h.ok = h.start.tag === "BUTTON" && !h.start.glass_focusable && h.start.hg === "dark" && h.start.label === "Switch to light mode"
         && h.switched.hg === "light" && h.switched.label === "Switch to dark mode" && h.after_demo.hg === "light" && h.back.hg === "dark";
     }
-    step("desktop: out to the demo and to Eucalyptus, and Back");
+    step("desktop: out to the demo and Back; Eucalyptus as the last section");
     const outAndBack = async (from, name, link, to) => {
       await go(from);
       await evaluate(`window.__stay = 1; true`);
@@ -637,10 +636,16 @@ try {
         at_section: await evaluate(`Math.abs(scrollY - ${secTop(name)}) < 2`), title: await evaluate(`document.title`) } };
     };
     const demo = await outAndBack("/run.html", "run", 'a[href="/demo.html"]', "/demo.html");
-    const euc = await outAndBack("/", "home", 'a[href="/eucalyptus.html"]', "/eucalyptus.html");
-    one.out_and_back = { demo, eucalyptus: euc,
-      eucalyptus_page: euc.theme === "eucalyptus" && euc.main === "Eucalyptus | Coming soon" && euc.canvases === 0 && !euc.wake,
-      same_return: demo.back.arrived && euc.back.arrived && demo.back.at_section && euc.back.at_section && demo.back.page_kept === euc.back.page_kept && demo.back.loader === euc.back.loader };
+    one.out_and_back = { demo, same_return: demo.back.arrived && demo.back.at_section && demo.back.page_kept };
+    // Eucalyptus is the one page's last section: home's line scrolls to it in place, and it holds its two lines and
+    // the footer, in its theme, with no canvas
+    await go("/");
+    await evaluate(`document.querySelector('[data-section="home"] a[href="/eucalyptus.html"]').click(); true`);
+    one.eucalyptus_section = { arrived: await settledAt(`Math.abs(scrollY - ${secTop("eucalyptus")}) < 2 && location.pathname === "/eucalyptus.html"`, 6000),
+      ...(await evaluate(`(() => { const e = document.querySelector('[data-section="eucalyptus"]'); return { theme: e.dataset.theme, text: [...e.querySelectorAll('.euc-label, .euc-title')].map((x) => x.textContent).join(' | '),
+        canvases: e.querySelectorAll('canvas').length, footer: !!e.querySelector('.foot'), sancho_footer: !!document.querySelector('[data-section="sancho"] .foot'), current: document.querySelector('.menu-panel a[aria-current]')?.textContent }; })()`)) };
+    one.eucalyptus_section.ok = one.eucalyptus_section.arrived && one.eucalyptus_section.theme === "eucalyptus" && one.eucalyptus_section.text === "Eucalyptus | Coming soon"
+      && one.eucalyptus_section.canvases === 0 && one.eucalyptus_section.footer && !one.eucalyptus_section.sancho_footer && one.eucalyptus_section.current === "Eucalyptus";
   }
   await go("/demo.html"); await sleep(500);
   report.contrast_ready = await contrast("#chips .chip, #run");

@@ -1,7 +1,7 @@
 # The site's design
 
 Read this before restyling any page. It records the reference the whole site is held to (section 1), the
-page order and how the four chain pages work as one document behind a loading screen (2), each page's theme (3),
+page order and how the chain's five sections work as one document behind a loading screen (2), each page's theme (3),
 the shared grid, type scale and menu (4), where things live in the code (5), the standing rules (6) and what is
 still open (7).
 
@@ -164,13 +164,14 @@ pair of cards**. At 390 each screen holds one of those things, never two. One id
 
 ## 2. The pages, in order: one document
 
-The four chain pages are one document, built once behind a loading screen and kept alive:
+The chain's five sections are one document, built once behind a loading screen and kept alive:
 
-**home** (`/`) → **run** (`/run.html`) → **docs** (`/docs.html`) → **Sancho** (`/sancho.html`)
+**home** (`/`) → **run** (`/run.html`) → **docs** (`/docs.html`) → **Sancho** (`/sancho.html`) → **Eucalyptus**
+(`/eucalyptus.html`; a section since 2026-11-18, it had been a page of its own)
 
 Each is a section of that document with its own address. Scrolling simply continues from one into the next. Outside
 the chain, separate documents reached by links: **demo** (`/demo.html`, from the run section's "Try it on three bundled searches" only; home does
-not link to it), **Eucalyptus** (`/eucalyptus.html`, from home's last line), **viewer** (`/viewer.html`, from Sancho), **result** (a demo
+not link to it), **viewer** (`/viewer.html`, from Sancho), **result** (a demo
 verdict on its own page), **share**, **privacy**, **terms**, **404**, and **loader** (`/loader.html`, the loading
 screen on its own with a simulated load, for review).
 
@@ -179,7 +180,7 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
 
 ### How the document is built (vite.config.ts, src/onepage/)
 
-- `index.html`, `run.html`, `docs.html` and `sancho.html` are four shells of the same document. Each has its own
+- `index.html`, `run.html`, `docs.html`, `sancho.html` and `eucalyptus.html` are five shells of the same document. Each has its own
   `<title>`, description and `data-start` (the section it opens on), the early script `public/loader-early.js`,
   the loading screen's stylesheet, the one module `src/onepage/main.ts`, and a `<!-- onepage -->` marker.
 - The `onepage()` plugin in `vite.config.ts` replaces the marker at build time with, in order: the loading
@@ -197,7 +198,7 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
   a `div` inside it (`run-main`, `docs-main`, `sancho-main`): the document has one `<main>`.
 - Each section ends with one small cue, `<a class="cue" href="next">Continue ↓</a>` (mono, micro size,
   uppercase, muted): the way on for the keyboard and a click. There is no other seam: no gap, rule or
-  heading between sections. Only Sancho, the last section, keeps the footer.
+  heading between sections. Only Eucalyptus, the last section, has the footer (Sancho's ends with the cue).
 - `boot.ts`'s `snap()` starts every section on a whole pixel (it adds under 1 px of `margin-top` where needed,
   again whenever the first section resizes), so each renders exactly as its page did.
 - `.section` takes over what `<body>` gave each page (colour, body type) and clips anything reaching past the
@@ -260,7 +261,7 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
   next Tab continues from there. A link with an anchor (`/docs.html#tracing`) pushes the section's address with
   the anchor and scrolls to the heading. While such a scroll is under way the address is left alone (`steering`).
 - Back and Forward (`popstate`) jump to the entry's section, and anchor.
-- A direct link to any of the four addresses opens on its section (and anchor), behind the loading screen:
+- A direct link to any of the five addresses opens on its section (and anchor), behind the loading screen:
   `history.scrollRestoration` is manual, and the jump is made once the layout is final, before the screen goes.
 - Links out of the chain (demo, viewer, Eucalyptus, the paper) are plain navigations.
 
@@ -315,12 +316,13 @@ class table's size) have their room from the start, so its arrival never moves t
 - `scripts/browser_check.mjs` checks the one page in headless Chrome at 1440x900 and 1366x768:
   - a first visit and a later one;
   - each address as a direct link (it opens on its section, with its title and current link);
-  - the address following the scroll through all four sections without adding history;
+  - the address following the scroll through all five sections without adding history;
   - header links, Back, the cue by click and by Enter (focus moves to the section);
   - a docs contents link;
   - Pyodide on demand: not loaded for a visitor who scrolls past, loaded when the form is on screen;
-  - out to the demo (from run) and to Eucalyptus (from home), and Back: both return alike (`out_and_back`), and
-    the Eucalyptus page is the home theme with nothing in `<main>`, no canvas and no wake.
+  - out to the demo (from run) and Back: the page kept, on its section (`out_and_back`); home's Eucalyptus line
+    scrolls to the last section, which holds its two lines and the footer, in its theme, with no canvas
+    (`eucalyptus_section`).
 
   `--run-page` runs the run form against the mock providers.
 - `scripts/reference.mjs` takes reference shots of each section (top, middle, end; 1440x900 and 390x844) and
@@ -494,11 +496,11 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     16.8 ms); paused while hidden or off screen.
 - **demo**: the city garden at night in neon tubing (also the result page, which replays a demo verdict). The
   only page with neon, glow or the night palette; `demo.css` is loaded by no other page.
-- **Eucalyptus** (`eucalyptus.html`, `src/pages/eucalyptus.ts`, `src/styles/eucalyptus.css`; 2026-11-18): its own
-  theme, a lime ground (#C4F042) with ink #14210A. The words "Coming soon" large in the title face (Bricolage 800 at
-  `--t-hero`) on the grid's left edge, a small mono caps label "Eucalyptus" above; the menu and the footer in the
-  same colours (the pill in the ground). Nothing else. A separate document outside the one-page scroll, with no
-  cursor effect; leaving it and coming back behaves as for the demo.
+- **Eucalyptus** (`src/onepage/eucalyptus.html`, `src/pages/eucalyptus.ts`, `src/styles/eucalyptus.css`;
+  2026-11-18): the one page's last section, at `/eucalyptus.html`. Its own theme, a lime ground (#C4F042) with ink
+  #14210A. The words "Coming soon" large in the title face (Bricolage 800 at `--t-hero`) on the grid's left edge, a
+  small mono caps label "Eucalyptus" above; the menu (the pill in the ground) and the site's footer in the same
+  colours; one full screen. Nothing else, and no cursor effect. Home's last line and the menu scroll to it in place.
 - **viewer**: a light counterpart to the run page: cool off-white, graphite type, hairlines, one muted
   oxidized-copper green. No illustration, no glow. Reached from Sancho; outside the chain.
 
@@ -624,7 +626,7 @@ the pill ends at 58 px, the contents stick at 126 px, a docs heading lands at 10
 |---|---|
 | `src/styles/base.css` | fonts, grid, type and motion tokens, header, footer, shared components, the flat tree |
 | `src/styles/<theme>.css` | one token block per page, and that page's own rules |
-| `index.html`, `run.html`, `docs.html`, `sancho.html` | the four shells of the one document (title, description, `data-start`) |
+| `index.html`, `run.html`, `docs.html`, `sancho.html`, `eucalyptus.html` | the five shells of the one document (title, description, `data-start`) |
 | `vite.config.ts` (`onepage()`, `SECTIONS`) | writes the loading screen, header, backdrops and sections into the shells |
 | `src/onepage/*.html` | the header and each section's markup |
 | `src/menu.html`, `src/menu.ts` | the menu: its markup (written into every page at `<!-- menu -->`) and its behaviour |
