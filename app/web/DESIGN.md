@@ -500,7 +500,10 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   2026-11-18): the one page's last section, at `/eucalyptus.html`. Its own theme, a lime ground (#C4F042) with ink
   #14210A. The words "Coming soon" large in the title face (Bricolage 800 at `--t-hero`) on the grid's left edge, a
   small mono caps label "Eucalyptus" above; the menu (the pill in the ground) and the site's footer in the same
-  colours; one full screen. Nothing else, and no cursor effect. Home's last line and the menu scroll to it in place.
+  colours; one full screen. Home's last line and the menu scroll to it in place. Sancho's cursor tail, one to one
+  (`src/trace.ts`: the same fluid, the same glossy trace and Sancho's own colours, #f2d7a6 / #14070a / #b5391c),
+  drawn in its backdrop over the lime, fading out before the title and the footer; on the lime its pale highlight
+  is close to the ground, so it reads mostly by its shade and rim. No tail on a phone or under reduced motion.
 - **viewer**: a light counterpart to the run page: cool off-white, graphite type, hairlines, one muted
   oxidized-copper green. No illustration, no glow. Reached from Sancho; outside the chain.
 
