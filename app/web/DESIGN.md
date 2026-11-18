@@ -532,8 +532,8 @@ session restyles its own theme; the docs tokens set here are interim.
     below, re-anchored to the scroll as it draws), so it scrolls with the text and never drifts from it. Most are faint off-white; about one in six is gold. They draw left
     to right at a pace that follows the scroll and eases to an idle; at the foot they slow and rest. Behind
     text they dim to 6% (7:1 holds for every text tone over a gold path, both palettes): behind the headline and the
-    lead by the letters themselves, not their boxes (2026-11-18: `glyphs` in src/fan.ts, each word drawn in its own font,
-    3 px thicker, into a full-resolution mask over the text), behind the rest of the text by its extent; under
+    lead by the letters themselves, not their boxes (2026-11-18: `glyphs` in src/fan.ts, as on Contact), behind the rest of
+    the text by its extent; a line the wake bends is dimmed where it is drawn, so none slips under text undimmed; under
     inputs, selects, text areas and buttons they are removed.
   - **Phone**: composed for itself. Headline, lead, a smaller glass, then the sections stacked; the fan is
     a band between the form and the tree.
@@ -648,9 +648,13 @@ session restyles its own theme; the docs tokens set here are interim.
     take a tone 35% of the way from white to #E8A598 (`--wake-tone` #F7E0DB), with #E8A598 fringes at run's weight and
     offset; the silver paths bend and keep their colour, as the gold do on run. Frames (headed Chrome, 1440x900, a
     stroke across the text and the fan): median 16.7 ms, worst 17.7 ms.
-  - **Behind the text**: the paths dim behind the letters themselves, not their boxes (the fan's glyph mask: each word
-    drawn in its own font, 3 px thicker, into a full-resolution mask over the text): to 12% behind the headline, the
-    three lines (and the links' arrows) and the footer, with no glossy trace there. The tail never moves text.
+  - **Behind the text**: the paths dim behind the letters themselves, not their boxes (the fan's glyph mask: each
+    letter drawn in its own font where the browser placed it, 4 px thicker, closed by a 3x3 minimum, into a
+    full-resolution mask over the text): to 12% behind the headline, the three lines (and the links' arrows) and the
+    footer, with no glossy trace there. A line the tail bends is dimmed where it is drawn, so one pushed under a letter
+    is dimmed there too. The tail never moves text. Measured at 1440x900 behind the letters only (`glyphContrast` in
+    browser_check: the letters found from a shot with and one without the text), at rest and in six samples with the
+    tail crossing the text: worst 5.32:1 (the headline); every line and the footer 5.4:1 or more.
   - **Loader**: as before, in full every time, its white screen sliding up to the blue page.
   - **Phone**: the same text stacked, the fan still, no tail. **Reduced motion**: the fan still, no tail, and the
     loader's still version.
