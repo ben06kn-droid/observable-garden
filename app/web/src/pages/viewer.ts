@@ -216,7 +216,7 @@ async function showSancho() {
   $("v-rec-h").textContent = heading;
   $("v-meaning").textContent = "Sharpe and config hash, not a verdict: Sancho is a fixed model, not a search, so it gets no search verdict. "
     + "There is no search for the gate to replay; what quixote sancho writes is Sancho's stream and its in-sample Sharpe, and that is all there is to show. "
-    + (registered ? "This is the registered Sancho (the default levers); its registered tests, priced as one declared strategy, are on the Sancho page."
+    + (registered ? "This is the registered Sancho (the default levers); its registered tests, priced as one declared strategy, are in the Sancho section."
                   : "This config is not the registered one: a different model from the registered Sancho, labelled by its config hash.");
   $("v-reasons-h").hidden = true; $("v-reasons").replaceChildren();
   const about = (j.panel_about ?? {}) as Values, turn = (j.turnover ?? {}) as Values;
