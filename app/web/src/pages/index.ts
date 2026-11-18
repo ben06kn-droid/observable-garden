@@ -76,8 +76,10 @@ const wake = new WakeLayer({ host: one,
   // the docs push's (32 + 48·√dose px), its carry the midpoint of 0.12 and the docs flow; its fade, 0.42 s, was set
   // by measurement so the tail's visible area 0.9 s after a stroke is halfway between the two (about 8k px)
   // its life then cut to 65% (2026-11-18): both fades × 0.65 (0.495 → 0.322 s, 0.42 → 0.273 s); nothing else changed
+  // on the clock in steps of 1/36 s, the fluid at 0.42 of real time: Safari's look here, where its frames (about 36 a
+  // second while the tail runs) used to under-count their time (2026-11-18; DESIGN.md, the cursor's wake)
   scale: { cell: 6.5, flow: 0.35625, curl: 41.6, force: 0.8, fade: 0.495 * 0.65,
-           dye: 1.5, dyeWidth: 17.2 / 1.5, dyeGrow: 24 / 1.5, dyeFlow: 0.26625, dyeFade: 0.42 * 0.65 },
+           dye: 1.5, dyeWidth: 17.2 / 1.5, dyeGrow: 24 / 1.5, dyeFlow: 0.26625, dyeFade: 0.42 * 0.65, step: 1 / 36, rate: 0.42 },
   onPush: (x, y, vx, vy, dose) => { const k = 0.5 + 0.9 * Math.sqrt(dose); life.wind.add(x, y, vx * k, vy * k); } });
 
 // drawn once the type has settled, behind the loading screen: the grove's data fetched, then the grove drawn

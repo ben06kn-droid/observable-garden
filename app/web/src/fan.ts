@@ -209,7 +209,7 @@ export class Fan {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
     this.texP = tex(); this.texM = tex();
     this.gl = gl;
-    if (this.o.wake && !this.o.reduce) { const w = new Wake(gl); if (w) this.wake = w; }
+    if (this.o.wake && !this.o.reduce) { const w = new Wake(gl, { step: 1 / 20 }); if (w) this.wake = w;   // steps of 1/20 s: Safari's look here (about 20 frames a second) }
   }
 
   // ---------- the paths

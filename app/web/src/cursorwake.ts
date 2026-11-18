@@ -115,6 +115,10 @@ void main() {
   o = vec4(c.r * uFade, c.g * uFade2, 0.0, 1.0);
 }`;
 
+// the drawn state: between the last two steps of the fluid (or its dye), by how far the clock is into the next
+const BLEND = HEAD + `
+uniform sampler2D uP, uSrc; uniform float uK;
+void main() { vec2 uv = gl_FragCoord.xy * uTex; o = vec4(mix(texture(uP, uv).rg, texture(uSrc, uv).rg, uK), 0.0, 1.0); }`;
 interface Target { tex: WebGLTexture; fb: WebGLFramebuffer }
 interface Prog { p: WebGLProgram; u: Record<string, WebGLUniformLocation | null> }
 
@@ -149,6 +153,14 @@ export interface WakeScale {
   force?: number;
   /** the fluid's fade's time constant, s (0.45): longer lives longer */
   fade?: number;
+  /** the simulation's fixed step, s (1/60): it advances on the clock in steps of this length whatever the frame
+   *  rate, and the cursor's path is sampled at each step's own time, so the wake is the same at 30, 60 or 120
+   *  frames a second; each frame draws the state between the last two steps */
+  step?: number;
+  /** how fast the fluid evolves, × real time (1): below 1 it moves, spreads and fades more slowly, while the push
+   *  still follows the cursor's real speed. (Calibrates a page to the look it had when a browser's slow frames
+   *  under-counted its time: Safari's, 2026-11-18.) */
+  rate?: number;
 }
 
 export class Wake {
@@ -158,24 +170,27 @@ export class Wake {
   /** seconds since the fluid last had anything pushed into it; it is still after about 0.6 s */
   idle = 99;
   /** pointer movement still waiting to be pushed in (the wake's delay) */
-  get pending() { return this.queue.length > 0; }
+  get pending() { return performance.now() < this.lastT + DELAY + 2 * this.hMs; }
 
   private cell: number; private flow: number; private eps: number; private dyeCell: number; private dyeFlow: number; private dyeWidth: number; private dyeGrow: number; private dyeFade: number; private dyeDose = 0; private force: number; private fadeT: number;
   private dye: [Target, Target] | null = null; private dw = 0; private dh = 0; private vw = 1; private vh = 1;
+  // the fixed step (ms), the simulation's clock (performance time of the last step), the previous step's state and
+  // the drawn (blended) state
+  private hMs: number; private rate: number; private clock = -1; private vPrev: Target | null = null; private vOut: Target | null = null; private dPrev: Target | null = null; private dOut: Target | null = null;
   /** each stretch of the cursor's path as it is pushed in (after the delay): viewport css px, its velocity
    *  in px/s and its dose (0-1, how strongly it stirs the fluid) */
   onPush: ((x: number, y: number, vx: number, vy: number, dose: number) => void) | null = null;
   constructor(gl: WebGL2RenderingContext, scale: WakeScale = {}) {
-    this.gl = gl; this.cell = scale.cell ?? CELL; this.flow = scale.flow ?? FLOW; this.eps = scale.curl ?? 22; this.dyeCell = scale.dye ?? 0; this.dyeFlow = scale.dyeFlow ?? 0.1; this.dyeWidth = scale.dyeWidth ?? 0.7; this.dyeGrow = scale.dyeGrow ?? 0; this.dyeFade = scale.dyeFade ?? DYE_FADE; this.force = scale.force ?? 1; this.fadeT = scale.fade ?? FADE;
+    this.gl = gl; this.cell = scale.cell ?? CELL; this.flow = scale.flow ?? FLOW; this.eps = scale.curl ?? 22; this.dyeCell = scale.dye ?? 0; this.dyeFlow = scale.dyeFlow ?? 0.1; this.dyeWidth = scale.dyeWidth ?? 0.7; this.dyeGrow = scale.dyeGrow ?? 0; this.dyeFade = scale.dyeFade ?? DYE_FADE; this.force = scale.force ?? 1; this.fadeT = scale.fade ?? FADE; this.hMs = 1000 * (scale.step ?? 1 / 60); this.rate = scale.rate ?? 1;
     if (!gl.getExtension("EXT_color_buffer_float")) return;
     const sh = (t: number, src: string) => { const s = gl.createShader(t)!; gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
     const vs = sh(gl.VERTEX_SHADER, VERT); if (!vs) return;
-    for (const [name, src] of Object.entries({ advect: ADVECT, splat: SPLAT, curl: CURL, vort: VORT, div: DIV, pres: PRES, grad: GRAD, ...(this.dyeCell ? { dyeAdvect: DYE_ADVECT, dyeSplat: DYE_SPLAT } : {}) })) {
+    for (const [name, src] of Object.entries({ advect: ADVECT, splat: SPLAT, curl: CURL, vort: VORT, div: DIV, pres: PRES, grad: GRAD, blend: BLEND, ...(this.dyeCell ? { dyeAdvect: DYE_ADVECT, dyeSplat: DYE_SPLAT } : {}) })) {
       const fs = sh(gl.FRAGMENT_SHADER, src); if (!fs) return;
       const p = gl.createProgram()!; gl.attachShader(p, vs); gl.attachShader(p, fs); gl.bindAttribLocation(p, 0, "p"); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return;
       const u: Record<string, WebGLUniformLocation | null> = {};
-      for (const n of ["uTex", "uVel", "uDt", "uCell", "uFade", "uA", "uB", "uForce", "uR", "uCurl", "uEps", "uP", "uDiv", "uSrc", "uView", "uFade2"]) u[n] = gl.getUniformLocation(p, n);
+      for (const n of ["uTex", "uVel", "uDt", "uCell", "uFade", "uA", "uB", "uForce", "uR", "uCurl", "uEps", "uP", "uDiv", "uSrc", "uView", "uFade2", "uK"]) u[n] = gl.getUniformLocation(p, n);
       this.progs[name] = { p, u };
     }
     this.ok = true;
@@ -183,14 +198,14 @@ export class Wake {
   get ready() { return this.ok && !!this.vel; }
   /** whether this browser can run it at all (half-float targets, the programs compiled) */
   get supported() { return this.ok; }
-  /** the velocity texture, for the composite */
-  get texture() { return this.vel?.[0].tex ?? null; }
+  /** the velocity texture, for the composite: the state drawn this frame */
+  get texture() { return this.vOut?.tex ?? this.vel?.[0].tex ?? null; }
   /** s after the last push until the wake is still: longer while a slow dye is still fading */
   /** the dye's fade (s), for reading its age */
   get fadeTime() { return this.dyeFade; }
   get still() { return this.dye ? Math.max(STILL, this.dyeFade * 5) : Math.max(STILL, this.fadeT * 4); }
   /** the dye texture (covers the viewport, GL frame), when the layer asked for one */
-  get dyeTexture() { return this.dye?.[0].tex ?? null; }
+  get dyeTexture() { return this.dOut?.tex ?? this.dye?.[0].tex ?? null; }
 
   /** size the simulation to the viewport (css px) */
   resize(vw: number, vh: number) {
@@ -209,22 +224,33 @@ export class Wake {
       gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
       return { tex, fb };
     };
-    this.vel = [target(gl.RG, gl.RG16F), target(gl.RG, gl.RG16F)];
+    this.vel = [target(gl.RG, gl.RG16F), target(gl.RG, gl.RG16F)]; this.vPrev = target(gl.RG, gl.RG16F); this.vOut = target(gl.RG, gl.RG16F);
     this.pres = [target(gl.RED, gl.R16F), target(gl.RED, gl.R16F)];
     this.div = target(gl.RED, gl.R16F); this.curl = target(gl.RED, gl.R16F);
     if (this.dyeCell) {
       this.dw = Math.max(8, Math.ceil(vw / this.dyeCell)); this.dh = Math.max(8, Math.ceil(vh / this.dyeCell));
       this.dye = [target(gl.RG, gl.RG16F, this.dw, this.dh), target(gl.RG, gl.RG16F, this.dw, this.dh)];
+      this.dPrev = target(gl.RG, gl.RG16F, this.dw, this.dh); this.dOut = target(gl.RG, gl.RG16F, this.dw, this.dh);
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) this.ok = false;
   }
 
   /** the pointer moved to (x, y), viewport css px: kept, and pushed into the fluid DELAY ms later */
-  move(x: number, y: number) { this.queue.push({ t: performance.now(), x, y }); if (this.queue.length > 240) this.queue.shift(); }
+  move(x: number, y: number) { const t = performance.now(); this.queue.push({ t, x, y }); this.lastT = t; if (this.queue.length > 480) this.queue.shift(); }
   /** the pointer left: the next movement starts a new stroke */
-  lift() { this.queue.push({ t: performance.now(), x: NaN, y: NaN }); }
-  private queue: { t: number; x: number; y: number }[] = []; private prev: { t: number; x: number; y: number } | null = null;
+  lift() { const t = performance.now(); this.queue.push({ t, x: NaN, y: NaN }); this.lastT = t; }
+  private queue: { t: number; x: number; y: number }[] = []; private prev: { x: number; y: number } | null = null; private lastT = -1e9;
+  /** the pointer's place at time t (ms), on its path between the events either side; null: lifted, or not yet moved */
+  private at(t: number): { x: number; y: number } | null {
+    const q = this.queue;
+    while (q.length > 1 && q[1].t <= t) q.shift();
+    if (!q.length || q[0].t > t) return this.prev;
+    const a = q[0]; if (Number.isNaN(a.x)) return null;
+    const b = q[1]; if (!b || Number.isNaN(b.x)) return { x: a.x, y: a.y };
+    const f = (t - a.t) / Math.max(1e-3, b.t - a.t);
+    return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+  }
 
   private pass(name: string, out: Target, set: (u: Prog["u"]) => void, w = this.w, h = this.h) {
     const gl = this.gl, pr = this.progs[name];
@@ -245,53 +271,82 @@ export class Wake {
     const D = this.dye;
     if (D) { this.pass("dyeSplat", D[1], (u) => { gl.uniform1i(u.uVel, this.bind(0, D[0])); gl.uniform2f(u.uA, 0, 0); gl.uniform2f(u.uB, 1, 1); gl.uniform2f(u.uForce, 0, 0); gl.uniform1f(u.uR, 1); }, this.dw, this.dh);
       const d = D[0]; D[0] = D[1]; D[1] = d; }
-    const idle = this.idle; this.idle = -1; this.step(0, vh); this.idle = idle;
+    const idle = this.idle; this.idle = -1; this.sub(0, vh, performance.now() - DELAY); this.idle = idle; this.blendOut(0);
   }
 
-  /** one step of the fluid; vh is the viewport's height (css px), for the GL frame's flip */
-  step(dt: number, vh: number) {
+  /** advance the fluid to now, on the clock, in fixed steps (dt, the frame's own, is not used: the clock is the
+   *  simulation's), and draw the state between the last two; vh is the viewport's height (css px), for the GL
+   *  frame's flip */
+  step(_dt: number, vh: number) {
+    if (!this.ready || !this.vel) return;
+    const now = performance.now(), h = this.hMs;
+    // first, or after a pause (a hidden tab, a section off screen): start from now, losing nothing visible
+    if (this.clock < 0 || now - this.clock > 1000) this.clock = now - h;
+    let k = Math.floor((now - this.clock) / h);
+    if (k > 8) { this.clock = now - 8 * h; k = 8; }   // a long stall: at most eight steps to catch up
+    for (let i = 0; i < k; i++) {
+      if (i === k - 1) this.keepPrev();
+      this.clock += h;
+      this.sub(h / 1000, vh, this.clock - DELAY);
+    }
+    this.blendOut((now - this.clock) / h);
+  }
+  /** the state before the last step of this frame, kept for the blend */
+  private keepPrev() {
+    const gl = this.gl;
+    const copy = (src: Target, dst: Target, w: number, ht: number) => this.pass("blend", dst, (u) => { gl.uniform1i(u.uP, this.bind(0, src)); gl.uniform1i(u.uSrc, this.bind(1, src)); gl.uniform1f(u.uK, 0); }, w, ht);
+    if (this.vel && this.vPrev) copy(this.vel[0], this.vPrev, this.w, this.h);
+    if (this.dye && this.dPrev) copy(this.dye[0], this.dPrev, this.dw, this.dh);
+  }
+  /** the drawn state: k of the way from the previous step's state to the last */
+  private blendOut(k: number) {
+    const gl = this.gl, f = Math.max(0, Math.min(1, k));
+    if (this.vel && this.vPrev && this.vOut) this.pass("blend", this.vOut, (u) => { gl.uniform1i(u.uP, this.bind(0, this.vPrev!)); gl.uniform1i(u.uSrc, this.bind(1, this.vel![0])); gl.uniform1f(u.uK, f); });
+    if (this.dye && this.dPrev && this.dOut) this.pass("blend", this.dOut, (u) => { gl.uniform1i(u.uP, this.bind(0, this.dPrev!)); gl.uniform1i(u.uSrc, this.bind(1, this.dye![0])); gl.uniform1f(u.uK, f); }, this.dw, this.dh);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /** one fixed step of the fluid, dt s long, its push taken from the cursor's path at time tau (ms) */
+  private sub(dtReal: number, vh: number, tau: number) {
     if (!this.ready || !this.vel || !this.pres || !this.div || !this.curl) return;
     const gl = this.gl, V = this.vel, P = this.pres;
-    this.idle += dt;
+    this.idle += dtReal * this.rate;          // in the fluid's time: it is still when it has had time to settle
+    const dt = dtReal * this.rate;            // the fluid's own time
     const swap = () => { const t = V[0]; V[0] = V[1]; V[1] = t; };
-    // the push, a beat behind the pointer (DELAY ms, on purpose): each stretch of its path, along a capsule
-    // that widens with its speed, its strength rising steeply with speed (a slow drift barely stirs it, a
-    // quick flick throws a long, wide wake)
+    // the push, a beat behind the pointer (DELAY ms, on purpose: tau is already that far back): the stretch of its
+    // path covered in this step, along a capsule that widens with its speed, its strength rising steeply with
+    // speed (a slow drift barely stirs it, a quick flick throws a long, wide wake). One per step, so how much it
+    // stirs depends on time, not on how many events the browser delivers or how many frames it draws
     const toTex = (x: number, y: number): [number, number] => [x / this.cell, (vh - y) / this.cell];
-    const due = performance.now() - DELAY;
-    let pushes = 0;
-    while (this.queue.length && this.queue[0].t <= due) {
-      const q = this.queue.shift()!;
-      if (Number.isNaN(q.x)) { this.prev = null; continue; }
-      const a = this.prev; this.prev = q;
-      if (!a) continue;
-      const dx = q.x - a.x, dy = q.y - a.y, d = Math.hypot(dx, dy), ms = Math.max(4, q.t - a.t);
-      if (d < 0.5) continue;
-      const sp = Math.min(5000, (d / ms) * 1000);                        // px/s
-      const dose = Math.pow(Math.min(1, Math.max(0, (sp - 90) / 1400)), 1.6);   // slow: next to nothing
-      if (dose <= 0.002) continue;
-      // the dye: a line along every stretch of the path (so the trail never skips), its strength smoothed
-      // over the last few stretches (so it does not bead where the pointer's speed jitters)
-      const D = this.dye;
-      if (D) {
-        this.dyeDose += (dose - this.dyeDose) * 0.35;
-        const c = this.dyeCell, P0: [number, number] = [a.x / c, (vh - a.y) / c], P1: [number, number] = [q.x / c, (vh - q.y) / c], amt = 0.45 + 0.55 * Math.sqrt(this.dyeDose);
-        this.pass("dyeSplat", D[1], (u) => {
-          gl.uniform1i(u.uVel, this.bind(0, D[0]));
-          gl.uniform2f(u.uA, P0[0], P0[1]); gl.uniform2f(u.uB, P1[0], P1[1]);
-          gl.uniform2f(u.uForce, amt, 0); gl.uniform1f(u.uR, this.dyeWidth + this.dyeGrow * Math.sqrt(this.dyeDose));
-        }, this.dw, this.dh);
-        const t = D[0]; D[0] = D[1]; D[1] = t; this.idle = 0;
+    const q = this.at(tau), a = this.prev;
+    this.prev = q;
+    if (a && q && dtReal > 0) {
+      const dx = q.x - a.x, dy = q.y - a.y, d = Math.hypot(dx, dy);
+      const sp = Math.min(5000, d / dtReal);                                // px/s, real
+      const dose = d < 0.5 ? 0 : Math.pow(Math.min(1, Math.max(0, (sp - 90) / 1400)), 1.6);   // slow: next to nothing
+      if (dose > 0.002) {
+        // the dye: a line along the stretch (so the trail never skips), its strength smoothed over the last few
+        // stretches (so it does not bead where the pointer's speed jitters)
+        const D = this.dye;
+        if (D) {
+          this.dyeDose += (dose - this.dyeDose) * 0.35;
+          const c = this.dyeCell, P0: [number, number] = [a.x / c, (vh - a.y) / c], P1: [number, number] = [q.x / c, (vh - q.y) / c], amt = 0.45 + 0.55 * Math.sqrt(this.dyeDose);
+          this.pass("dyeSplat", D[1], (u) => {
+            gl.uniform1i(u.uVel, this.bind(0, D[0]));
+            gl.uniform2f(u.uA, P0[0], P0[1]); gl.uniform2f(u.uB, P1[0], P1[1]);
+            gl.uniform2f(u.uForce, amt, 0); gl.uniform1f(u.uR, this.dyeWidth + this.dyeGrow * Math.sqrt(this.dyeDose));
+          }, this.dw, this.dh);
+          const t = D[0]; D[0] = D[1]; D[1] = t;
+        }
+        const k = (sp / d) * 3.4 * dose * this.force, A = toTex(q.x - dx * TRAIL, q.y - dy * TRAIL), B = toTex(q.x, q.y);
+        this.pass("splat", V[1], (u) => {
+          gl.uniform1i(u.uVel, this.bind(0, V[0]));
+          gl.uniform2f(u.uA, A[0], A[1]); gl.uniform2f(u.uB, B[0], B[1]);
+          gl.uniform2f(u.uForce, dx * k, -dy * k); gl.uniform1f(u.uR, 4 + 6 * Math.sqrt(dose));
+        });
+        swap(); this.idle = 0;
+        this.onPush?.(q.x, q.y, dx / dtReal, dy / dtReal, dose);
       }
-      if (pushes >= 8) continue;
-      const k = (sp / d) * 3.4 * dose * this.force, A = toTex(q.x - dx * TRAIL, q.y - dy * TRAIL), B = toTex(q.x, q.y);
-      this.pass("splat", V[1], (u) => {
-        gl.uniform1i(u.uVel, this.bind(0, V[0]));
-        gl.uniform2f(u.uA, A[0], A[1]); gl.uniform2f(u.uB, B[0], B[1]);
-        gl.uniform2f(u.uForce, dx * k, -dy * k); gl.uniform1f(u.uR, 4 + 6 * Math.sqrt(dose));
-      });
-      swap(); this.idle = 0; pushes++;
-      this.onPush?.(q.x, q.y, (dx / ms) * 1000, (dy / ms) * 1000, dose);
     }
     if (this.idle > this.still) return;     // still: nothing to step
     // curls, kept alive

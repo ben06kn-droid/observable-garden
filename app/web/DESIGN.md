@@ -490,6 +490,16 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
 The site's signature: the cursor stirs a small fluid, after lukres.dev's cursor effect. One module serves
 every page; a page gives it the drawn layer it acts on and its colours from its theme tokens.
 
+- **On the clock** (2026-11-18): the fluid advances by real elapsed time in fixed steps (`step`, 1/60 s by
+  default), the cursor's path sampled at each step's own time (one push per step, however many events the browser
+  delivers), and each frame draws the state between the last two steps; so the wake is the same at 30, 60 or 120
+  frames a second, and a browser keeps drawing at its own rate. It had advanced once per frame by the frame's
+  time measured from the end of the last frame's work, capped at 50 ms: slow frames (Safari's: about 36 a second
+  on home while the tail ran, about 20 on run) under-counted time, so the tail lived longer there. Calibrated to
+  Safari's look as it was: home steps 1/36 s with the fluid at 0.42 of real time (`rate`); run's fan steps 1/20 s.
+  Measured with one recorded stroke (area and width of the tail, and the share left at 900 ms): home, Safari before
+  56-63k px, 105-138 px, 68-83%; now Chrome 50-52k, 88-98 px, 75-80%, Safari 49k, 99 px, 85%. Docs, Sancho and the
+  demo keep 1/60 s and their look (Chrome, before and after, within the measurement's noise).
 - **Rules everywhere**: only cursor movement drives it; pressing and dragging do nothing; no response to
   touch; nothing on a phone or under reduced motion; asleep when its layer is off screen or the fluid is
   still; never on text, controls or the header. Its push trails the cursor by 70 ms on purpose, and its
