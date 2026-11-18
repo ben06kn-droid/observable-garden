@@ -572,30 +572,32 @@ try {
     const anchor = await evaluate(`(() => { const a = [...document.querySelectorAll('[data-section="docs"] .toc a')].at(-2); a.click(); return a.hash; })()`);
     one.contents_link = { anchor, arrived: await settledAt(`(() => { const h = document.getElementById(decodeURIComponent(location.hash.slice(1))); return !!h && Math.abs(h.getBoundingClientRect().top - (parseFloat(getComputedStyle(h).scrollMarginTop) || 0)) < 3; })()`), url: await evaluate(`location.pathname + location.hash`) };
     await shot(`${tag}-3-docs`);
-    if (tag === "desktop") {
-      // out of the one page to the demo (from the run section) and to Eucalyptus (from home), and Back: the two must
-      // return alike (the page kept or rebuilt the same way, the same loading screen, on the section left from)
-      step("desktop: out to the demo and to Eucalyptus, and Back");
-      const outAndBack = async (from, name, link, to) => {
-        await go(from);
-        await evaluate(`window.__stay = 1; true`);
-        await evaluate(`document.querySelector('[data-section="${name}"] ${link}').click(); true`);
-        const arrived = await settledAt(`location.pathname === "${to}" && document.readyState === "complete"`, 20000); await sleep(800);
-        const there = { arrived, theme: await evaluate(`document.documentElement.dataset.theme`), main_empty: await evaluate(`document.querySelector("main").children.length === 0`),
-          canvases: await evaluate(`document.querySelectorAll("canvas").length`), wake: await evaluate(`!!document.querySelector(".wake-layer")`) };
-        await evaluate(`history.back(); true`);
-        const back = await settledAt(`location.pathname === "${from}" && document.readyState === "complete" && !document.querySelector(".loader")`, 20000); await sleep(800);
-        return { ...there, back: { arrived: back, path: await here(), page_kept: await evaluate(`window.__stay === 1`), loader: await evaluate(`document.documentElement.dataset.loader ?? null`),
-          at_section: await evaluate(`Math.abs(scrollY - ${secTop(name)}) < 2`), title: await evaluate(`document.title`) } };
-      };
-      const demo = await outAndBack("/run.html", "run", 'a[href="/demo.html"]', "/demo.html");
-      const euc = await outAndBack("/", "home", 'a[href="/eucalyptus.html"]', "/eucalyptus.html");
-      one.out_and_back = { demo, eucalyptus: euc,
-        eucalyptus_page: euc.theme === "home" && euc.main_empty && euc.canvases === 0 && !euc.wake,
-        same_return: demo.back.arrived && euc.back.arrived && demo.back.at_section && euc.back.at_section && demo.back.page_kept === euc.back.page_kept && demo.back.loader === euc.back.loader };
-    }
   }
   await viewport(1440, 900);
+  {
+    // after both passes: their history checks count entries, and Chrome keeps at most 50
+    const one = report.desktop_onepage, secTop = (n) => `Math.round(document.querySelector('[data-section="${n}"]').getBoundingClientRect().top + scrollY)`;
+    // out of the one page to the demo (from the run section) and to Eucalyptus (from home), and Back: the two must
+    // return alike (the page kept or rebuilt the same way, the same loading screen, on the section left from)
+    step("desktop: out to the demo and to Eucalyptus, and Back");
+    const outAndBack = async (from, name, link, to) => {
+      await go(from);
+      await evaluate(`window.__stay = 1; true`);
+      await evaluate(`document.querySelector('[data-section="${name}"] ${link}').click(); true`);
+      const arrived = await settledAt(`location.pathname === "${to}" && document.readyState === "complete"`, 20000); await sleep(800);
+      const there = { arrived, theme: await evaluate(`document.documentElement.dataset.theme`), main_empty: await evaluate(`document.querySelector("main").children.length === 0`),
+        canvases: await evaluate(`document.querySelectorAll("canvas").length`), wake: await evaluate(`!!document.querySelector(".wake-layer")`) };
+      await evaluate(`history.back(); true`);
+      const back = await settledAt(`location.pathname === "${from}" && document.readyState === "complete" && !document.querySelector(".loader")`, 20000); await sleep(800);
+      return { ...there, back: { arrived: back, path: await here(), page_kept: await evaluate(`window.__stay === 1`), loader: await evaluate(`document.documentElement.dataset.loader ?? null`),
+        at_section: await evaluate(`Math.abs(scrollY - ${secTop(name)}) < 2`), title: await evaluate(`document.title`) } };
+    };
+    const demo = await outAndBack("/run.html", "run", 'a[href="/demo.html"]', "/demo.html");
+    const euc = await outAndBack("/", "home", 'a[href="/eucalyptus.html"]', "/eucalyptus.html");
+    one.out_and_back = { demo, eucalyptus: euc,
+      eucalyptus_page: euc.theme === "home" && euc.main_empty && euc.canvases === 0 && !euc.wake,
+      same_return: demo.back.arrived && euc.back.arrived && demo.back.at_section && euc.back.at_section && demo.back.page_kept === euc.back.page_kept && demo.back.loader === euc.back.loader };
+  }
   await go("/demo.html"); await sleep(500);
   report.contrast_ready = await contrast("#chips .chip, #run");
   const idx = { nothing: 0, planted: 1, restart: 2 }[example];
