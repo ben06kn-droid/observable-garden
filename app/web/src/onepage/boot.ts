@@ -80,13 +80,19 @@ function mark(s: HTMLElement, how: "replace" | "push" | "none") {
   current = s;
 }
 /** scroll to a section: instantly (opening, Back), or as a smooth scroll (a link), adding a history entry if asked */
+let target = -1;   // where a scroll to a section is going: the address is left alone until it gets there
 function goTo(s: HTMLElement, smooth: boolean, push = false) {
   mark(s, push ? "push" : "none");
+  target = Math.round(top(s));
   window.clearTimeout(steering);
-  steering = window.setTimeout(() => { steering = 0; }, smooth ? 1200 : 50);
-  window.scrollTo({ top: top(s), behavior: smooth && !reduceMotion ? "smooth" : "auto" });
+  steering = window.setTimeout(() => { steering = 0; target = -1; }, smooth ? 2500 : 300);   // a backstop
+  const from = window.scrollY, behavior: ScrollBehavior = smooth && !reduceMotion ? "smooth" : "auto";
+  window.scrollTo({ top: target, behavior });
+  // a smooth scroll asked for in the same frame as another scroll ends can be dropped (seen in Chrome straight after
+  // Back): if it has not moved at all, ask again
+  if (behavior === "smooth") window.setTimeout(() => { if (target >= 0 && Math.abs(window.scrollY - from) < 1 && Math.abs(window.scrollY - target) > 2) window.scrollTo({ top: target, behavior }); }, 120);
 }
-addEventListener("scrollend", () => { if (steering) { window.clearTimeout(steering); steering = 0; } });
+addEventListener("scrollend", () => { if (steering && Math.abs(window.scrollY - target) < 2) { window.clearTimeout(steering); steering = 0; target = -1; } });
 document.addEventListener("click", (e) => {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   const a = (e.target as Element).closest?.("a[href]") as HTMLAnchorElement | null;
@@ -95,6 +101,9 @@ document.addEventListener("click", (e) => {
   if (url.origin !== location.origin || url.hash) return;
   const s = byPath.get(pathOf(url.pathname)); if (!s) return;
   e.preventDefault(); goTo(s, true, true);
+  // focus moves with the reader, as it does for an in-page link: the next Tab continues from the section
+  if (!s.hasAttribute("tabindex")) s.setAttribute("tabindex", "-1");
+  s.focus({ preventScroll: true });
 });
 addEventListener("popstate", () => { const s = byPath.get(pathOf(location.pathname)); if (s) goTo(s, false); });
 

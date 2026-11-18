@@ -133,6 +133,8 @@ async function go(path) {
   await send("Page.navigate", { url: base + path }, page);
   await loaded;
   await evaluate("document.fonts.ready.then(() => true)");
+  // the one-page site (home, run): built behind its loading screen, which goes once everything is drawn
+  for (let i = 0; i < 300 && await evaluate(`!!document.querySelector(".loader")`); i++) await sleep(50);
 }
 async function shot(name, full = false) {
   if (!shots) return;
@@ -389,7 +391,8 @@ if (runPage) {
     await sleep(500);
     report.prompt_edited = await evaluate(`[...document.querySelectorAll('#rec-kv dt')].find((d) => d.textContent === 'Prompt')?.nextElementSibling.textContent`);
     report.key_gone = await evaluate(`({ in_text: document.body.innerText.includes(${JSON.stringify(KEY)}), in_html: document.documentElement.outerHTML.includes(${JSON.stringify(KEY)}),
-      in_url: location.href.includes(${JSON.stringify(KEY)}), local: localStorage.length, session: sessionStorage.length, field: document.getElementById('f-key').value })`);
+      in_url: location.href.includes(${JSON.stringify(KEY)}), local: localStorage.length, session: Object.keys(sessionStorage),
+      in_storage: [...Object.values(localStorage), ...Object.values(sessionStorage)].some((v) => v.includes(${JSON.stringify(KEY)})), field: document.getElementById('f-key').value })`);   // session: only the loading screen's "seen" flag
     // the share link: copied (or shown, where the clipboard is not allowed), then opened
     await send("Browser.grantPermissions", { permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"], origin: base }).catch(() => {});
     const shareUrl = await evaluate(`(async () => { document.getElementById('share').click(); await new Promise((r) => setTimeout(r, 400));
@@ -476,67 +479,70 @@ if (runPage) {
 }
 
 try {
-  // ---- the scroll chain (src/chain.ts, public/carry.js): home → run → docs → Sancho and back. Reading
-  // scroll is native; a carry needs the page at its end, a quiet wheel there, then a deliberate push.
-  const CHAIN = [...readFileSync(join(import.meta.dirname, "..", "src", "chain.ts"), "utf8").matchAll(/\{ path: "([^"]+)", name: "[^"]+", ground: "(#[0-9a-f]{6})" \}/g)].map((m) => ({ path: m[1], ground: m[2] }));
+  // ---- the one-page site (src/onepage/): home and run are sections of one document, built once behind the loading
+  // screen; each keeps its address. Then the pages not yet in it (docs, Sancho), still carried between as before.
+  const CHAIN = [...readFileSync(join(import.meta.dirname, "..", "src", "chain.ts"), "utf8").matchAll(/\{ path: "([^"]+)", name: "[^"]+", ground: "(#[0-9a-f]{6})"/g)].map((m) => ({ path: m[1], ground: m[2] }));
   const step = (s) => process.stderr.write(`[chain] ${s}\n`);   // progress, on stderr
   const here = () => evaluate(`location.pathname === "/index.html" ? "/" : location.pathname`);
   const toEnd = () => evaluate(`window.scrollTo(0, document.documentElement.scrollHeight); true`);
   const within = (p, ms) => Promise.race([p.catch(() => null), sleep(ms).then(() => null)]);   // a page that navigated away never answers
   const push = async (dy, n = 10) => { for (let i = 0; i < n; i++) { await within(wheel(dy / n), 250); await sleep(16); } };
-  const arrive = async (path) => { const t0 = Date.now(); while (Date.now() - t0 < 8000) { if (await within(here(), 400) === path && await within(evaluate(`document.readyState === "complete"`), 400)) return true; await sleep(50); } return false; };
+  const arrive = async (path) => { const t0 = Date.now(); while (Date.now() - t0 < 8000) { if (await within(here(), 400) === path && await within(evaluate(`document.readyState === "complete" && !document.querySelector(".loader")`), 400)) return true; await sleep(50); } return false; };
+  const runTop = `Math.round(document.querySelector('[data-section="run"]').getBoundingClientRect().top + scrollY)`;
+  const settledAt = async (expr, ms = 5000) => { try { await until(expr, ms); return true; } catch { return false; } };
   for (const [vw, vh, tag] of [[1440, 900, "desktop"], [1366, 768, "laptop"]]) {
     await viewport(vw, vh);
-    await go("/");
-    await sleep(700);
+    // a first visit in the session: the whole loading screen (at least the 3 s of the B), then the site, at home
+    await evaluate(`sessionStorage.clear(); true`);
+    const t0 = Date.now();
+    await send("Page.navigate", { url: base + "/" }, page);
+    await sleep(300);
+    const one = report[`${tag}_onepage`] = { first_visit: { loader_shown: await evaluate(`!!document.querySelector(".loader") && !document.documentElement.dataset.loader`) } };
+    await until(`document.readyState === "complete" && !document.querySelector(".loader")`, 20000);
+    Object.assign(one.first_visit, { loader_ms: Date.now() - t0, at_home: await evaluate(`scrollY < 2`), path: await here(), title: await evaluate(`document.title`) });
     await shot(`${tag}-1-home`);
     if (tag === "desktop") report.shake_home = await evaluate(`(() => { const g = [...document.querySelectorAll('#bg-trees .real .stem')].find((e) => { const r = e.getBoundingClientRect(); return r.left > 800 && r.top < innerHeight; });
       if (!g) return 'no tree in view'; g.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return g.getAnimations().length > 0; })()`);
-    const chain = report[`${tag}_chain`] = { grounds: {} };
-    step(`${tag}: grounds`);
-    for (const c of CHAIN) { await go(c.path); chain.grounds[c.path] = (await evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--ground').trim()`)) === c.ground; }
-    await go("/"); await sleep(400);
-    step(`${tag}: mid-read and reaching the end`);
-    await evaluate(`window.scrollTo(0, (document.documentElement.scrollHeight - innerHeight) / 2); true`); await sleep(500);
-    step(`${tag}: push mid-read`); await push(vh * 0.6); step(`${tag}: pushed`); await sleep(1200);
-    chain.mid_read_stays = (await here()) === "/"; step(`${tag}: mid-read stays ${chain.mid_read_stays}`);
-    await evaluate(`window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 150); true`); await sleep(500);
-    await push(vh * 0.8, 24); await sleep(1200);
-    chain.reaching_end_stays = (await here()) === "/"; step(`${tag}: reaching the end stays ${chain.reaching_end_stays}`);
-    // a small push at the end fills the cue's hairline a little and stays
-    await sleep(400); await push(vh * 0.1, 4); await sleep(120);
-    chain.cue_fills = Number(await evaluate(`getComputedStyle(document.querySelector('.carry-next')).getPropertyValue('--push')`)) > 0;
-    await sleep(1200);
-    chain.small_push_stays = (await here()) === "/";
-    chain.down = [];
-    step(`${tag}: down`);
-    for (let i = 0; i + 1 < CHAIN.length; i++) {
-      const to = CHAIN[i + 1].path;
-      await toEnd(); await sleep(600);
-      step(`${tag}: carry to ${to}`);
-      await push(vh * 0.5, 12);
-      const ok = await arrive(to); await sleep(1300);   // the carry's frames are counted by the arriving page (carry.js)
-      chain.down.push({ to, arrived: ok, at_top: await evaluate(`scrollY < 3`), view_transition: await evaluate(`window.__carry?.viewTransition ?? null`), frames: await evaluate(`window.__carry?.frames ?? null`) });
-    }
-    await shot(`${tag}-2-arrived-sancho`);
-    chain.up = [];
-    step(`${tag}: up`);
-    for (let i = CHAIN.length - 1; i > 0; i--) {
-      const to = CHAIN[i - 1].path;
-      await evaluate(`window.scrollTo(0, 0); true`); await sleep(600);
-      await push(-vh * 0.5, 12);
-      const ok = await arrive(to); await sleep(1000);
-      chain.up.push({ to, arrived: ok, at_end: await evaluate(`Math.abs(scrollY - (document.documentElement.scrollHeight - innerHeight)) < 4`) });
-    }
-    step(`${tag}: Enter on the cue, header link`);
-    await toEnd(); await sleep(300);
-    await evaluate(`document.querySelector('.carry-next').focus(); true`);
+    step(`${tag}: addresses follow the scroll`);
+    const h0 = await evaluate(`history.length`);
+    await evaluate(`scrollTo(0, ${runTop} + 200); true`); await sleep(400);
+    one.scroll_into_run = { path: await here(), title: await evaluate(`document.title`), current: await evaluate(`document.querySelector('.top nav a[aria-current]')?.textContent ?? null`) };
+    await evaluate(`scrollTo(0, 0); true`); await sleep(400);
+    one.scroll_back_home = { path: await here(), current: await evaluate(`document.querySelector('.top nav a[aria-current]')?.textContent ?? null`), history_unchanged: (await evaluate(`history.length`)) === h0 };
+    step(`${tag}: a header link, Back, the cue, the keyboard`);
+    await evaluate(`document.querySelector('.top nav a[href="/run.html"]').click(); true`);
+    one.header_link = { arrived: await settledAt(`Math.abs(scrollY - ${runTop}) < 2`), path: await here(), history_added: (await evaluate(`history.length`)) === h0 + 1, y: await evaluate(`Math.round(scrollY)`), run_top: await evaluate(runTop) };
+    await evaluate(`history.back(); true`);
+    one.back = { home: await settledAt(`scrollY < 2 && location.pathname === "/"`) };
+    await evaluate(`document.querySelector('[data-section="home"] a.carry-next').click(); true`);
+    one.cue = { arrived: await settledAt(`Math.abs(scrollY - ${runTop}) < 2`), path: await here(), y: await evaluate(`Math.round(scrollY)`), run_top: await evaluate(runTop) };
+    await evaluate(`history.back(); true`); await settledAt(`scrollY < 2 && location.pathname === "/"`); await sleep(300);
+    await evaluate(`document.querySelector('[data-section="home"] a.carry-next').focus(); true`); await sleep(200);
     await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page);
     await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, page);
-    chain.enter_on_cue = await arrive(CHAIN[1].path);
-    // a header link plays no carry
-    await evaluate(`document.querySelector('.top nav a[href="/docs.html"]').click(); true`); await arrive("/docs.html");
-    chain.header_link_plain = await evaluate(`!window.__carry`);
+    one.enter_on_cue = await settledAt(`Math.abs(scrollY - ${runTop}) < 2 && location.pathname === "/run.html"`);
+    one.focus_moved = await evaluate(`document.activeElement?.dataset?.section ?? document.activeElement?.className ?? null`);
+    step(`${tag}: a direct link, later in the session`);
+    const t1 = Date.now();
+    await send("Page.navigate", { url: base + "/run.html" }, page); await sleep(200);
+    one.direct_run = { formed: await evaluate(`document.documentElement.dataset.loader === "formed"`) };
+    await until(`document.readyState === "complete" && !document.querySelector(".loader")`, 20000);
+    Object.assign(one.direct_run, { loader_ms: Date.now() - t1, at_run: await evaluate(`Math.abs(scrollY - ${runTop}) < 2`), title: await evaluate(`document.title`) });
+    await shot(`${tag}-2-run`);
+    // a page not yet in the one page is an ordinary navigation
+    await evaluate(`document.querySelector('.top nav a[href="/docs.html"]').click(); true`);
+    one.to_docs = await arrive("/docs.html");
+    // docs and Sancho, still separate pages, carried between as before
+    const chain = report[`${tag}_chain`] = { grounds: {} };
+    for (const c of CHAIN.filter((c) => ["/docs.html", "/sancho.html"].includes(c.path))) { await go(c.path); chain.grounds[c.path] = (await evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--ground').trim()`)) === c.ground; }
+    await go("/docs.html"); await toEnd(); await sleep(600);
+    await push(vh * 0.5, 12);
+    chain.down = { arrived: await arrive("/sancho.html") }; await sleep(1300);
+    Object.assign(chain.down, { at_top: await evaluate(`scrollY < 3`), view_transition: await evaluate(`window.__carry?.viewTransition ?? null`) });
+    await evaluate(`window.scrollTo(0, 0); true`); await sleep(600);
+    await push(-vh * 0.5, 12);
+    chain.up = { arrived: await arrive("/docs.html") }; await sleep(1000);
+    chain.up.at_end = await evaluate(`Math.abs(scrollY - (document.documentElement.scrollHeight - innerHeight)) < 4`);
   }
   await viewport(1440, 900);
   await go("/demo.html"); await sleep(500);
@@ -627,10 +633,13 @@ try {
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true`);
   await until(`document.getElementById('inside').hidden && !document.body.classList.contains('inside-open')`, 4000);
   report.reduced = await evaluate(`({ out: !document.getElementById('demo').classList.contains('in-run'), scene: getComputedStyle(document.getElementById('scene')).transform })`);
-  // reduced motion on the chain: the same gesture carries, as an immediate navigation (no view transition)
-  await go("/run.html"); await toEnd(); await sleep(600);
+  // reduced motion on the one page: a link to a section jumps there at once; on docs and Sancho the gesture carries,
+  // as an immediate navigation (no view transition)
+  await go("/"); await evaluate(`document.querySelector('.top nav a[href="/run.html"]').click(); true`); await sleep(120);
+  report.reduced.onepage_jump = await evaluate(`Math.abs(scrollY - Math.round(document.querySelector('[data-section="run"]').getBoundingClientRect().top + scrollY)) < 2`);
+  await go("/docs.html"); await toEnd(); await sleep(600);
   const vh0 = 900; await push(vh0 * 0.5, 12);
-  report.reduced.chain = { arrived: await arrive("/docs.html") };
+  report.reduced.chain = { arrived: await arrive("/sancho.html") };
   await sleep(400);
   report.reduced.chain.view_transition = await evaluate(`window.__carry?.viewTransition ?? null`);
   report.reduced.chain.at_top = await evaluate(`scrollY < 3`);
