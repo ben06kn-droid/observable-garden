@@ -46,7 +46,74 @@ linear except colour.
   scrolls (`overflow: hidden` on html and body); the content is translated.
 - **Scroll is a timeline.** Sections map the scroll position to 0–1 ranges (`math.fit(range.ratio, a, b, 0, 1, ease)`)
   and drive their drawing from that: scroll scrubs motion, it does not trigger it.
-- **Page to page** is 1.0 s each way (1.5 s when a project card morphs into its page), behind a full-screen curtain.
+- **Page to page** is a curtain, and slow: see "Moving from one part to the next", below.
+
+### Moving from one part to the next, frame by frame (measured 2026-11-17)
+
+Recorded in Chrome 157 at 1440x900, 60 Hz (a screenshot of every compositor frame from the trace, and each
+frame's element positions logged in the page), driven by a trackpad-like wheel: events every 16.7 ms, a
+quick ramp to a peak, momentum decaying by 0.9 to 0.88 per event. Read alongside his script bundle, which
+gives the exact formulas the frames show. Frame sheets: `screenshots/lukres/`.
+
+**Selected Work → Recognition (the "proof" section)**
+
+- **Trigger: none.** This is not a page change: Recognition is the next section of the same document, and
+  the move is ordinary (eased) scrolling. No threshold, nothing plays on its own. Stop the wheel halfway and
+  everything stops halfway (measured: the ground held at a mid grey, rgb(114,115,119), while the wheel rested).
+- **The motion follows the wheel**, 1:1 in distance, through his eased scroll: content lags the wheel by up
+  to about 80 px during a swipe and settles about 0.4 s after the last event (`1 − e^(−12·dt)` per frame;
+  never overshoots).
+- **What moves.** The content scrolls up as one; nothing is masked, scaled or cross-faded at the boundary.
+  Three things are tied to the scroll position:
+  - the ground sweeps from off-white (rgb(238,241,248)) to black, linearly, while Recognition's top moves
+    from 585 px to 248 px below the top of the viewport (337 px of scroll, 0.37 of the viewport's height);
+  - a huge "PROOF OF WORK" title (WebGL, behind the content) scrolls up with the section, solid black on
+    the light ground and turning to an outline as the ground darkens;
+  - nothing else: no parallax on the reading content.
+- **Entrances on their own clocks.** Each block's entrance starts when its top reaches the bottom of the
+  viewport and plays at real time (1 s per s), and runs backwards if the block goes back below the fold:
+  heading characters rise from 100% and turn from 30° to rest over 0.7 s on expo-out, 40 ms apart; the
+  section number's digits 50 ms apart; each row's hairline draws (scaleX 0 → 1) over 0.8 s from 0.2 s,
+  expo-out; each row's words rise out of masks over 0.8 s, staggered 100 ms by column, 50 ms by line,
+  20 ms by word.
+- **Header**: fixed, never moves or fades, no background. Its text turns white when the sweep is half done
+  (a class toggle, not scrubbed) with `transition: color .25s` (the logo 0.5 s).
+
+**Recognition (Education, the proof's last block) → "What I build with"**
+
+- **Trigger: none**, again one document and ordinary scrolling.
+- **The ground** goes from black to blue (rgb(26,46,241)), linearly, from the moment the section's top
+  enters at the bottom of the viewport until it has travelled a quarter of (viewport + section height):
+  about 1,190 px here, 1.3 viewports (the section is tall; its cards are pinned while they play). The last
+  proof block therefore already reads navy (rgb(8,12,60)) as the section enters.
+- **The title** "WHAT I / BUILD WITH" plays on a clock that runs only while it is on screen: the first two
+  words rise from 100% over 1.0 s on `cubic-bezier(.35, 0, 0, 1)`, 100 ms apart; the last two drop in from
+  −100% and then slide sideways into line between 1 and 2 s. The previous section's giant outlined words
+  change colour over the first quarter of the sweep.
+- **The cards are scrubbed by scroll**: they spread from a stack into a fan (expo-out), flip 180° → 0
+  (back-in-out, staggered) and tilt, all mapped to the section's position, with a small wobble on time;
+  the pinned card row drifts with a gentle parallax.
+- **Header**: unchanged (white, still, no background).
+
+**The end of the page → the projects page (his only real page change)**
+
+- **Trigger: time, not distance.** At the very end (within 5 px), a bar under "NEXT PAGE" fills at 2 per
+  second for as long as wheel input keeps arriving (any downward delta counts), holds for 0.3 s after each
+  event, drains at 5/s on an upward scroll and 0.2/s when idle. Measured: one swipe filled it in 0.53 s.
+  The scroll that arrives at the end is not excluded; it counts as soon as the page is at its end.
+- **Then it plays on its own** and is slow: the route changes; the old page holds still for about 0.45 s; a
+  black diagonal shutter closes from two corners, turning, in about 0.25 s, into an L-shaped window (his
+  logo) that shrinks to nothing; on a first visit a pixel "LOADING" plays until the page's assets arrive
+  (2.2 s here); then the L grows and turns to reveal the new page through it in about 0.4 s, while the new
+  title's letters rise and tilt in. 3.5 s in all on a cold visit. The header is covered by the curtain.
+- **Shared by all three**: transform and opacity only, 60 fps (median frame 16.6 ms; one frame in 230 over
+  34 ms, during the first sweep).
+
+**What this means for the chain here.** The two moves that feel effortless on his site are not transitions
+at all: the next thing is already on the page, and scrolling simply continues into it while the ground's
+colour is scrubbed by the scroll. His one real page change is a curtain with a loading screen, triggered by
+half a second of pushing, and it is the slowest thing on his site. Our pages are separate documents, so
+copying "the same" means reproducing the first kind of move across a document boundary.
 
 `src/scroll.ts` already models the eased wheel and his page carry. Note one deliberate difference: his site does
 not respond to `prefers-reduced-motion` at all. Ours does, and must.
