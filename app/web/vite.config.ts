@@ -9,7 +9,7 @@ import { LOADER } from "./src/loader-mark";
 // the pinned Pyodide release: its files are served from /pyodide/<version>/
 const PYODIDE = JSON.parse(readFileSync(resolve(import.meta.dirname, "public/pyodide/MANIFEST.json"), "utf8")).pyodide;
 
-const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "loader", "eucalyptus"];   // eucalyptus.html: a shell of the one page
+const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "loader", "eucalyptus", "contact"];   // eucalyptus.html: a shell of the one page
 
 // The menu (src/menu.html) is written into every page at its <!-- menu --> marker (the one page's header.html has one).
 // The one-page site: home, run, docs and Sancho are sections of one document, built once behind the
@@ -24,6 +24,9 @@ function onepage(): Plugin {
     name: "onepage",
     transformIndexHtml: { order: "pre", handler(html) {
       html = html.replace("<!-- menu -->", () => readFileSync(resolve(import.meta.dirname, "src/menu.html"), "utf8"));
+      // a separate page that opens behind the loading screen (contact.html) has it written in at its marker, so it is on
+      // screen from the first frame
+      html = html.replace("<!-- loader -->", () => LOADER);
       const at = html.indexOf("<!-- onepage");
       if (at < 0) return html;
       const end = html.indexOf("-->", at) + 3;
