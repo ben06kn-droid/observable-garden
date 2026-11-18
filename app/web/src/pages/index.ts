@@ -58,18 +58,21 @@ const draw = () => {
 // sides, over the grove and the paper, never over the text. The leaves feel it as wind: the fluid hands
 // each stretch of the cursor's path to the leaves as it takes it in (the same beat and the same response
 // to speed), so the trail and the kick arrive together and leaves on the ground are sent back up.
-const box = (e: Element) => { const r = e.getBoundingClientRect(), b = one.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; };
+// the layer covers the whole home section, down to its foot ("Continue"), so the tail runs on to the run section's own
+// with no band between (2026-11-18: it was the overview's box, which clips its content, and the tail stopped short of
+// the cue); boxes are in the section's px
+const box = (e: Element) => { const r = e.getBoundingClientRect(), b = home.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; };
 const horizonPart = { paint(c: CanvasRenderingContext2D) {      // the ground line and its ticks (drawn by CSS, so drawn here too)
   const h = box(horizon); c.fillStyle = tone("--paper-tree"); c.fillRect(h.x, h.y, h.w, 1);
   for (const i of horizon.querySelectorAll("i")) { const t = box(i); c.fillRect(t.x, h.y - 4, 1, 9); }
 } };
-const grovePart = svgPart(one, () => grove?.stems ?? []);
-const wake = new WakeLayer({ host: one,
+const grovePart = svgPart(home, () => grove?.stems ?? []);
+const wake = new WakeLayer({ host: home,
   ground: (c, w, h) => { c.fillStyle = tone("--paper"); c.fillRect(0, 0, w, h); },
   // what the trail refracts: the grove, the ground line and the leaves (none of them is bent)
   parts: () => [grovePart, horizonPart, $("air-one") as HTMLCanvasElement, $("pile-one") as HTMLCanvasElement],
   bends: () => false,
-  keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *")].map(box),
+  keep: () => [...home.querySelectorAll(".head h1, .head .lead, .body > *, .cue")].map(box),
   // halfway between the narrow line it was and the docs tail (src/sky.ts; 2026-11-18). The fluid's settings, shared
   // with docs, are the midpoints: cell 5 | 8, flow 0.3 | 0.4125, curl 70 | 13.2, force 1 | 0.6, fade 0.45 | 0.54. The
   // dye has no docs counterpart (docs draws the fluid itself): its width is the midpoint of the line's (2.4px) and

@@ -761,7 +761,9 @@ every page; a page gives it the drawn layer it acts on and its colours from its 
     fades; the same in the glass, where a pushed gold stroke stays gold, unfringed). Inside the glass the strokes are pushed aside by
     the cursor as by a round obstacle, not bent by the fluid (section 3, run, "The cursor in the glass").
   - home: a trail, the grove's green with a pale green highlight, over the grove, the ground line and the
-    open paper, and behind the text (the overlay lies under it). The leaves are its wind.
+    open paper, and behind the text (the overlay lies under it). The leaves are its wind. Its layer covers the whole
+    home section down to its foot, the "Continue" band included, so a stroke runs on into the run section's tail with
+    no gap (2026-11-18: the layer was the overview's box, which clips, and the tail stopped short of the cue).
   - demo: a trail in neon blue with pink edges, as before; over the backdrop, the run's tree and the bed, under the
     text (its canvas sits in the tree's column, under the text column). It stays on inside a run, acting on the tree
     and the backdrop exactly as outside, and keeps off the panel (`keep`). While the tree grows its picture is
