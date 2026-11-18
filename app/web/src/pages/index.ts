@@ -52,10 +52,9 @@ const draw = () => {
   if (reduceMotion) leaves.draw();         // no loop under reduced motion: the still frame, drawn once
   host.classList.add("drawn");             // a redraw (a resize) does not play the arrival again
   wake.invalidate(); wake.keepMask();
-  // the legend counts what is drawn: every restart on a desktop, two of them on a phone
-  const each = document.createElement("span"); each.className = "each"; each.textContent = ", a twig each";
-  const shown = grove.shown < grove.restarts ? `${grove.shown} of ${grove.restarts} restarts` : `${grove.restarts} restarts`;
-  $("grove-count").replaceChildren(`${shown} · ${grove.evaluations} evaluations`, each);
+  // the caption counts what is drawn, from the log: every restart and its evaluations on a desktop, the phone
+  // grove's own restarts and evaluations on a phone
+  $("grove-count").textContent = `These trees are one real search: ${grove.shown} restarts, ${grove.evaluations} strategies tried, one twig for each.`;
 };
 // ---- the cursor's wake (cursorwake.ts, the site's signature). Here it moves nothing and bends nothing: it
 // is drawn as a trail, a thin glossy green line that follows the cursor with small wisps curling off its
@@ -73,7 +72,7 @@ const wake = new WakeLayer({ host: one,
   // what the trail refracts: the grove, the ground line and the leaves (none of them is bent)
   parts: () => [grovePart, horizonPart, $("air-one") as HTMLCanvasElement, $("pile-one") as HTMLCanvasElement],
   bends: () => false,
-  keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *, .legend > span")].map(box),
+  keep: () => [...one.querySelectorAll(".head h1, .head .lead, .body > *, .legend")].map(box),
   // halfway between the narrow line it was and the docs tail (src/sky.ts; 2026-11-18). The fluid's settings, shared
   // with docs, are the midpoints: cell 5 | 8, flow 0.3 | 0.4125, curl 70 | 13.2, force 1 | 0.6, fade 0.45 | 0.54. The
   // dye has no docs counterpart (docs draws the fluid itself): its width is the midpoint of the line's (2.4px) and

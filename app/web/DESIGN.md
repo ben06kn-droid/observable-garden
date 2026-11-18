@@ -331,11 +331,14 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   leaves falling. The headline and the brand mark are Bricolage Grotesque at its heavy weight, and nothing
   else is. One complete screen at every size: the copy in columns 1–6, read as one block from the top (the
   open paper under it is where the leaves land); the grove in 7–12; a hairline ground across the grid with
-  ticks on the edges and the centre line; a mono legend under it. The copy (2026-11-18): the paragraph, then one
-  sentence in the body style ("Bring your own search on Run, or read the method in the paper."), then one larger
-  line in the body face at 1.5 times the body size, "**Eucalyptus** coming soon: certifying strategies from
-  open-ended search.", the whole line a link to `eucalyptus.html`, where the call to action stood (2.25 body-em
-  below the copy; 1.4 on a phone). Home has no link to the demo. All the copy has arrived within a second;
+  ticks on the edges and the centre line; one caption under it. The copy (2026-11-18): under the title, "Did the
+  agent find an edge, or just search long enough?"; one paragraph (what a search's best backtest is and what
+  Quixote does); one line of links ("Run it on your own search, read the docs, or read the paper."); then one larger
+  line in the body face at 1.5 times the body size, "**Eucalyptus**, coming soon: the same test for agents that
+  search raw data freely.", the whole line a link to `eucalyptus.html` (2.25 body-em below the copy; 1.4 on a
+  phone). The caption under the ground line, left aligned, in the mono micro style in sentence case: "These trees
+  are one real search: 8 restarts, 377 strategies tried, one twig for each.", its numbers from the log (on a phone,
+  the phone grove's own). Home has no link to the demo. All the copy has arrived within a second;
   the cue to the run page starts at the fold. Below 813 px the same parts stack: headline, reading, grove,
   ground (on the phone the grove runs past the first screen). No tree is drawn behind text; every tree is
   inside its box with its foot on the ground line.
@@ -353,7 +356,7 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
     knockout in the paper's colour under every front stroke keeps the front trees clean. **Phone grove**:
     three of the same trees at the same proportions (the restarts with the best Sharpe: two in front, one
     behind), laid out the same way in a taller grove; the headline, the copy and the tree tops are on the
-    first screen and the ground line may fall below the fold; the legend says "3 of 8 restarts".
+    first screen and the ground line may fall below the fold; the caption counts those three restarts and their evaluations.
   - **The trees do not respond to clicks** (2026-11-18), here or on the demo: no sway, not buttons, no pointer
     cursor. On the demo the run's tree alone is clickable, to open the run, and it does not shake.
   - **Colour**: leaves on the trees are three greens (lighter in the back row); the falling and fallen leaves
