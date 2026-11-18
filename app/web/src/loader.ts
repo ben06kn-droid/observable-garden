@@ -1,13 +1,13 @@
 // The loading screen: white, a ring that draws itself, is cut across and folds into a B (src/styles/loader.css
 // holds the drawing and its timing), and a box (a rectangular prism) bottom left that fills with solid black in proportion to
 // what has really loaded. The fill only ever rises and moves smoothly between updates. It always plays to the
-// finished B (3 s), holds the B still until loading is done, then slides the whole screen up (600 ms) to reveal
+// finished B (1.5 s), holds the B still until loading is done, then slides the whole screen up (600 ms) to reveal
 // the site beneath. Shown once per browser session. Reduced motion: a still navy B and the box, then a plain cut.
 import "./styles/loader.css";
 import { MARK } from "./loader-mark";
 
 const SEEN = "qx-loader-seen";
-const FORMED_MS = 3000;
+const FORMED_MS = 1500;
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 
@@ -35,7 +35,7 @@ export class Loader {
     }
     if (formed) this.el.classList.add("formed");
     this.snap = formed;
-    // the B takes 3 s from the screen's first frame (its animations start with the page); a rebuild has no minimum
+    // the B takes 1.5 s from the screen's first frame (its animations start with the page); a rebuild has no minimum
     const left = Math.max(0, FORMED_MS - performance.now());
     this.formed = reduce || formed ? Promise.resolve() : new Promise((r) => window.setTimeout(r, existing ? left : FORMED_MS));
     this.full = new Promise((r) => { this.filled = r; });
