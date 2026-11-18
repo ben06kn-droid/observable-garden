@@ -11,6 +11,7 @@ import { COUNTER, counterDigits, MARK } from "./loader-mark";
 
 const SEEN = "qx-loader-seen";
 const FORMED_MS = 1500;          // the B's length (ring 0-400 ms, cut 400-700, fold 700-1500)
+const HOLD_MS = 400;             // the finished B stays this long before the screen leaves (2026-11-18)
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 
@@ -47,7 +48,8 @@ export class Loader {
     // B's length keeps a stalled animation (a hidden tab) from holding the site. A rebuild has no minimum.
     const mark = this.el.querySelector(".mark"), drawing = mark?.getAnimations({ subtree: true }) ?? [];
     this.formed = reduce || formed ? Promise.resolve()
-      : Promise.race([Promise.all(drawing.map((a) => a.finished.catch(() => undefined))).then(() => undefined), new Promise<void>((r) => window.setTimeout(r, 2 * FORMED_MS))]);
+      : Promise.race([Promise.all(drawing.map((a) => a.finished.catch(() => undefined))).then(() => undefined), new Promise<void>((r) => window.setTimeout(r, 2 * FORMED_MS))])
+        .then(() => new Promise<void>((r) => window.setTimeout(r, HOLD_MS)));   // and the finished B held a moment
     this.full = new Promise((r) => { this.filled = r; });
   }
 
