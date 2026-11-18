@@ -257,8 +257,8 @@ The chain's five sections are one document, built once behind a loading screen a
 Each is a section of that document with its own address. Scrolling simply continues from one into the next. Outside
 the chain, separate documents reached by links: **demo** (`/demo.html`, from the run section's "Try it on three bundled searches" only; home does
 not link to it), **result** (a demo
-verdict on its own page), **contact** (`/contact.html`, from the menu), **share**, **privacy**, **terms**, **404**, and
-**loader** (`/loader.html`, the loading screen on its own with a simulated load, for review).
+verdict on its own page), **contact** (`/contact.html`, from the menu), **share**, **privacy**, **terms**, and **404**. **loader** (`/loader.html`, the loading screen on its own with a simulated load) is for review under the
+dev server only; it is not in the production build.
 
 (Until 2026-11-17 the four were separate documents joined by a "carry": a gesture at a page's end and a
 cross-document view transition. That work stays on the `site-revamp` branch; it is retired here.)
@@ -386,7 +386,8 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
   then sets `<html data-loader="formed">` before the first frame: the finished B is drawn at once, there is no
   minimum time, the box does not ease, and the screen goes as soon as the rebuild is done.
 - Reduced motion: a still navy B and the box, then a plain cut to the site.
-- `loader.html` (`src/pages/loader-preview.ts`) shows the screen alone over a simulated load.
+- `loader.html` (`src/pages/loader-preview.ts`) shows the screen alone over a simulated load, under the dev server only
+  (`npm run dev`); it is not in the production build.
 
 ### Pyodide on demand (src/pages/run.ts)
 
@@ -848,7 +849,7 @@ a footer (Eucalyptus, the demo, Contact, the legal, shared-verdict and result pa
 | `src/onepage/boot.ts` | the work count, the reveal, addresses and history, the scroll crossfade, section visibility, whole-pixel sections |
 | `src/styles/onepage.css` | backdrops, `.section`, the cue, the header's mixed ground |
 | `src/loader.ts`, `src/loader-mark.ts`, `src/styles/loader.css`, `public/loader-early.js` | the loading screen |
-| `loader.html`, `src/pages/loader-preview.ts` | the loading screen alone, for review |
+| `loader.html`, `src/pages/loader-preview.ts` | the loading screen alone, for review (dev server only, not built) |
 | `src/scene.ts` | a run's tree in a section; the old demo's decoration only with `decor` (the result page) |
 | `src/runtree.ts`, `src/demotree.ts`, `src/demobed.ts` | the demo's run tree: its geometry from a search, its drawing at any point of the search, the bed |
 | `src/cursorwake.ts` | the cursor's wake: the fluid, the shared shader, the pointer rules, the theme's colours, the trail overlay (`WakeLayer`) and its SVG painter |

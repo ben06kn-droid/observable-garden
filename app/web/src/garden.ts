@@ -314,7 +314,7 @@ export function drawGarden(svg: SVGSVGElement, tree: SearchTree, opts: DrawOptio
     }
     if (opts.bar !== undefined) {
       const bar = el("g", { class: "bar", "aria-hidden": "true" }, svg);
-      const by = f(sc.y(opts.bar)), n = 12;   // in segments, so colour can travel along it (runView.ts)
+      const by = f(sc.y(opts.bar)), n = 12;   // in segments
       for (let j = 0; j < n; j++) {   // each a faint wide glow under a lit line (no filter)
         const g = el("g", { "data-tide": "" }, bar), a = { x1: f(40 + ((Wd - 50) * j) / n), x2: f(40 + ((Wd - 50) * (j + 1)) / n), y1: by, y2: by };
         el("line", { ...a, class: "glow" }, g); el("line", { ...a, class: "lit" }, g);

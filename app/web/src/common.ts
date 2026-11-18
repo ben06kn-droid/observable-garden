@@ -12,14 +12,6 @@ inject({ mode: "production" });
 
 export const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-export function headerOverPaper(paper: Element | null) {
-  const top = document.querySelector(".top");
-  if (!top || !paper) return;
-  const io = new IntersectionObserver(([e]) => top.classList.toggle("on-paper", e.isIntersecting && e.intersectionRatio > 0.06),
-                                      { threshold: [0, 0.06, 0.5, 1] });
-  io.observe(paper);
-}
-
 export const WORD: Record<string, string> = { CERTIFIED: "PASS" };
 export const MEANING: Record<string, string> = {
   PASS: "p is below α: the submitted rule beats what the search would find on noise.",
@@ -30,12 +22,6 @@ export const MEANING: Record<string, string> = {
   DEPENDS_ON_JUDGMENT: "the search changed a declared rule mid-run; the decision after the change cannot be priced.",
 };
 export const word = (status: string) => WORD[status] ?? status;
-
-/** L_0.90, which the audit reports only inside its confidence reason line. */
-export function lowerBound(reasons: string[]): number | null {
-  const m = /L_0\.90 ([+-]?\d+\.\d+)/.exec(reasons.join(" "));
-  return m ? Number(m[1]) : null;
-}
 
 export function countUp(node: HTMLElement, to: number, decimals: number, sign = false) {
   const fmt = (x: number) => (sign && x > 0 ? "+" : "") + x.toFixed(decimals);

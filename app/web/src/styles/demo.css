@@ -96,38 +96,20 @@
 /* the run's own tree, centred, the brightest thing on the page, with a dark margin round it */
 .two .spot { position: absolute; z-index: 2; top: 92px; left: 25%; right: 25%; bottom: 1.5%; pointer-events: none; }
 .two .spot .real { pointer-events: auto; }
-/* the seed: where the trunk will stand; breathing, a sprout swaying; spent once the trunk grows */
+/* the seed: where the trunk will stand; breathing; spent once the trunk grows */
 .seed { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: opacity 900ms linear; }
 .seed.spent { opacity: 0; }
 .seed .glow { position: absolute; left: -20px; top: -20px; width: 40px; height: 40px; border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 63, 210, 0.6) 0%, rgba(255, 63, 210, 0) 68%); will-change: transform, opacity; animation: breathe 3.6s ease-in-out infinite; }
 .seed .core { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--core); box-shadow: 0 0 4px var(--pink), 0 0 12px rgba(255, 63, 210, 0.6); }
-.seed .sprout { position: absolute; left: -15px; top: -46px; width: 30px; height: 48px; overflow: visible; transform-origin: 50% 94%; will-change: transform; animation: sway 4.4s ease-in-out infinite; }
-.seed .sprout path { fill: none; stroke: var(--pink); stroke-width: 1.3; stroke-linecap: round; }
-.seed .sprout .leaflet { fill: rgba(255, 63, 210, 0.3); stroke-width: 1; }
 @keyframes breathe { 0%, 100% { opacity: 0.5; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15); } }
-@keyframes sway { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
 /* the choice beside the seed: the three example names, faint until chosen, and the run control */
 .two .choice { position: absolute; z-index: 6; left: 0; top: 0; width: 200px; transition: transform 1000ms cubic-bezier(.35, 0, 0, 1); color: #a59ebc; }
 .controls { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.chip { width: 100%; font: 500 11px/1.3 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: inherit; background: transparent;
-  border: 0; padding: 4px 0; cursor: pointer; min-height: 24px; text-align: left; }
-.chip small { display: none; }
-.chip:hover { color: var(--ink); }
-.chip[aria-pressed="true"] { color: var(--ink); box-shadow: inset 2px 0 0 var(--pink); padding-left: 10px; }
 .run, .enter { display: block; margin-top: var(--s3); font: 600 12px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink); background: transparent;
   border: 0; border-bottom: 1px solid var(--pink); padding: 0; min-height: 36px; cursor: pointer; }
 .run[disabled] { opacity: 0.5; cursor: progress; }
-.choice-note { margin: 0 0 var(--s3); font: 11px/1.5 var(--mono); color: #b9b2cc; }
-.choice.moved .choice-note { display: none; }
-/* on the right of page two: the examples are a demo; the full gate is on the run page */
-.two .full-gate { position: absolute; z-index: 6; top: 96px; right: 4.5%; width: 250px; padding: 10px 14px; border-left: 2px solid var(--pink);
-  background: rgba(5, 4, 11, 0.72); font: 12px/1.6 var(--mono); color: #b9b2cc; transition: opacity 400ms linear; }
-.two .full-gate .label { margin: 0 0 var(--s2); font-size: 11px; color: var(--ink); }
-.two .full-gate p { margin: 0; }
-.two .full-gate a { color: var(--ink); }
 @media (max-width: 520px) { .two .choice { width: 140px; } }   /* beside the seed, inside a phone's width */
-@media (max-width: 760px) { .two .full-gate { top: 64px; left: 16px; right: 16px; width: auto; } }
 /* the trunk grows up out of the seed */
 #garden.growing .trunk[data-step] { transform-box: fill-box; transform-origin: 50% 100%; transition: transform 700ms cubic-bezier(.35, 0, 0, 1), opacity 300ms linear; }
 #garden.growing .trunk[data-step]:not(.on) { opacity: 1; transform: scaleY(0); }
@@ -135,8 +117,6 @@
 #garden.neon .halo { opacity: 0.72; transition: opacity 300ms linear; }
 #garden:has(.real .stem:hover) .halo { opacity: 1; }
 .spot .garden .axis { display: none; }
-.bar-petal { position: absolute; left: 0; top: 0; width: 12px; height: 12px; opacity: 0; z-index: 3; }
-.bar-petal path { fill: var(--petal); }
 .two .spot::before { content: ""; position: absolute; inset: -6% -14% 0;
   background: radial-gradient(closest-side at 50% 56%, rgba(5, 4, 11, 0.96) 0%, rgba(5, 4, 11, 0.88) 60%, rgba(5, 4, 11, 0) 100%); }
 .two .spot svg { position: relative; width: 100%; height: 100%; display: block; }
@@ -264,72 +244,9 @@
 .verdict.idle { border-top-color: var(--hair); }
 .verdict.idle .word { color: var(--faint); }
 
-/* ---------- entering a run (runView.ts): the ring turns each [data-tide] element at its own moment
-   (--d, from its distance to the tree); then the scene zooms about the tree and the process comes in.
-   Inside: the trees, the ground, the gradient, the bar and the text blue, the power lines pink, the
-   flowers in their own colours. ---------- */
 .two .scene { position: absolute; inset: 0; transform-origin: 0 0; }
-.two .tide-sky { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity var(--T, 1000ms) cubic-bezier(.35, 0, 0, 1);
-  background: linear-gradient(to top, #0a1d3a 0%, #071229 30%, #04060d 70%); }
-.two.in-run .tide-sky { opacity: 1; }
-/* the front: each element turns in 90 ms at the moment the front passes it; staggered over hundreds of
-   elements the change reads as a wave (a longer fade on each repainted the scene every frame). The run's tree
-   is the front's origin and turns at once at its start: as hundreds of transitioning strokes under a
-   blur it cost long frames on the larger searches */
-.two.tiding #garden [data-tide], .two.tiding #garden [data-tide] * { transition: none !important; }
-.two.tiding [data-tide], .two.tiding [data-tide] * { transition: stroke 90ms ease-out var(--d, 0ms), fill 90ms ease-out var(--d, 0ms), color 90ms ease-out var(--d, 0ms),
-  background-color 90ms ease-out var(--d, 0ms), text-shadow 90ms ease-out var(--d, 0ms), box-shadow 90ms ease-out var(--d, 0ms), opacity 400ms linear !important; }
-.two.in-run { --tube: var(--blue); --core: #e2f4ff; --wire: #ff6ad5; }
-.two.in-run .wood2 { --tube: #3d7fc4; --core: #cfe8ff; }
-.two.in-run .city .cable { color: #ff3fd2; }
-.two.in-run .city .pylon { stroke: #2f5f8f; }
-.two.in-run .city .pylon-leg { fill: #2f5f8f; }
-.two.in-run .city .skyline { fill: #0a1426; }
-.two.in-run .bed .ground-line { color: var(--blue); }
-.two.in-run .bed .ground-line .lit { stroke: #8fd3ff; }
-.two.in-run .bed .ground-fill { fill: #040b18; }
-.two.in-run .garden.neon .bar g, .two.in-run .garden.neon .bar .cap { color: var(--blue); }
-.two.in-run .garden.neon .bar .lit { stroke: #d4eeff; }
-.two.in-run .garden.neon .bar .cap { fill: #d4eeff; }
-.two.in-run .garden.neon .bar text { fill: #9fd6ff; }
-.two.in-run .note-word.lit, .two.in-run .note-word.dim { color: #b5dcff; }
-.two.in-run .note-bar, .two.in-run .note-sub, .two.in-run .note-line { color: #b5dcff; }
-.two.in-run .tick { background: var(--blue); }
-.two.in-run .choice, .two.in-run .chip[aria-pressed="true"] { color: #a9d6ff; }
-.two.in-run .chip[aria-pressed="true"] { box-shadow: inset 2px 0 0 var(--blue); }
-.two.in-run .run, .two.in-run .enter { color: #cfe6ff; border-bottom-color: var(--blue); }
-.two.in-run .seed .sprout path { stroke: var(--blue); }
 .two .choice { transition-property: transform, opacity; transition-duration: 1000ms, 400ms; transition-timing-function: cubic-bezier(.35, 0, 0, 1), linear; }
 .two .note, .two .note-word, .two .tick { transition: opacity 400ms linear; }   /* the labels are set where they belong; they never glide */
-.two.zoomed .choice, .two.zoomed .full-gate, .two.zoomed .note, .two.zoomed .note-word, .two.zoomed .tick { opacity: 0; pointer-events: none; }
-
-/* the run's process, over the zoomed garden */
-.run-panel { position: fixed; z-index: 40; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); overflow-y: auto; color: var(--ink);
-  background: rgba(4, 8, 18, 0.9); border-left: 1px solid var(--blue); padding: 0 var(--s5) var(--s7); }
-.run-panel header { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: baseline; gap: var(--s4);
-  padding: var(--s5) 0 var(--s4); background: rgb(4, 8, 18); border-bottom: 1px solid #1b3352; }
-.run-panel h2 { font: 800 1.5rem/1.1 var(--display); margin: 0; outline: none; }
-.run-panel h2 small { display: block; font: 12px/1.5 var(--mono); color: #a9c8e6; margin-top: var(--s2); }
-.run-panel h3 { font: 800 1rem/1.2 var(--display); color: var(--blue); margin: var(--s5) 0 var(--s2); }
-.run-panel .close { font: 12px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--blue); padding: 8px 0; cursor: pointer; }
-.run-panel .trees { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); padding: var(--s3) 0; border-bottom: 1px solid #1b3352; }
-.run-panel .trees[hidden] { display: none; }
-.run-panel .where { margin: 0; font: 12px/1.4 var(--mono); color: #cfe6ff; text-align: center; }
-.run-panel .step { font: 11px var(--mono); letter-spacing: 0.06em; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--blue); padding: 6px 0; cursor: pointer; white-space: nowrap; }
-/* the tree being read is lit, the others step back */
-#garden [data-stem] { transition: opacity 300ms linear; }
-#garden [data-stem].dimmed { opacity: 0.28; }
-.run-panel ol { list-style: none; margin: 0; padding: 0; }
-.run-panel li { border-bottom: 1px solid #1b3352; padding: var(--s4) 0; }
-.run-panel .mv { margin: 0 0 var(--s2); font: 13px/1.5 var(--mono); color: #b6c9de; }
-.run-panel .mv b { color: var(--blue); font-weight: 500; }
-.run-panel .mv .rule { color: var(--ink); }
-.run-panel .logline { font: 12px/1.5 var(--mono); color: #93a9c2; margin: 0 0 var(--s3); overflow-wrap: anywhere; }
-.run-panel table { width: 100%; border-collapse: collapse; font: 12.5px/1.5 var(--mono); }
-.run-panel td { padding: 2px 0; color: #b6c9de; }
-.run-panel td.s { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
-.run-panel tr.chosen td { color: var(--ink); }
-.run-panel tr.chosen td:first-child::before { content: "> "; color: var(--blue); }
 
 /* ---------- inside a tree: the tree fills the view, blue, and its process sits over it ---------- */
 .inside { position: fixed; inset: 0; z-index: 40; background: var(--night); color: var(--ink); overflow: hidden; }
@@ -368,4 +285,3 @@ body.inside-open { overflow: hidden; }
 .below { background: var(--night); }
 .verdict .word, .verdict dd { font-family: var(--display); }
 .page { position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; }
-.demo-main .page.two { padding-top: 0; }

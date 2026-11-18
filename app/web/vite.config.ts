@@ -9,7 +9,7 @@ import { LOADER } from "./src/loader-mark";
 // the pinned Pyodide release: its files are served from /pyodide/<version>/
 const PYODIDE = JSON.parse(readFileSync(resolve(import.meta.dirname, "public/pyodide/MANIFEST.json"), "utf8")).pyodide;
 
-const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "loader", "eucalyptus", "contact"];   // eucalyptus.html and viewer.html: shells of the one page
+const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "eucalyptus", "contact"];   // eucalyptus.html and viewer.html: shells of the one page
 
 // The menu (src/menu.html) is written into every page at its <!-- menu --> marker (the one page's header.html has one).
 // The one-page site: home, run, docs and Sancho are sections of one document, built once behind the
