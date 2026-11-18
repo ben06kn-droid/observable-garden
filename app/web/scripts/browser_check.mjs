@@ -584,7 +584,8 @@ try {
     step("desktop: the menu by keyboard and pointer");
     {
       await go("/");
-      const key = async (k, code, vk) => { for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: k, code, windowsVirtualKeyCode: vk }, page); await sleep(80); };
+      // Enter carries its character: Chrome activates a button from it, not from the bare key code
+      const key = async (k, code, vk) => { for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: k, code, windowsVirtualKeyCode: vk, ...(type === "keyDown" && k === "Enter" ? { text: "\r" } : {}) }, page); await sleep(80); };
       const state = () => evaluate(`({ expanded: document.querySelector('.menu-btn').getAttribute('aria-expanded'), hidden: document.querySelector('.menu-panel').hidden, focus: document.activeElement?.textContent?.trim() ?? null })`);
       const m = one.menu = { roles: await evaluate(`({ button: document.querySelector('.menu-btn').tagName, controls: document.querySelector('.menu-btn').getAttribute('aria-controls') === document.querySelector('.menu-panel').id, nav_label: document.querySelector('.menu-panel').getAttribute('aria-label'), items: [...document.querySelectorAll('.menu-panel a')].map((a) => a.textContent), current: document.querySelector('.menu-panel a[aria-current]')?.textContent })`) };
       await evaluate(`document.querySelector('.menu-btn').focus(); true`);
