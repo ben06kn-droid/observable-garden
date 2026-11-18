@@ -500,6 +500,7 @@ every page; a page gives it the drawn layer it acts on and its colours from its 
     settings are the midpoints of the two (cell 6.5, flow 0.356, curl 41.6, force 0.8, fade 0.495 s); the dye,
     which docs lacks, is as wide as the midpoint of the line and the docs push (17 + 24·√dose px), carried at
     0.266 of the flow, and fades in 0.42 s, set so its visible area 0.9 s after a stroke is halfway between them.
+    Then its life was cut to 65% (2026-11-18): the fluid's fade 0.322 s, the dye's 0.273 s.
     Measured with one stroke at 1440x900 (median thickness across the path at 150 ms: line 7 px, docs 110 px,
     now 58 px). Its colours are unchanged; its opaque body reads heavier than the docs tail's translucent one. It bends nothing on the page: loose things (leaves, petals) feel it as wind instead, at the
     moment the fluid takes each stretch of the cursor's path in, and are lifted off the ground. The
