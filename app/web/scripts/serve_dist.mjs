@@ -16,7 +16,7 @@ const dist = join(web, "dist");
 const conf = JSON.parse(readFileSync(join(web, "vercel.json"), "utf8"));
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css",
   ".json": "application/json", ".wasm": "application/wasm", ".whl": "application/zip", ".zip": "application/zip",
-  ".npz": "application/octet-stream", ".woff2": "font/woff2", ".woff": "font/woff", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8" };
+  ".npz": "application/octet-stream", ".woff2": "font/woff2", ".woff": "font/woff", ".svg": "image/svg+xml", ".pdf": "application/pdf", ".txt": "text/plain; charset=utf-8" };
 const rules = conf.headers.map((h) => ({ re: new RegExp("^" + h.source.replace(/\(\.\*\)/g, ".*") + "$"), headers: h.headers }));
 
 /** `root`: serve another built copy (the carry profiler's instrumented one); `carryLog(body)`: tests only, receives
