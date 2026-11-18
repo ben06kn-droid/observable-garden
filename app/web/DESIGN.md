@@ -169,8 +169,8 @@ The four chain pages are one document, built once behind a loading screen and ke
 **home** (`/`) → **run** (`/run.html`) → **docs** (`/docs.html`) → **Sancho** (`/sancho.html`)
 
 Each is a section of that document with its own address. Scrolling simply continues from one into the next. Outside
-the chain, separate documents reached by links: **demo** (`/demo.html`, from home's call to action and the run
-section's "Try it on three bundled searches"), **viewer** (`/viewer.html`, from Sancho), **result** (a demo
+the chain, separate documents reached by links: **demo** (`/demo.html`, from the run section's "Try it on three bundled searches" only; home does
+not link to it), **viewer** (`/viewer.html`, from Sancho), **result** (a demo
 verdict on its own page), **share**, **privacy**, **terms**, **404**, and **loader** (`/loader.html`, the loading
 screen on its own with a simulated load, for review).
 
@@ -329,7 +329,11 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   leaves falling. The headline and the brand mark are Bricolage Grotesque at its heavy weight, and nothing
   else is. One complete screen at every size: the copy in columns 1–6, read as one block from the top (the
   open paper under it is where the leaves land); the grove in 7–12; a hairline ground across the grid with
-  ticks on the edges and the centre line; a mono legend under it. All the copy has arrived within a second;
+  ticks on the edges and the centre line; a mono legend under it. The copy (2026-11-18): the paragraph, then one
+  sentence in the body style ("Bring your own search on Run, or read the method in the paper."), then one larger
+  line in the body face at 1.5 times the body size, "**Eucalyptus** coming soon: certifying strategies from
+  open-ended search.", the whole line a link to `eucalyptus.html`, where the call to action stood (2.25 body-em
+  below the copy; 1.4 on a phone). Home has no link to the demo. All the copy has arrived within a second;
   the cue to the run page starts at the fold. Below 813 px the same parts stack: headline, reading, grove,
   ground (on the phone the grove runs past the first screen). No tree is drawn behind text; every tree is
   inside its box with its foot on the ground line.
@@ -531,7 +535,8 @@ page's label and headline, the cue, the footer. The reading measure is `--measur
 | `--t-label` | `clamp(0.75rem, 0.9vw, 0.875rem)` | header links, captions, uppercase |
 | `--t-micro` | `0.6875rem` | mono labels, uppercase, tracked 0.14em |
 
-No bold except the home headline and the brand mark; emphasis is weight 500.
+No bold except the home headline, the brand mark and the word "Eucalyptus" in home's last line (IBM Plex Sans 700,
+loaded by `home.css` alone); emphasis is weight 500.
 
 **Motion tokens**: `--ease-travel` = `cubic-bezier(.35, 0, 0, 1)`, `--ease-ui` = `cubic-bezier(.4, 0, .1, 1)`,
 `--dur-page` 1000 ms, `--dur-enter` 700 ms, `--dur-ui` 350 ms, `--dur-colour` 450 ms.
