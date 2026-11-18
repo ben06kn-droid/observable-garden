@@ -118,6 +118,91 @@ document (section 2): scrolling simply continues from one into the next while th
 the scroll, as on his site. Two deliberate differences: the scroll is the browser's own, not his eased wheel; and
 his site does not respond to `prefers-reduced-motion` at all. Ours does, and must.
 
+### Browsing sideways: a project page, frame by frame (measured 2026-11-18)
+
+His one horizontal interaction is the project page (`/projects/<id>`), reached by clicking a project card on the home
+page's Selected Work or on `/projects`. Recorded in Chrome at 1440x900, 60 Hz: a screencast of every frame and, per
+animation frame, the strip's transform, the title, description and meta column, the next-project preview, its bar, the
+scroll hint and the back button. Driven by trackpad-like wheel swipes (40 events per swipe, a ramp to a peak of 120 px,
+then decay by 0.9; CDP delivered them about 66 ms apart, slower than a real trackpad's 16.7 ms, so the lag below is an
+upper bound). Read with his `ProjectDetailsSection`, `ProjectPage`, `ScrollPane` and `Input` classes. Frame sheets:
+`screenshots/lukres/project-{enter,move,next,leave}.jpg`.
+
+**Entering (a click; plays on its own, about 3 s)**
+
+- The click changes the route at once (10 ms); the card list page hides over 1.5 s while the clicked card's picture
+  (WebGL) zooms to cover the window (scale to cover × 1.2, `cubicInOut`), turning slightly about its vertical axis as it
+  travels to the centre; the list's title and the other cards fade with the light ground behind them (frames +345 to
+  +1700 ms).
+- Then the screen holds the project's dark ground, empty, while the project's page arrives (+1.9 to +2.6 s here; a 318 ms
+  frame when its markup was inserted).
+- Then its content shows on `contentShowRatio` (1.5 s): the title rises from the window's vertical centre (189 px below
+  its place) to its place, expo-in-out, over the first 0.65 of it, then fades in; the description, the button and the
+  two side lists rise 30 px and fade in, staggered (0.40-0.85, 0.45-0.90, 0.50-0.95, 0.55-1.0 of the clock, expo-out);
+  the header's Back button rises 1 em and fades in (+2.8 to +3.0 s); a "Scroll to explore" hint, bottom right, fades
+  in by +3.2 s. Nothing moves sideways until the content has shown (the strip takes no input before 0.75 of the clock).
+
+**The layout**
+
+- Not full-window panels. The project's text (title, description, a button, two short lists) is a fixed column on the
+  left (0-768 px at 1440); the strip of media tiles starts beside it. Tiles are about 0.8 of the window high, of mixed
+  widths (1134, 797, 638 px here), 80 px apart, with rounded corners; one tile on screen and a part of the next. This
+  project's strip was 8,331 px of travel, 5.8 windows.
+- Past the last tile, a panel for the next project waits off the right edge: its own ground colour, its name, a
+  "Next project" label and a bar.
+
+**Moving through it (the wheel)**
+
+- **Vertical wheel becomes horizontal travel, 1:1 in pixels.** Each event's vertical delta (normalised to pixels,
+  clamped to ±200 per event) is added to a target; the strip moves `remaining × (1 − e^(−12·dt))` toward it each frame,
+  the same eased wheel as his vertical pages. Measured: one swipe of 1,310 px of wheel moved the strip 1,310 px; the
+  content lagged the wheel by at most 137-167 px during the swipe and stopped 316 ms after the last event; nothing
+  overshoots. Horizontal trackpad movement and drag move it too; the arrow keys move it 100 px, Page Up/Down a window.
+- **The text column leaves by parallax and fade, not by travelling with the strip**: the title moves at 1/2 the strip's
+  speed, the description at 1/3, the side lists at 1/5 and 1/4, and the whole column fades from opacity 1 to 0 over the
+  first quarter of a window of travel (360 px at 1440; gone 340 ms into the first swipe). Scrolling back brings it back
+  exactly (the fade and parallax are functions of position).
+- **The tiles do not animate in** on their own clocks: they slide in with the strip. While the strip moves fast, the
+  WebGL screen smears them sideways in proportion to speed (frames +308 to +808 ms of `project-move.jpg`), sharp again
+  as it settles. A tile's picture also drifts within its frame by its position on screen (a parallax of ±0.5 of its
+  travel), and a text tile types itself out while it sits between 20% and 80% of the window.
+- **The scroll hint** fades out for good on the first wheel event (about 0.6 s, expo-out).
+
+**What shows progress**
+
+Nothing during the strip: no counter, no dots, no scrollbar. The only progress mark is at the very end: the next
+project's panel, which slides in from the right as the end nears (it stops 1,080 px from the left edge, showing 360 px),
+and the bar under its "Next project" label.
+
+**Leaving**
+
+- **Scrolling back up at the start does not leave.** Measured: a full upward swipe on arrival moved nothing (strip 0,
+  route unchanged); the strip is clamped at 0, and only the scroll hint reacts (it fades).
+- **Back**, a pill in the header, returns to where the reader came from (the last non-project route, or home): the
+  project's content fades over about 0.5 s, the dark ground holds, then the picture of this project's card shrinks from
+  the whole window back into its place in the list (the entry played backwards, 1.5 s, with the same slight turn); the
+  list is scrolled so that card sits a quarter of a window from the top; the light ground returns with it. About 2 s in
+  all.
+- **The browser's Back** does the same (the routes are history entries).
+- **Pushing past the end goes on, not out**: at the end (the target within 1 px of it), each frame with downward
+  input charges the bar at 3 a second; upward input drains it at 5 a second and idling at 0.2 a second. Full, the route
+  changes to the next project: its panel slides over the whole window (`quintInOut`, 1 s), its ground turns from the
+  panel's light tint to the project's own colour, and its content shows as on entry (1.5 s). Measured: the bar filled in
+  1.6 s of pushing; the next page's content was up 1.0 s after the route changed.
+- **No Escape and no close button.**
+
+**Phone (from his code, not measured)**: the same page laid out vertically (`isVertical`): the text column at the top
+scrolling away with the tiles, which stack, and the next project's panel below the last.
+
+**Frames**: median 16.7 ms, 95th percentile 17.6 ms while browsing the strip (686 frames, worst 33 ms); the worst frames
+are on entry (318 ms, inserting the page) and are hidden behind the dark ground.
+
+**What it means for the viewer here.** The feel comes from three things: the strip following the wheel 1:1 through the
+eased scroll (never a snap per item, never a timed slide), the text column dissolving by position as the strip starts,
+and a calm, slow entry that covers the window before the new content arrives. What we would add, because the brief asks
+for it and his site does not have it: leaving by scrolling back up from the start, Escape and a Close control, a
+progress mark during the strip, and a reduced-motion version (his site has none).
+
 ### Type scale
 
 Two families (DM Sans 400 and 500; IBM Plex Mono 400 and 500 for labels and figures). **No bold anywhere.**
