@@ -46,10 +46,28 @@ if (process.argv.includes("--compare")) {
   for (const f of readdirSync(a).filter((f) => f.endsWith(".png"))) {
     let A, B; try { A = png(join(a, f)); B = png(join(b, f)); } catch { rows.push({ shot: f, missing: true }); continue; }
     if (A.w !== B.w || A.h !== B.h) { rows.push({ shot: f, size: `${A.w}x${A.h} vs ${B.w}x${B.h}` }); continue; }
-    // anti-aliasing: a difference only where an edge is (some neighbour differs in A by more than the change)
+    // anti-aliasing: a difference only where an edge is (some neighbour differs in A by more than the change). A
+    // section of the one-page site can start a fraction of a pixel lower than its page did (the sections above it
+    // need not end on a whole pixel), which moves every glyph's anti-aliasing: B is tried shifted by up to 2 device
+    // pixels up or down, and the best match is reported with its shift
+    let best = null;
+    for (const shift of [0, -1, 1, -2, 2]) {
+      const r = diff(A, B, shift);
+      if (!best || r.over < best.over) best = { ...r, shift };
+      if (r.over === 0) break;
+    }
+    rows.push({ shot: f, differing_pixels: best.over, share: +(100 * best.over / (A.w * A.h)).toFixed(3), max: best.max, shift_px: best.shift });
+  }
+  for (const r of rows) console.log(JSON.stringify(r));
+  process.exit(0);
+}
+function diff(A, B, shift) {
     let over = 0, max = 0;
     for (let i = 0; i < A.w * A.h; i++) {
-      let d = 0; for (let k = 0; k < 3; k++) d = Math.max(d, Math.abs(A.px[i * 3 + k] - B.px[i * 3 + k]));
+      const x0 = i % A.w, y0 = (i / A.w) | 0, yb = y0 + shift;
+      if (yb < 0 || yb >= B.h) continue;
+      const ib = yb * A.w + x0;
+      let d = 0; for (let k = 0; k < 3; k++) d = Math.max(d, Math.abs(A.px[i * 3 + k] - B.px[ib * 3 + k]));
       if (d <= 8) continue;
       const x = i % A.w, y = (i / A.w) | 0; let edge = false;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -59,10 +77,7 @@ if (process.argv.includes("--compare")) {
       }
       if (!edge) { over++; max = Math.max(max, d); }
     }
-    rows.push({ shot: f, differing_pixels: over, share: +(100 * over / (A.w * A.h)).toFixed(3), max });
-  }
-  for (const r of rows) console.log(JSON.stringify(r));
-  process.exit(0);
+    return { over, max };
 }
 
 // ---- capture
