@@ -287,10 +287,12 @@ async function contrast(selector, samples = 6) {
   const worst = els.map(() => Infinity), lows = els.map(() => []);
   for (let k = 0; k < samples; k++) {
     // the text hidden, and its own underline or marker too, so only the scene behind it is measured
-    await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => { for (const [k, v] of [['color', 'transparent'], ['text-shadow', 'none'], ['border-color', 'transparent'], ['box-shadow', 'none']]) e.style.setProperty(k, v, 'important'); }); true`);
+    // (and its descendants: a span in its own colour, as the demo intro's first sentence, was measured as background;
+    // with no transition: a border fading over 450 ms, as the demo's Start, was still drawn when the shot was taken)
+    await evaluate(`document.querySelectorAll('[data-measure], [data-measure] *').forEach((e) => { for (const [k, v] of [['transition', 'none'], ['color', 'transparent'], ['text-shadow', 'none'], ['border-color', 'transparent'], ['box-shadow', 'none']]) e.style.setProperty(k, v, 'important'); }); true`);
     await sleep(60);
     const { data } = await send("Page.captureScreenshot", { format: "png" }, page);
-    await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => { for (const k of ['color', 'text-shadow', 'border-color', 'box-shadow']) e.style.removeProperty(k); }); true`);
+    await evaluate(`document.querySelectorAll('[data-measure], [data-measure] *').forEach((e) => { for (const k of ['color', 'text-shadow', 'border-color', 'box-shadow', 'transition']) e.style.removeProperty(k); }); true`);
     const img = decodePng(Buffer.from(data, "base64"));
     els.forEach((e, n) => {
       const L = lum(e.c[0], e.c[1], e.c[2]);

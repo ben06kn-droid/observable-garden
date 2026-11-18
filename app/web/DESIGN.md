@@ -655,7 +655,9 @@ session restyles its own theme; the docs tokens set here are interim.
     footer, with no glossy trace there. A line the tail bends is dimmed where it is drawn, so one pushed under a letter
     is dimmed there too. The tail never moves text. Measured at 1440x900 behind the letters only (`glyphContrast` in
     browser_check: the letters found from a shot with and one without the text), at rest and in six samples with the
-    tail crossing the text: worst 5.32:1 (the headline); every line and the footer 5.4:1 or more.
+    tail crossing the text: worst 5.32:1 (the headline); every line and the footer 5.4:1 or more. Re-measured at the
+    pre-merge check (2026-11-18): the three lines 5.43:1 or more at rest and under the tail, the footer's line 4.57:1 at rest
+    (above 4.5:1, below the 5.4:1 measured on 79d926f; not investigated, no design change made before the merge).
   - **Loader**: as before, in full every time, its white screen sliding up to the blue page.
   - **Phone**: the same text stacked, the fan still, no tail. **Reduced motion**: the fan still, no tail, and the
     loader's still version.
@@ -872,27 +874,29 @@ a footer (Eucalyptus, the demo, Contact, the legal, shared-verdict and result pa
 - Every page meets the standard in section 1: few elements, generous space, one idea per screen, transform and
   opacity only, 60 fps, and any animation not as good as lukres.dev's is cut.
 
-## 7. Open items for the last session (before merge)
+## 7. Open items
 
-- **One cross-browser pass, Firefox included.** Scroll through the one page both ways in Firefox at 1440x900 and
-  390x844, with every section's shots, and again in Safari and Chrome. Firefox is not yet installed on the development machine; drive it with geckodriver.
-- **Safari at the run section.** Measured 2026-11-17, before Pyodide loaded on demand: the median frame crossing
-  into run was 40 ms and into docs 37 ms (Chrome: 16.7 ms). The old run page alone was already about 30 fps in
-  Safari. Target: 60 fps with a 95th-percentile frame under 20 ms through run and across both its boundaries. Not
-  yet profiled (suspects: the fan's 2D canvas uploaded as a texture each frame, two separate WebGL scenes, full
-  Retina resolution); the author judged the scrolling good by eye on 2026-11-18.
-- **Rare long frames in Chrome.** Up to 1.25 s, in 2 of 6 runs of the build before Pyodide loaded on demand. They
-  were in Chrome's GPU process, compiling shader pipelines for the first raster of something (the docs sheet's
-  rim light was one), while Pyodide was compiling its WebAssembly on the other cores. With Pyodide on demand, none
-  appeared in 4 runs, including Pyodide loading during the scroll. Too few runs to call it gone.
-- **Memory** after Pyodide on demand is not yet measured. Before it, the one page was 333 MB in its renderer plus
-  1.4 GB in Chrome's GPU process, and 1.39 GB in Safari's page process, Pyodide included.
-- **The one-page browser check and the reference comparison** were last run before the loader timing and Pyodide
-  on demand changed (2026-11-18). Run both again.
-- **The Contact check's `loader_full`** read false in every run before 2026-11-18: it was read after `go()` had waited
-  for the screen to go. It is now read as the page loads.
-- **Run the equivalence script**, `node scripts/equivalence.mjs --python python3`: the gate, worker, wheel and
-  examples were not touched by the revamp, and this confirms it.
-- The docs colours are interim until its session (Sancho's and the viewer's are settled).
-- The cursor's wake on docs (blue, white and green, soft and bubble-like), in its own session (Sancho's, run's and
-  Contact's are settled; the viewer has none).
+The pre-merge check (2026-11-18) is recorded in `MERGE-CHECK.md`: what was removed, every check and its result, and how
+to roll back. What it closed: the one-page browser check and the reference comparison re-run after the loader timing
+and Pyodide on demand (both pass); the Contact check's `loader_full` (true, read as the page loads); the equivalence
+script (every example identical, largest difference 2.2e-16).
+
+**Deferred past the merge** (known and accepted, not blockers):
+
+- **DEFERRED: Firefox is untested.** One cross-browser pass, Firefox included: scroll through the one page both ways
+  in Firefox at 1440x900 and 390x844, with every section's shots, and again in Safari and Chrome. Firefox is not yet
+  installed on the development machine; drive it with geckodriver. Every check before the merge ran in Chrome only.
+- **DEFERRED: Safari speed in the run section.** Measured 2026-11-17, before Pyodide loaded on demand: the median
+  frame crossing into run was 40 ms and into docs 37 ms (Chrome: 16.7 ms). The old run page alone was already about
+  30 fps in Safari. Target: 60 fps with a 95th-percentile frame under 20 ms through run and across both its
+  boundaries. Not yet profiled (suspects: the fan's 2D canvas uploaded as a texture each frame, two separate WebGL
+  scenes, full Retina resolution); the author judged the scrolling good by eye on 2026-11-18.
+- **Not re-measured before the merge: rare long frames in Chrome.** Up to 1.25 s, in 2 of 6 runs of the build before
+  Pyodide loaded on demand. They were in Chrome's GPU process, compiling shader pipelines for the first raster of
+  something (the docs sheet's rim light was one), while Pyodide was compiling its WebAssembly on the other cores. With
+  Pyodide on demand, none appeared in 4 runs, including Pyodide loading during the scroll. Too few runs to call it gone.
+- **Not re-measured before the merge: memory** after Pyodide on demand. Before it, the one page was 333 MB in its
+  renderer plus 1.4 GB in Chrome's GPU process, and 1.39 GB in Safari's page process, Pyodide included.
+- **Design, in their own sessions:** the docs colours are interim (Sancho's and the viewer's are settled); the cursor's
+  wake on docs (blue, white and green, soft and bubble-like; Sancho's, run's and Contact's are settled; the viewer has
+  none).
