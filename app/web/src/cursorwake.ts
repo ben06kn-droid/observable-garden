@@ -381,12 +381,16 @@ export function rgb(s: string): RGB {
   if (h) { if (h.length === 3) h = h.replace(/./g, "$&$&"); const n = parseInt(h, 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
   const r = s.match(/(\d+(\.\d+)?)/g); return r ? [Number(r[0]) / 255, Number(r[1]) / 255, Number(r[2]) / 255] : [0, 0, 0];
 }
-export interface WakeColours { tone: RGB; fringe: RGB; fringeA: number; toneMix: number; gloss: number; hi: RGB; shade: RGB; trail: number; refract: number; warp: number; tint: number; edgeOut: RGB; edgeIn: RGB }
+export interface WakeColours { tone: RGB; fringe: RGB; fringeA: number; fringeMix: number; fringeOff: [number, number]; toneMix: number; gloss: number; hi: RGB; shade: RGB; trail: number; refract: number; warp: number; tint: number; edgeOut: RGB; edgeIn: RGB }
 /** the wake's colours, from the theme tokens in force at `el` */
 export function wakeColours(el: Element): WakeColours {
   const cs = getComputedStyle(el), v = (k: string) => cs.getPropertyValue(k).trim();
   const num = (k: string, d: number) => { const x = v(k); return x === "" || Number.isNaN(Number(x)) ? d : Number(x); };
+  const off = v("--wake-fringe-off").split(/\s+/).map(Number);
   return { tone: rgb(v("--wake-tone") || "#dce2ef"), fringe: rgb(v("--wake-fringe") || "#e5484d"), fringeA: num("--wake-fringe-alpha", 1),
+    // the fringe's strength at its fullest (0.6) and its offset across the line, px, from a faint wake to a strong
+    // one (0.7 1.3)
+    fringeMix: num("--wake-fringe-mix", 0.6), fringeOff: off.length === 2 && off.every((x) => !Number.isNaN(x)) ? [off[0], off[1]] : [0.7, 1.3],
     toneMix: num("--wake-tone-mix", 1), gloss: num("--wake-gloss", 1), hi: rgb(v("--wake-hi") || "#ffffff"), shade: rgb(v("--wake-shade") || "#000000"), trail: num("--wake-trail", 0), refract: num("--wake-refract", 0), warp: num("--wake-warp", 0),
     tint: num("--wake-tint", 0.16), edgeOut: rgb(v("--wake-edge-out") || "#ff4769"), edgeIn: rgb(v("--wake-edge-in") || "#33c7e6") };
 }

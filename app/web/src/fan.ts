@@ -53,7 +53,7 @@ const FRAG = `#version 300 es
 precision highp float;
 uniform vec2 uView; uniform float uDpr, uScroll; uniform vec2 uRegion;   // the canvas (css px); its page y; the fan's extent
 uniform vec2 uVp; uniform float uVpOff;            // the viewport, and the canvas's top in it
-uniform vec3 uGround, uLine, uSand, uTone, uFringe, uHi, uShade; uniform float uWA, uSA, uFringeA;
+uniform vec3 uGround, uLine, uSand, uTone, uFringe, uHi, uShade; uniform float uWA, uSA, uFringeA, uFringeMix; uniform vec2 uFringeOff;
 uniform sampler2D uPaths; uniform float uFanW;
 uniform sampler2D uMask; uniform vec4 uMaskBox;
 uniform sampler2D uVel; uniform float uWake;
@@ -84,10 +84,10 @@ void main() {
     // over or beside a toned white one, and as it fades in or out
     float lw = clamp(a.x * 2.4, 0.0, 1.0);
     vec3 cw = mix(mix(uGround, uLine, a.x), mix(uGround, uTone, lw), s);
-    vec2 n = wakeAcross(d, s);
+    vec2 n = normalize(d + 1e-5) * mix(uFringeOff.x, uFringeOff.y, s);    // the fringe's offset (the theme's)
     vec2 f0 = cov(pc - d - n), f1 = cov(pc - d + n);
     float fr = clamp(max(f0.x, f1.x) * 2.4 - lw, 0.0, 1.0) * s;
-    cw = mix(cw, uFringe, clamp(fr * 0.6 * uFringeA, 0.0, 1.0));
+    cw = mix(cw, uFringe, clamp(fr * uFringeMix * uFringeA, 0.0, 1.0));
     col = mix(cw, uSand, a.y);
     float line = max(lw, clamp(a.y * 1.2, 0.0, 1.0));
     alpha = max(alpha, max(lw * s, fr));
@@ -116,7 +116,7 @@ export class Fan {
   private speed = 55; private scrollV = 0; private lastScroll = 0; private lastScrollT = 0; private sinceSpawn = 9;
   private ground: RGB = [0, 0, 0]; private line: RGB = [1, 1, 1];
   private sand: RGB = [0.84, 0.7, 0.48]; private wa = 0.2;
-  private tone: RGB = [0.86, 0.89, 0.94]; private fringe: RGB = [0.9, 0.28, 0.3];
+  private tone: RGB = [0.86, 0.89, 0.94]; private fringe: RGB = [0.9, 0.28, 0.3]; private fringeMix = 0.6; private fringeOff: [number, number] = [0.7, 1.3];
   private prog: WebGLProgram | null = null; private wake: Wake | null = null;
   private hi: RGB = [1, 1, 1]; private shade: RGB = [0, 0, 0];
   private unfollow = () => {};
@@ -151,7 +151,7 @@ export class Fan {
     const cs = getComputedStyle(this.canvas);
     this.ground = rgb(cs.getPropertyValue("--fan-ground") || "#121416"); this.line = rgb(cs.getPropertyValue("--fan-line") || "#f0f1fa");
     this.sand = rgb(cs.getPropertyValue("--fan-sand") || "#d6b27b"); this.wa = Number(cs.getPropertyValue("--fan-alpha")) || 0.2;
-    const w = wakeColours(this.canvas); this.tone = w.tone; this.fringe = w.fringe; this.fringeA = w.fringeA; this.hi = w.hi; this.shade = w.shade;
+    const w = wakeColours(this.canvas); this.tone = w.tone; this.fringe = w.fringe; this.fringeA = w.fringeA; this.fringeMix = w.fringeMix; this.fringeOff = w.fringeOff; this.hi = w.hi; this.shade = w.shade;
   }
 
   /** sizes, the reach, the masks: call after a layout change */
@@ -203,13 +203,14 @@ export class Fan {
     gl.useProgram(p); this.prog = p;
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ["uView", "uDpr", "uScroll", "uRegion", "uVp", "uVpOff", "uFringeA", "uHi", "uShade", "uGround", "uLine", "uSand", "uTone", "uFringe", "uWA", "uSA", "uPaths", "uFanW", "uMask", "uMaskBox", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uView", "uDpr", "uScroll", "uRegion", "uVp", "uVpOff", "uFringeA", "uHi", "uShade", "uGround", "uLine", "uSand", "uTone", "uFringe", "uWA", "uSA", "uFringeMix", "uFringeOff", "uPaths", "uFanW", "uMask", "uMaskBox", "uVel", "uWake"]) this.u[n] = gl.getUniformLocation(p, n);
     const tex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
     this.texP = tex(); this.texM = tex();
     this.gl = gl;
-    if (this.o.wake && !this.o.reduce) { const w = new Wake(gl, { step: 1 / 20 }); if (w) this.wake = w;   // steps of 1/20 s: Safari's look here (about 20 frames a second) }
+    // steps of 1/20 s: Safari's look here (about 20 frames a second)
+    if (this.o.wake && !this.o.reduce) { const w = new Wake(gl, { step: 1 / 20 }); if (w) this.wake = w; }
   }
 
   // ---------- the paths
@@ -288,7 +289,7 @@ export class Fan {
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     const r = this.o.region();
     gl.uniform2f(this.u.uView, this.vw, this.ch); gl.uniform1f(this.u.uDpr, this.dpr); gl.uniform1f(this.u.uScroll, this.top);
-    gl.uniform2f(this.u.uVp, this.vw, this.vh); gl.uniform1f(this.u.uVpOff, this.top - scrollY); gl.uniform1f(this.u.uFringeA, this.fringeA);
+    gl.uniform2f(this.u.uVp, this.vw, this.vh); gl.uniform1f(this.u.uVpOff, this.top - scrollY); gl.uniform1f(this.u.uFringeA, this.fringeA); gl.uniform1f(this.u.uFringeMix, this.fringeMix); gl.uniform2f(this.u.uFringeOff, this.fringeOff[0], this.fringeOff[1]);
     gl.uniform2f(this.u.uRegion, r.top, r.bottom);
     gl.uniform3f(this.u.uGround, ...this.ground); gl.uniform3f(this.u.uLine, ...this.line); gl.uniform3f(this.u.uSand, ...this.sand);
     gl.uniform1f(this.u.uWA, this.wa); gl.uniform1f(this.u.uSA, 0.95);

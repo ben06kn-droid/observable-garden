@@ -527,7 +527,10 @@ every page; a page gives it the drawn layer it acts on and its colours from its 
     moment the fluid takes each stretch of the cursor's path in, and are lifted off the ground. The
     overlay repaints a picture of the layer from its SVG (replayed into a canvas) and its canvases.
 - **Per page**:
-  - run: bending, silver-white with red fringes, on the fan's white paths; the gold paths bend with it but keep
+  - run: bending, on the fan's white paths: on the dark ground they take a clear red tint (35% of the way from
+    their off-white to #FF3B30, `--wake-tone` #f5b1b3) with vivid #FF3B30 fringes at about 95%, 1.5 to 2 px off the
+    line (`--wake-fringe-mix`, `--wake-fringe-off`; measured 4.8-5.0:1 on the ground, 2026-11-18); on the light
+    ground silver-grey with fine red fringes, as before; the gold paths bend with it but keep
     their own gold throughout, with no tone and no fringe, in both palettes (2026-11-18: the shader tones and fringes
     the white channel only and lays the gold over it by its own coverage, so the rule follows a path's colour as it
     fades; the same in the glass, where a pushed gold stroke stays gold, unfringed). Inside the glass the strokes are pushed aside by
