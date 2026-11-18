@@ -19,14 +19,19 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", "
   ".npz": "application/octet-stream", ".woff2": "font/woff2", ".woff": "font/woff", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8" };
 const rules = conf.headers.map((h) => ({ re: new RegExp("^" + h.source.replace(/\(\.\*\)/g, ".*") + "$"), headers: h.headers }));
 
-export function serve(port = 4173, { mock = false } = {}) {
+/** `root`: serve another built copy (the carry profiler's instrumented one); `carryLog(body)`: tests only, receives
+ *  what scripts/carry/instr.js posts to /__carry-log */
+export function serve(port = 4173, { mock = false, root = dist, carryLog = null } = {}) {
   return new Promise((resolve) => {
     const srv = createServer((req, res) => {
       let path = decodeURIComponent(new URL(req.url, "http://x").pathname);
       if (mock && path.startsWith("/__mock/") && mockProviders(req, res, path)) return;
+      if (carryLog && path === "/__carry-log" && req.method === "POST") {
+        let body = ""; req.on("data", (d) => { body += d; }); req.on("end", () => { carryLog(body); res.statusCode = 204; res.end(); }); return;
+      }
       if (path.endsWith("/")) path += "index.html";
-      let file = join(dist, path);
-      if (!file.startsWith(dist) || !existsSync(file) || statSync(file).isDirectory()) { file = join(dist, "404.html"); res.statusCode = 404; }
+      let file = join(root, path);
+      if (!file.startsWith(root) || !existsSync(file) || statSync(file).isDirectory()) { file = join(root, "404.html"); res.statusCode = 404; }
       for (const r of rules) if (r.re.test(path)) for (const h of r.headers) {
         if (h.key === "Strict-Transport-Security") continue;
         res.setHeader(h.key, h.key === "Content-Security-Policy" ? h.value.replace(/;\s*upgrade-insecure-requests/, "") : h.value);
