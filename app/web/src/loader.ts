@@ -3,8 +3,11 @@
 // what has really loaded. The fill only ever rises and moves smoothly between updates. It always plays to the
 // finished B (1.5 s), holds the B still until loading is done, then slides the whole screen up (600 ms) to reveal
 // the site beneath. Shown once per browser session. Reduced motion: a still navy B and the box, then a plain cut.
+// Beside the box, a percent counter in block numerals (src/loader-mark.ts): the same eased value as the fill, as a
+// whole number, so the two always agree; it only rises, and reads 100 exactly when the box is full. The screen is
+// one progressbar whose value is that number.
 import "./styles/loader.css";
-import { MARK } from "./loader-mark";
+import { COUNTER, counterDigits, MARK } from "./loader-mark";
 
 const SEEN = "qx-loader-seen";
 const FORMED_MS = 1500;
@@ -15,6 +18,7 @@ const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 export class Loader {
   readonly el: HTMLElement;
   private target = 0; private shown = 0; private raf = 0; private last = 0; private snap = false;
+  private digits: SVGPathElement | null = null; private count = -1;
   private formed: Promise<void>;
   private filled: () => void = () => {}; private full: Promise<void>;
 
@@ -30,10 +34,12 @@ export class Loader {
       this.el.className = "loader";
       this.el.setAttribute("role", "progressbar"); this.el.setAttribute("aria-label", "Loading the site");
       this.el.setAttribute("aria-valuemin", "0"); this.el.setAttribute("aria-valuemax", "100"); this.el.setAttribute("aria-valuenow", "0");
-      this.el.innerHTML = MARK;
+      this.el.setAttribute("aria-valuetext", "0%");
+      this.el.innerHTML = MARK + COUNTER;
       document.body.append(this.el);
     }
     if (formed) this.el.classList.add("formed");
+    this.digits = this.el.querySelector<SVGPathElement>(".count .digits");
     this.snap = formed;
     // the B takes 1.5 s from the screen's first frame (its animations start with the page); a rebuild has no minimum
     const left = Math.max(0, FORMED_MS - performance.now());
@@ -44,7 +50,6 @@ export class Loader {
   /** what has really loaded, 0-1; the box never empties back */
   progress(p: number) {
     this.target = Math.max(this.target, Math.min(1, Math.max(0, p)));
-    this.el.setAttribute("aria-valuenow", String(Math.round(this.target * 100)));
     if (!this.raf) { this.last = performance.now(); this.raf = requestAnimationFrame(this.tick); }
   }
 
@@ -56,6 +61,12 @@ export class Loader {
     this.shown += (this.target - this.shown) * (reduce || this.snap ? 1 : 1 - Math.exp(-10 * dt));
     if (this.target - this.shown < 0.002) this.shown = this.target;
     this.el.style.setProperty("--ld-p", this.shown.toFixed(4));
+    // the counter: the fill's own value as a whole number (rounded down: 100 only when the box is full)
+    const n = this.shown >= 1 ? 100 : Math.min(99, Math.floor(this.shown * 100));
+    if (n > this.count) {
+      this.count = n; this.digits?.setAttribute("d", counterDigits(n));
+      this.el.setAttribute("aria-valuenow", String(n)); this.el.setAttribute("aria-valuetext", `${n}%`);
+    }
     if (this.shown >= 1) this.filled();
     if (this.shown < this.target) this.raf = requestAnimationFrame(this.tick);
   };

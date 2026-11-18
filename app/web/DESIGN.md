@@ -274,6 +274,14 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
 - The box: a rectangular prism (face 56 × 384, depth drawn up and to the right, sharp mitred corners), filling
   with solid black from the bottom in proportion to the work really done. The level only rises and eases toward
   the share done (about 0.3 s to close a gap).
+- **The counter** (2026-11-18; `src/loader-mark.ts`, `loader.ts`): to the right of the box, 12 px from its outline,
+  the digits' foot level with the box's foot: the percent loaded in block numerals (a 5 x 7 grid of 4 px squares,
+  like a pixel display, drawn as one SVG path; 28 px tall, solid black) and a "%" in the same blocks. Three
+  fixed-width cells, right aligned, so nothing moves sideways from one digit to three. It is the fill's own eased
+  value as a whole number (rounded down): it only rises, the two always agree, and it reads 100 exactly when the
+  box is full (checked on `loader.html`: 35 samples through a load). It leaves with the screen, and shows on the
+  short version too. The screen is one `progressbar` whose `aria-valuenow` and `aria-valuetext` ("57%") are that
+  number. Reduced motion: it updates without smoothing, as the fill does.
 - **The work** (`task()` in `boot.ts`): each section's script registers what must be done before it can be
   shown (home: the grove's data and its drawing; run: the glass, hero layer and fan with their first frames;
   docs: the sky; Sancho: the dusk), plus the fonts. The files fetched before any script ran count as already done.
