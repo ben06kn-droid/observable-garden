@@ -2,7 +2,7 @@
 
 Read this before restyling any page. It records the reference the whole site is held to (section 1), the
 page order and how the four chain pages work as one document behind a loading screen (2), each page's theme (3),
-the shared grid, type scale and header (4), where things live in the code (5), the standing rules (6) and what is
+the shared grid, type scale and menu (4), where things live in the code (5), the standing rules (6) and what is
 still open (7).
 
 ## 1. The reference: lukres.dev, measured
@@ -184,7 +184,7 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
   the loading screen's stylesheet, the one module `src/onepage/main.ts`, and a `<!-- onepage -->` marker.
 - The `onepage()` plugin in `vite.config.ts` replaces the marker at build time with, in order: the loading
   screen's markup (`LOADER`, from `src/loader-mark.ts`, so it is on screen from the first frame);
-  `src/onepage/header.html` (the skip link and the one header); one backdrop per section (`.backdrops`); and
+  `src/onepage/header.html` (the skip link and the menu); one backdrop per section (`.backdrops`); and
   `<main>` holding `src/onepage/{home,run,docs,sancho}.html`. `SECTIONS` in the plugin is the order.
 - `src/onepage/main.ts` imports `common`, then `boot.ts` (so the loading screen and the work count exist before
   any section registers work), then each section's script in page order (`src/pages/index.ts`, `run.ts`,
@@ -209,15 +209,15 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
 
 ### Themes
 
-- A theme applies to whatever carries `data-theme`: a section, its backdrop, the header's wrapper, or `<html>` on
+- A theme applies to whatever carries `data-theme`: a section, its backdrop, the menu's wrapper, or `<html>` on
   the separate pages. Each theme's block in `src/styles/<theme>.css` is written `[data-theme="…"]`, never
   `html[data-theme]`, so it works in all four places. Rules that were `[data-theme="x"] body` on a page are
   matched by `.section` too where the section needs them.
-- The header sits in `<div class="top-theme">`. `boot.ts` gives that wrapper the theme (and `data-page`) of the
-  section that leads at the moment, so the header's type and structure change with the sections; its colours are
-  mixed separately (below). Its ground is `var(--header-bg)`, set per theme, docs and Sancho included.
+- The menu sits in `<div class="top-theme">`. `boot.ts` gives that wrapper the theme (and `data-page`) of the
+  section that leads at the moment, so the menu's type changes with the sections; its colours are mixed separately
+  (below). Its ground is `var(--header-bg)`, set per theme, docs and Sancho included.
 - The run section's light/dark inversion (`data-hg` on the section, mirrored on the run backdrop) calls
-  `refreshThemes()`, so the header mixes from the inverted colours.
+  `refreshThemes()`, so the menu mixes from the inverted colours.
 
 ### Backdrops and the scroll crossfade (src/onepage/boot.ts, src/styles/onepage.css)
 
@@ -226,9 +226,11 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
 - **The crossfade is tied to scroll position, not time**, as on lukres.dev (section 1): a backdrop's opacity
   goes linearly from 0 to 1 while its section's top rises from 65% to 27.6% of the viewport's height (`BAND`;
   his 585 to 248 px at 900). Scrolling back reverses it exactly. Opacity only.
-- **The header** mixes its colours (`--header-bg`, `--ink`, `--muted`, `--rule`) between the two sections'
+- **The menu** mixes its colours (`--header-bg`, `--ink`, `--muted`, `--rule`) between the two sections'
   values by the same share, and takes the new section's theme half way through the band. Each section's values are
-  read once from its backdrop (`refreshThemes()`).
+  read from its backdrop (`refreshThemes()`) when `start()` runs, after every section's script and stylesheet: read
+  any earlier (under the dev server a section's styles arrive with its script), they came out transparent and the
+  header vanished.
 - `scrub()` runs at most once per animation frame, from passive `scroll` and `resize` listeners. It writes only
   opacities and the header's custom properties, and reads only section rectangles.
 - Reduced motion: the same position-based crossfade (it moves only as the reader scrolls, so it is not an
@@ -251,9 +253,9 @@ cross-document view transition. That work stays on the `site-revamp` branch; it 
 ### Addresses and history (src/onepage/boot.ts)
 
 - Each section's address and title are its `data-path` and `data-title`. As the reader scrolls, the address, the
-  title and the header's current link (`aria-current`) follow the section under the middle of the screen, with
+  title and the menu's current item (`aria-current`) follow the section under the middle of the screen, with
   `history.replaceState`: scrolling adds no history.
-- A same-origin link to a section's address (the header's links, a cue, a link in the text) is caught: a smooth
+- A same-origin link to a section's address (the menu's items, a cue, a link in the text) is caught: a smooth
   scroll to the section, one `pushState` entry, and focus moved to the section (`tabindex="-1"`, no ring), so the
   next Tab continues from there. A link with an anchor (`/docs.html#tracing`) pushes the section's address with
   the anchor and scrolls to the heading. While such a scroll is under way the address is left alone (`steering`).
@@ -526,7 +528,7 @@ every page; a page gives it the drawn layer it acts on and its colours from its 
 The viewer draws a run's tree without the demo's decoration (the run page draws only the scale, src/runscale.ts): `makeScene()` without `decor`
 draws the tree, its bar and the verdict written on it, flat, in `--tree`, `--tree-path` and `--tree-bar`.
 
-## 4. The grid, the type scale, the header
+## 4. The grid, the type scale, the menu
 
 **Grid** (`src/styles/base.css`, `:root`): side padding `--pad-x` = `max(5vw, 40px)` (72 px at 1440), 25 px up to
 812 px wide, 15 px up to 400 px; vertical padding `--pad-y` = `clamp(30px, 4vw, 50px)`; 12 columns with gap
@@ -553,13 +555,26 @@ loaded by `home.css` alone); emphasis is weight 500.
 **Motion tokens**: `--ease-travel` = `cubic-bezier(.35, 0, 0, 1)`, `--ease-ui` = `cubic-bezier(.4, 0, .1, 1)`,
 `--dur-page` 1000 ms, `--dur-enter` 700 ms, `--dur-ui` 350 ms, `--dur-colour` 450 ms.
 
-**Header**: the same markup on every page, coloured only by tokens. The brand on the grid's left edge (columns
-1–3), Run · Docs · Sancho · Paper starting on column 7 (the grid's centre line, where the home page's grove
-starts), the author, Contact (a mailto link; the address is never
-printed) and LinkedIn on the right edge (columns 9–12). Links roll on hover (the label out of its mask, a copy
-in after it: `--dur-ui`, `--ease-ui`); the current page is underlined. Below 1241 px the name leaves the header,
-below 901 px LinkedIn too, so the links never crowd (checked from 813 to 1920 px); below 812 px Paper also
-moves to the footer (which carries the author's line on every page); Contact stays in the header at every width.
+**The menu** (2026-11-18; `src/menu.html`, `src/menu.ts`, `base.css`): there is no header bar. One control is fixed
+at the top left of the window: the wordmark "Garden" (the display face) with a small "Menu" label (mono caps) on a
+pill in the section's `--header-bg` (the ground itself on home, run, the demo, the viewer and Eucalyptus; on docs
+and Sancho the light glass and sheet their dark ink reads on, with what lies beneath blurred). The wordmark hangs on
+the grid's left edge; the control lies in the band `--head` reserves (76 px, 60 on a phone), which every section,
+the docs contents (sticky at `--head` + `--pad-y`) and every anchor (`scroll-margin-top`) already clear (checked:
+the pill ends at 58 px, the contents stick at 126 px, a docs heading lands at 100 px in its own column).
+- A click opens a panel directly beneath, in the same colours with a hairline border: Quixote (the home section),
+  Run, Docs, Sancho (scrolled to, as the header's links were), Paper (the paper, a new tab), Eucalyptus (its
+  page). No demo. The section on screen (on a separate page, that page) is marked with a dot (`aria-current`).
+- It closes on choosing an item, on Escape (focus back on the button) and on a click outside, and when focus
+  leaves it. A disclosure: a button with `aria-expanded` and `aria-controls`, the panel a labelled `nav` of plain
+  links. Enter or Space opens it with focus on the current item; Down and Up open it at the first or last;
+  inside, Up, Down, Home and End move between items.
+- On the one page its colours mix between sections with the scroll as the header's did (`boot.ts`). On a phone
+  the same control and panel, sized for touch (a 44 px control and 44 px items).
+- It is written into every page with a menu by the build, at a `<!-- menu -->` marker (`vite.config.ts`): the one
+  page, the demo, the viewer, Eucalyptus, and the legal, shared-verdict, result and 404 pages (their bar's styles
+  are gone).
+- The author's name, Contact (a mailto link; the address is never printed) and LinkedIn are in the footer only.
 
 ## 5. Where things live
 
@@ -570,6 +585,7 @@ moves to the footer (which carries the author's line on every page); Contact sta
 | `index.html`, `run.html`, `docs.html`, `sancho.html` | the four shells of the one document (title, description, `data-start`) |
 | `vite.config.ts` (`onepage()`, `SECTIONS`) | writes the loading screen, header, backdrops and sections into the shells |
 | `src/onepage/*.html` | the header and each section's markup |
+| `src/menu.html`, `src/menu.ts` | the menu: its markup (written into every page at `<!-- menu -->`) and its behaviour |
 | `src/onepage/main.ts` | the one module: boot, then each section's script, then `start()` |
 | `src/onepage/boot.ts` | the work count, the reveal, addresses and history, the scroll crossfade, section visibility, whole-pixel sections |
 | `src/styles/onepage.css` | backdrops, `.section`, the cue, the header's mixed ground |

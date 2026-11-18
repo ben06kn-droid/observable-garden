@@ -11,6 +11,7 @@ const PYODIDE = JSON.parse(readFileSync(resolve(import.meta.dirname, "public/pyo
 
 const pages = ["index", "demo", "result", "docs", "privacy", "terms", "run", "share", "viewer", "sancho", "404", "loader", "eucalyptus"];
 
+// The menu (src/menu.html) is written into every page at its <!-- menu --> marker (the one page's header.html has one).
 // The one-page site: home, run, docs and Sancho are sections of one document, built once behind the
 // loading screen and kept alive. Every address of it (/, /run.html) is the same document with its own title,
 // description and starting section (data-start; also /docs.html, /sancho.html); this writes in what they share, in order: the loading screen
@@ -22,12 +23,13 @@ function onepage(): Plugin {
   return {
     name: "onepage",
     transformIndexHtml: { order: "pre", handler(html) {
+      html = html.replace("<!-- menu -->", () => readFileSync(resolve(import.meta.dirname, "src/menu.html"), "utf8"));
       const at = html.indexOf("<!-- onepage");
       if (at < 0) return html;
       const end = html.indexOf("-->", at) + 3;
       const backdrops = `<div class="backdrops" aria-hidden="true">${SECTIONS.map((n) => `<div class="backdrop" data-for="${n}" data-theme="${n}"${n === "docs" || n === "sancho" ? ` data-page="${n}"` : ""}></div>`).join("")}</div>`;
       const body = `${LOADER}\n${part("header")}${backdrops}\n<main id="main">\n${SECTIONS.map(part).join("")}</main>\n`;
-      return html.slice(0, at) + body + html.slice(end);
+      return (html.slice(0, at) + body + html.slice(end)).replace("<!-- menu -->", () => readFileSync(resolve(import.meta.dirname, "src/menu.html"), "utf8"));
     } },
   };
 }

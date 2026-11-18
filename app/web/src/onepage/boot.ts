@@ -5,7 +5,7 @@
 //   a scene built and its first frame drawn); the files fetched before any script ran count as done. The loading
 //   screen's box shows the share done. When all of it is done the screen goes (src/loader.ts), never before.
 // - Addresses. Each section has its own address and title (data-path, data-title). As the reader scrolls, the
-//   address, the title and the header's current link follow the section under the middle of the screen
+//   address, the title and the menu's current item follow the section under the middle of the screen
 //   (history.replaceState: scrolling adds no history entries). A link to a section (the header's, a cue, a link in
 //   the text) scrolls to it and adds an entry; Back and Forward scroll between them. A direct link to any address
 //   opens on its section (data-start), behind the loading screen.
@@ -59,7 +59,12 @@ async function reveal() {
   revealedNow();
 }
 /** all the page scripts have registered their work */
-export function start() { started = true; snap(); goTo(startSection(), false); scrub(); if (done === total) { performance.mark("qx-work-done"); void reveal(); } }
+export function start() {
+  // each section's colours, read now that every section's script has run: under the dev server a section's
+  // stylesheet arrives with its script, after this module, and a read before then finds no colours at all (the
+  // header's ink and ground mixed from transparent: it vanished)
+  refreshThemes();
+  started = true; snap(); goTo(startSection(), false); scrub(); if (done === total) { performance.mark("qx-work-done"); void reveal(); } }
 /** an anchor inside a section (a docs heading): scroll to it, once its section is the current one */
 function toAnchor(hash: string, smooth = false) {
   const el = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;

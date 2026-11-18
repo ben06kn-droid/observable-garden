@@ -19,7 +19,7 @@
   --pad-x: max(5vw, 40px);
   --pad-y: clamp(30px, 4vw, 50px);
   --gap: 2vw;
-  --head: 76px;                /* the header's height; content starts below it */
+  --head: 76px;                /* the band the menu control lies in, at the top; content starts below it */
   --measure: 44rem;            /* the longest line of reading text (about 70 characters of body type); in rem so code blocks share it */
 
   /* the type scale, set in viewport width like his (DESIGN.md, Type scale) */
@@ -61,21 +61,42 @@ code { font-size: 0.92em; overflow-wrap: anywhere; }   /* hashes break rather th
 .skip { position: absolute; left: -9999px; top: var(--s2); z-index: 60; background: var(--ink); color: var(--ground); padding: var(--s2) var(--s3); font: 500 13px var(--mono); }
 .skip:focus { left: var(--pad-x); }
 
-/* ---------- the header: one structure on every page, on the page's grid ----------
-   The brand on the left edge; the chain's pages and the paper; the author and a contact link on the
-   right. Themed only through tokens. Below 812 px the author's line moves to the footer. */
-.top {
-  position: fixed; inset: 0 0 auto 0; z-index: 50; height: var(--head);
-  display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gap); align-items: center;
-  padding: 0 var(--pad-x); color: var(--ink); background: var(--header-bg);
-  font: 500 var(--t-label)/1 var(--sans); letter-spacing: 0.04em; text-transform: uppercase;
+/* ---------- the menu (src/menu.html, src/menu.ts): one control fixed at the top left of the window ----------
+   The wordmark and a small "Menu" label on a pill in the section's ground (--header-bg: the ground itself on home,
+   run, the demo, the viewer and Eucalyptus; on docs and Sancho the light glass and sheet their dark ink reads on),
+   and the panel beneath it in the same colours with a hairline border. No bar. Colours by tokens only; on the one
+   page boot.ts mixes them across a boundary as the scroll goes. The wordmark hangs on the grid's left edge. The
+   control lies in the band --head reserves at the top (76 px; 60 on a phone), which content starts below. */
+.top { position: fixed; z-index: 50; top: var(--menu-top); left: calc(var(--pad-x) - var(--pill-x)); color: var(--ink); }
+:root { --pill-x: 14px; --pill-h: 40px; --menu-top: calc((var(--head) - var(--pill-h)) / 2); }
+.menu-btn { display: flex; align-items: center; gap: 12px; height: var(--pill-h); margin: 0; padding: 0 var(--pill-x);
+  border: 0; border-radius: 999px; background: var(--header-bg); color: var(--ink); cursor: pointer; font: inherit;
+  transition: background-color var(--dur-colour) linear; }
+.menu-btn .brand { font: 800 clamp(1.15rem, 1.4vw, 1.5rem)/1 var(--display); letter-spacing: -0.01em; }
+.menu-btn .menu-label { font: 500 var(--t-micro)/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  padding-top: 0.15em; }
+.menu-btn:hover .menu-label, .top.open .menu-label { color: var(--ink); }
+.menu-panel { position: absolute; top: calc(100% + 8px); left: 0; min-width: 232px; padding: 8px;
+  background: var(--header-bg); border: 1px solid var(--rule); border-radius: 14px; }
+.top.open .menu-panel { animation: menu-in var(--dur-ui) var(--ease-ui) both; }
+@keyframes menu-in { from { opacity: 0; transform: translate3d(0, -6px, 0); } }
+.menu-panel ul { list-style: none; margin: 0; padding: 0; }
+.menu-panel a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; text-decoration: none; color: var(--ink);
+  font: 500 var(--t-label)/1.2 var(--sans); letter-spacing: 0.04em; text-transform: uppercase; }
+.menu-panel a:hover, .menu-panel a:focus-visible { background: var(--rule); }
+.menu-panel a:focus-visible { outline-offset: -2px; }
+/* the section (or page) on screen: a small dot before its name */
+.menu-panel a::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0; flex: none; }
+.menu-panel a[aria-current="page"]::before { opacity: 1; }
+@media (max-width: 812px) {
+  /* sized for touch: a 44 px control, items 44 px tall */
+  :root { --pill-h: 44px; --pill-x: 14px; }
+  .menu-panel { min-width: min(260px, calc(100vw - 2 * var(--pad-x))); }
+  .menu-panel a { min-height: 44px; padding: 0 12px; font-size: 0.875rem; }
 }
-.top .brand { grid-column: 1 / span 3; justify-self: start; font: 800 clamp(1.15rem, 1.4vw, 1.5rem)/1 var(--display); letter-spacing: -0.01em; text-transform: none; text-decoration: none; }
-/* the links start on column 7, the grid's centre line (the line the home page's drawing starts on) */
-.top nav { grid-column: 7 / span 2; white-space: nowrap; display: flex; gap: clamp(14px, 1.6vw, 28px); }
-.top .who { grid-column: 9 / span 4; justify-self: end; display: flex; gap: clamp(14px, 1.6vw, 28px); margin: 0; align-items: center; }
-.top .who .name { color: var(--muted); }
-.top nav > *, .top .who > * { flex: none; }   /* a label never shrinks into its mask */
+@media (max-width: 400px) { :root { --pill-x: 9px; } }   /* the pill 6 px from the screen's edge, the wordmark on the 15 px edge */
+@media (prefers-reduced-motion: reduce) { .top.open .menu-panel { animation: none; } }
+
 /* a link label rolls up out of its mask and its copy rises in after it (his hover, 0.35 s, UI curve) */
 .roll { position: relative; display: inline-block; overflow: hidden; vertical-align: top; text-decoration: none; padding: 6px 0; line-height: 1.1; }
 .roll > span { display: block; transition: transform var(--dur-ui) var(--ease-ui); }
@@ -83,16 +104,6 @@ code { font-size: 0.92em; overflow-wrap: anywhere; }   /* hashes break rather th
 .roll:hover > span, .roll:focus-visible > span { transform: translate3d(0, -160%, 0); }
 .roll:hover::after, .roll:focus-visible::after { transform: translate3d(0, 0, 0); }
 .roll[aria-current="page"]::before { content: ""; position: absolute; left: 0; right: 0; bottom: 1px; height: 1px; background: currentColor; }
-@media (max-width: 1240px) { .top .who .name { display: none; } }        /* the footer carries the name */
-@media (max-width: 900px) { .top .who a[href*="linkedin.com"] { display: none; } }
-@media (max-width: 812px) {
-  .top { display: flex; justify-content: space-between; gap: var(--s4); }
-  .top nav { gap: 14px; margin-left: auto; }
-  .top .who { gap: 14px; }                                   /* Contact stays; the name and LinkedIn move to the footer */
-  .top .who .name, .top .who a[href*="linkedin.com"] { display: none; }
-  .top .nav-paper { display: none; }
-}
-@media (max-width: 400px) { .top { font-size: 11px; letter-spacing: 0.02em; gap: 11px; } .top nav, .top .who { gap: 11px; } }
 
 /* ---------- the footer ---------- */
 .foot { padding: var(--pad-y) var(--pad-x); border-top: 1px solid var(--rule); color: var(--muted);

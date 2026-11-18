@@ -2,6 +2,7 @@
 // two sentences on result pages.
 import "./styles/base.css";
 import { inject } from "@vercel/analytics";
+import "./menu";                 // the menu, on the pages that have one (src/menu.html)
 
 // Vercel Web Analytics: page views only, no cookies. The script and its beacon are this site's own
 // /_vercel/insights/ route, so the CSP's script-src and connect-src stay 'self'. The mode is fixed

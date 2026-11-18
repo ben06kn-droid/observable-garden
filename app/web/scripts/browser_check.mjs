@@ -332,8 +332,10 @@ if (process.argv.includes("--pages")) {
     report.phone = {};
     for (const pg of ["/", "/demo.html", "/eucalyptus.html", "/docs.html", "/sancho.html", "/run.html", "/viewer.html", "/privacy.html"]) {
       await go(pg); await sleep(400);
-      report.phone[pg] = await evaluate(`(() => { const t = document.querySelector('.top').getBoundingClientRect(), n = document.querySelector('.top nav').getBoundingClientRect();
-        return { page_scrolls_sideways: document.documentElement.scrollWidth > innerWidth, nav_inside: n.right <= innerWidth + 0.5 && n.left >= 0, header_height: Math.round(t.height) }; })()`);
+      // the menu on a phone: the control and, open, its panel inside the screen, sized for touch (44 px)
+      report.phone[pg] = await evaluate(`(() => { const b = document.querySelector('.menu-btn'); b.click(); const p = document.querySelector('.menu-panel').getBoundingClientRect(), r = b.getBoundingClientRect();
+        const items = [...document.querySelectorAll('.menu-panel a')].map((a) => Math.round(a.getBoundingClientRect().height)); b.click();
+        return { page_scrolls_sideways: document.documentElement.scrollWidth > innerWidth, panel_inside: p.right <= innerWidth + 0.5 && p.left >= 0, control_h: Math.round(r.height), item_h_min: Math.min(...items) }; })()`);
       if (pg === "/sancho.html") await shot("sancho-phone");
     }
     report.network = { requests: requests.length, elsewhere: [...new Set(requests.map((r) => new URL(r.url).origin).filter((o) => o !== base && !o.startsWith("data:") && !o.startsWith("blob:")))] };
@@ -528,11 +530,11 @@ try {
     step(`${tag}: addresses follow the scroll`);
     const h0 = await evaluate(`history.length`);
     await evaluate(`scrollTo(0, ${runTop} + 200); true`); await sleep(400);
-    one.scroll_into_run = { path: await here(), title: await evaluate(`document.title`), current: await evaluate(`document.querySelector('.top nav a[aria-current]')?.textContent ?? null`) };
+    one.scroll_into_run = { path: await here(), title: await evaluate(`document.title`), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent ?? null`) };
     await evaluate(`scrollTo(0, 0); true`); await sleep(400);
-    one.scroll_back_home = { path: await here(), current: await evaluate(`document.querySelector('.top nav a[aria-current]')?.textContent ?? null`), history_unchanged: (await evaluate(`history.length`)) === h0 };
+    one.scroll_back_home = { path: await here(), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent ?? null`), history_unchanged: (await evaluate(`history.length`)) === h0 };
     step(`${tag}: a header link, Back, the cue, the keyboard`);
-    await evaluate(`document.querySelector('.top nav a[href="/run.html"]').click(); true`);
+    await evaluate(`document.querySelector('.menu-panel a[href="/run.html"]').click(); true`);
     one.header_link = { arrived: await settledAt(`Math.abs(scrollY - ${runTop}) < 2`), path: await here(), history_added: (await evaluate(`history.length`)) === h0 + 1, y: await evaluate(`Math.round(scrollY)`), run_top: await evaluate(runTop) };
     await evaluate(`history.back(); true`);
     one.back = { home: await settledAt(`scrollY < 2 && location.pathname === "/"`) };
@@ -556,7 +558,7 @@ try {
     one.direct = {};
     for (const [n, path] of [["docs", "/docs.html"], ["sancho", "/sancho.html"]]) {
       await go(path);
-      one.direct[n] = { at_section: await evaluate(`Math.abs(scrollY - ${secTop(n)}) < 2`), title: await evaluate(`document.title`), current: await evaluate(`document.querySelector('.top nav a[aria-current]')?.textContent ?? null`) };
+      one.direct[n] = { at_section: await evaluate(`Math.abs(scrollY - ${secTop(n)}) < 2`), title: await evaluate(`document.title`), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent ?? null`) };
     }
     // the address follows the scroll through every section, adding no history
     const h1 = await evaluate(`history.length`), seenPaths = [];
@@ -564,9 +566,9 @@ try {
     one.scroll_through = { paths: seenPaths, history_unchanged: (await evaluate(`history.length`)) === h1 };
     // the header's Docs and Sancho links scroll in place; a link in the contents lands on its heading, its anchor kept
     await evaluate(`scrollTo(0, 0); true`); await sleep(400);
-    await evaluate(`document.querySelector('.top nav a[href="/docs.html"]').click(); true`);
+    await evaluate(`document.querySelector('.menu-panel a[href="/docs.html"]').click(); true`);
     one.header_docs = await settledAt(`Math.abs(scrollY - ${secTop("docs")}) < 2 && location.pathname === "/docs.html"`);
-    await evaluate(`document.querySelector('.top nav a[href="/sancho.html"]').click(); true`);
+    await evaluate(`document.querySelector('.menu-panel a[href="/sancho.html"]').click(); true`);
     one.header_sancho = await settledAt(`Math.abs(scrollY - ${secTop("sancho")}) < 2 && location.pathname === "/sancho.html"`);
     await go("/docs.html");
     const anchor = await evaluate(`(() => { const a = [...document.querySelectorAll('[data-section="docs"] .toc a')].at(-2); a.click(); return a.hash; })()`);
@@ -579,6 +581,32 @@ try {
     const one = report.desktop_onepage, secTop = (n) => `Math.round(document.querySelector('[data-section="${n}"]').getBoundingClientRect().top + scrollY)`;
     // out of the one page to the demo (from the run section) and to Eucalyptus (from home), and Back: the two must
     // return alike (the page kept or rebuilt the same way, the same loading screen, on the section left from)
+    step("desktop: the menu by keyboard and pointer");
+    {
+      await go("/");
+      const key = async (k, code, vk) => { for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: k, code, windowsVirtualKeyCode: vk }, page); await sleep(80); };
+      const state = () => evaluate(`({ expanded: document.querySelector('.menu-btn').getAttribute('aria-expanded'), hidden: document.querySelector('.menu-panel').hidden, focus: document.activeElement?.textContent?.trim() ?? null })`);
+      const m = one.menu = { roles: await evaluate(`({ button: document.querySelector('.menu-btn').tagName, controls: document.querySelector('.menu-btn').getAttribute('aria-controls') === document.querySelector('.menu-panel').id, nav_label: document.querySelector('.menu-panel').getAttribute('aria-label'), items: [...document.querySelectorAll('.menu-panel a')].map((a) => a.textContent), current: document.querySelector('.menu-panel a[aria-current]')?.textContent })`) };
+      await evaluate(`document.querySelector('.menu-btn').focus(); true`);
+      await key("Enter", "Enter", 13); m.enter_opens = await state();                 // focus on the current item (Quixote)
+      await key("ArrowDown", "ArrowDown", 40); m.arrow_down = await state();          // Run
+      await key("End", "End", 35); m.end = await state();                             // Eucalyptus
+      await key("Escape", "Escape", 27); m.escape = await state();                    // closed, focus on the button
+      await key("ArrowDown", "ArrowDown", 40); m.down_opens = await state();
+      await send("Input.dispatchMouseEvent", { type: "mousePressed", x: 900, y: 600, button: "left", clickCount: 1 }, page);
+      await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 900, y: 600, button: "left", clickCount: 1 }, page); await sleep(150);
+      m.outside_closes = await state();
+      const r = await evaluate(`(() => { const b = document.querySelector('.menu-btn').getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()`);
+      for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: r[0], y: r[1], button: "left", clickCount: 1 }, page);
+      await sleep(200); m.click_opens = await state();
+      const d = await evaluate(`(() => { const a = document.querySelector('.menu-panel a[href="/docs.html"]').getBoundingClientRect(); return [a.left + a.width / 2, a.top + a.height / 2]; })()`);
+      for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: d[0], y: d[1], button: "left", clickCount: 1 }, page);
+      m.choose_docs = { arrived: await settledAt(`Math.abs(scrollY - ${secTop("docs")}) < 2 && location.pathname === "/docs.html"`), ...(await state()), current: await evaluate(`document.querySelector('.menu-panel a[aria-current]')?.textContent`) };
+      m.ok = m.roles.button === "BUTTON" && m.roles.controls && m.roles.items.join() === "Quixote,Run,Docs,Sancho,Paper,Eucalyptus" && m.roles.current === "Quixote"
+        && m.enter_opens.expanded === "true" && m.enter_opens.focus === "Quixote" && m.arrow_down.focus === "Run" && m.end.focus === "Eucalyptus"
+        && m.escape.hidden && m.escape.focus?.startsWith("Garden") && m.down_opens.focus === "Quixote" && m.outside_closes.hidden && !m.click_opens.hidden
+        && m.choose_docs.arrived && m.choose_docs.hidden && m.choose_docs.current === "Docs";
+    }
     step("desktop: out to the demo and to Eucalyptus, and Back");
     const outAndBack = async (from, name, link, to) => {
       await go(from);
@@ -662,14 +690,20 @@ try {
   await go(`/result.html?ex=${example}`);
   await until(`!!document.querySelector('#verdict-word:not([hidden])')`, 180000); await sleep(1600);
   await shot("9-result", true);
-  report.header_opaque = {};   // nothing reads through the header: its ground is the page's, fully opaque
+  // the menu's pill on every page: its ground (alpha 1 is the page's own ground; docs and Sancho their glass and sheet,
+  // with what lies beneath blurred), its ink, and no full-width bar
+  report.menu_pill = {};
   for (const p of ["/", "/demo.html", "/eucalyptus.html", "/docs.html", "/sancho.html", "/privacy.html", "/terms.html", "/run.html", "/viewer.html", "/share.html", `/result.html?ex=${example}`]) {
     await go(p);
-    report.header_opaque[p] = await evaluate(`(() => { const c = getComputedStyle(document.querySelector('.top')).backgroundColor, m = c.match(/rgba?\\(([^)]+)\\)/); const a = m ? m[1].split(',').map(Number) : []; return a.length === 3 || a[3] === 1; })()`);
+    report.menu_pill[p] = await evaluate(`(() => { const b = document.querySelector('.menu-btn'), cs = getComputedStyle(b), t = document.querySelector('.top').getBoundingClientRect();
+      return { ground: cs.backgroundColor, ink: cs.color, blur: cs.backdropFilter !== 'none', width: Math.round(t.width), no_bar: t.width < innerWidth / 3 }; })()`);
   }
   await go("/nope.html");                                    // on purpose: the 404 page itself, under the CSP
   report.not_found_page = await evaluate(`document.title`);
-  report.author = await evaluate(`({ email_not_shown: !document.querySelector('.top').textContent.includes('@'), name: document.querySelector('.top .who .name')?.textContent, contact: document.querySelector('.top .who a[href^="mailto:"]')?.textContent, linkedin: document.querySelector('.top .who a[href*="linkedin.com"]')?.href, safe: document.querySelector('.top .who a[href*="linkedin.com"]')?.rel })`);
+  // the author's name, Contact and LinkedIn: in the footer only, never in the menu (a page with both: Eucalyptus)
+  await go("/eucalyptus.html");
+  report.author = await evaluate(`({ email_not_shown: !document.body.innerText.includes('@'), in_menu: !!document.querySelector('.top .who, .top a[href^="mailto:"], .top a[href*="linkedin.com"]'),
+    name: document.querySelector('.foot .who span')?.textContent, contact: document.querySelector('.foot .who a[href^="mailto:"]')?.textContent, linkedin: document.querySelector('.foot .who a[href*="linkedin.com"]')?.href, safe: document.querySelector('.foot .who a[href*="linkedin.com"]')?.rel })`);
   report.paper_link = await evaluate(`[...document.querySelectorAll('a')].filter(a => a.textContent === 'Paper').every(a => a.href.startsWith('https://papers.ssrn.com/') && a.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer'))`);
   await go("/docs.html"); await shot("10-docs");
   await viewport(390, 844); await go("/"); await shot("11-phone-home");
@@ -689,7 +723,7 @@ try {
   await until(`document.getElementById('inside').hidden && !document.body.classList.contains('inside-open')`, 4000);
   report.reduced = await evaluate(`({ out: !document.getElementById('demo').classList.contains('in-run'), scene: getComputedStyle(document.getElementById('scene')).transform })`);
   // reduced motion on the one page: a link to a section jumps there at once
-  await go("/"); await evaluate(`document.querySelector('.top nav a[href="/run.html"]').click(); true`); await sleep(120);
+  await go("/"); await evaluate(`document.querySelector('.menu-panel a[href="/run.html"]').click(); true`); await sleep(120);
   report.reduced.onepage_jump = await evaluate(`Math.abs(scrollY - Math.round(document.querySelector('[data-section="run"]').getBoundingClientRect().top + scrollY)) < 2`);
 
   report.reduced.still = {};
