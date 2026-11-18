@@ -59,13 +59,13 @@ export function birchGroups(moves: TreeMove[]): Group[] {
 }
 
 // ---- geometry helpers
-function quad(a: P, c: P, b: P, n: number): P[] {
+export function quad(a: P, c: P, b: P, n: number): P[] {
   const out: P[] = [];
   for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t; out.push([u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]); }
   return out;
 }
 /** a filled stroke along `pts`, its width w(t); a level end at the start when `flat` */
-function taper(pts: P[], w: (t: number) => number, flat = false): string {
+export function taper(pts: P[], w: (t: number) => number, flat = false): string {
   const L: P[] = [], R: P[] = [], n = pts.length - 1;
   for (let i = 0; i <= n; i++) {
     const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n, i + 1)], d = norm([b[0] - a[0], b[1] - a[1]]), h = w(i / n) / 2;
@@ -81,7 +81,7 @@ function segX(a: P, b: P, c: P, d: P): boolean {
   return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
 }
 /** whether two polylines cross (or come within `gap` px of each other), ignoring the first `skip` px of `a` */
-function near(a: P[], b: P[], gap: number, skip = 0): boolean {
+export function near(a: P[], b: P[], gap: number, skip = 0): boolean {
   if (skip === 0) {   // far apart: no segment can come within `gap`
     let ax0 = Infinity, ax1 = -Infinity, ay0 = Infinity, ay1 = -Infinity, bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
     for (const p of a) { if (p[0] < ax0) ax0 = p[0]; if (p[0] > ax1) ax1 = p[0]; if (p[1] < ay0) ay0 = p[1]; if (p[1] > ay1) ay1 = p[1]; }
