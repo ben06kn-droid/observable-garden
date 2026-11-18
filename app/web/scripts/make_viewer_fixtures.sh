@@ -25,9 +25,9 @@ panel("synthetic_700.npz", 700)
 panel("synthetic_1200.npz", 1200)
 v = C.load().values
 v["first_scored_row"], v["trees"]["rounds"] = 300, 5
-open("tailored_config.json", "w").write(json.dumps(v))
+open("sancho_config_tailored.json", "w").write(json.dumps(v))
 EOF
-PYTHONPATH="$ROOT" "$PY" -m quixote.cli sancho --panel synthetic_700.npz --config tailored_config.json --out sancho_out
+PYTHONPATH="$ROOT" "$PY" -m quixote.cli sancho --panel synthetic_700.npz --config sancho_config_tailored.json --out sancho_out
 PYTHONPATH="$ROOT" "$PY" -m quixote.cli sancho --panel synthetic_1200.npz --out sancho_registered_out
 # the audit's exit code is its verdict (FAIL is not 0), so it is not an error here
 PYTHONPATH="$ROOT" "$PY" -m quixote.cli audit "$ROOT/examples/logs/scripted_session.json" --panel "$ROOT/examples/data/tiny_panel.npz" \

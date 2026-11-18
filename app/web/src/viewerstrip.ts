@@ -178,8 +178,13 @@ export function makeStrip(layer: HTMLElement, o: { onResize?: () => void } = {})
   /** Close, Escape or scrolling back from the first panel: back through history if the viewer added the entry */
   function requestClose() {
     if (!open || busy) return;
-    if (history.state?.viewer === 1) history.back();   // popstate closes it
-    else void hide("ui");
+    if (history.state?.viewer === 1) {
+      // popstate closes it, a moment later: until then nothing may ask again, or each wheel event of the same swipe
+      // went back one more entry (past Sancho to whatever came before; seen in Chrome, 2026-11-18)
+      busy = true;
+      window.setTimeout(() => { if (open && location.pathname === PATH) busy = false; }, 1500);   // if Back never arrives
+      history.back();
+    } else void hide("ui");
   }
 
   layer.querySelector("#v-close")!.addEventListener("click", requestClose);
