@@ -4,7 +4,7 @@ import "../common";
 import "../styles/docs.css";
 import { Loader } from "../loader";
 
-const ms = Number(new URLSearchParams(location.search).get("ms") ?? 2600);
+const ms = Number(new URLSearchParams(location.search).get("ms") ?? 3600);
 // what has "loaded" by time t (ms): bursts and stalls, as a real load is
 const STEPS: [number, number][] = [[0, 0], [0.08, 0.1], [0.2, 0.18], [0.35, 0.22], [0.5, 0.47], [0.62, 0.52], [0.8, 0.83], [0.92, 0.9], [1, 1]];
 const loaded = (t: number) => {

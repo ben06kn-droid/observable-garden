@@ -1,24 +1,24 @@
 // The loading screen: white, a ring that draws itself, is cut across and folds into a B (src/styles/loader.css
-// holds the drawing and its timing), and an outlined tube bottom left that fills with solid black in proportion to
+// holds the drawing and its timing), and a box (a rectangular prism) bottom left that fills with solid black in proportion to
 // what has really loaded. The fill only ever rises and moves smoothly between updates. It always plays to the
-// finished B (1.5 s), holds the B still until loading is done, then slides the whole screen up (600 ms) to reveal
-// the site beneath. Shown once per browser session. Reduced motion: a still navy B and the tube, then a plain cut.
+// finished B (3 s), holds the B still until loading is done, then slides the whole screen up (600 ms) to reveal
+// the site beneath. Shown once per browser session. Reduced motion: a still navy B and the box, then a plain cut.
 import "./styles/loader.css";
 
 const SEEN = "qx-loader-seen";
-const FORMED_MS = 1500;
+const FORMED_MS = 3000;
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const MARK = `<svg class="mark" viewBox="0 0 160 160" aria-hidden="true">
+const MARK = `<svg class="mark" viewBox="0 0 160 160" aria-hidden="true"><g class="all">
   <circle class="ring" cx="80" cy="80" r="52" pathLength="1"/>
   <g class="half ld-top"><path d="M 28 80 A 52 52 0 0 1 132 80"/></g>
   <g class="half ld-bottom"><path d="M 132 80 A 52 52 0 0 1 28 80"/></g>
   <line class="cut" x1="20" y1="80" x2="140" y2="80" pathLength="1"/>
-</svg>
-<svg class="tube" viewBox="0 0 14 96" aria-hidden="true">
-  <defs><clipPath id="ld-inside"><rect x="1" y="1" width="12" height="94" rx="6"/></clipPath></defs>
-  <g clip-path="url(#ld-inside)"><rect class="level" x="0" y="0" width="14" height="96"/></g>
-  <rect class="wall" x="1" y="1" width="12" height="94" rx="6"/>
+</g></svg>
+<svg class="tank" viewBox="-1 -15 78 400" aria-hidden="true">
+  <defs><clipPath id="ld-box"><polygon points="0,0 20,-14 76,-14 76,370 56,384 0,384"/></clipPath></defs>
+  <g clip-path="url(#ld-box)"><polygon class="level" points="0,0 20,-14 76,-14 76,520 0,520"/></g>
+  <path class="edge" d="M 0 0 H 56 V 384 H 0 Z M 0 0 L 20 -14 H 76 L 56 0 M 76 -14 V 370 L 56 384"/>
 </svg>`;
 
 export class Loader {
@@ -41,7 +41,7 @@ export class Loader {
     this.full = new Promise((r) => { this.filled = r; });
   }
 
-  /** what has really loaded, 0-1; the tube never falls back */
+  /** what has really loaded, 0-1; the box never empties back */
   progress(p: number) {
     this.target = Math.max(this.target, Math.min(1, Math.max(0, p)));
     this.el.setAttribute("aria-valuenow", String(Math.round(this.target * 100)));
@@ -59,7 +59,7 @@ export class Loader {
     if (this.shown < this.target) this.raf = requestAnimationFrame(this.tick);
   };
 
-  /** loading is complete: once the B has formed and the tube is full, slide the screen away */
+  /** loading is complete: once the B has formed and the box is full, slide the screen away */
   async finish(): Promise<void> {
     this.progress(1);
     await Promise.all([this.formed, this.full]);

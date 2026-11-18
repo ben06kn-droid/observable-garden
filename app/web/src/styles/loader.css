@@ -1,53 +1,61 @@
-/* The loading screen (src/loader.ts): white, a ring that draws itself, is cut across, and folds into a B; a
-   cylinder bottom left that fills with what has really loaded. Every step on the site's curve. Drawn in SVG and
-   CSS. The mark's geometry, in its 160 x 160 box centred on (80, 80):
-   - the ring: radius 52 at the stroke's centre, 16 thick, so 120 across;
+/* The loading screen (src/loader.ts): white, a ring that draws itself, is cut across, and folds open into a B; a
+   box bottom left that fills with what has really loaded. Every step on the site's curve. Drawn in SVG and CSS.
+   The mark's geometry, in its 160 x 160 box centred on (80, 80):
+   - the ring: radius 52 at the stroke's centre, 16 thick, so 120 across; its rightmost point is (132, 80);
    - the cut: a line 120 long through the centre, edge to edge;
-   - the B: the top half turned a quarter clockwise and the bottom half a quarter the other way, each at half size
-     (radius 26) and moved to (67, 54) and (67, 106), so both bulge right; the cut turned upright at x 67, its ends
-     level with the bowls' outer tops (y 20 and 140). The stroke stays 16 (non-scaling) as the halves shrink. */
+   - the B: each half turns a quarter about the ring's rightmost point, the top one clockwise and the bottom one the
+     other way, keeping its size, so both bulge right, one above the other (y -24 to 80, 80 to 184); the cut turns
+     upright, grows to the B's full height (224, y -32 to 192) and moves to x 132, its spine. The whole mark slides
+     78 left meanwhile, so the finished B is centred where the ring was. The stroke stays 16 throughout. */
 .loader { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: #ffffff; --ld-ease: cubic-bezier(.35, 0, 0, 1); }
 .loader .mark { width: 160px; height: 160px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 16; color: #1f4fd8;
-  animation: ld-ink 800ms var(--ld-ease) 700ms both; }
+  animation: ld-ink 1600ms var(--ld-ease) 1400ms both; }
 .loader .mark path, .loader .mark line, .loader .mark circle { vector-effect: non-scaling-stroke; stroke-linecap: butt; }
+.loader .all { transform-box: view-box; animation: ld-centre 1600ms var(--ld-ease) 1400ms both; }
 
-/* 0-400 ms: the ring draws itself, clockwise from the top */
+/* 0-800 ms: the ring draws itself, clockwise from the top */
 .loader .ring { stroke-dasharray: 1 2; stroke-dashoffset: 1; transform-box: view-box; transform-origin: 80px 80px; transform: rotate(-90deg);
-  animation: ld-draw 400ms var(--ld-ease) both, ld-off 1ms linear 400ms both; }
-/* from 400 ms the ring is its two halves (the same pixels), so they can fold */
-.loader .half { opacity: 0; transform-box: view-box; transform-origin: 80px 80px; }
-.loader .half.ld-top { animation: ld-on 1ms linear 400ms both, ld-fold-top 800ms var(--ld-ease) 700ms both; }
-.loader .half.ld-bottom { animation: ld-on 1ms linear 400ms both, ld-fold-bottom 800ms var(--ld-ease) 700ms both; }
-/* 400-700 ms: the cut draws across, left to right; 700-1500 ms it turns upright and slides to the bowls' left edge */
+  animation: ld-draw 800ms var(--ld-ease) both, ld-off 1ms linear 800ms both; }
+/* from 800 ms the ring is its two halves (the same pixels), so they can turn */
+.loader .half { opacity: 0; transform-box: view-box; transform-origin: 132px 80px; }
+.loader .half.ld-top { animation: ld-on 1ms linear 800ms both, ld-fold-top 1600ms var(--ld-ease) 1400ms both; }
+.loader .half.ld-bottom { animation: ld-on 1ms linear 800ms both, ld-fold-bottom 1600ms var(--ld-ease) 1400ms both; }
+/* 800-1400 ms: the cut draws across, left to right; 1400-3000 ms it turns upright into the spine */
 .loader .cut { stroke-dasharray: 1 2; stroke-dashoffset: 1; transform-box: view-box; transform-origin: 80px 80px;
-  animation: ld-draw 300ms var(--ld-ease) 400ms both, ld-spine 800ms var(--ld-ease) 700ms both; }
+  animation: ld-draw 600ms var(--ld-ease) 800ms both, ld-spine 1600ms var(--ld-ease) 1400ms both, ld-solid 1ms linear 1400ms forwards; }
 
 @keyframes ld-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes ld-off { to { opacity: 0; } }
+/* once drawn the cut is solid: its dash was measured on its first length, and it grows into the spine */
+@keyframes ld-solid { from { stroke-dasharray: none; } to { stroke-dasharray: none; } }
 @keyframes ld-on { from { opacity: 0; } to { opacity: 1; } }
-@keyframes ld-fold-top { from { transform: translate(0, 0) rotate(0deg) scale(1); } to { transform: translate(-13px, -26px) rotate(90deg) scale(0.5); } }
-@keyframes ld-fold-bottom { from { transform: translate(0, 0) rotate(0deg) scale(1); } to { transform: translate(-13px, 26px) rotate(-90deg) scale(0.5); } }
-@keyframes ld-spine { from { transform: translate(0, 0) rotate(0deg); } to { transform: translate(-13px, 0) rotate(-90deg); } }
+@keyframes ld-fold-top { from { transform: rotate(0deg); } to { transform: rotate(90deg); } }
+@keyframes ld-fold-bottom { from { transform: rotate(0deg); } to { transform: rotate(-90deg); } }
+@keyframes ld-spine { from { transform: translate(0, 0) rotate(0deg) scale(1, 1); } to { transform: translate(52px, 0) rotate(-90deg) scale(1.8667, 1); } }
+@keyframes ld-centre { from { transform: translate(0, 0); } to { transform: translate(-78px, 0); } }
 @keyframes ld-ink { from { color: #1f4fd8; } to { color: #0b1f4b; } }
 
-/* bottom left: an outlined tube that fills with solid black from the bottom, as much as has really loaded */
-.loader .tube { position: absolute; left: 32px; bottom: 32px; width: 14px; height: 96px; overflow: visible; }
-.loader .tube .wall { fill: none; stroke: #000000; stroke-width: 2; }
-.loader .tube .level { fill: #000000; transform-box: fill-box; transform-origin: 50% 100%; transform: scaleY(var(--ld-p, 0)); }
+/* bottom left: a box (a rectangular prism, its face 56 x 384, its depth drawn up and to the right), outlined with
+   sharp corners, filling with solid black from the bottom, as much as has really loaded; the fill's top is a level
+   surface across the box */
+.loader .tank { position: absolute; left: 32px; bottom: 32px; width: 78px; height: 400px; overflow: visible; }
+.loader .tank .edge { fill: none; stroke: #000000; stroke-width: 2; stroke-linejoin: miter; stroke-miterlimit: 10; }
+.loader .tank .level { fill: #000000; transform: translate(0, calc((1 - var(--ld-p, 0)) * 384px)); }
 
-/* leaving: the white screen, the B and the tube slide up off the page, revealing the site beneath */
+/* leaving: the white screen, the B and the box slide up off the page, revealing the site beneath */
 .loader.leaving { animation: ld-leave 600ms var(--ld-ease) both; pointer-events: none; }
 @keyframes ld-leave { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, -100%, 0); } }
 
-/* reduced motion: a still navy B and the tube; then a plain cut to the site */
+/* reduced motion: a still navy B and the box; then a plain cut to the site */
 @media (prefers-reduced-motion: reduce) {
-  .loader .mark, .loader .ring, .loader .half, .loader .cut, .loader.leaving { animation: none; }
+  .loader .mark, .loader .all, .loader .ring, .loader .half, .loader .cut, .loader.leaving { animation: none; }
   .loader .mark { color: #0b1f4b; }
+  .loader .all { transform: translate(-78px, 0); }
   .loader .ring { opacity: 0; }
   .loader .half { opacity: 1; }
-  .loader .half.ld-top { transform: translate(-13px, -26px) rotate(90deg) scale(0.5); }
-  .loader .half.ld-bottom { transform: translate(-13px, 26px) rotate(-90deg) scale(0.5); }
-  .loader .cut { stroke-dashoffset: 0; transform: translate(-13px, 0) rotate(-90deg); }
+  .loader .half.ld-top { transform: rotate(90deg); }
+  .loader .half.ld-bottom { transform: rotate(-90deg); }
+  .loader .cut { stroke-dasharray: none; stroke-dashoffset: 0; transform: translate(52px, 0) rotate(-90deg) scale(1.8667, 1); }
 }
 
 /* the preview page (loader.html) only */
