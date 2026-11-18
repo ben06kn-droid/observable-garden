@@ -220,7 +220,7 @@ async function check() {
   const cells = (info.size ?? 0) * (info.rows ?? 0);
   capLine.textContent = info.error ? "" : cells > CLASS_CAP
     ? `This class is too large for a browser: ${info.size!.toLocaleString("en")} members × ${info.rows!.toLocaleString("en")} rows is more than the ${(CLASS_CAP / 1e6).toFixed(0)} million cells this page takes (a class table of ${(CLASS_CAP * 8 / 1e6).toFixed(0)} MB). Run it locally: quixote run --agent examples.llm_agent:Agent --panel ${panelName} --class ${className} --out log.json`
-    : `Class table: ${(cells * 8 / 1e6).toFixed(1)} MB (${info.size!.toLocaleString("en")} members × ${info.rows!.toLocaleString("en")} rows), within the ${(CLASS_CAP / 1e6).toFixed(0)} million cells a browser takes.`;
+    : `Class table: ${(cells * 8 / 1e6).toFixed(1)} MB (${info.size!.toLocaleString("en")} members × ${info.rows!.toLocaleString("en")} rows), within the browser's limit of ${(CLASS_CAP / 1e6).toFixed(0)} million cells.`;
   refresh();
 }
 const readFile = (f: File) => new Promise<ArrayBuffer>((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as ArrayBuffer); r.onerror = () => rej(r.error); r.readAsArrayBuffer(f); });
@@ -258,7 +258,7 @@ function onProvider() {
   fModelId.placeholder = p.id === "local" ? "e.g. qwen3:32b" : "as the provider names it";
   fKey.placeholder = p.keyPlaceholder;
   $("provider-note").textContent = `Sent to the ${p.shape} as ${p.effortParam}${p.id === "local" ? " (only if a level is chosen)" : ""}. `
-    + "Every level the provider documents is offered for every model; a model that refuses one answers with the provider's error, shown word for word."
+    + "All documented levels are offered for every model. If a model rejects one, the provider's error is shown word for word."
     + (p.id === "openrouter" ? " The list is OpenRouter's models that take tools." : "");
   $("key-host").textContent = endpoint().host;
   void loadRouted();
@@ -304,12 +304,12 @@ function estimate() {
   const input = n * (base + obs) + ((obs + reply) * n * (n - 1)) / 2;   // each turn resends the history so far
   const output = n * out;
   const pr = price(), id = modelId() || "the model";
-  const tokensLine = `Rough estimate for up to ${n - 3} moves: about ${Math.round(input / 1000)}k input and ${Math.round(output / 1000)}k output tokens`;
-  const real = " The output figure is a guess by effort level, not a measurement: once the run starts, the token count under “The model's moves” is the real figure, from the provider's own usage.";
+  const tokensLine = `Estimate for up to ${n - 3} moves: about ${Math.round(input / 1000)}k input and ${Math.round(output / 1000)}k output tokens`;
+  const real = " The output figure is a guess; once the run starts, the real token count appears under “The model's moves”.";
   if (!pr) { $("estimate").textContent = `${tokensLine}; cost unknown (${provider().id === "local" ? "a local server has no list price" : `no list price known for ${id}`}).${real}`; return; }
   const dollars = (input * pr[0] + output * pr[1]) / 1e6;
-  $("estimate").textContent = `${tokensLine}, at most about $${dollars < 0.1 ? dollars.toFixed(3) : dollars.toFixed(2)} at ${provider().label}'s list prices for ${id} `
-    + `(less where the provider's prompt cache applies; a model that stops early costs less).${real}`;
+  $("estimate").textContent = `${tokensLine}, at most about $${dollars < 0.1 ? dollars.toFixed(3) : dollars.toFixed(2)} at ${provider().label}'s list prices for ${id}. `
+    + `Prompt caching or an early stop lowers it.${real}`;
 }
 for (const el of [fMoves, fModel, fModelId, fEffort, fPrompt]) el.addEventListener("input", estimate);
 

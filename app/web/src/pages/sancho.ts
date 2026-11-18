@@ -118,9 +118,9 @@ async function update() {
   $("cfg-cmd").textContent = `${INSTALL}\nquixote sancho --panel my_panel.npz --config ${CONFIG_FILE} --out sancho_out/`;
   const first = firstScored(current);
   $("cfg-rows").replaceChildren(registered
-    ? `Sancho's first scored row is ${first} after the embargo, so it needs about three years of daily rows and refuses the 600-row bundled panel by design; the `
-    : `With these levers Sancho's first scored row is ${first} after the embargo (for a panel whose delay is 1), so the panel needs more rows than that; the `,
-    Object.assign(h("a", null, "Docs page"), { href: "/docs.html#panel" }), " shows the panel format.");
+    ? `Sancho's first scored row is ${first} after the embargo, so it needs about three years of daily rows. It refuses the 600-row sample panel by design. The `
+    : `With these levers, Sancho's first scored row is ${first} after the embargo (for a panel whose delay is 1), so the panel needs more rows than that. The `,
+    Object.assign(h("a", null, "Docs section"), { href: "/docs.html#panel" }), " shows the panel format.");
 }
 
 $("cfg-download").addEventListener("click", () => {
