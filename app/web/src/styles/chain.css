@@ -1,29 +1,40 @@
 /* The scroll chain's carry (src/chain.ts, public/carry.js). Loaded only by the chain's pages (home,
    run, docs, Sancho), so only they opt in to cross-document view transitions. Transform and opacity
-   only; lukres.dev's curve; 1.0 s. Colours come from the page's tokens. */
+   only, on lukres.dev's eased scroll; the arriving headline on his curve, 1.0 s. */
 
 /* the opt-in itself (@view-transition) is public/carry.css, linked first in each chain page's <head> */
 
-/* the header stays put across a carry; only its colours cross-fade */
+/* ---------- the motion (src/chain.ts while the push builds, public/carry.js once the next page is shown).
+   While a push builds, the page's parts (not the header) slide by the push and the next page's colour opens up
+   in the gap: the strip. When it carries, the motion continues and the arriving page picks it up where the page
+   being left was captured: one scroll, eased as lukres.dev's wheel is (1 - e^(-12 t)), no fade, mask or scale.
+   carry.js animates the snapshots (Web Animations on the pseudo-elements); here only their starting places,
+   so the very first frame is already right. Transform and opacity only. */
+html[data-pushing] body > * { will-change: translate; }
+.carry-strip { position: fixed; left: 0; right: 0; height: 100vh; height: 100lvh; z-index: 49; background: var(--carry-strip); pointer-events: none; will-change: transform; }
+html[data-pushing="down"] .carry-strip { top: 100%; }
+html[data-pushing="up"] .carry-strip { bottom: 100%; }
+
+html[data-carry]::view-transition-group(root), html[data-carry]::view-transition-image-pair(root),
+html[data-carry]::view-transition-old(root), html[data-carry]::view-transition-new(root),
+html[data-carry]::view-transition-group(top), html[data-carry]::view-transition-image-pair(top),
+html[data-carry]::view-transition-old(top), html[data-carry]::view-transition-new(top) { animation: none; mix-blend-mode: normal; }
+html[data-carry="down"]::view-transition-new(root) { transform: translate3d(0, var(--carry-rest, 100vh), 0); }
+html[data-carry="up"]::view-transition-new(root) { transform: translate3d(0, calc(-1 * var(--carry-rest, 100vh)), 0); }
+/* the header holds still: the old one stays until the moving edge is halfway up the screen, then the new one's
+   colours come in over it in 0.25 s (lukres.dev's header turns at mid-sweep, color .25s) */
 .top { view-transition-name: top; }
-::view-transition-group(top) { animation-duration: var(--dur-page); animation-timing-function: var(--ease-travel); }
+html[data-carry]::view-transition-new(top) { opacity: 0; }
 
-/* down: this page's snapshot rises off the top as the next rises in from below, as one scroll */
-html[data-carry="down"]::view-transition-old(root) { animation: carry-off-up var(--dur-page) var(--ease-travel) both; }
-html[data-carry="down"]::view-transition-new(root) { animation: carry-on-up var(--dur-page) var(--ease-travel) both; }
-/* up: the reverse, landing at the previous page's end */
-html[data-carry="up"]::view-transition-old(root) { animation: carry-off-down var(--dur-page) var(--ease-travel) both; }
-html[data-carry="up"]::view-transition-new(root) { animation: carry-on-down var(--dur-page) var(--ease-travel) both; }
-::view-transition-old(root), ::view-transition-new(root) { mix-blend-mode: normal; }
-@keyframes carry-off-up { to { transform: translate3d(0, -100%, 0); } }
-@keyframes carry-on-up { from { transform: translate3d(0, 100%, 0); } }
-@keyframes carry-off-down { to { transform: translate3d(0, 100%, 0); } }
-@keyframes carry-on-down { from { transform: translate3d(0, -100%, 0); } }
+/* the arriving page's headline: each word rises out of its own mask, 1.0 s on lukres.dev's curve, 100 ms apart,
+   from when the headline comes into view (carry.js wraps the words, sets each delay, and unwraps them after) */
+.carry-w { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 0.06em 0.14em; margin: 0 -0.06em -0.14em; }
+.carry-w > span { display: inline-block; animation: carry-rise 1s cubic-bezier(.35, 0, 0, 1) var(--d, 0ms) both; }
+@keyframes carry-rise { from { transform: translate3d(0, 110%, 0); } }
 
-/* the fallback: a cover in the next page's ground slides over this page (chain.ts), and the next
-   page starts under its own ground and uncovers */
-.carry-cover { position: fixed; inset: 0; z-index: 100; background: var(--carry-ground); pointer-events: none; will-change: transform; }
-html[data-carry-cover]::after { content: ""; position: fixed; inset: 0; z-index: 100; background: var(--ground); pointer-events: none;
+/* the fallback (no cross-document view transitions): the motion runs on until the next page's colour fills the
+   screen (the strip, chain.ts), the browser navigates, and the next page starts under its own colour and uncovers */
+html[data-carry-cover]::after { content: ""; position: fixed; inset: 0; z-index: 100; background: var(--carry-cover, var(--ground)); pointer-events: none;
   animation: uncover 520ms var(--ease-travel) 80ms both; }
 @keyframes uncover { to { opacity: 0; } }
 
@@ -51,5 +62,6 @@ html, body { overscroll-behavior-y: contain; }
 
 @media (prefers-reduced-motion: reduce) {
   html[data-carry-cover]::after { display: none; }
+  .carry-w > span { animation: none; }
   .carry-next .meter i { transition: none; }
 }
