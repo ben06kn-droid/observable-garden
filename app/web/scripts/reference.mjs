@@ -109,7 +109,9 @@ for (const [tag, w, h, dpr, mobile] of [["desktop", 1440, 900, 1, false], ["phon
     // loaded, fonts in, the loading screen (if any) gone, the scenes drawn
     for (let i = 0; i < 100; i++) { if (await evaluate(`document.readyState === "complete" && !document.querySelector(".loader")`)) break; await sleep(100); }
     await evaluate("document.fonts.ready.then(() => true)");
-    // the run page: once the gate has loaded and filled in the prompt (its layout changes when it does)
+    // the run page: once the gate has loaded and filled in the prompt (its layout changes when it does); the gate loads
+    // for a visitor who comes to the form, here a field taking focus (and losing it: no focus ring in the shots)
+    if (page === "run") await evaluate(`(() => { const f = document.getElementById("f-moves"); if (f) { f.focus({ preventScroll: true }); f.blur(); } return true; })()`);
     if (page === "run") for (let i = 0; i < 600; i++) { if (await evaluate(`(document.getElementById("f-prompt")?.value.length ?? 1) > 0`)) break; await sleep(100); }
     await sleep(motion ? 5000 : 1500);
     for (const at of ["top", "middle", "end"]) {

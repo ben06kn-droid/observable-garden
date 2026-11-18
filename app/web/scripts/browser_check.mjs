@@ -350,6 +350,11 @@ if (process.argv.includes("--pages")) {
   process.exit(report.error || report.csp_violations || report.missing.length || analyticsFails(report.analytics) || issues.some((i) => i.kind === "exception") ? 1 : 0);
 }
 
+// the run page's gate loads for a visitor who comes to its form: a field taking focus starts it at once
+async function gateIn() {
+  await evaluate(`(() => { const f = document.getElementById('f-moves'); f.focus({ preventScroll: true }); f.blur(); return true; })()`);
+  await until(`document.getElementById('f-prompt').value.length > 100 && /rows/.test(document.getElementById('in-status').textContent)`, 60000);
+}
 async function wheel(dy) { await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: 400, y: 400, deltaX: 0, deltaY: dy }, page); }
 if (runPage) {
   // The run page end to end, under the production headers, with the provider replaced by the mock:
@@ -360,7 +365,7 @@ if (runPage) {
   try {
     await viewport(1440, 900);
     await go("/run.html?provider=mock");
-    await until(`document.getElementById('f-prompt').value.length > 100 && /rows/.test(document.getElementById('in-status').textContent)`, 60000);
+    await gateIn();
     report.inputs = await evaluate(`({ status: document.getElementById('in-status').textContent, cap: document.getElementById('in-cap').textContent, estimate: document.getElementById('estimate').textContent, start_enabled: !document.getElementById('start').disabled })`);
     await shot("run-1-setup", true);
     const startWith = async (k, moves = 8) => evaluate(`(() => { document.getElementById('f-key').value = ${JSON.stringify(k)}; document.getElementById('f-moves').value = '${moves}'; document.getElementById('f-B').value = '500'; document.getElementById('run-form').requestSubmit(); return true; })()`);
@@ -422,7 +427,7 @@ if (runPage) {
       const out = report.providers[id] = {};
       const t0 = Date.now();
       await go("/run.html?provider=mock");
-      await until(`document.getElementById('f-prompt').value.length > 100 && /rows/.test(document.getElementById('in-status').textContent)`, 60000);
+      await gateIn();
       await choose(id);
       out.efforts = await evaluate(`[...document.getElementById('f-effort').options].map((o) => o.value)`);
       out.key_placeholder = await evaluate(`document.getElementById('f-key').placeholder`);
@@ -495,7 +500,7 @@ try {
   const settledAt = async (expr, ms = 5000) => { try { await until(expr, ms); return true; } catch { return false; } };
   for (const [vw, vh, tag] of [[1440, 900, "desktop"], [1366, 768, "laptop"]]) {
     await viewport(vw, vh);
-    // a first visit in the session: the whole loading screen (at least the 3 s of the B), then the site, at home
+    // a first visit in the session: the whole loading screen (at least the 1.5 s of the B), then the site, at home
     await evaluate(`sessionStorage.clear(); true`);
     const t0 = Date.now();
     await send("Page.navigate", { url: base + "/" }, page);
@@ -506,6 +511,18 @@ try {
     await shot(`${tag}-1-home`);
     if (tag === "desktop") report.shake_home = await evaluate(`(() => { const g = [...document.querySelectorAll('#bg-trees .real .stem')].find((e) => { const r = e.getBoundingClientRect(); return r.left > 800 && r.top < innerHeight; });
       if (!g) return 'no tree in view'; g.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return g.getAnimations().length > 0; })()`);
+    if (tag === "desktop") {
+      // the run page's gate (Pyodide) loads only for a visitor who comes to its form: none for one who scrolls past it
+      // to the end and waits there; then the form held on screen starts it (focus and Start: --run-page)
+      step("desktop: the gate loads on demand");
+      const end = await evaluate(`document.documentElement.scrollHeight - innerHeight`);
+      for (let y = 0; y <= end + 240; y += 240) { await evaluate(`scrollTo(0, ${Math.min(y, end)}); true`); await sleep(60); }
+      await sleep(2500);
+      one.gate_scrolled_past = await evaluate(`performance.getEntriesByType("mark").map((m) => m.name).filter((n) => n.startsWith("qx-gate"))`);
+      await evaluate(`document.getElementById('run-form').scrollIntoView({ block: 'center' }); true`);
+      one.gate_on_view = await settledAt(`performance.getEntriesByName("qx-gate-start:view").length > 0`, 6000);
+      await evaluate(`scrollTo(0, 0); true`); await sleep(500);
+    }
     step(`${tag}: addresses follow the scroll`);
     const h0 = await evaluate(`history.length`);
     await evaluate(`scrollTo(0, ${runTop} + 200); true`); await sleep(400);

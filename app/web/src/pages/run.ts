@@ -302,7 +302,9 @@ const fmtUsage = (u: RunUsage) => `${u.requests} model calls · ${u.input_tokens
 function endKey() { key = ""; fKey.value = ""; }
 window.addEventListener("pagehide", () => { endKey(); if (running) cancelGate(); });
 
-form.addEventListener("submit", (e) => { e.preventDefault(); void start(); });
+// Start before the gate and the bundled inputs have loaded: they start loading (if they had not), and the run starts
+// once they are in
+form.addEventListener("submit", (e) => { e.preventDefault(); if (inputsIn) void start(); else { wantGate("start"); void booted.then(() => start()); } });
 cancelBtn.addEventListener("click", () => {
   if (!running) return;
   cancelGate();                                              // the worker ends; nothing it held survives
@@ -433,16 +435,36 @@ async function shareLink(r: AuditResult, record: Record<string, unknown>): Promi
 }
 
 // ---- start: the prompt from the CLI adapter, the bundled inputs
-// Pyodide and the package (about 23 MB) load in a worker once the site is shown and the browser is idle: never
-// behind the loading screen. Start pressed before then waits for it (start() awaits loadGate, with its status)
-(async () => {
-  await revealed; await idle();
+// Pyodide and the package (about 23 MB) load in a worker only for a visitor who comes to the form: when the form
+// is first on screen and the page has been still for a moment (no scrolling for 0.8 s, then the browser idle), or
+// at once when a field in the form takes focus or Start is pressed. Never behind the loading screen, and never for
+// a visitor who only scrolls past (its compiling competes with the scroll for the processor). Start pressed before
+// it has loaded waits for it (start() awaits loadGate, with its status). Each step is marked (performance marks
+// qx-gate-*) for measurement.
+let gateWanted = false;
+function wantGate(why: string) {
+  if (gateWanted) return; gateWanted = true;
+  performance.mark(`qx-gate-start:${why}`);
+  window.removeEventListener("scroll", still); formSeen.disconnect(); window.clearTimeout(stillT);
+  void bootGate();
+}
+let formOnScreen = false, stillT = 0;
+const still = () => { window.clearTimeout(stillT); if (formOnScreen) stillT = window.setTimeout(() => void idle().then(() => { if (formOnScreen) wantGate("view"); }), 800); };
+const formSeen = new IntersectionObserver(([e]) => { formOnScreen = e.isIntersecting; still(); });
+void revealed.then(() => { if (gateWanted) return; formSeen.observe(form); window.addEventListener("scroll", still, { passive: true }); });
+form.addEventListener("focusin", () => wantGate("focus"));
+let inputsIn = false, bootedNow: () => void = () => {};
+const booted = new Promise<void>((r) => { bootedNow = r; });
+async function bootGate() {
   try {
     const gate = await loadGate();
     const p = await gate.prompt();
     defaultPrompt = p.system; schemas = p.schemas;
     fPrompt.value = p.system; $("f-tools").textContent = JSON.stringify(p.schemas, null, 1);
+    performance.mark("qx-gate-ready");
   } catch (e) { errorBox.textContent = `The gate did not load: ${String((e as Error).message ?? e)}`; }
   onProvider();
   await useBundled();
-})();
+  performance.mark("qx-gate-inputs");
+  inputsIn = true; bootedNow();
+}
