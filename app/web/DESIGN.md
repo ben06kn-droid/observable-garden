@@ -1,8 +1,9 @@
 # The site's design
 
 Read this before restyling any page. It records the reference the whole site is held to (section 1), the
-page order and how one page carries to the next (2), each page's theme (3), the shared grid, type scale and
-header (4), where things live in the code (5), and the standing rules (6).
+page order and how the four chain pages work as one document behind a loading screen (2), each page's theme (3),
+the shared grid, type scale and header (4), where things live in the code (5), the standing rules (6) and what is
+still open (7).
 
 ## 1. The reference: lukres.dev, measured
 
@@ -112,11 +113,10 @@ gives the exact formulas the frames show. Frame sheets: `screenshots/lukres/`.
 **What this means for the chain here.** The two moves that feel effortless on his site are not transitions
 at all: the next thing is already on the page, and scrolling simply continues into it while the ground's
 colour is scrubbed by the scroll. His one real page change is a curtain with a loading screen, triggered by
-half a second of pushing, and it is the slowest thing on his site. Our pages are separate documents, so
-copying "the same" means reproducing the first kind of move across a document boundary.
-
-`src/scroll.ts` already models the eased wheel and his page carry. Note one deliberate difference: his site does
-not respond to `prefers-reduced-motion` at all. Ours does, and must.
+half a second of pushing, and it is the slowest thing on his site. Here the four chain pages are therefore one
+document (section 2): scrolling simply continues from one into the next while the ground's colour is scrubbed by
+the scroll, as on his site. Two deliberate differences: the scroll is the browser's own, not his eased wheel; and
+his site does not respond to `prefers-reduced-motion` at all. Ours does, and must.
 
 ### Type scale
 
@@ -162,45 +162,165 @@ pair of cards**. At 390 each screen holds one of those things, never two. One id
   not kept.
 - Each page keeps its own palette and motif; the restraint and the motion quality are shared.
 
-## 2. The pages, in order
+## 2. The pages, in order: one document
 
-The site reads as four pages in sequence, each its own HTML document and URL:
+The four chain pages are one document, built once behind a loading screen and kept alive:
 
 **home** (`/`) → **run** (`/run.html`) → **docs** (`/docs.html`) → **Sancho** (`/sancho.html`)
 
-Scrolling past the end of one carries the visitor to the next; scrolling up from the top goes back and lands
-at the previous page's end. Outside the chain, reached by links: **demo** (`/demo.html`, from home's call to
-action and the run page's "Try it on three bundled searches"), **viewer** (`/viewer.html`, from Sancho),
-**result** (a demo verdict on its own page), **share**, **privacy**, **terms**, **404**.
+Each is a section of that document with its own address. Scrolling simply continues from one into the next. Outside
+the chain, separate documents reached by links: **demo** (`/demo.html`, from home's call to action and the run
+section's "Try it on three bundled searches"), **viewer** (`/viewer.html`, from Sancho), **result** (a demo
+verdict on its own page), **share**, **privacy**, **terms**, **404**, and **loader** (`/loader.html`, the loading
+screen on its own with a simulated load, for review).
 
-### The carry (src/chain.ts, public/carry.js, src/styles/chain.css)
+(Until 2026-11-17 the four were separate documents joined by a "carry": a gesture at a page's end and a
+cross-document view transition. That work stays on the `site-revamp` branch; it is retired here.)
 
-- Reading scroll is the browser's own on every page. Nothing intercepts the wheel within a page.
-- A carry fires only at the very end of a page (or the very top, going back). It arms once the page is there
-  **and** the wheel has gone quiet for 220 ms, so the momentum of the scroll that reached the end never counts.
-  Then it takes one gesture of 40% of the viewport, or a nudge, a pause (250 ms) and another. Touch: a pull of
-  30% of the viewport that starts at the edge, carried on release. Keys at the edge: two presses with a pause.
-- Each end carries a cue: "Next", "Continue to docs ↓" at the large step, and a hairline that fills with the
-  push. It is a plain link (keyboard, no script). At the top, "↑ Back to run" appears while a pull builds,
-  and on focus.
-- With cross-document view transitions (Chrome, Edge, Safari 18.2+): a navigation that opts in. The old page
-  rises off and the new rises in as one scroll, 1.0 s on `cubic-bezier(.35, 0, 0, 1)`, transform only, on the
-  compositor. The header holds still and cross-fades its colours. `carry.js` (classic, render-blocking in each
-  chain page's `<head>`) reads the direction before the first frame. A `<link rel="expect" href="#chain-end"
-  blocking="render">` holds that frame until the page is parsed, so a carry upward can land at the end.
-- Without them (the fallback, in any browser that lacks them): a cover in the next page's ground slides over this page (0.6 s,
-  same curve), the browser navigates, and the next page starts under its own ground and fades it off. No white
-  flash. `?carry=fallback` on any chain page forces this path for testing.
-- Reduced motion: the same gesture, then an immediate navigation. Header links and Back are plain navigations
-  with no transition.
-- The rest of the gesture that made a carry (a trackpad's momentum) must not scroll the page it lands on:
-  `carry.js` swallows wheel events while they keep coming, for at most 1.2 s; the first 220 ms pause ends it.
-- `CHAIN` in `src/chain.ts` lists the pages in order with each one's ground colour, which must equal that
-  theme's `--ground` (the browser check holds them equal).
+### How the document is built (vite.config.ts, src/onepage/)
+
+- `index.html`, `run.html`, `docs.html` and `sancho.html` are four shells of the same document. Each has its own
+  `<title>`, description and `data-start` (the section it opens on), the early script `public/loader-early.js`,
+  the loading screen's stylesheet, the one module `src/onepage/main.ts`, and a `<!-- onepage -->` marker.
+- The `onepage()` plugin in `vite.config.ts` replaces the marker at build time with, in order: the loading
+  screen's markup (`LOADER`, from `src/loader-mark.ts`, so it is on screen from the first frame);
+  `src/onepage/header.html` (the skip link and the one header); one backdrop per section (`.backdrops`); and
+  `<main>` holding `src/onepage/{home,run,docs,sancho}.html`. `SECTIONS` in the plugin is the order.
+- `src/onepage/main.ts` imports `common`, then `boot.ts` (so the loading screen and the work count exist before
+  any section registers work), then each section's script in page order (`src/pages/index.ts`, `run.ts`,
+  `docs.ts`, `sancho.ts`), then calls `start()`.
+
+### Sections (src/onepage/*.html)
+
+- Each section is `<div class="section" data-section="…" data-theme="…" data-path="…" data-title="…">`, and docs
+  and Sancho also carry `data-page` (their shared glass structure, section 3). What was each page's `<main>` is
+  a `div` inside it (`run-main`, `docs-main`, `sancho-main`): the document has one `<main>`.
+- Each section ends with one small cue, `<a class="cue" href="next">Continue ↓</a>` (mono, micro size,
+  uppercase, muted): the way on for the keyboard and a click. There is no other seam: no gap, rule or
+  heading between sections. Only Sancho, the last section, keeps the footer.
+- `boot.ts`'s `snap()` starts every section on a whole pixel (it adds under 1 px of `margin-top` where needed,
+  again whenever the first section resizes), so each renders exactly as its page did.
+- `.section` takes over what `<body>` gave each page (colour, body type) and clips anything reaching past the
+  screen's sides (`overflow-x: clip`, not `hidden`, so the docs contents stay sticky). On a phone the docs and
+  Sancho sections are positioned, so the clouds and the dusk band are placed from the section, as they were from
+  their page (`src/styles/onepage.css`).
+- A section's script finds its own elements under `section("name")` (exported by `boot.ts`), never document-wide,
+  since every section's markup is in the one document.
+
+### Themes
+
+- A theme applies to whatever carries `data-theme`: a section, its backdrop, the header's wrapper, or `<html>` on
+  the separate pages. Each theme's block in `src/styles/<theme>.css` is written `[data-theme="…"]`, never
+  `html[data-theme]`, so it works in all four places. Rules that were `[data-theme="x"] body` on a page are
+  matched by `.section` too where the section needs them.
+- The header sits in `<div class="top-theme">`. `boot.ts` gives that wrapper the theme (and `data-page`) of the
+  section that leads at the moment, so the header's type and structure change with the sections; its colours are
+  mixed separately (below). Its ground is `var(--header-bg)`, set per theme, docs and Sancho included.
+- The run section's light/dark inversion (`data-hg` on the section, mirrored on the run backdrop) calls
+  `refreshThemes()`, so the header mixes from the inverted colours.
+
+### Backdrops and the scroll crossfade (src/onepage/boot.ts, src/styles/onepage.css)
+
+- One fixed backdrop per section, behind everything (`z-index: -2`), each in its theme's `--ground`; the body
+  is transparent. The first is always fully there; each next one fades in on top.
+- **The crossfade is tied to scroll position, not time**, as on lukres.dev (section 1): a backdrop's opacity
+  goes linearly from 0 to 1 while its section's top rises from 65% to 27.6% of the viewport's height (`BAND`;
+  his 585 to 248 px at 900). Scrolling back reverses it exactly. Opacity only.
+- **The header** mixes its colours (`--header-bg`, `--ink`, `--muted`, `--rule`) between the two sections'
+  values by the same share, and takes the new section's theme half way through the band. Each section's values are
+  read once from its backdrop (`refreshThemes()`).
+- `scrub()` runs at most once per animation frame, from passive `scroll` and `resize` listeners. It writes only
+  opacities and the header's custom properties, and reads only section rectangles.
+- Reduced motion: the same position-based crossfade (it moves only as the reader scrolls, so it is not an
+  animation); links jump instead of scrolling smoothly.
+
+### Scenes
+
+- Every scene is built once, behind the loading screen, and kept: the home grove and its leaves, the run
+  section's glass, hero layer and fan, the docs sky, the Sancho dusk.
+- The docs sky (`src/sky.ts`) and the Sancho dusk (`src/dusk.ts`) are canvases inside their section's
+  **backdrop**, so they fade in with it. They draw only while that backdrop can be seen (`onBackdrop()` →
+  `setActive()`): from when it starts fading in until the next backdrop fully covers it. The sky reads its colours
+  from its own canvas (the docs theme), not from `<html>`. On a phone the dusk is instead a band at the top of
+  the Sancho section, scrolling with it, as at the top of its page.
+- Home's leaves pause while home is off screen (`inView("home")`); the run section's glass pauses through its own
+  IntersectionObserver and the fan when its region is off screen; the home grove is drawn finished, with no
+  arrival animation (it is already there beneath the loading screen).
+- `onView(name, f)` and `inView(name)` in `boot.ts` report whether a section is on screen, for any other scene.
+
+### Addresses and history (src/onepage/boot.ts)
+
+- Each section's address and title are its `data-path` and `data-title`. As the reader scrolls, the address, the
+  title and the header's current link (`aria-current`) follow the section under the middle of the screen, with
+  `history.replaceState`: scrolling adds no history.
+- A same-origin link to a section's address (the header's links, a cue, a link in the text) is caught: a smooth
+  scroll to the section, one `pushState` entry, and focus moved to the section (`tabindex="-1"`, no ring), so the
+  next Tab continues from there. A link with an anchor (`/docs.html#tracing`) pushes the section's address with
+  the anchor and scrolls to the heading. While such a scroll is under way the address is left alone (`steering`).
+- Back and Forward (`popstate`) jump to the entry's section, and anchor.
+- A direct link to any of the four addresses opens on its section (and anchor), behind the loading screen:
+  `history.scrollRestoration` is manual, and the jump is made once the layout is final, before the screen goes.
+- Links out of the chain (demo, viewer, Eucalyptus, the paper) are plain navigations.
+
+### The loading screen (src/loader.ts, src/loader-mark.ts, src/styles/loader.css, public/loader-early.js)
+
+- White, with a navy-blue mark centred and a box bottom left. The mark: a ring draws itself clockwise from the top
+  (0–400 ms), a line cuts across it (400–700 ms), and its two halves each turn a quarter about the ring's
+  rightmost point while the line turns upright and grows into the spine, forming a B 224 px tall (700–1500 ms);
+  the whole mark slides 78 px left so the B ends centred, and the ink deepens from #1f4fd8 to #0b1f4b. Stroke 16
+  throughout; every step on `cubic-bezier(.35, 0, 0, 1)`; SVG and CSS only.
+- The box: a rectangular prism (face 56 × 384, depth drawn up and to the right, sharp mitred corners), filling
+  with solid black from the bottom in proportion to the work really done. The level only rises and eases toward
+  the share done (about 0.3 s to close a gap).
+- **The work** (`task()` in `boot.ts`): each section's script registers what must be done before it can be
+  shown (home: the grove's data and its drawing; run: the glass, hero layer and fan with their first frames;
+  docs: the sky; Sancho: the dusk), plus the fonts. The files fetched before any script ran count as already done.
+  So the box jumps to most of the way at once and the rest fills as the scenes are built. It is never full while
+  work remains.
+- **The exit**: once the B has formed (1.5 s from the first frame) **and** the box is full, the open section is
+  scrolled into place, two frames pass (every scene's first frame is on screen beneath), and the whole screen
+  slides up off the page (600 ms, the same curve). A first visit reveals at about 2.1 s when the work is done
+  sooner; it never waits on work nobody can see yet (Pyodide, below). Performance marks `qx-work-done` and
+  `qx-revealed` time it.
+- **Later in the session** (back from the demo, the viewer or Eucalyptus with a rebuild): `sessionStorage`
+  `qx-loader-seen` is set when the screen first goes. `public/loader-early.js`, a classic render-blocking script,
+  then sets `<html data-loader="formed">` before the first frame: the finished B is drawn at once, there is no
+  minimum time, the box does not ease, and the screen goes as soon as the rebuild is done.
+- Reduced motion: a still navy B and the box, then a plain cut to the site.
+- `loader.html` (`src/pages/loader-preview.ts`) shows the screen alone over a simulated load.
+
+### Pyodide on demand (src/pages/run.ts)
+
+The gate (Pyodide and the package, about 23 MB, in a worker) is never loaded behind the loading screen, and
+never for a visitor who only scrolls past the run section. It starts when the run form is on screen and the page
+has been still for 0.8 s and then idle, or at once when a field in the form takes focus or Start is pressed. Start pressed
+before it has loaded runs as soon as the gate and the bundled inputs are in. Marks: `qx-gate-start:<view|focus|start>`,
+`qx-gate-ready`, `qx-gate-inputs`. The two lines the gate fills in when it arrives (the inputs' summary, the
+class table's size) have their room from the start, so its arrival never moves the form or rebuilds the glass.
+
+### Checks and measurement
+
+- `scripts/browser_check.mjs` checks the one page in headless Chrome at 1440x900 and 1366x768:
+  - a first visit and a later one;
+  - each address as a direct link (it opens on its section, with its title and current link);
+  - the address following the scroll through all four sections without adding history;
+  - header links, Back, the cue by click and by Enter (focus moves to the section);
+  - a docs contents link;
+  - Pyodide on demand: not loaded for a visitor who scrolls past, loaded when the form is on screen.
+
+  `--run-page` runs the run form against the mock providers.
+- `scripts/reference.mjs` takes reference shots of each section (top, middle, end; 1440x900 and 390x844) and
+  compares two sets, allowing for anti-aliasing. `--at DIR` shoots at another set's offsets, so a section whose
+  length changed is still compared content for content.
+- `scripts/onepage_measure.mjs` measures with real trackpad input (`scripts/carry/swipe.swift`) in Chrome or
+  Safari, with nothing attached to the browser: time behind the loading screen, frame times across each boundary,
+  and memory (with `--baseline DIST`, against a multi-page build). `scripts/freeze_trace.mjs` catches long frames
+  across the run/docs boundary with a Chrome trace of each.
 
 ## 3. One look per page
 
-Every page sets `<html data-theme="…">` and imports one token block from `src/styles/<theme>.css`. Shared
+Every page has a theme: the chain's sections set it on themselves (`data-theme` on the section, section 2), every
+other page on `<html data-theme="…">`. Each imports one token block from `src/styles/<theme>.css`. Shared
 components read only semantic tokens (`--ground`, `--ink`, `--muted`, `--faint`, `--rule`, `--header-bg`,
 `--accent`, `--focus`, `--field`, `--field-line`, `--problem`, `--tree`, `--tree-path`, `--tree-bar`). Each page's
 session restyles its own theme; the run, docs, Sancho and viewer tokens set here are interim.
@@ -278,9 +398,9 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   - **Reading face**: body, label and small text in Inter (variable, 450), self-hosted, latin subset; IBM
     Plex Sans stays for the headline and the large words, IBM Plex Mono for labels in capitals. Muted and faint text were brightened so
     every text tone keeps 7.8:1 or more where a path passes behind it (the fan dims to 6% behind text).
-  - **Scrolling**: native only. Every scroll, wheel and touch listener is passive; the carry's one
-    non-passive wheel listener (it swallows the gesture that made a carry) removes itself after 1.2 s.
-    Animation runs from animation frames; the glass pauses off screen; nothing forces layout in a scroll.
+  - **Scrolling**: native only. Every scroll, wheel and touch listener is passive. Animation runs from
+    animation frames; the glass pauses off screen; nothing forces layout in a scroll. The gate loads on demand
+    (section 2, "Pyodide on demand").
   - **No tree on this page**: the run's tree is drawn on the home and demo pages only. Before a run nothing
     sits between Start and the moves; during a run a counter above the moves says how far the search has
     come ("move 5 of 12", then the replay's count); after it, the result area shows the gate's numbers on
@@ -412,11 +532,17 @@ moves to the footer (which carries the author's line on every page); Contact sta
 |---|---|
 | `src/styles/base.css` | fonts, grid, type and motion tokens, header, footer, shared components, the flat tree |
 | `src/styles/<theme>.css` | one token block per page, and that page's own rules |
-| `src/styles/chain.css` | the carry's transitions, cue and fallback cover (chain pages only) |
-| `src/chain.ts`, `public/carry.js` | the leaving and arriving halves of a carry |
+| `index.html`, `run.html`, `docs.html`, `sancho.html` | the four shells of the one document (title, description, `data-start`) |
+| `vite.config.ts` (`onepage()`, `SECTIONS`) | writes the loading screen, header, backdrops and sections into the shells |
+| `src/onepage/*.html` | the header and each section's markup |
+| `src/onepage/main.ts` | the one module: boot, then each section's script, then `start()` |
+| `src/onepage/boot.ts` | the work count, the reveal, addresses and history, the scroll crossfade, section visibility, whole-pixel sections |
+| `src/styles/onepage.css` | backdrops, `.section`, the cue, the header's mixed ground |
+| `src/loader.ts`, `src/loader-mark.ts`, `src/styles/loader.css`, `public/loader-early.js` | the loading screen |
+| `loader.html`, `src/pages/loader-preview.ts` | the loading screen alone, for review |
 | `src/scene.ts` | a run's tree in a section; the demo's decoration only with `decor` |
 | `src/cursorwake.ts` | the cursor's wake: the fluid, the shared shader, the pointer rules, the theme's colours, the trail overlay (`WakeLayer`) and its SVG painter |
-| `src/pages/<page>.ts` | each page's script; it imports `../common` first, then its theme |
+| `src/pages/<page>.ts` | each page's script; it imports `../common` first, then its theme. The chain's four (`index`, `run`, `docs`, `sancho`) are imported by `src/onepage/main.ts`, register their work with `task()` and keep to their own section |
 
 ## 6. Standing rules
 
@@ -434,9 +560,23 @@ moves to the footer (which carries the author's line on every page); Contact sta
 
 ## 7. Open items for the last session (before merge)
 
-- **One cross-browser pass, Firefox included.** Walk the chain both ways in Firefox (the fallback path: cover,
-  navigation, uncover) at 1440x900 and 390x844, with every page's shots, and again in Safari and Chrome.
-  Firefox is not yet installed on the development machine; drive it with geckodriver.
+- **One cross-browser pass, Firefox included.** Scroll through the one page both ways in Firefox at 1440x900 and
+  390x844, with every section's shots, and again in Safari and Chrome. Firefox is not yet installed on the development machine; drive it with geckodriver.
+- **Safari at the run section.** Measured 2026-11-17, before Pyodide loaded on demand: the median frame crossing
+  into run was 40 ms and into docs 37 ms (Chrome: 16.7 ms). The old run page alone was already about 30 fps in
+  Safari. Target: 60 fps with a 95th-percentile frame under 20 ms through run and across both its boundaries. Not
+  yet profiled (suspects: the fan's 2D canvas uploaded as a texture each frame, two separate WebGL scenes, full
+  Retina resolution); the author judged the scrolling good by eye on 2026-11-18.
+- **Rare long frames in Chrome.** Up to 1.25 s, in 2 of 6 runs of the build before Pyodide loaded on demand. They
+  were in Chrome's GPU process, compiling shader pipelines for the first raster of something (the docs sheet's
+  rim light was one), while Pyodide was compiling its WebAssembly on the other cores. With Pyodide on demand, none
+  appeared in 4 runs, including Pyodide loading during the scroll. Too few runs to call it gone.
+- **Memory** after Pyodide on demand is not yet measured. Before it, the one page was 333 MB in its renderer plus
+  1.4 GB in Chrome's GPU process, and 1.39 GB in Safari's page process, Pyodide included.
+- **The one-page browser check and the reference comparison** were last run before the loader timing and Pyodide
+  on demand changed (2026-11-18). Run both again.
+- **The viewer check** (`browser_check.mjs --pages --fixtures DIR`) needs fixtures from a Sancho fit, too heavy for
+  the development laptop.
 - **Run the equivalence script**, `node scripts/equivalence.mjs --python python3`: the gate, worker, wheel and
   examples were not touched by the revamp, and this confirms it.
 - The empty tree area on the viewer before a run is loaded: settled in its session. (The run page has no tree area: its result is the scale alone.)
