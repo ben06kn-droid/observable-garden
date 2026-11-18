@@ -74,11 +74,13 @@ vec2 glyphAt(vec2 q) {
   return any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0))) ? vec2(1.0) : texture(uGlyph, uv).rg;
 }
 vec2 maskAt(vec2 p) { vec2 q = vec2(p.x, p.y + uScroll); return texture(uMask, (q - uMaskBox.xy) / uMaskBox.zw).rg * glyphAt(q); }
-// the lines' coverage at a canvas point: (white, gold), faded before the fields and dimmed behind text
+// the lines' coverage at a canvas point: (white, gold). The fade before the fields and the dimming behind text are
+// applied where a line is drawn (the mask at the output pixel, main()), so a line the wake bends under a letter is
+// dimmed there, and one bent out from under it is not
 vec2 cov(vec2 p) {
   if (p.x < 0.0 || p.x > uFanW || p.y < 0.0 || p.y > uView.y) return vec2(0.0);
   vec4 t = texture(uPaths, vec2(p.x / uFanW, p.y / uView.y));
-  return clamp(vec2(t.b * uWA, t.r * uSA) * maskAt(p).r, 0.0, 1.0);
+  return clamp(vec2(t.b * uWA, t.r * uSA), 0.0, 1.0);
 }
 // the wake's displacement at a canvas point (css px), from the viewport's fluid
 vec2 flowAt(vec2 p) { return wakeFlow(uVel, vec2(p.x, p.y + uVpOff), uVp); }
@@ -88,7 +90,10 @@ void main() {
   if (py < uRegion.x || py > uRegion.y) { o = vec4(0.0); return; }
   vec2 d = uWake > 0.0 ? flowAt(pc) : vec2(0.0);
   float s = uWake * wakeStrength(d);
-  vec2 a = cov(pc - d);
+  // dimmed where it is drawn (2026-11-18: by the mask where it came from, a line bent under a letter from open space
+  // arrived there undimmed)
+  vec2 md = maskAt(pc);
+  vec2 a = cov(pc - d) * md.r;
   vec3 col = mix(mix(uGround, uLine, a.x), uSand, a.y);
   float alpha = max(a.x, a.y);
   if (s > 0.0) {
@@ -99,14 +104,14 @@ void main() {
     float lw = clamp(a.x * 2.4, 0.0, 1.0);
     vec3 cw = mix(mix(uGround, uLine, a.x), mix(uGround, uTone, lw), s);
     vec2 n = normalize(d + 1e-5) * mix(uFringeOff.x, uFringeOff.y, s);    // the fringe's offset (the theme's)
-    vec2 f0 = cov(pc - d - n), f1 = cov(pc - d + n);
+    vec2 f0 = cov(pc - d - n) * md.r, f1 = cov(pc - d + n) * md.r;
     float fr = clamp(max(f0.x, f1.x) * 2.4 - lw, 0.0, 1.0) * s;
     cw = mix(cw, uFringe, clamp(fr * uFringeMix * uFringeA, 0.0, 1.0));
     col = mix(cw, uSand, a.y);
     float line = max(lw, clamp(a.y * 1.2, 0.0, 1.0));
     alpha = max(alpha, max(lw * s, fr));
     // the blank space: the wake itself, a glossy trace (wakeTrace). Never under a field.
-    float blank = (1.0 - clamp(line, 0.0, 1.0)) * maskAt(pc).g;
+    float blank = (1.0 - clamp(line, 0.0, 1.0)) * md.g;
     vec2 gr = vec2(length(flowAt(pc + vec2(6.0, 0.0))) - length(flowAt(pc - vec2(6.0, 0.0))),
                    length(flowAt(pc + vec2(0.0, 6.0))) - length(flowAt(pc - vec2(0.0, 6.0))));
     vec4 tr = wakeTrace(alpha > 0.0 ? col : uGround, gr, s, blank, uHi, uShade, uFringe, uFringeA);
@@ -214,11 +219,11 @@ export class Fan {
     this.buildGlyphs();
   }
 
-  // ---------- the letters' mask: each word drawn in its own font where it lies, a few px thicker, at full resolution,
+  // ---------- the letters' mask: each letter drawn in its own font where it lies, a few px thicker, at full resolution,
   // over the text's extent only (outside it the shader reads 1). The paths dim behind the letters, not the boxes
   private buildGlyphs() {
     const gl = this.gl; if (!gl) return;
-    const items = this.o.glyphs?.() ?? [], y0 = scrollY, SPREAD = 3;
+    const items = this.o.glyphs?.() ?? [], y0 = scrollY, SPREAD = 4;
     type Word = { text: string; x: number; y: number; h: number; font: string; ls: string; colour: string };
     const words: Word[] = [], range = document.createRange();
     let x0 = Infinity, x1 = -Infinity, t0 = Infinity, t1 = -Infinity;
@@ -229,16 +234,12 @@ export class Fan {
         const cs = getComputedStyle(n.parentElement!);
         if (cs.visibility === "hidden" || cs.display === "none") continue;
         const font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-        for (const m of n.data.matchAll(/\S+/g)) {
+        // letter by letter, each where the browser put it (a long word drawn as one string drifted a few px from the
+        // page's own layout: a thin stroke of the email's 'l' escaped the mask)
+        for (const m of n.data.matchAll(/\S/gu)) {
           range.setStart(n, m.index!); range.setEnd(n, m.index! + m[0].length);
-          // a word broken across lines (a hyphen, an address) gives a rect per line: draw it per rect, by its share
-          const rs = [...range.getClientRects()].filter((r) => r.width > 0);
-          if (rs.length !== 1) { for (let i = 0; i < m[0].length; i++) {   // letter by letter
-            range.setStart(n, m.index! + i); range.setEnd(n, m.index! + i + 1); const r = range.getBoundingClientRect(); if (!r.width) continue;
-            words.push({ text: m[0][i], x: r.left, y: r.top + y0, h: r.height, font, ls: cs.letterSpacing, colour });
-            x0 = Math.min(x0, r.left); x1 = Math.max(x1, r.right); t0 = Math.min(t0, r.top + y0); t1 = Math.max(t1, r.bottom + y0); } continue; }
-          const r = rs[0];
-          words.push({ text: m[0], x: r.left, y: r.top + y0, h: r.height, font, ls: cs.letterSpacing, colour });
+          const r = range.getBoundingClientRect(); if (!r.width) continue;
+          words.push({ text: m[0], x: r.left, y: r.top + y0, h: r.height, font, ls: "0px", colour });
           x0 = Math.min(x0, r.left); x1 = Math.max(x1, r.right); t0 = Math.min(t0, r.top + y0); t1 = Math.max(t1, r.bottom + y0);
         }
       }
@@ -257,6 +258,17 @@ export class Fan {
       x.fillStyle = x.strokeStyle = w.colour;
       x.strokeText(w.text, w.x - bx, base); x.fillText(w.text, w.x - bx, base);
     }
+    // a 3x3 minimum over the mask: small separate contours (the dot of an i) came out with a hole in the middle, where a
+    // path showed through the letter (measured 3.4:1 on Contact's email); this closes them
+    const im = x.getImageData(0, 0, W, H), src = new Uint8ClampedArray(im.data), d = im.data;
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      let r = 255, g = 255;
+      for (let dj = -1; dj <= 1; dj++) { const jj = j + dj; if (jj < 0 || jj >= H) continue;
+        for (let di = -1; di <= 1; di++) { const ii = i + di; if (ii < 0 || ii >= W) continue; const o = (jj * W + ii) * 4; if (src[o] < r) r = src[o]; if (src[o + 1] < g) g = src[o + 1]; } }
+      const o = (j * W + i) * 4; d[o] = r; d[o + 1] = g;
+    }
+    x.putImageData(im, 0, 0);
+    if (import.meta.env.DEV) (window as unknown as { __fanGlyphs?: unknown }).__fanGlyphs = { c, bx, by };   // for checking the mask in development
     gl.bindTexture(gl.TEXTURE_2D, this.texG);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
     this.glyphBox = [bx, by, W, H];

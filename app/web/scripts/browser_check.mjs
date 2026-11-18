@@ -239,6 +239,46 @@ function decodePng(buf) {
 }
 const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
 const lum = (r, g, b) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+// contrast behind the letters themselves (where the fan is dimmed by its glyph mask, src/fan.ts). The letters' pixels
+// are found once, from a still pair of shots, one with the text and one without (its underlines kept in both, so only
+// the letters count): a pixel the text changed by more than a fifth of the range. Then each sample takes a shot without
+// the text, after `stroke` if given (a cursor crossing the text), and reads the text's colour against the scene at
+// those pixels
+async function glyphContrast(selector, samples = 3, stroke = null) {
+  const els = await evaluate(`[...document.querySelectorAll(${JSON.stringify(selector)})].filter((e) => e.offsetParent !== null && e.textContent.trim()).map((e, i) => {
+    e.dataset.measure = i; const r = e.getBoundingClientRect(), c = getComputedStyle(e).color.match(/[0-9.]+/g).map(Number);
+    return { i, name: (e.className || e.tagName) + ': ' + e.textContent.trim().slice(0, 24), x: r.left, y: r.top, w: r.width, h: r.height, c };
+  })`);
+  const shotPng = async () => decodePng(Buffer.from((await send("Page.captureScreenshot", { format: "png" }, page)).data, "base64"));
+  const hide = (on) => evaluate(on ? `document.querySelectorAll('[data-measure]').forEach((e) => { e.style.setProperty('color', 'transparent', 'important'); e.style.setProperty('text-decoration-color', getComputedStyle(e).textDecorationColor, 'important'); }); true`
+    : `document.querySelectorAll('[data-measure]').forEach((e) => { e.style.removeProperty('color'); e.style.removeProperty('text-decoration-color'); }); true`);
+  // the text's decoration colour is pinned before the text goes transparent (it follows currentColor otherwise)
+  await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => e.style.setProperty('text-decoration-color', getComputedStyle(e).textDecorationColor, 'important')); true`);
+  const a = await shotPng(); await hide(true); const b0 = await shotPng(); await hide(false);
+  await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => e.style.removeProperty('text-decoration-color')); true`);
+  const glyphs = els.map((e) => { const out = [];
+    for (let y = Math.max(0, Math.floor(e.y)); y < Math.min(a.h, Math.ceil(e.y + e.h)); y++)
+      for (let x = Math.max(0, Math.floor(e.x)); x < Math.min(a.w, Math.ceil(e.x + e.w)); x++) {
+        const o = (y * a.w + x) * a.bpp;
+        if (Math.abs(lum(a.px[o], a.px[o + 1], a.px[o + 2]) - lum(b0.px[o], b0.px[o + 1], b0.px[o + 2])) >= 0.2) out.push(o);
+      }
+    return out; });
+  const worst = els.map(() => Infinity), lows = els.map(() => 0);
+  for (let k = 0; k < samples; k++) {
+    let b = b0;
+    if (k > 0 || stroke) { if (stroke) await stroke(k); await hide(true); b = await shotPng(); await hide(false); }
+    els.forEach((e, n) => {
+      const L = lum(e.c[0], e.c[1], e.c[2]);
+      for (const o of glyphs[n]) {
+        const Lb = lum(b.px[o], b.px[o + 1], b.px[o + 2]), r = (Math.max(L, Lb) + 0.05) / (Math.min(L, Lb) + 0.05);
+        if (r < worst[n]) worst[n] = r;
+        if (r < 4.5) lows[n]++;
+      }
+    });
+  }
+  await evaluate(`document.querySelectorAll('[data-measure]').forEach((e) => e.removeAttribute('data-measure')); true`);
+  return els.map((e, n) => ({ el: e.name, worst: +worst[n].toFixed(2), px_below_4_5: lows[n], glyph_px: glyphs[n].length }));
+}
 async function contrast(selector, samples = 6) {
   const els = await evaluate(`[...document.querySelectorAll(${JSON.stringify(selector)})].filter((e) => e.offsetParent !== null && e.textContent.trim()).map((e, i) => {
     e.dataset.measure = i; const r = e.getBoundingClientRect(), c = getComputedStyle(e).color.match(/[0-9.]+/g).map(Number);
@@ -715,21 +755,40 @@ try {
   await go("/nope.html");                                    // on purpose: the 404 page itself, under the CSP
   report.not_found_page = await evaluate(`document.title`);
   // the Contact page (contact.html): the loading screen in full every time (not formed, even later in a session that has
-  // seen it), the headline and the four lines, the external links in a new tab, Contact current in the menu; the
-  // author's details in no footer and not in the menu
+  // seen it: read as the page loads, before the screen goes), the headline and the three lines, the links (mailto,
+  // LinkedIn in a new tab, the résumé downloading and 'Open in browser' in a new tab), no labels, Contact current in the
+  // menu; one screen at 1440x900 and 1280x720; the blue ground and white text; the fan behind it complete and still
+  // (two frames apart, nothing changes); white text at 4.5:1 or more behind its letters, at rest and with the cursor's
+  // tail crossing it
   await go("/privacy.html"); await evaluate(`sessionStorage.setItem('qx-loader-seen', '1'); true`);
-  await go("/contact.html");
-  report.contact = await evaluate(`(() => { const l = document.querySelector('.loader'), row = (k) => [...document.querySelectorAll('.ct-row')].find((r) => r.querySelector('dt').textContent === k)?.querySelector('dd');
-    const ext = (a) => a?.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer');
-    return { loader_full: !!l && !l.classList.contains('formed') && document.documentElement.dataset.loader === undefined,
-      headline: document.querySelector('.ct-h').textContent, labels: [...document.querySelectorAll('.ct-row dt')].map((d) => d.textContent).join(),
-      name: row('Name')?.textContent, email_is_mailto: row('Email')?.querySelector('a')?.getAttribute('href') === 'mailto:' + row('Email')?.textContent, email_same_tab: !row('Email')?.querySelector('a')?.target,
-      linkedin: row('LinkedIn')?.querySelector('a')?.href, github: row('GitHub')?.querySelector('a')?.href, new_tabs: ext(row('LinkedIn')?.querySelector('a')) && ext(row('GitHub')?.querySelector('a')),
-      resume: [...(row('Résumé')?.querySelectorAll('a') ?? [])].map((a) => ({ text: a.textContent, href: a.getAttribute('href'), download: a.hasAttribute('download'), new_tab: a.target === '_blank' })),
+  {
+    const loaded = new Promise((r) => { const f = (ev) => { const m = JSON.parse(ev.data); if (m.method === "Page.domContentEventFired" && m.sessionId === page) { ws.removeEventListener("message", f); r(); } }; ws.addEventListener("message", f); });
+    await send("Page.enable", {}, page); await send("Page.navigate", { url: base + "/contact.html" }, page); await loaded;
+    const early = await evaluate(`(() => { const l = document.querySelector('.loader'); return { loader_present: !!l, loader_full: !!l && !l.classList.contains('formed') && document.documentElement.dataset.loader === undefined }; })()`);
+    report.contact = { ...early, revealed_ms: await until(`!document.querySelector('.loader')`, 12000) };
+  }
+  Object.assign(report.contact, await evaluate(`(() => { const ext = (a) => a?.target === '_blank' && a.rel.includes('noopener') && a.rel.includes('noreferrer');
+    const li = [...document.querySelectorAll('.ct-list li')], a = (i) => [...(li[i]?.querySelectorAll('a') ?? [])];
+    return { headline: document.querySelector('.ct-h').textContent, lines: li.map((l) => [...l.querySelectorAll('a')].map((x) => x.textContent).join(' | ')),
+      labels: document.querySelectorAll('.ct dt, .ct-row').length,
+      email_is_mailto: a(0)[0]?.getAttribute('href') === 'mailto:' + a(0)[0]?.textContent, email_same_tab: !a(0)[0]?.target,
+      linkedin: a(1)[0]?.href, linkedin_new_tab: ext(a(1)[0]),
+      resume: a(2).map((x) => ({ text: x.textContent, href: x.getAttribute('href'), download: x.hasAttribute('download'), new_tab: x.target === '_blank' })),
       current: document.querySelector('.menu-panel a[aria-current]')?.textContent, ground: getComputedStyle(document.body).backgroundColor, ink: getComputedStyle(document.querySelector('.ct-h')).color,
-      canvases: document.querySelectorAll('canvas').length, in_menu: !!document.querySelector('.top a[href^="mailto:"], .top a[href*="linkedin.com"]'),
-      in_footer: !!document.querySelector('.foot .who, .foot a[href^="mailto:"], .foot a[href*="linkedin.com"]') }; })()`);
-  report.contact.revealed = await until(`!document.querySelector('.loader')`, 8000);
+      pill: getComputedStyle(document.querySelector('.menu-btn')).backgroundColor, footer_ink: getComputedStyle(document.querySelector('.foot')).color,
+      fan: !!document.querySelector('canvas.fan'), main_text: document.querySelector('main').innerText.replace(/\\s+/g, ' ').trim() }; })()`));
+  report.contact.one_screen = {};
+  for (const [w, h] of [[1440, 900], [1280, 720]]) {
+    await viewport(w, h); await sleep(500);
+    report.contact.one_screen[`${w}x${h}`] = await evaluate(`({ scroll: document.documentElement.scrollHeight - innerHeight, footer_in: document.querySelector('.foot').getBoundingClientRect().bottom <= innerHeight + 0.5 })`);
+    await shot(`contact-${w}x${h}`);
+  }
+  await viewport(1440, 900); await sleep(600);
+  // still: two screenshots a second apart with no input are the same
+  { const s1 = (await send("Page.captureScreenshot", { format: "png" }, page)).data; await sleep(1000); const s2 = (await send("Page.captureScreenshot", { format: "png" }, page)).data; report.contact.fan_still = s1 === s2; }
+  report.contact.contrast_still = await glyphContrast(".ct-h, .ct-list a, .foot > span, .foot a", 1);
+  const across = async (k) => { for (let i = 0; i <= 30; i++) { await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 60 + i * 26, y: 250 + k * 140 + Math.sin(i / 4) * 60 }, page); await sleep(16); } await sleep(80); };
+  report.contact.contrast_tail = await glyphContrast(".ct-h, .ct-list a", 3, across);
   // the footer on every page with one: the line on the grid's left edge, Privacy, Terms and Source on the right, nothing else;
   // the paper only from home's line and the docs section, never from the menu or a footer
   report.footer = {};
