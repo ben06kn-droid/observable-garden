@@ -719,6 +719,7 @@ try {
       headline: document.querySelector('.ct-h').textContent, labels: [...document.querySelectorAll('.ct-row dt')].map((d) => d.textContent).join(),
       name: row('Name')?.textContent, email_is_mailto: row('Email')?.querySelector('a')?.getAttribute('href') === 'mailto:' + row('Email')?.textContent, email_same_tab: !row('Email')?.querySelector('a')?.target,
       linkedin: row('LinkedIn')?.querySelector('a')?.href, github: row('GitHub')?.querySelector('a')?.href, new_tabs: ext(row('LinkedIn')?.querySelector('a')) && ext(row('GitHub')?.querySelector('a')),
+      resume: [...(row('Résumé')?.querySelectorAll('a') ?? [])].map((a) => ({ text: a.textContent, href: a.getAttribute('href'), download: a.hasAttribute('download'), new_tab: a.target === '_blank' })),
       current: document.querySelector('.menu-panel a[aria-current]')?.textContent, ground: getComputedStyle(document.body).backgroundColor, ink: getComputedStyle(document.querySelector('.ct-h')).color,
       canvases: document.querySelectorAll('canvas').length, in_menu: !!document.querySelector('.top a[href^="mailto:"], .top a[href*="linkedin.com"]'),
       in_footer: !!document.querySelector('.foot .who, .foot a[href^="mailto:"], .foot a[href*="linkedin.com"]') }; })()`);

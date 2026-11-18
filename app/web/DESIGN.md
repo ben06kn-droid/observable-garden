@@ -545,7 +545,10 @@ session restyles its own theme; the run, docs, Sancho and viewer tokens set here
   scene, no cursor effect, nothing decorative; plain markup, to take animations later. The headline "Let’s work
   together" in the title face (Bricolage 800 at `--t-hero`, two lines at 1440) on the grid's left edge; under it four
   lines in a large reading size, each a small mono caps label with its value beside it: Name, Email (written out, a
-  mailto link), LinkedIn and GitHub (new tabs, a small ↗). Links: a thin underline at rest, a full-weight one on hover
+  mailto link), LinkedIn and GitHub (new tabs, a small ↗), Résumé ("Download PDF", which downloads
+  `/Benjamin-Knaster-Resume.pdf` from `public/`, and a smaller "Open in browser" beside it, which opens it in a new tab;
+  Chrome's PDF viewer shows it under the site's CSP, checked with `serve_dist.mjs`, which now serves `.pdf` as
+  `application/pdf`). Links: a thin underline at rest, a full-weight one on hover
   and focus (the arrow moves), a 2 px ring on focus. The menu (Contact current) and the footer in its colours. It opens
   behind the loading screen **every time, in full** (the ring, the cut, the fold, the box and the counter, then the
   slide up), even later in a session that has seen it: the build writes the screen in at a `<!-- loader -->` marker,
