@@ -93,6 +93,7 @@ export function makeStrip(layer: HTMLElement, o: { onResize?: () => void } = {})
   document.addEventListener("keydown", (e) => {
     if (!open || busy) return;
     if (e.key === "Escape") { e.preventDefault(); requestClose(); return; }
+    if (e.key === "Tab") { trap(e); return; }
     if (isList() || typing(e.target) || e.altKey || e.metaKey || e.ctrlKey) return;
     const i = index();
     const to = e.key === "ArrowRight" || e.key === "PageDown" ? i + 1 : e.key === "ArrowLeft" || e.key === "PageUp" ? i - 1
@@ -100,6 +101,16 @@ export function makeStrip(layer: HTMLElement, o: { onResize?: () => void } = {})
     if (to === null) return;
     e.preventDefault(); go(to);
   });
+  // focus stays inside: from the last stop Tab goes to the first, from the first Shift+Tab to the last (everything else
+  // is inert, so the browser's own order inside is the reading order: Close, then each panel and what is in it)
+  function trap(e: KeyboardEvent) {
+    const stops = [...layer.querySelectorAll<HTMLElement>("button, input, a[href], [tabindex='0']")]
+      .filter((el) => !el.closest("[hidden]") && !(el as HTMLButtonElement).disabled);
+    if (!stops.length) { e.preventDefault(); return; }
+    const first = stops[0], lastStop = stops[stops.length - 1], at = document.activeElement;
+    if (e.shiftKey && (at === first || at === layer || !layer.contains(at))) { e.preventDefault(); lastStop.focus(); }
+    else if (!e.shiftKey && (at === lastStop || !layer.contains(at))) { e.preventDefault(); first.focus(); }
+  }
   layer.addEventListener("focusin", (e) => {
     if (isList()) return;
     const p = (e.target as Element).closest?.(".v-panel") as HTMLElement | null;
