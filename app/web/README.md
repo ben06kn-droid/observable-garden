@@ -100,6 +100,7 @@ created:
 | Environment variables | none |
 | Headers | in `vercel.json`: the CSP and security headers on every path; immutable caching for `/assets/`, `/py/*.whl` and `/pyodide/314.0.7/`; revalidation for `.json` and `.html` |
 | Set in the dashboard, not in code | Firewall and rate limits; deployment protection for previews if wanted |
+| Domains (dashboard) | `www.observable-garden.com` serves production (from `main`); `observable-garden.com` and `observable-garden.vercel.app` each redirect to it (308, permanent). Nothing in the code names a host: links, the share link (`location.origin`), the CSP (`'self'`) and analytics (`/_vercel/insights/` on the site's own origin) follow whichever domain serves the page |
 
 A preview deploy, from this directory, logged in to the account:
 
