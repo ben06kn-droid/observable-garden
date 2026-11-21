@@ -699,6 +699,51 @@ try {
     one.eucalyptus_section.ok = one.eucalyptus_section.arrived && one.eucalyptus_section.theme === "eucalyptus" && one.eucalyptus_section.text === "Eucalyptus | Coming soon"
       && one.eucalyptus_section.canvases === 0 && one.eucalyptus_section.footer && !one.eucalyptus_section.sancho_footer && one.eucalyptus_section.current === "Eucalyptus";
   }
+  // home's paper, clear of anything another section leaves over it (2026-11-21: the docs contents' cloud, static at
+  // 813-1240px wide, was placed from the initial containing block and drew a navy oval over home in Chrome). Home's own
+  // drawing (the section, the menu) is hidden for the shot, so every point must be the paper itself, read from home's
+  // backdrop: falling leaves and the cursor's tail cannot make it fail; another section's layer between the paper and
+  // the grove does. After a fresh load, after scrolling to the end and back, and after returning from the demo; at
+  // 1440x900, inside the band that showed it (1000x705) and on a phone.
+  step("home's paper, clear, at three sizes");
+  {
+    const paperAt = async (state) => {
+      await evaluate(`scrollTo(0, 0); true`); await sleep(700);
+      const want = (await evaluate(`getComputedStyle(document.querySelector('.backdrop[data-for="home"]')).backgroundColor`)).match(/\d+/g).slice(0, 3).map(Number);
+      await evaluate(`for (const e of document.querySelectorAll('[data-section="home"], .top')) e.style.setProperty("visibility", "hidden", "important"); true`);
+      await evaluate(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`);
+      const { data } = await send("Page.captureScreenshot", { format: "png" }, page);
+      await evaluate(`for (const e of document.querySelectorAll('[data-section="home"], .top')) e.style.removeProperty("visibility"); true`);
+      const { w, h, bpp, px } = decodePng(Buffer.from(data, "base64"));
+      const off = [];
+      for (let j = 0; j < 5; j++) for (let i = 0; i < 7; i++) {
+        const x = Math.round(w * (0.04 + 0.92 * i / 6)), y = Math.round(h * (0.04 + 0.92 * j / 4)), k = (y * w + x) * bpp, got = [px[k], px[k + 1], px[k + 2]];
+        if (got.some((c, n) => Math.abs(c - want[n]) > 2)) off.push(`${x},${y}: ${got.join(",")}`);
+      }
+      if (off.length && shots) writeFileSync(join(shots, `home-paper-${state}-${w}x${h}.png`), Buffer.from(data, "base64"));
+      return { paper: want.join(","), points: 35, off: off.slice(0, 6), off_count: off.length };
+    };
+    const hp = report.home_paper = {};
+    for (const [w, h] of [[1440, 900], [1000, 705], [390, 844]]) {
+      await viewport(w, h);
+      const r = hp[`${w}x${h}`] = {};
+      await evaluate(`sessionStorage.clear(); true`); await go("/");
+      r.fresh = await paperAt("fresh");
+      const end = await evaluate(`document.documentElement.scrollHeight - innerHeight`);
+      for (let y = 0; y <= end; y += Math.round(h * 0.6)) { await evaluate(`scrollTo(0, ${y}); true`); await sleep(40); }
+      await evaluate(`scrollTo(0, ${end}); true`); await sleep(600);
+      for (let y = end; y > 0; y -= Math.round(h * 0.6)) { await evaluate(`scrollTo(0, ${y}); true`); await sleep(40); }
+      r.end_and_back = await paperAt("end-and-back");
+      await go("/run.html");
+      await evaluate(`document.querySelector('[data-section="run"] a[href="/demo.html"]').click(); true`);
+      await settledAt(`location.pathname === "/demo.html" && document.readyState === "complete"`, 20000); await sleep(800);
+      await evaluate(`history.back(); true`);
+      await settledAt(`location.pathname === "/run.html" && document.readyState === "complete" && !document.querySelector(".loader")`, 20000);
+      r.from_demo = await paperAt("from-demo");
+    }
+    hp.ok = Object.values(hp).every((v) => typeof v !== "object" || Object.values(v).every((s) => s.off_count === 0));
+    await viewport(1440, 900);
+  }
   // the demo (DESIGN.md 3, demo): the three searches as rows and one Start; the stages told in the status lines; the
   // run's tree growing in search order, then the pink path; the bed for the repeated searches; the verdict; inside the run
   await go("/demo.html"); await sleep(500);
@@ -882,4 +927,5 @@ report.csp_violations = issues.filter((i) => /Content Security Policy|Refused to
 report.missing = missing();
 report.analytics = analytics();
 console.log(JSON.stringify(report, null, 1));
-process.exit(report.error || report.csp_violations || report.missing.length || analyticsFails(report.analytics) || issues.some((i) => i.kind === "exception") ? 1 : 0);
+process.exit(report.error || report.csp_violations || report.missing.length || analyticsFails(report.analytics) || issues.some((i) => i.kind === "exception")
+  || report.home_paper?.ok === false ? 1 : 0);

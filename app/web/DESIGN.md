@@ -416,7 +416,17 @@ class table's size) have their room from the start, so its arrival never moves t
   - out to the demo (from run) and to Contact (from the menu on home) and Back: the page kept, on its section
     (`out_and_back`); home's Eucalyptus line
     scrolls to the last section, which holds its two lines and the footer, in its theme, with no canvas
-    (`eucalyptus_section`).
+    (`eucalyptus_section`);
+  - home's paper clear (`home_paper`, 2026-11-21): with home's own drawing hidden for the shot, 35 points across the
+    window must be the paper read from home's backdrop, after a fresh load, after scrolling to the end and back, and
+    after returning from the demo, at 1440x900, 1000x705 and 390x844. A failure fails the check. It was added after the
+    docs contents' cloud (a `::before` at `z-index: -1`) drew a navy oval over home at 813-1240 px wide: there the list
+    is static, so the cloud was placed from the initial containing block, which on the one page is home's first
+    screen. On a phone (812 px and below) the docs section is positioned, so the same cloud covered the whole docs
+    section and darkened its sheet. The cloud is now drawn only above 1240 px, where the list is sticky and its white
+    text needs it; on a phone the sheet shows the sky through it again (bluer at the top, greener lower down). **Rule:**
+    an absolutely positioned element or pseudo-element in a section must have a positioned ancestor inside that
+    section at every width.
 
   `--run-page` runs the run form against the mock providers.
 - `scripts/reference.mjs` takes reference shots of each section (top, middle, end; 1440x900 and 390x844) and
